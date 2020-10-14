@@ -36,87 +36,20 @@ mod tests {
 
     use super::super::*;
     use crate::error::ValidationError;
+    use crate::subscription_filter::WhitelistSubscriptionFilter;
     use crate::types::FastMessageId;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
-    // helper functions for testing
-
-    fn build_and_inject_nodes<T>(
-        peer_no: usize,
-        topics: Vec<String>,
-        to_subscribe: bool,
-    ) -> (GenericGossipsub<T>, Vec<PeerId>, Vec<TopicHash>)
+    #[derive(Default, Builder, Debug)]
+    #[builder(default)]
+    struct InjectNodes<T, F>
+    // TODO: remove trait bound Default when this issue is fixed:
+    //  https://github.com/colin-kiegel/rust-derive-builder/issues/93
     where
-        T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        T: Send + 'static + Default + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
-        // use a default GossipsubConfig
-        build_and_inject_nodes_with_config(
-            peer_no,
-            topics,
-            to_subscribe,
-            GenericGossipsubConfig::default(),
-        )
-    }
-
-    fn build_and_inject_nodes_with_config<T>(
-        peer_no: usize,
-        topics: Vec<String>,
-        to_subscribe: bool,
-        gs_config: GenericGossipsubConfig<T>,
-    ) -> (GenericGossipsub<T>, Vec<PeerId>, Vec<TopicHash>)
-    where
-        T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
-    {
-        // create a gossipsub struct
-        build_and_inject_nodes_with_config_and_explicit(peer_no, topics, to_subscribe, gs_config, 0)
-    }
-
-    // This function generates `peer_no` random PeerId's, subscribes to `topics` and subscribes the
-    // injected nodes to all topics if `to_subscribe` is set. All nodes are considered gossipsub nodes.
-    fn build_and_inject_nodes_with_config_and_explicit<T>(
-        peer_no: usize,
-        topics: Vec<String>,
-        to_subscribe: bool,
-        gs_config: GenericGossipsubConfig<T>,
-        explicit: usize,
-    ) -> (GenericGossipsub<T>, Vec<PeerId>, Vec<TopicHash>)
-    where
-        T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
-    {
-        build_and_inject_nodes_with_config_and_explicit_and_outbound(
-            peer_no,
-            topics,
-            to_subscribe,
-            gs_config,
-            explicit,
-            0,
-        )
-    }
-
-    fn build_and_inject_nodes_with_config_and_explicit_and_outbound<T>(
-        peer_no: usize,
-        topics: Vec<String>,
-        to_subscribe: bool,
-        gs_config: GenericGossipsubConfig<T>,
-        explicit: usize,
-        outbound: usize,
-    ) -> (GenericGossipsub<T>, Vec<PeerId>, Vec<TopicHash>)
-    where
-        T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
-    {
-        build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-            peer_no,
-            topics,
-            to_subscribe,
-            gs_config,
-            explicit,
-            outbound,
-            None,
-        )
-    }
-
-    fn build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring<T>(
         peer_no: usize,
         topics: Vec<String>,
         to_subscribe: bool,
@@ -124,59 +57,105 @@ mod tests {
         explicit: usize,
         outbound: usize,
         scoring: Option<(PeerScoreParams, PeerScoreThresholds)>,
-    ) -> (GenericGossipsub<T>, Vec<PeerId>, Vec<TopicHash>)
-    where
-        T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
-    {
-        let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
-        // create a gossipsub struct
-        let mut gs: GenericGossipsub<T> =
-            GenericGossipsub::new(MessageAuthenticity::Signed(keypair), gs_config).unwrap();
-
-        if let Some((scoring_params, scoring_thresholds)) = scoring {
-            gs.with_peer_score(scoring_params, scoring_thresholds)
-                .unwrap();
-        }
-
-        let mut topic_hashes = vec![];
-
-        // subscribe to the topics
-        for t in topics {
-            let topic = Topic::new(t);
-            gs.subscribe(&topic).unwrap();
-            topic_hashes.push(topic.hash().clone());
-        }
-
-        // build and connect peer_no random peers
-        let mut peers = vec![];
-
-        let empty = vec![];
-        for i in 0..peer_no {
-            peers.push(add_peer(
-                &mut gs,
-                if to_subscribe { &topic_hashes } else { &empty },
-                i < outbound,
-                i < explicit,
-            ));
-        }
-
-        return (gs, peers, topic_hashes);
+        subscription_filter: F,
     }
 
-    fn add_peer<T>(
-        gs: &mut GenericGossipsub<T>,
+    impl<T, F> InjectNodes<T, F>
+    where
+        T: Send + 'static + Default + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
+    {
+        pub fn create_network(self) -> (GenericGossipsub<T, F>, Vec<PeerId>, Vec<TopicHash>) {
+            let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
+            // create a gossipsub struct
+            let mut gs: GenericGossipsub<T, F> = GenericGossipsub::new_with_subscription_filter(
+                MessageAuthenticity::Signed(keypair),
+                self.gs_config,
+                self.subscription_filter,
+            )
+            .unwrap();
+
+            if let Some((scoring_params, scoring_thresholds)) = self.scoring {
+                gs.with_peer_score(scoring_params, scoring_thresholds)
+                    .unwrap();
+            }
+
+            let mut topic_hashes = vec![];
+
+            // subscribe to the topics
+            for t in self.topics {
+                let topic = Topic::new(t);
+                gs.subscribe(&topic).unwrap();
+                topic_hashes.push(topic.hash().clone());
+            }
+
+            // build and connect peer_no random peers
+            let mut peers = vec![];
+
+            let empty = vec![];
+            for i in 0..self.peer_no {
+                peers.push(add_peer(
+                    &mut gs,
+                    if self.to_subscribe {
+                        &topic_hashes
+                    } else {
+                        &empty
+                    },
+                    i < self.outbound,
+                    i < self.explicit,
+                ));
+            }
+
+            (gs, peers, topic_hashes)
+        }
+    }
+
+    impl<T, F> InjectNodesBuilder<T, F>
+    where
+        T: Send + 'static + Default + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
+    {
+        pub fn create_network(&self) -> (GenericGossipsub<T, F>, Vec<PeerId>, Vec<TopicHash>) {
+            self.build().unwrap().create_network()
+        }
+    }
+
+    fn inject_nodes<T, F>() -> InjectNodesBuilder<T, F>
+    where
+        T: Send + 'static + Default + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
+    {
+        InjectNodesBuilder::default()
+    }
+
+    fn inject_nodes1<T>() -> InjectNodesBuilder<T, AllowAllSubscriptionFilter>
+    where
+        T: Send + 'static + Default + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+    {
+        inject_nodes()
+    }
+
+    fn inject_nodes2() -> InjectNodesBuilder<Vec<u8>, AllowAllSubscriptionFilter> {
+        inject_nodes()
+    }
+
+    // helper functions for testing
+
+    fn add_peer<T, F>(
+        gs: &mut GenericGossipsub<T, F>,
         topic_hashes: &Vec<TopicHash>,
         outbound: bool,
         explicit: bool,
     ) -> PeerId
     where
         T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         add_peer_with_addr(gs, topic_hashes, outbound, explicit, Multiaddr::empty())
     }
 
-    fn add_peer_with_addr<T>(
-        gs: &mut GenericGossipsub<T>,
+    fn add_peer_with_addr<T, F>(
+        gs: &mut GenericGossipsub<T, F>,
         topic_hashes: &Vec<TopicHash>,
         outbound: bool,
         explicit: bool,
@@ -184,6 +163,7 @@ mod tests {
     ) -> PeerId
     where
         T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         add_peer_with_addr_and_kind(
             gs,
@@ -195,8 +175,8 @@ mod tests {
         )
     }
 
-    fn add_peer_with_addr_and_kind<T>(
-        gs: &mut GenericGossipsub<T>,
+    fn add_peer_with_addr_and_kind<T, F>(
+        gs: &mut GenericGossipsub<T, F>,
         topic_hashes: &Vec<TopicHash>,
         outbound: bool,
         explicit: bool,
@@ -205,6 +185,7 @@ mod tests {
     ) -> PeerId
     where
         T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         let peer = PeerId::random();
         //peers.push(peer.clone());
@@ -220,7 +201,7 @@ mod tests {
                 }
             },
         );
-        <GenericGossipsub<T> as NetworkBehaviour>::inject_connected(gs, &peer);
+        <GenericGossipsub<T, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
             gs.inject_event(
                 peer.clone(),
@@ -362,7 +343,11 @@ mod tests {
         // - run JOIN(topic)
 
         let subscribe_topic = vec![String::from("test_subscribe")];
-        let (gs, _, topic_hashes) = build_and_inject_nodes::<Vec<u8>>(20, subscribe_topic, true);
+        let (gs, _, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(subscribe_topic)
+            .to_subscribe(true)
+            .create_network();
 
         assert!(
             gs.mesh.get(&topic_hashes[0]).is_some(),
@@ -408,7 +393,11 @@ mod tests {
             .collect::<Vec<Topic>>();
 
         // subscribe to topic_strings
-        let (mut gs, _, topic_hashes) = build_and_inject_nodes::<Vec<u8>>(20, topic_strings, true);
+        let (mut gs, _, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(topic_strings)
+            .to_subscribe(true)
+            .create_network();
 
         for topic_hash in &topic_hashes {
             assert!(
@@ -480,7 +469,11 @@ mod tests {
             .map(|t| Topic::new(t.clone()))
             .collect::<Vec<Topic>>();
 
-        let (mut gs, _, topic_hashes) = build_and_inject_nodes::<Vec<u8>>(20, topic_strings, true);
+        let (mut gs, _, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(topic_strings)
+            .to_subscribe(true)
+            .create_network();
 
         // unsubscribe, then call join to invoke functionality
         assert!(
@@ -577,8 +570,12 @@ mod tests {
             .unwrap();
 
         let publish_topic = String::from("test_publish");
-        let (mut gs, _, topic_hashes) =
-            build_and_inject_nodes_with_config(20, vec![publish_topic.clone()], true, config);
+        let (mut gs, _, topic_hashes) = inject_nodes1()
+            .peer_no(20)
+            .topics(vec![publish_topic.clone()])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
 
         assert!(
             gs.mesh.get(&topic_hashes[0]).is_some(),
@@ -643,8 +640,12 @@ mod tests {
             .unwrap();
 
         let fanout_topic = String::from("test_fanout");
-        let (mut gs, _, topic_hashes) =
-            build_and_inject_nodes_with_config(20, vec![fanout_topic.clone()], true, config);
+        let (mut gs, _, topic_hashes) = inject_nodes1()
+            .peer_no(20)
+            .topics(vec![fanout_topic.clone()])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
 
         assert!(
             gs.mesh.get(&topic_hashes[0]).is_some(),
@@ -704,11 +705,11 @@ mod tests {
     #[test]
     /// Test the gossipsub NetworkBehaviour peer connection logic.
     fn test_inject_connected() {
-        let (gs, peers, topic_hashes) = build_and_inject_nodes::<Vec<u8>>(
-            20,
-            vec![String::from("topic1"), String::from("topic2")],
-            true,
-        );
+        let (gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![String::from("topic1"), String::from("topic2")])
+            .to_subscribe(true)
+            .create_network();
 
         // check that our subscriptions are sent to each of the peers
         // collect all the SendEvents
@@ -765,7 +766,11 @@ mod tests {
             .iter()
             .map(|&t| String::from(t))
             .collect();
-        let (mut gs, peers, topic_hashes) = build_and_inject_nodes::<Vec<u8>>(20, topics, false);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(topics)
+            .to_subscribe(false)
+            .create_network();
 
         // The first peer sends 3 subscriptions and 1 unsubscription
         let mut subscriptions = topic_hashes[..3]
@@ -923,7 +928,11 @@ mod tests {
     /// Tests that the correct message is sent when a peer asks for a message in our cache.
     #[test]
     fn test_handle_iwant_msg_cached() {
-        let (mut gs, peers, _) = build_and_inject_nodes::<Vec<u8>>(20, Vec::new(), true);
+        let (mut gs, peers, _) = inject_nodes2()
+            .peer_no(20)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .create_network();
 
         let message = RawGossipsubMessage {
             source: Some(peers[11].clone()),
@@ -966,7 +975,11 @@ mod tests {
     /// Tests that messages are sent correctly depending on the shifting of the message cache.
     #[test]
     fn test_handle_iwant_msg_cached_shifted() {
-        let (mut gs, peers, _) = build_and_inject_nodes::<Vec<u8>>(20, Vec::new(), true);
+        let (mut gs, peers, _) = inject_nodes2()
+            .peer_no(20)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .create_network();
 
         // perform 10 memshifts and check that it leaves the cache
         for shift in 1..10 {
@@ -1017,7 +1030,11 @@ mod tests {
     #[test]
     // tests that an event is not created when a peers asks for a message not in our cache
     fn test_handle_iwant_msg_not_cached() {
-        let (mut gs, peers, _) = build_and_inject_nodes::<Vec<u8>>(20, Vec::new(), true);
+        let (mut gs, peers, _) = inject_nodes2()
+            .peer_no(20)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .create_network();
 
         let events_before = gs.events.len();
         gs.handle_iwant(&peers[7], vec![MessageId::new(b"unknown id")]);
@@ -1032,8 +1049,11 @@ mod tests {
     #[test]
     // tests that an event is created when a peer shares that it has a message we want
     fn test_handle_ihave_subscribed_and_msg_not_cached() {
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(20, vec![String::from("topic1")], true);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .create_network();
 
         gs.handle_ihave(
             &peers[7],
@@ -1061,8 +1081,11 @@ mod tests {
     // tests that an event is not created when a peer shares that it has a message that
     // we already have
     fn test_handle_ihave_subscribed_and_msg_cached() {
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(20, vec![String::from("topic1")], true);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .create_network();
 
         let msg_id = MessageId::new(b"known id");
 
@@ -1080,7 +1103,11 @@ mod tests {
     // test that an event is not created when a peer shares that it has a message in
     // a topic that we are not subscribed to
     fn test_handle_ihave_not_subscribed() {
-        let (mut gs, peers, _) = build_and_inject_nodes::<Vec<u8>>(20, vec![], true);
+        let (mut gs, peers, _) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![])
+            .to_subscribe(true)
+            .create_network();
 
         let events_before = gs.events.len();
         gs.handle_ihave(
@@ -1102,8 +1129,11 @@ mod tests {
     // tests that a peer is added to our mesh when we are both subscribed
     // to the same topic
     fn test_handle_graft_is_subscribed() {
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(20, vec![String::from("topic1")], true);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .create_network();
 
         gs.handle_graft(&peers[7], topic_hashes.clone());
 
@@ -1117,8 +1147,11 @@ mod tests {
     // tests that a peer is not added to our mesh when they are subscribed to
     // a topic that we are not
     fn test_handle_graft_is_not_subscribed() {
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(20, vec![String::from("topic1")], true);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .create_network();
 
         gs.handle_graft(
             &peers[7],
@@ -1139,8 +1172,11 @@ mod tests {
             .map(|&t| String::from(t))
             .collect();
 
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(20, topics.clone(), true);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(topics.clone())
+            .to_subscribe(true)
+            .create_network();
 
         let mut their_topics = topic_hashes.clone();
         // their_topics = [topic1, topic2, topic3]
@@ -1166,8 +1202,11 @@ mod tests {
     #[test]
     // tests that a peer is removed from our mesh
     fn test_handle_prune_peer_in_mesh() {
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(20, vec![String::from("topic1")], true);
+        let (mut gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(20)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .create_network();
 
         // insert peer into our mesh for 'topic1'
         gs.mesh
@@ -1222,7 +1261,11 @@ mod tests {
     #[test]
     // tests that a peer added as explicit peer gets connected to
     fn test_explicit_peer_gets_connected() {
-        let (mut gs, _, _) = build_and_inject_nodes::<Vec<u8>>(0, Vec::new(), true);
+        let (mut gs, _, _) = inject_nodes2()
+            .peer_no(0)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .create_network();
 
         //create new peer
         let peer = PeerId::random();
@@ -1255,7 +1298,12 @@ mod tests {
             .check_explicit_peers_ticks(2)
             .build()
             .unwrap();
-        let (mut gs, others, _) = build_and_inject_nodes_with_config(1, Vec::new(), true, config);
+        let (mut gs, others, _) = inject_nodes1()
+            .peer_no(1)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
 
         let peer = others.get(0).unwrap();
 
@@ -1306,13 +1354,13 @@ mod tests {
 
     #[test]
     fn test_handle_graft_explicit_peer() {
-        let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            1,
-            vec![String::from("topic1"), String::from("topic2")],
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (mut gs, peers, topic_hashes) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec![String::from("topic1"), String::from("topic2")])
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         let peer = peers.get(0).unwrap();
 
@@ -1337,13 +1385,13 @@ mod tests {
 
     #[test]
     fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
-        let (gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2,
-            vec![String::from("topic1")],
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (gs, peers, topic_hashes) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
         assert_eq!(
@@ -1376,13 +1424,13 @@ mod tests {
 
     #[test]
     fn do_not_graft_explicit_peer() {
-        let (mut gs, others, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            1,
-            vec![String::from("topic")],
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (mut gs, others, topic_hashes) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec![String::from("topic")])
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         gs.heartbeat();
 
@@ -1403,13 +1451,13 @@ mod tests {
 
     #[test]
     fn do_forward_messages_to_explicit_peers() {
-        let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2,
-            vec![String::from("topic1"), String::from("topic2")],
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (mut gs, peers, topic_hashes) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec![String::from("topic1"), String::from("topic2")])
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         let local_id = PeerId::random();
 
@@ -1448,13 +1496,13 @@ mod tests {
 
     #[test]
     fn explicit_peers_not_added_to_mesh_on_subscribe() {
-        let (mut gs, peers, _) = build_and_inject_nodes_with_config_and_explicit(
-            2,
-            Vec::new(),
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (mut gs, peers, _) = inject_nodes1()
+            .peer_no(2)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         //create new topic, both peers subscribing to it but we do not subscribe to it
         let topic = Topic::new(String::from("t"));
@@ -1503,13 +1551,13 @@ mod tests {
 
     #[test]
     fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
-        let (mut gs, peers, _) = build_and_inject_nodes_with_config_and_explicit(
-            2,
-            Vec::new(),
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (mut gs, peers, _) = inject_nodes1()
+            .peer_no(2)
+            .topics(Vec::new())
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         //create new topic, both peers subscribing to it but we do not subscribe to it
         let topic = Topic::new(String::from("t"));
@@ -1561,13 +1609,13 @@ mod tests {
 
     #[test]
     fn no_gossip_gets_sent_to_explicit_peers() {
-        let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2,
-            vec![String::from("topic1"), String::from("topic2")],
-            true,
-            GossipsubConfig::default(),
-            1,
-        );
+        let (mut gs, peers, topic_hashes) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec![String::from("topic1"), String::from("topic2")])
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(1)
+            .create_network();
 
         let local_id = PeerId::random();
 
@@ -1611,8 +1659,11 @@ mod tests {
         let config = GossipsubConfig::default();
 
         // Adds mesh_low peers and PRUNE 2 giving us a deficit.
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(config.mesh_n() + 1, vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(config.mesh_n() + 1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         let to_remove_peers = config.mesh_n() + 1 - config.mesh_n_low() - 1;
 
@@ -1644,14 +1695,13 @@ mod tests {
         // Adds mesh_low peers and PRUNE 2 giving us a deficit.
         let n = config.mesh_n_high() + 10;
         //make all outbound connections so that we allow grafting to all
-        let (mut gs, peers, topics) = build_and_inject_nodes_with_config_and_explicit_and_outbound(
-            n,
-            vec!["test".into()],
-            true,
-            config.clone(),
-            0,
-            n,
-        );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(n)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .outbound(n)
+            .create_network();
 
         // graft all the peers
         for peer in peers {
@@ -1669,8 +1719,11 @@ mod tests {
     fn test_connect_to_px_peers_on_handle_prune() {
         let config = GossipsubConfig::default();
 
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(1, vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         //handle prune from single peer with px peers
 
@@ -1723,8 +1776,11 @@ mod tests {
         let config = GossipsubConfig::default();
 
         //build mesh with enough peers for px
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(config.prune_peers() + 1, vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(config.prune_peers() + 1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         //send prune to peer
         gs.send_graft_prune(
@@ -1761,8 +1817,11 @@ mod tests {
         let config = GossipsubConfig::default();
 
         //build mesh with enough peers for px
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(config.prune_peers() + 1, vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(config.prune_peers() + 1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         //remove peer from mesh and send prune to peer => this adds a backoff for this peer
         gs.mesh.get_mut(&topics[0]).unwrap().remove(&peers[0]);
@@ -1807,8 +1866,12 @@ mod tests {
             .build()
             .unwrap();
         //only one peer => mesh too small and will try to regraft as early as possible
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config(1, vec!["test".into()], true, config);
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
 
         //handle prune from peer with backoff of one second
         gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), Some(1))]);
@@ -1860,8 +1923,12 @@ mod tests {
             .build()
             .unwrap();
         //only one peer => mesh too small and will try to regraft as early as possible
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config(1, vec!["test".into()], true, config);
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
 
         //handle prune from peer without a specified backoff
         gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), None)]);
@@ -1907,8 +1974,11 @@ mod tests {
 
         let topic = "test";
         // Adds more peers than mesh can hold to test flood publishing
-        let (mut gs, _, _) =
-            build_and_inject_nodes::<Vec<u8>>(config.mesh_n_high() + 10, vec![topic.into()], true);
+        let (mut gs, _, _) = inject_nodes2()
+            .peer_no(config.mesh_n_high() + 10)
+            .topics(vec![topic.into()])
+            .to_subscribe(true)
+            .create_network();
 
         let other_topic = Topic::new("test2");
 
@@ -1959,11 +2029,11 @@ mod tests {
 
         //add more peers than in mesh to test gossipping
         //by default only mesh_n_low peers will get added to mesh
-        let (mut gs, _, topic_hashes) = build_and_inject_nodes::<Vec<u8>>(
-            config.mesh_n_low() + config.gossip_lazy() + 1,
-            vec!["topic".into()],
-            true,
-        );
+        let (mut gs, _, topic_hashes) = inject_nodes2()
+            .peer_no(config.mesh_n_low() + config.gossip_lazy() + 1)
+            .topics(vec!["topic".into()])
+            .to_subscribe(true)
+            .create_network();
 
         //receive message
         let message = RawGossipsubMessage {
@@ -2001,8 +2071,11 @@ mod tests {
         //add a lot of peers
         let m =
             config.mesh_n_low() + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
-        let (mut gs, _, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(m, vec!["topic".into()], true);
+        let (mut gs, _, topic_hashes) = inject_nodes2()
+            .peer_no(m)
+            .topics(vec!["topic".into()])
+            .to_subscribe(true)
+            .create_network();
 
         //receive message
         let message = RawGossipsubMessage {
@@ -2038,8 +2111,11 @@ mod tests {
         let config = GossipsubConfig::default();
 
         //enough peers to fill the mesh
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(config.mesh_n_high(), vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         // graft all the peers => this will fill the mesh
         for peer in peers {
@@ -2081,8 +2157,12 @@ mod tests {
             .unwrap();
 
         //fill the mesh with inbound connections
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config(n, vec!["test".into()], true, config.clone());
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(n)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .create_network();
 
         // graft all the peers
         for peer in peers {
@@ -2115,8 +2195,11 @@ mod tests {
         let config = GossipsubConfig::default();
 
         // Fill full mesh with inbound peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(config.mesh_n_high(), vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         // graft all the peers
         for peer in peers {
@@ -2152,16 +2235,18 @@ mod tests {
         let config = GossipsubConfig::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((
+                PeerScoreParams::default(),
+                PeerScoreThresholds::default(),
+            )))
+            .create_network();
 
         //add penalty to peer
         gs.peer_score.as_mut().unwrap().0.add_penalty(&peers[0], 1);
@@ -2195,16 +2280,16 @@ mod tests {
     fn test_dont_graft_to_negative_scored_peers() {
         let config = GossipsubConfig::default();
         //init full mesh
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                config.mesh_n_high(),
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .scoring(Some((
+                PeerScoreParams::default(),
+                PeerScoreThresholds::default(),
+            )))
+            .create_network();
 
         //add two additional peers that will not be part of the mesh
         let p1 = add_peer(&mut gs, &topics, false, false);
@@ -2234,16 +2319,16 @@ mod tests {
         let config = GossipsubConfig::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .scoring(Some((
+                PeerScoreParams::default(),
+                PeerScoreThresholds::default(),
+            )))
+            .create_network();
 
         //penalize peer
         gs.peer_score.as_mut().unwrap().0.add_penalty(&peers[0], 1);
@@ -2284,16 +2369,18 @@ mod tests {
             .unwrap();
 
         // Build mesh with three peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                3,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(3)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((
+                PeerScoreParams::default(),
+                PeerScoreThresholds::default(),
+            )))
+            .create_network();
 
         // Penalize first peer
         gs.peer_score.as_mut().unwrap().0.add_penalty(&peers[0], 1);
@@ -2333,16 +2420,13 @@ mod tests {
         peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
         // Build full mesh
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                config.mesh_n_high(),
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         // Graft all the peer
         for peer in peers {
@@ -2405,16 +2489,15 @@ mod tests {
         peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
         // Build full mesh
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                config.mesh_n_high(),
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         // Graft all the peer
         for peer in peers {
@@ -2483,16 +2566,15 @@ mod tests {
         peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
         //build full mesh
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                config.mesh_n_high(),
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         // graft all the peer
         for peer in peers {
@@ -2555,16 +2637,10 @@ mod tests {
         peer_score_thresholds.publish_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
         //build mesh with no peers and no subscribed topics
-        let (mut gs, _, _) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                0,
-                vec![],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, _, _) = inject_nodes1()
+            .gs_config(config.clone())
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         //create a new topic for which we are not subscribed
         let topic = Topic::new("test");
@@ -2618,16 +2694,11 @@ mod tests {
         peer_score_thresholds.publish_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
         //build mesh with no peers
-        let (mut gs, _, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                0,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, _, topics) = inject_nodes1()
+            .topics(vec!["test".into()])
+            .gs_config(config.clone())
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         //add two additional peers that will be added to the mesh
         let p1 = add_peer(&mut gs, &topics, false, false);
@@ -2678,16 +2749,11 @@ mod tests {
         peer_score_thresholds.graylist_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
         //build mesh with no peers
-        let (mut gs, _, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                0,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, _, topics) = inject_nodes1()
+            .topics(vec!["test".into()])
+            .gs_config(config.clone())
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         //add two additional peers that will be added to the mesh
         let p1 = add_peer(&mut gs, &topics, false, false);
@@ -2812,16 +2878,13 @@ mod tests {
         peer_score_thresholds.accept_px_threshold = peer_score_params.app_specific_weight;
 
         // Build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                2,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         // Decrease score of first peer to less than accept_px_threshold
         gs.set_application_score(&peers[0], 0.99);
@@ -2892,16 +2955,18 @@ mod tests {
 
         //build mesh with more peers than mesh can hold
         let n = config.mesh_n_high() + 1;
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                n,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                n,
-                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(n)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(n)
+            .scoring(Some((
+                PeerScoreParams::default(),
+                PeerScoreThresholds::default(),
+            )))
+            .create_network();
 
         // graft all, will be accepted since the are outbound
         for peer in &peers {
@@ -2948,16 +3013,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with one peer
-        let (mut gs, peers, _) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, _) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         //sleep for 2 times the mesh_quantum
         sleep(topic_params.time_in_mesh_quantum * 2);
@@ -3032,16 +3096,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                2,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3133,16 +3196,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                2,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3235,16 +3297,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3329,16 +3390,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3386,16 +3446,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
 
@@ -3445,16 +3504,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3496,16 +3554,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3553,16 +3610,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3613,16 +3669,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with two peers
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                2,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3681,16 +3736,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3758,16 +3812,15 @@ mod tests {
         let peer_score_thresholds = PeerScoreThresholds::default();
 
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, peer_score_thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, peer_score_thresholds)))
+            .create_network();
 
         let mut seq = 0;
         let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
@@ -3809,16 +3862,15 @@ mod tests {
         peer_score_params.app_specific_weight = 2.0;
 
         //build mesh with one peer
-        let (mut gs, peers, _) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                1,
-                vec!["test".into()],
-                true,
-                GossipsubConfig::default(),
-                0,
-                0,
-                Some((peer_score_params, PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, _) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .gs_config(GossipsubConfig::default())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
+            .create_network();
 
         gs.set_application_score(&peers[0], 1.1);
 
@@ -3834,16 +3886,15 @@ mod tests {
         peer_score_params.ip_colocation_factor_threshold = 5.0;
         peer_score_params.ip_colocation_factor_weight = -2.0;
 
-        let (mut gs, _, _) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                0,
-                vec![],
-                false,
-                GossipsubConfig::default(),
-                0,
-                0,
-                Some((peer_score_params, PeerScoreThresholds::default())),
-            );
+        let (mut gs, _, _) = inject_nodes1()
+            .peer_no(0)
+            .topics(vec![])
+            .to_subscribe(false)
+            .gs_config(GossipsubConfig::default())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
+            .create_network();
 
         //create 5 peers with the same ip
         let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
@@ -3954,16 +4005,15 @@ mod tests {
         peer_score_params.behaviour_penalty_weight = -2.0;
         peer_score_params.behaviour_penalty_decay = 0.9;
 
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                2,
-                vec!["test".into()],
-                false,
-                config,
-                0,
-                0,
-                Some((peer_score_params, PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(2)
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config)
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
+            .create_network();
 
         //remove peers from mesh and send prune to them => this adds a backoff for the peers
         for i in 0..2 {
@@ -4030,16 +4080,15 @@ mod tests {
         let mut thresholds = PeerScoreThresholds::default();
         thresholds.opportunistic_graft_threshold = 2.0;
 
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                5,
-                vec!["test".into()],
-                false,
-                config,
-                0,
-                0,
-                Some((peer_score_params, thresholds)),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(5)
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config)
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, thresholds)))
+            .create_network();
 
         //fill mesh with 5 peers
         for peer in &peers {
@@ -4109,7 +4158,11 @@ mod tests {
     #[test]
     fn test_ignore_graft_from_unknown_topic() {
         //build gossipsub without subscribing to any topics
-        let (mut gs, _, _) = build_and_inject_nodes::<Vec<u8>>(0, vec![], false);
+        let (mut gs, _, _) = inject_nodes2()
+            .peer_no(0)
+            .topics(vec![])
+            .to_subscribe(false)
+            .create_network();
 
         //handle an incoming graft for some topic
         gs.handle_graft(&PeerId::random(), vec![Topic::new("test").hash()]);
@@ -4129,8 +4182,11 @@ mod tests {
     fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
         let config = GossipsubConfig::default();
         //build gossipsub with full mesh
-        let (mut gs, _, topics) =
-            build_and_inject_nodes::<Vec<u8>>(config.mesh_n_high(), vec!["test".into()], false);
+        let (mut gs, _, topics) = inject_nodes2()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .create_network();
 
         //add another peer not in the mesh
         let peer = add_peer(&mut gs, &topics, false, false);
@@ -4174,12 +4230,12 @@ mod tests {
             .build()
             .unwrap();
         //build gossipsub with full mesh
-        let (mut gs, _, topics) = build_and_inject_nodes_with_config(
-            config.mesh_n_high(),
-            vec!["test".into()],
-            false,
-            config.clone(),
-        );
+        let (mut gs, _, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config.clone())
+            .create_network();
 
         //add another peer not in the mesh
         let peer = add_peer(&mut gs, &topics, false, false);
@@ -4261,12 +4317,12 @@ mod tests {
             .build()
             .unwrap();
         //build gossipsub with full mesh
-        let (mut gs, _, topics) = build_and_inject_nodes_with_config(
-            config.mesh_n_high(),
-            vec!["test".into()],
-            false,
-            config.clone(),
-        );
+        let (mut gs, _, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config.clone())
+            .create_network();
 
         //add another peer not in the mesh
         let peer = add_peer(&mut gs, &topics, false, false);
@@ -4354,12 +4410,12 @@ mod tests {
             .build()
             .unwrap();
         //build gossipsub with full mesh
-        let (mut gs, peers, topics) = build_and_inject_nodes_with_config(
-            config.mesh_n_high(),
-            vec!["test".into()],
-            false,
-            config.clone(),
-        );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config.clone())
+            .create_network();
 
         //graft to all peers to really fill the mesh with all the peers
         for peer in peers {
@@ -4437,16 +4493,15 @@ mod tests {
         peer_score_params.behaviour_penalty_weight = -1.0;
 
         //fill the mesh
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                config.mesh_n_high(),
-                vec!["test".into()],
-                false,
-                config.clone(),
-                0,
-                0,
-                Some((peer_score_params, PeerScoreThresholds::default())),
-            );
+        let (mut gs, peers, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_high())
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config.clone())
+            .explicit(0)
+            .outbound(0)
+            .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
+            .create_network();
 
         //graft to all peers to really fill the mesh with all the peers
         for peer in peers {
@@ -4543,12 +4598,12 @@ mod tests {
             .flood_publish(false)
             .build()
             .unwrap();
-        let (mut gs, _, topics) = build_and_inject_nodes_with_config(
-            config.mesh_n_low() - 1,
-            vec!["test".into()],
-            false,
-            config,
-        );
+        let (mut gs, _, topics) = inject_nodes1()
+            .peer_no(config.mesh_n_low() - 1)
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .gs_config(config)
+            .create_network();
 
         //add two floodsub peer, one explicit, one implicit
         let p1 = add_peer_with_addr_and_kind(
@@ -4599,8 +4654,12 @@ mod tests {
             .flood_publish(false)
             .build()
             .unwrap();
-        let (mut gs, _, _) =
-            build_and_inject_nodes_with_config(config.mesh_n_low() - 1, Vec::new(), false, config);
+        let (mut gs, _, _) = inject_nodes1()
+            .peer_no(config.mesh_n_low() - 1)
+            .topics(Vec::new())
+            .to_subscribe(false)
+            .gs_config(config)
+            .create_network();
 
         let topic = Topic::new("test");
         let topics = vec![topic.hash()];
@@ -4652,7 +4711,11 @@ mod tests {
 
     #[test]
     fn test_dont_add_floodsub_peers_to_mesh_on_join() {
-        let (mut gs, _, _) = build_and_inject_nodes::<Vec<u8>>(0, Vec::new(), false);
+        let (mut gs, _, _) = inject_nodes2()
+            .peer_no(0)
+            .topics(Vec::new())
+            .to_subscribe(false)
+            .create_network();
 
         let topic = Topic::new("test");
         let topics = vec![topic.hash()];
@@ -4679,7 +4742,11 @@ mod tests {
 
     #[test]
     fn test_dont_send_px_to_old_gossipsub_peers() {
-        let (mut gs, _, topics) = build_and_inject_nodes::<Vec<u8>>(0, vec!["test".into()], false);
+        let (mut gs, _, topics) = inject_nodes2()
+            .peer_no(0)
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .create_network();
 
         //add an old gossipsub peer
         let p1 = add_peer_with_addr_and_kind(
@@ -4712,8 +4779,11 @@ mod tests {
     #[test]
     fn test_dont_send_floodsub_peers_in_px() {
         //build mesh with one peer
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes::<Vec<u8>>(1, vec!["test".into()], true);
+        let (mut gs, peers, topics) = inject_nodes2()
+            .peer_no(1)
+            .topics(vec!["test".into()])
+            .to_subscribe(true)
+            .create_network();
 
         //add two floodsub peers
         let _p1 = add_peer_with_addr_and_kind(
@@ -4749,7 +4819,11 @@ mod tests {
 
     #[test]
     fn test_dont_add_floodsub_peers_to_mesh_in_heartbeat() {
-        let (mut gs, _, topics) = build_and_inject_nodes::<Vec<u8>>(0, vec!["test".into()], false);
+        let (mut gs, _, topics) = inject_nodes2()
+            .peer_no(0)
+            .topics(vec!["test".into()])
+            .to_subscribe(false)
+            .create_network();
 
         //add two floodsub peer, one explicit, one implicit
         let _p1 = add_peer_with_addr_and_kind(
@@ -4774,8 +4848,11 @@ mod tests {
     // Some very basic test of public api methods.
     #[test]
     fn test_public_api() {
-        let (gs, peers, topic_hashes) =
-            build_and_inject_nodes::<Vec<u8>>(4, vec![String::from("topic1")], true);
+        let (gs, peers, topic_hashes) = inject_nodes2()
+            .peer_no(4)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .create_network();
         let peers = peers.into_iter().collect::<BTreeSet<_>>();
 
         assert_eq!(
@@ -4826,7 +4903,7 @@ mod tests {
             }};
         }
 
-        #[derive(Clone)]
+        #[derive(Clone, Default)]
         struct MessageData(pub Vec<u8>);
 
         impl Into<Vec<u8>> for MessageData {
@@ -4881,8 +4958,12 @@ mod tests {
             .fast_message_id_fn(fast_message_id_fn)
             .build()
             .unwrap();
-        let (mut gs, _, topic_hashes) =
-            build_and_inject_nodes_with_config(0, vec![String::from("topic1")], true, config);
+        let (mut gs, _, topic_hashes) = inject_nodes1()
+            .peer_no(0)
+            .topics(vec![String::from("topic1")])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
 
         let message = RawGossipsubMessage {
             source: None,
@@ -4904,19 +4985,32 @@ mod tests {
     }
 
     #[test]
+    fn test_subscribe_to_invalid_topic() {
+        let t1 = Topic::new("t1");
+        let t2 = Topic::new("t2");
+        let (mut gs, _, _) = inject_nodes::<Vec<u8>, _>()
+            .subscription_filter(WhitelistSubscriptionFilter(
+                vec![t1.hash()].into_iter().collect(),
+            ))
+            .to_subscribe(false)
+            .create_network();
+
+        assert!(gs.subscribe(&t1).is_ok());
+        assert!(gs.subscribe(&t2).is_err());
+    }
+
+    #[test]
     fn test_subscribe_and_graft_with_negative_score() {
         //simulate a communication between two gossipsub instances
-        let (mut gs1, _, topic_hashes) =
-            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
-                0,
-                vec!["test".into()],
-                false,
-                GossipsubConfig::default(),
-                0,
-                0,
-                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
-            );
-        let (mut gs2, _, _) = build_and_inject_nodes(0, vec![], false);
+        let (mut gs1, _, topic_hashes) = inject_nodes1()
+            .topics(vec!["test".into()])
+            .scoring(Some((
+                PeerScoreParams::default(),
+                PeerScoreThresholds::default(),
+            )))
+            .create_network();
+
+        let (mut gs2, _, _) = inject_nodes2().create_network();
 
         let connection_id = ConnectionId::new(0);
 

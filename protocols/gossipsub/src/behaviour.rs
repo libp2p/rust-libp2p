@@ -49,12 +49,13 @@ use libp2p_swarm::{
 
 use crate::backoff::BackoffStorage;
 use crate::config::{GenericGossipsubConfig, ValidationMode};
-use crate::error::PublishError;
+use crate::error::{PublishError, SubscriptionError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, HandlerEvent};
 use crate::mcache::MessageCache;
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
+use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::types::{
@@ -202,17 +203,20 @@ impl From<MessageAuthenticity> for PublishConfig {
     }
 }
 
+type GossipsubNetworkBehaviourAction<T> =
+    NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GenericGossipsubEvent<T>>;
+
 /// Network behaviour that handles the gossipsub protocol.
 ///
 /// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GenericGossipsubConfig`] instance. If message signing is
 /// disabled, the [`ValidationMode`] in the config should be adjusted to an appropriate level to
 /// accept unsigned messages.
-pub struct GenericGossipsub<T: AsRef<[u8]>> {
+pub struct GenericGossipsub<T: AsRef<[u8]>, Filter: TopicSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
     config: GenericGossipsubConfig<T>,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GenericGossipsubEvent<T>>>,
+    events: VecDeque<GossipsubNetworkBehaviourAction<T>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -288,16 +292,37 @@ pub struct GenericGossipsub<T: AsRef<[u8]>> {
 
     /// short term cache for fast message ids mapping them to the real message ids
     fast_messsage_id_cache: TimeCache<FastMessageId, MessageId>,
+
+    subscription_filter: Filter,
 }
 
 // for backwards compatibility
-pub type Gossipsub = GenericGossipsub<Vec<u8>>;
+pub type Gossipsub = GenericGossipsub<Vec<u8>, AllowAllSubscriptionFilter>;
 
-impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T> {
+impl<T, F> GenericGossipsub<T, F>
+where
+    T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+    F: TopicSubscriptionFilter + Default,
+{
     /// Creates a `GenericGossipsub` struct given a set of parameters specified via a `GenericGossipsubConfig`.
     pub fn new(
         privacy: MessageAuthenticity,
         config: GenericGossipsubConfig<T>,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter(privacy, config, F::default())
+    }
+}
+
+impl<T, F> GenericGossipsub<T, F>
+where
+    T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+    F: TopicSubscriptionFilter,
+{
+    /// Creates a `GenericGossipsub` struct given a set of parameters specified via a `GenericGossipsubConfig`.
+    pub fn new_with_subscription_filter(
+        privacy: MessageAuthenticity,
+        config: GenericGossipsubConfig<T>,
+        subscription_filter: F,
     ) -> Result<Self, &'static str> {
         // Set up the router given the configuration settings.
 
@@ -339,6 +364,7 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
             peer_protocols: HashMap::new(),
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
+            subscription_filter,
         })
     }
 
@@ -387,9 +413,13 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
     /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
-    pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
+    pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         debug!("Subscribing to topic: {}", topic);
         let topic_hash = topic.hash();
+        if !self.subscription_filter.can_subscribe(&topic_hash) {
+            return Err(SubscriptionError::NotAllowed);
+        }
+
         if self.mesh.get(&topic_hash).is_some() {
             debug!("Topic: {} is already in the mesh.", topic);
             return Ok(false);
@@ -412,7 +442,8 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
-                self.send_message(peer, event.clone())?;
+                self.send_message(peer, event.clone())
+                    .map_err(SubscriptionError::PublishError)?;
             }
         }
 
@@ -1547,7 +1578,22 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
         // Notify the application about the subscription, after the grafts are sent.
         let mut application_event = Vec::new();
 
-        for subscription in subscriptions {
+        let filtered_topics = match self
+            .subscription_filter
+            .filter_incoming_subscriptions(subscriptions, subscribed_topics)
+        {
+            Ok(topics) => topics,
+            Err(s) => {
+                error!(
+                    "Subscription filter error: {}; ignoring RPC from peer {}",
+                    s,
+                    propagation_source.to_string()
+                );
+                return;
+            }
+        };
+
+        for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
             let peer_list = self
                 .topic_peers
@@ -2608,9 +2654,10 @@ fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
     })
 }
 
-impl<T> NetworkBehaviour for GenericGossipsub<T>
+impl<T, F> NetworkBehaviour for GenericGossipsub<T, F>
 where
     T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+    F: Send + 'static + TopicSubscriptionFilter,
 {
     type ProtocolsHandler = GossipsubHandler;
     type OutEvent = GenericGossipsubEvent<T>;
@@ -3034,7 +3081,7 @@ fn validate_config(
     Ok(())
 }
 
-impl<T: Debug + AsRef<[u8]>> fmt::Debug for GenericGossipsub<T> {
+impl<T: Debug + AsRef<[u8]>, F: TopicSubscriptionFilter> fmt::Debug for GenericGossipsub<T, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
             .field("config", &self.config)

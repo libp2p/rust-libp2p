@@ -145,9 +145,14 @@ mod gossip_promises;
 mod handler;
 mod mcache;
 mod peer_score;
+pub mod subscription_filter;
 pub mod time_cache;
 mod topic;
 mod types;
+
+#[cfg(test)]
+#[macro_use]
+extern crate derive_builder;
 
 mod rpc_proto {
     include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));

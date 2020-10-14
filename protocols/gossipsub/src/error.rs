@@ -38,6 +38,15 @@ pub enum PublishError {
     MessageTooLarge,
 }
 
+/// Error associated with subscribing to a topic.
+#[derive(Debug)]
+pub enum SubscriptionError {
+    /// Couldn't publish our subscription
+    PublishError(PublishError),
+    /// We are not allowed to subscribe to this topic by the subscription filter
+    NotAllowed,
+}
+
 impl From<SigningError> for PublishError {
     fn from(error: SigningError) -> Self {
         PublishError::SigningError(error)
