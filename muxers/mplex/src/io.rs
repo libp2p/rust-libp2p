@@ -556,7 +556,7 @@ where
             if self.pending_flush_open.contains(id) {
                 trace!("{}: Executing pending flush for {}.", self.id, id);
                 ready!(self.poll_flush(cx))?;
-                self.pending_flush_open.remove(id);
+                self.pending_flush_open = Default::default();
             }
         }
 
