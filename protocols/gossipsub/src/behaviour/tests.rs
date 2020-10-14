@@ -4902,4 +4902,72 @@ mod tests {
         assert_eq!(counters.slow_counter, 1);
         assert_eq!(counters.from_counter, 1);
     }
+
+    #[test]
+    fn test_subscribe_and_graft_with_negative_score() {
+        //simulate a communication between two gossipsub instances
+        let (mut gs1, _, topic_hashes) =
+            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
+                0,
+                vec!["test".into()],
+                false,
+                GossipsubConfig::default(),
+                0,
+                0,
+                Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
+            );
+        let (mut gs2, _, _) = build_and_inject_nodes(0, vec![], false);
+
+        let connection_id = ConnectionId::new(0);
+
+        let topic = Topic::new("test");
+
+        let p2 = add_peer(&mut gs1, &Vec::new(), true, false);
+        let p1 = add_peer(&mut gs2, &topic_hashes, false, false);
+
+        //add penalty to peer p2
+        gs1.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
+
+        let original_score = gs1.peer_score.as_ref().unwrap().0.score(&p2);
+
+        //subscribe to topic in gs2
+        gs2.subscribe(&topic).unwrap();
+
+        let forward_messages_to_p1 = |gs1: &mut Gossipsub, gs2: &mut Gossipsub| {
+            //collect messages to p1
+            let messages_to_p1 = gs2.events.drain(..).filter_map(|e| match e {
+                NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
+                    if &peer_id == &p1 {
+                        Some(event)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            });
+            for message in messages_to_p1 {
+                gs1.inject_event(
+                    p2.clone(),
+                    connection_id,
+                    HandlerEvent::Message {
+                        rpc: proto_to_message(&message),
+                        invalid_messages: vec![],
+                    },
+                );
+            }
+        };
+
+        //forward the subscribe message
+        forward_messages_to_p1(&mut gs1, &mut gs2);
+
+        //heartbeats on both
+        gs1.heartbeat();
+        gs2.heartbeat();
+
+        //forward messages again
+        forward_messages_to_p1(&mut gs1, &mut gs2);
+
+        //nobody got penalized
+        assert!(gs1.peer_score.as_ref().unwrap().0.score(&p2) >= original_score);
+    }
 }
