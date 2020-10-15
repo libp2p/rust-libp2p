@@ -29,29 +29,26 @@ use nohash_hasher::{IntMap, IntSet};
 use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::collections::VecDeque;
-use std::{cmp, fmt, io, mem, task::{Context, Poll, Waker}};
-use std::sync::{Arc, atomic::{AtomicU32, Ordering}};
+use std::{cmp, fmt, io, mem, sync::Arc, task::{Context, Poll, Waker}};
 
 pub use std::io::{Result, Error, ErrorKind};
-
-const NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(0);
 
 /// A connection identifier.
 ///
 /// Randomly generated and mainly intended to improve log output
 /// by scoping substream IDs to a connection.
 #[derive(Clone, Copy)]
-struct ConnectionId(u32);
+struct ConnectionId(u64);
 
 impl fmt::Debug for ConnectionId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:04x}", self.0)
+        write!(f, "{:16x}", self.0)
     }
 }
 
 impl fmt::Display for ConnectionId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:04x}", self.0)
+        write!(f, "{:16x}", self.0)
     }
 }
 /// A multiplexed I/O stream.
@@ -116,8 +113,8 @@ where
 {
     /// Creates a new multiplexed I/O stream.
     pub fn new(io: C, config: MplexConfig) -> Self {
-        let id = ConnectionId(NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed));
-        debug!("New multiplexed stream: {}", id);
+        let id = ConnectionId(rand::random());
+        debug!("New multiplexed connection: {}", id);
         Multiplexed {
             id,
             config,
