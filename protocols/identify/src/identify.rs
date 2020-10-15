@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn periodic_id_works() {
         let (mut swarm1, pubkey1) = {
-            let (pubkey, transport) = transport(); // TODO
+            let (pubkey, transport) = transport();
             let protocol = Identify::new("a".to_string(), "b".to_string(), pubkey.clone());
             let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
             (swarm, pubkey)

@@ -306,22 +306,20 @@ impl<T> Multiplexed<T> {
 
     /// Adds a timeout to the setup and protocol upgrade process for all
     /// inbound and outbound connections established through the transport.
-    pub fn timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<Self>> {
-        Multiplexed(TransportTimeout::new(self, timeout))
+    pub fn timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<T>> {
+        Multiplexed(TransportTimeout::new(self.0, timeout))
     }
 
     /// Adds a timeout to the setup and protocol upgrade process for all
     /// outbound connections established through the transport.
-    pub fn outbound_timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<Self>>
-    {
-        Multiplexed(TransportTimeout::with_outgoing_timeout(self, timeout))
+    pub fn outbound_timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<T>> {
+        Multiplexed(TransportTimeout::with_outgoing_timeout(self.0, timeout))
     }
 
     /// Adds a timeout to the setup and protocol upgrade process for all
     /// inbound connections established through the transport.
-    pub fn inbound_timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<Self>>
-    {
-        Multiplexed(TransportTimeout::with_ingoing_timeout(self, timeout))
+    pub fn inbound_timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<T>> {
+        Multiplexed(TransportTimeout::with_ingoing_timeout(self.0, timeout))
     }
 }
 
