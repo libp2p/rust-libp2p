@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package envelope_proto;
+
+import "keys.proto";
+
+message Envelope {
+  // The public_key field contains the public key whose secret counterpart was used to sign the message. This MUST be
+  // consistent with the peer id of the signing peer, as the recipient will derive the peer id of the signer from this
+  // key.
+  keys_proto.PublicKey public_key = 1;
+
+  // The payload_type field contains a multicodec-prefixed type indicator.
+  bytes payload_type = 2;
+
+  // The payload field contains the arbitrary byte string payload.
+  bytes payload = 3;
+
+  // The signature field contains a signature of all fields except public_key, generated as described below.
+  bytes signature = 5;
+}

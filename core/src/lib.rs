@@ -35,7 +35,7 @@
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
 
-mod keys_proto {
+pub mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
 }
 

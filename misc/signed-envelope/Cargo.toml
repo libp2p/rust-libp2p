@@ -1,0 +1,17 @@
+[package]
+name = "libp2p-signed-envelope"
+version = "0.1.0"
+authors = ["blacktemplar <blacktemplar@a1.net>"]
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+description = "Provides a signed envelope structure that can contain and sign arbitrary byte payloads."
+
+
+[dependencies]
+libp2p-core = { path = "../../core" }
+unsigned-varint = "0.5"
+prost = "0.6.1"
+
+[build-dependencies]
+prost-build = "0.6"
