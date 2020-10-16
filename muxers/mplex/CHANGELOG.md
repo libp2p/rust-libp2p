@@ -1,5 +1,9 @@
 # 0.23.0 [unreleased]
 
+- More granular execution of pending flushes, better logging and
+  avoiding unnecessary hashing.
+  [PR 1785](https://github.com/libp2p/rust-libp2p/pull/1785).
+
 - Split receive buffers per substream.
   [PR 1784](https://github.com/libp2p/rust-libp2p/pull/1784).
 
