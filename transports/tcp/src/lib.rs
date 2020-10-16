@@ -353,7 +353,10 @@ impl AsyncWrite for TcpTransStream {
 #[cfg(feature = "tokio")]
 impl AsyncRead for TokioTcpTransStream {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
-        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
+        // TODO: Put more thoughts into this.
+        let mut read_buf = tokio::io::ReadBuf::new(buf);
+        let result = futures::ready!(tokio::io::AsyncRead::poll_read(Pin::new(&mut self.inner), cx, &mut read_buf));
+        Poll::Ready(result.map(|()| read_buf.filled().len()))
     }
 }
 

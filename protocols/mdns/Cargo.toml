@@ -28,3 +28,4 @@ wasm-timer = "0.2.4"
 
 [dev-dependencies]
 if-addrs = "0.6.4"
+tokio = { version = "0.3", default-features = false, features = ["rt", "rt-multi-thread"] }
