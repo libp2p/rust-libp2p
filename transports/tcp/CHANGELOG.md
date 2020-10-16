@@ -1,4 +1,6 @@
- # 0.22.1 [unreleased]
+# 0.23.0 [unreleased]
+
+- Update `libp2p-core`.
 
 - Replace `get_if_addrs` with `if-addrs`.
 

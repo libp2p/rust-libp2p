@@ -1,4 +1,8 @@
-# 0.22.2 [unreleased]
+# 0.23.0 [unreleased]
+
+- Rework transport boxing and move timeout configuration
+  to the transport builder.
+  [PR 1794](https://github.com/libp2p/rust-libp2p/pull/1794).
 
 - Update dependencies.
 

@@ -111,7 +111,7 @@ use libp2p_core::{
         Substream
     },
     transport::{self, TransportError},
-    muxing::{StreamMuxer, StreamMuxerBox},
+    muxing::StreamMuxerBox,
     network::{
         Network,
         NetworkInfo,
@@ -261,7 +261,7 @@ where
     TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     network: Network<
-        transport::Boxed<(TConnInfo, StreamMuxerBox), io::Error>,
+        transport::Boxed<(TConnInfo, StreamMuxerBox)>,
         TInEvent,
         TOutEvent,
         NodeHandlerWrapperBuilder<THandler>,
@@ -335,20 +335,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandleErr: error::Error + Send + 'static,
 {
     /// Builds a new `Swarm`.
-    pub fn new<TTransport, TMuxer>(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self
-    where
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
-        <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
-        <TMuxer as StreamMuxer>::Substream: Send + 'static,
-        TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone + Send + Sync + 'static,
-        TTransport::Error: Send + Sync + 'static,
-        TTransport::Listener: Send + 'static,
-        TTransport::ListenerUpgrade: Send + 'static,
-        TTransport::Dial: Send + 'static,
-    {
-        SwarmBuilder::new(transport, behaviour, local_peer_id)
-            .build()
+    pub fn new(
+        transport: transport::Boxed<(TConnInfo, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId
+    ) -> Self {
+        SwarmBuilder::new(transport, behaviour, local_peer_id).build()
     }
 
     /// Returns information about the [`Network`] underlying the `Swarm`.
@@ -972,7 +964,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 /// including the underlying [`Network`].
 pub struct SwarmBuilder<TBehaviour, TConnInfo> {
     local_peer_id: PeerId,
-    transport: transport::Boxed<(TConnInfo, StreamMuxerBox), io::Error>,
+    transport: transport::Boxed<(TConnInfo, StreamMuxerBox)>,
     behaviour: TBehaviour,
     network_config: NetworkConfig,
 }
@@ -984,21 +976,14 @@ where TBehaviour: NetworkBehaviour,
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
     /// via [`SwarmBuilder::build`].
-    pub fn new<TTrans, TMuxer>(transport: TTrans, behaviour: TBehaviour, local_peer_id: PeerId) -> Self
-    where
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
-        <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
-        <TMuxer as StreamMuxer>::Substream: Send + 'static,
-        TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone + Send + Sync + 'static,
-        TTrans::Error: Send + Sync + 'static,
-        TTrans::Listener: Send + 'static,
-        TTrans::ListenerUpgrade: Send + 'static,
-        TTrans::Dial: Send + 'static,
-    {
+    pub fn new(
+        transport: transport::Boxed<(TConnInfo, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId
+    ) -> Self {
         SwarmBuilder {
             local_peer_id,
-            transport: transport.boxed(),
+            transport: transport,
             behaviour,
             network_config: Default::default(),
         }
@@ -1193,15 +1178,10 @@ mod tests {
         identity,
         upgrade,
         multiaddr,
-        transport::{self, dummy::*}
+        transport
     };
-    use libp2p_mplex::Multiplex;
     use libp2p_noise as noise;
     use super::*;
-
-    fn get_random_id() -> identity::PublicKey {
-        identity::Keypair::generate_ed25519().public()
-    }
 
     fn new_test_swarm<T, O>(handler_proto: T) -> Swarm<CallTraceBehaviour<MockBehaviour<T, O>>>
     where
@@ -1215,28 +1195,10 @@ mod tests {
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(libp2p_mplex::MplexConfig::new());
+            .multiplex(libp2p_mplex::MplexConfig::new())
+            .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         SwarmBuilder::new(transport, behaviour, pubkey.into()).build()
-    }
-
-    #[test]
-    fn test_build_swarm() {
-        let id = get_random_id();
-        let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
-        let behaviour = DummyBehaviour {};
-        let swarm = SwarmBuilder::new(transport, behaviour, id.into())
-            .incoming_connection_limit(4)
-            .build();
-        assert_eq!(swarm.network.incoming_limit(), Some(4));
-    }
-
-    #[test]
-    fn test_build_swarm_with_max_listeners_none() {
-        let id = get_random_id();
-        let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
-        let swarm = SwarmBuilder::new(transport, DummyBehaviour {}, id.into()).build();
-        assert!(swarm.network.incoming_limit().is_none())
     }
 
     /// Establishes a number of connections between two peers,

@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 bytes = "0.5"
 futures = "0.3.1"
 futures_codec = "0.4"
-libp2p-core = { version = "0.22.0", path = "../../core" }
+libp2p-core = { version = "0.23.0", path = "../../core" }
 log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.11"

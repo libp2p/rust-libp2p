@@ -40,7 +40,7 @@ use std::{io, task::Poll};
 use util::TestHandler;
 
 type TestNetwork = Network<TestTransport, (), (), TestHandler>;
-type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox), io::Error>;
+type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
 
 fn new_network(cfg: NetworkConfig) -> TestNetwork {
     let local_key = identity::Keypair::generate_ed25519();
@@ -50,6 +50,7 @@ fn new_network(cfg: NetworkConfig) -> TestNetwork {
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_mplex::MplexConfig::new())
+        .boxed()
         .and_then(|(peer, mplex), _| {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
