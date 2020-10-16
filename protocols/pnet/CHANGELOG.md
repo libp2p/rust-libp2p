@@ -1,4 +1,4 @@
-# 0.19.2 [unreleased]
+# 0.19.2 [2020-10-16]
 
 - Update dependencies.
 

@@ -1,4 +1,4 @@
-# 0.8.3 [unreleased]
+# 0.8.3 [2020-10-16]
 
 - Fix a regression resulting in a panic with the `V1Lazy` protocol.
   [PR 1783](https://github.com/libp2p/rust-libp2p/pull/1783).
