@@ -62,22 +62,22 @@ atomic = "0.5.0"
 bytes = "0.5"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.22.2", path = "core" }
+libp2p-core = { version = "0.23.0", path = "core" }
 libp2p-core-derive = { version = "0.20.2", path = "misc/core-derive" }
 libp2p-floodsub = { version = "0.23.0", path = "protocols/floodsub", optional = true }
-libp2p-gossipsub = { version = "0.22.1", path = "./protocols/gossipsub", optional = true }
-libp2p-identify = { version = "0.22.0", path = "protocols/identify", optional = true }
-libp2p-kad = { version = "0.23.1", path = "protocols/kad", optional = true }
+libp2p-gossipsub = { version = "0.23.0", path = "./protocols/gossipsub", optional = true }
+libp2p-identify = { version = "0.23.0", path = "protocols/identify", optional = true }
+libp2p-kad = { version = "0.24.0", path = "protocols/kad", optional = true }
 libp2p-mplex = { version = "0.23.0", path = "muxers/mplex", optional = true }
-libp2p-noise = { version = "0.24.1", path = "protocols/noise", optional = true }
-libp2p-ping = { version = "0.22.0", path = "protocols/ping", optional = true }
+libp2p-noise = { version = "0.25.0", path = "protocols/noise", optional = true }
+libp2p-ping = { version = "0.23.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.23.0", path = "protocols/plaintext", optional = true }
 libp2p-pnet = { version = "0.19.2", path = "protocols/pnet", optional = true }
 libp2p-request-response = { version = "0.4.0", path = "protocols/request-response", optional = true }
-libp2p-swarm = { version = "0.22.1", path = "swarm" }
-libp2p-uds = { version = "0.22.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.22.0", path = "transports/wasm-ext", optional = true }
-libp2p-yamux = { version = "0.25.0", path = "muxers/yamux", optional = true }
+libp2p-swarm = { version = "0.23.0", path = "swarm" }
+libp2p-uds = { version = "0.23.0", path = "transports/uds", optional = true }
+libp2p-wasm-ext = { version = "0.23.0", path = "transports/wasm-ext", optional = true }
+libp2p-yamux = { version = "0.26.0", path = "muxers/yamux", optional = true }
 multiaddr = { package = "parity-multiaddr", version = "0.9.3", path = "misc/multiaddr" }
 multihash = "0.11.0"
 parking_lot = "0.11.0"
@@ -86,11 +86,11 @@ smallvec = "1.0"
 wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
-libp2p-deflate = { version = "0.22.0", path = "protocols/deflate", optional = true }
-libp2p-dns = { version = "0.22.0", path = "transports/dns", optional = true }
-libp2p-mdns = { version = "0.22.1", path = "protocols/mdns", optional = true }
-libp2p-tcp = { version = "0.22.1", path = "transports/tcp", optional = true }
-libp2p-websocket = { version = "0.23.1", path = "transports/websocket", optional = true }
+libp2p-deflate = { version = "0.23.0", path = "protocols/deflate", optional = true }
+libp2p-dns = { version = "0.23.0", path = "transports/dns", optional = true }
+libp2p-mdns = { version = "0.23.0", path = "protocols/mdns", optional = true }
+libp2p-tcp = { version = "0.23.0", path = "transports/tcp", optional = true }
+libp2p-websocket = { version = "0.24.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
 async-std = "1.6.2"

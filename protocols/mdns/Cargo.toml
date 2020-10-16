@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-mdns"
 edition = "2018"
-version = "0.22.1"
+version = "0.23.0"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -16,8 +16,8 @@ dns-parser = "0.8"
 either = "1.5.3"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.22.0", path = "../../core" }
-libp2p-swarm = { version = "0.22.0", path = "../../swarm" }
+libp2p-core = { version = "0.23.0", path = "../../core" }
+libp2p-swarm = { version = "0.23.0", path = "../../swarm" }
 log = "0.4"
 net2 = "0.2"
 rand = "0.7"

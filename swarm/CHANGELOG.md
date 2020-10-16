@@ -1,4 +1,9 @@
-# 0.22.1 [unreleased]
+# 0.23.0 [unreleased]
+
+- Require a `Boxed` transport to be given to the `Swarm`
+  or `SwarmBuilder` to avoid unnecessary double-boxing of
+  transports and simplify API bounds.
+  [PR 1794](https://github.com/libp2p/rust-libp2p/pull/1794)
 
 - Respect inbound timeouts and upgrade versions in the `MultiHandler`.
   [PR 1786](https://github.com/libp2p/rust-libp2p/pull/1786).
