@@ -1,4 +1,4 @@
-# 0.23.0 [unreleased]
+# 0.23.0 [2020-10-16]
 
 - Require a `Boxed` transport to be given to the `Swarm`
   or `SwarmBuilder` to avoid unnecessary double-boxing of
