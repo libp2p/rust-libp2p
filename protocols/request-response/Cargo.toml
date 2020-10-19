@@ -13,8 +13,8 @@ categories = ["network-programming", "asynchronous"]
 async-trait = "0.1"
 bytes = "0.5.6"
 futures = "0.3.1"
-libp2p-core = { version = "0.22.0", path = "../../core" }
-libp2p-swarm = { version = "0.22.0", path = "../../swarm" }
+libp2p-core = { version = "0.23.0", path = "../../core" }
+libp2p-swarm = { version = "0.23.0", path = "../../swarm" }
 log = "0.4.11"
 lru = "0.6"
 minicbor = { version = "0.6", features = ["std", "derive"] }

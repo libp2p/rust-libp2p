@@ -77,7 +77,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let transport = TokioTcpConfig::new().nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(mplex::MplexConfig::new());
+        .multiplex(mplex::MplexConfig::new())
+        .boxed();
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");
