@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package peer_record_proto;
+
+// PeerRecord contains the listen addresses for a peer at a particular point in time.
+message PeerRecord {
+  // AddressInfo wraps a multiaddr. In the future, it may be extended to
+  // contain additional metadata, such as "routability" (whether an address is
+  // local or global, etc).
+  message AddressInfo {
+    bytes multiaddr = 1;
+  }
+
+  // the peer id of the subject of the record (who these addresses belong to).
+  bytes peer_id = 1;
+
+  // A monotonically increasing sequence number, used for record ordering.
+  uint64 seq = 2;
+
+  // All current listen addresses
+  repeated AddressInfo addresses = 3;
+}

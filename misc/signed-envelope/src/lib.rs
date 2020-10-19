@@ -1,12 +1,13 @@
-use libp2p_core::PublicKey;
+use libp2p_core::identity::error::{DecodingError, SigningError as IdentitySigningError};
 use libp2p_core::identity::Keypair;
-use libp2p_core::identity::error::{SigningError as IdentitySigningError, DecodingError};
-use std::convert::{TryInto, TryFrom};
-use Error::*;
-use unsigned_varint::{encode, decode};
 use libp2p_core::keys_proto;
+use libp2p_core::PublicKey;
+use std::convert::{TryFrom, TryInto};
+use std::fmt::Debug;
+use unsigned_varint::encode;
+use Error::*;
 
-mod envelope_proto {
+pub mod envelope_proto {
     include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
 }
 
@@ -20,10 +21,15 @@ pub struct Envelope<T: Record> {
     pub public_key: PublicKey,
     pub signature: Vec<u8>,
 
-    payload: Vec<u8>
+    payload: Vec<u8>,
 }
 
-pub enum Error<T: Record> {
+#[derive(Debug)]
+pub enum Error<T: Record>
+where
+    <T as TryInto<Vec<u8>>>::Error: Debug,
+    <T as TryFrom<Vec<u8>>>::Error: Debug,
+{
     SerializationError(<T as TryInto<Vec<u8>>>::Error),
     DeserializationError(<T as TryFrom<Vec<u8>>>::Error),
     EmptyDomain,
@@ -35,8 +41,12 @@ pub enum Error<T: Record> {
     WrongPayloadType,
 }
 
-impl<T: Record> Envelope<T> {
-    pub fn sign(content: T, key_pair: Keypair) -> Result<Self, Error<T>> {
+impl<T: Record> Envelope<T>
+where
+    <T as TryInto<Vec<u8>>>::Error: Debug,
+    <T as TryFrom<Vec<u8>>>::Error: Debug,
+{
+    pub fn sign(content: T, key_pair: &Keypair) -> Result<Self, Error<T>> {
         let payload: Vec<u8> = content.clone().try_into().map_err(SerializationError)?;
 
         let buffer = Self::get_buffer(&payload)?;
@@ -47,13 +57,13 @@ impl<T: Record> Envelope<T> {
             content,
             public_key: key_pair.public(),
             signature,
-            payload
+            payload,
         })
     }
 
     pub fn verify(&self) -> bool {
-        if let Ok(buffer) = Self::get_buffer(&value.payload) {
-            self.public_key.verify(&buffer, &signature)
+        if let Ok(buffer) = Self::get_buffer(&self.payload) {
+            self.public_key.verify(&buffer, &self.signature)
         } else {
             false
         }
@@ -71,7 +81,7 @@ impl<T: Record> Envelope<T> {
         Ok(Self::concatenate_payloads(&[
             T::domain().as_bytes(),
             T::payload_type(),
-            &payload
+            &payload,
         ]))
     }
 
@@ -98,14 +108,16 @@ impl<T: Record> Into<envelope_proto::Envelope> for Envelope<T> {
     }
 }
 
-impl<T: Record> TryFrom<envelope_proto::Envelope> for Envelope<T> {
+impl<T: Record> TryFrom<envelope_proto::Envelope> for Envelope<T>
+where
+    <T as TryInto<Vec<u8>>>::Error: Debug,
+    <T as TryFrom<Vec<u8>>>::Error: Debug,
+{
     type Error = Error<T>;
 
     fn try_from(value: envelope_proto::Envelope) -> Result<Self, Self::Error> {
-
-        let public_key = PublicKey::try_from(
-            value.public_key.ok_or(NoPublicKey)?
-        ).map_err(PublicKeyDecodingError)?;
+        let public_key = PublicKey::try_from(value.public_key.ok_or(NoPublicKey)?)
+            .map_err(PublicKeyDecodingError)?;
 
         let payload = value.payload;
 

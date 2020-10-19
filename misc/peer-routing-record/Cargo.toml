@@ -1,0 +1,18 @@
+[package]
+name = "libp2p-peer-routing-record"
+version = "0.1.0"
+authors = ["blacktemplar <blacktemplar@a1.net>"]
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+description = "Provides a structure for storing a signed peer routing record."
+
+
+[dependencies]
+libp2p-core = { path = "../../core" }
+prost = "0.6.1"
+libp2p-signed-envelope = { path = "../signed-envelope" }
+log = "0.4"
+
+[build-dependencies]
+prost-build = "0.6"
