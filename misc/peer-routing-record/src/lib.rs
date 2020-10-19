@@ -97,7 +97,7 @@ pub fn timestamp_seq() -> u64 {
 }
 
 impl PeerRecord {
-    fn new(peer_id: PeerId, addresses: Vec<Multiaddr>) -> Self {
+    pub fn new(peer_id: PeerId, addresses: Vec<Multiaddr>) -> Self {
         Self {
             peer_id,
             addresses,
@@ -105,7 +105,7 @@ impl PeerRecord {
         }
     }
 
-    fn sign(self, keypair: &Keypair) -> Result<SignedPeerRecord, Error<Self>> {
+    pub fn sign(self, keypair: &Keypair) -> Result<SignedPeerRecord, Error<Self>> {
         SignedPeerRecord::sign(self, keypair)
     }
 }
