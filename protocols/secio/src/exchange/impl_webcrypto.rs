@@ -23,7 +23,7 @@
 use crate::{KeyAgreement, SecioError};
 use futures::prelude::*;
 use parity_send_wrapper::SendWrapper;
-use std::io;
+use std::{io, pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::prelude::*;
 
 /// Opaque private key type. Contains the private key and the `SubtleCrypto` object.
@@ -35,12 +35,11 @@ pub type AgreementPrivateKey = SendSyncHack<(JsValue, web_sys::SubtleCrypto)>;
 pub struct SendSyncHack<T>(SendWrapper<T>);
 
 impl<T> Future for SendSyncHack<T>
-where T: Future {
-    type Item = T::Item;
-    type Error = T::Error;
+where T: Future + Unpin {
+    type Output = T::Output;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.0.poll()
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        self.0.poll_unpin(cx)
     }
 }
 
@@ -48,128 +47,114 @@ where T: Future {
 ///
 /// Returns the opaque private key and the corresponding public key.
 pub fn generate_agreement(algorithm: KeyAgreement)
-    -> impl Future<Item = (AgreementPrivateKey, Vec<u8>), Error = SecioError>
+    -> impl Future<Output = Result<(AgreementPrivateKey, Vec<u8>), SecioError>>
 {
-    // First step is to create the `SubtleCrypto` object.
-    let crypto = build_crypto_future();
+    let future = async move {
+        // First step is to create the `SubtleCrypto` object.
+        let crypto = build_crypto_future().await?;
 
-    // We then generate the ephemeral key.
-    let key_promise = crypto.and_then(move |crypto| {
-        let crypto = crypto.clone();
-        let obj = build_curve_obj(algorithm);
+        // We then generate the ephemeral key.
+        let key_pair = {
+            let obj = build_curve_obj(algorithm);
 
-        let usages = js_sys::Array::new();
-        usages.push(&JsValue::from_str("deriveKey"));
-        usages.push(&JsValue::from_str("deriveBits"));
+            let usages = js_sys::Array::new();
+            usages.push(&JsValue::from_str("deriveKey"));
+            usages.push(&JsValue::from_str("deriveBits"));
 
-        crypto.generate_key_with_object(&obj, true, usages.as_ref())
-            .map(wasm_bindgen_futures::JsFuture::from)
-            .into_future()
-            .flatten()
-            .map(|key_pair| (key_pair, crypto))
-    });
+            let promise = crypto.generate_key_with_object(&obj, true, usages.as_ref())?;
+            wasm_bindgen_futures::JsFuture::from(promise).await?
+        };
 
-    // WebCrypto has generated a key-pair. Let's split this key pair into a private key and a
-    // public key.
-    let split_key = key_promise.and_then(move |(key_pair, crypto)| {
-        let private = js_sys::Reflect::get(&key_pair, &JsValue::from_str("privateKey"));
-        let public = js_sys::Reflect::get(&key_pair, &JsValue::from_str("publicKey"));
-        match (private, public) {
-            (Ok(pr), Ok(pu)) => Ok((pr, pu, crypto)),
-            (Err(err), _) => Err(err),
-            (_, Err(err)) => Err(err),
-        }
-    });
+        // WebCrypto has generated a key-pair. Let's split this key pair into a private key and a
+        // public key.
+        let (private, public) = {
+            let private = js_sys::Reflect::get(&key_pair, &JsValue::from_str("privateKey"));
+            let public = js_sys::Reflect::get(&key_pair, &JsValue::from_str("publicKey"));
+            match (private, public) {
+                (Ok(pr), Ok(pu)) => (pr, pu),
+                (Err(err), _) => return Err(err),
+                (_, Err(err)) => return Err(err),
+            }
+        };
 
-    // Then we turn the public key into an `ArrayBuffer`.
-    let export_key = split_key.and_then(move |(private, public, crypto)| {
-        crypto.export_key("raw", &public.into())
-            .map(wasm_bindgen_futures::JsFuture::from)
-            .into_future()
-            .flatten()
-            .map(|public| ((private, crypto), public))
-    });
+        // Then we turn the public key into an `ArrayBuffer`.
+        let public = {
+            let promise = crypto.export_key("raw", &public.into())?;
+            wasm_bindgen_futures::JsFuture::from(promise).await?
+        };
 
-    // And finally we convert this `ArrayBuffer` into a `Vec<u8>`.
-    let future = export_key
-        .map(|((private, crypto), public)| {
-            let public = js_sys::Uint8Array::new(&public);
-            let mut public_buf = vec![0; public.length() as usize];
-            public.copy_to(&mut public_buf);
-            (SendSyncHack(SendWrapper::new((private, crypto))), public_buf)
+        // And finally we convert this `ArrayBuffer` into a `Vec<u8>`.
+        let public = js_sys::Uint8Array::new(&public);
+        let mut public_buf = vec![0; public.length() as usize];
+        public.copy_to(&mut public_buf);
+        Ok((SendSyncHack(SendWrapper::new((private, crypto))), public_buf))
+    };
+
+    let future = future
+        .map_err(|err| {
+            SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
         });
-
-    SendSyncHack(SendWrapper::new(future.map_err(|err| {
-        SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
-    })))
+    SendSyncHack(SendWrapper::new(Box::pin(future)))
 }
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
 pub fn agree(algorithm: KeyAgreement, key: AgreementPrivateKey, other_public_key: &[u8], out_size: usize)
-    -> impl Future<Item = Vec<u8>, Error = SecioError>
+    -> impl Future<Output = Result<Vec<u8>, SecioError>>
 {
-    let (private_key, crypto) = key.0.take();
-
-    // We start by importing the remote's public key into the WebCrypto world.
-    let import_promise = {
-        let other_public_key = {
-            // This unsafe is here because the lifetime of `other_public_key` must not outlive the
-            // `tmp_view`. This is guaranteed by the fact that we clone this array right below.
-            // See also https://github.com/rustwasm/wasm-bindgen/issues/1303
-            let tmp_view = unsafe { js_sys::Uint8Array::view(other_public_key) };
-            js_sys::Uint8Array::new(tmp_view.as_ref())
-        };
-
-        // Note: contrary to what one might think, we shouldn't add the "deriveBits" usage.
-        crypto
-            .import_key_with_object(
-                "raw", &js_sys::Object::from(other_public_key.buffer()),
-                &build_curve_obj(algorithm), false, &js_sys::Array::new()
-            )
-            .into_future()
-            .map(wasm_bindgen_futures::JsFuture::from)
-            .flatten()
+    let other_public_key = {
+        // This unsafe is here because the lifetime of `other_public_key` must not outlive the
+        // `tmp_view`. This is guaranteed by the fact that we clone this array right below.
+        // See also https://github.com/rustwasm/wasm-bindgen/issues/1303
+        let tmp_view = unsafe { js_sys::Uint8Array::view(other_public_key) };
+        js_sys::Uint8Array::new(tmp_view.as_ref())
     };
 
-    // We then derive the final private key.
-    let derive = import_promise.and_then({
-        let crypto = crypto.clone();
-        move |public_key| {
+    let future = async move {
+        let (private_key, crypto) = key.0.take();
+
+        // We start by importing the remote's public key into the WebCrypto world.
+        let public_key = {
+            // Note: contrary to what one might think, we shouldn't add the "deriveBits" usage.
+            let promise = crypto
+                .import_key_with_object(
+                    "raw", &js_sys::Object::from(other_public_key.buffer()),
+                    &build_curve_obj(algorithm), false, &js_sys::Array::new()
+                )?;
+            wasm_bindgen_futures::JsFuture::from(promise).await?
+        };
+
+        // We then derive the final private key.
+        let bytes = {
             let derive_params = build_curve_obj(algorithm);
             let _ = js_sys::Reflect::set(derive_params.as_ref(), &JsValue::from_str("public"), &public_key);
-            crypto
+            let promise = crypto
                 .derive_bits_with_object(
                     &derive_params,
                     &web_sys::CryptoKey::from(private_key),
                     8 * out_size as u32
-                )
-                .into_future()
-                .map(wasm_bindgen_futures::JsFuture::from)
-                .flatten()
-        }
-    });
+                )?;
+            wasm_bindgen_futures::JsFuture::from(promise).await?
+        };
 
-    let future = derive
-        .map(|bytes| {
-            let bytes = js_sys::Uint8Array::new(&bytes);
-            let mut buf = vec![0; bytes.length() as usize];
-            bytes.copy_to(&mut buf);
-            buf
-        })
-        .map_err(|err| {
+        let bytes = js_sys::Uint8Array::new(&bytes);
+        let mut buf = vec![0; bytes.length() as usize];
+        bytes.copy_to(&mut buf);
+        Ok(buf)
+    };
+
+    let future = future
+        .map_err(|err: JsValue| {
             SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
         });
-
-    SendSyncHack(SendWrapper::new(future))
+    SendSyncHack(SendWrapper::new(Box::pin(future)))
 }
 
 /// Builds a future that returns the `SubtleCrypto` object.
-fn build_crypto_future() -> impl Future<Item = web_sys::SubtleCrypto, Error = JsValue> {
+async fn build_crypto_future() -> Result<web_sys::SubtleCrypto, JsValue> {
     web_sys::window()
         .ok_or_else(|| JsValue::from_str("Window object not available"))
         .and_then(|window| window.crypto())
         .map(|crypto| crypto.subtle())
-        .into_future()
 }
 
 /// Builds a `EcKeyGenParams` object.

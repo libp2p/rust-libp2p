@@ -18,13 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message::CircuitRelay_Peer;
+use crate::message_proto::circuit_relay;
 use bytes::Buf as _;
 use futures::prelude::*;
+use futures::future::BoxFuture;
 use libp2p_core::{multiaddr::Error as MultiaddrError, upgrade, Multiaddr, PeerId};
 use smallvec::SmallVec;
 use std::{convert::TryFrom, error, fmt, io, mem};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
+use std::pin::Pin;
 
 /// Any message received on the wire whose length is superior to that will be refused and will
 /// trigger an error.
@@ -50,18 +52,19 @@ pub(crate) struct Peer {
     pub(crate) addrs: SmallVec<[Multiaddr; 4]>,
 }
 
-impl TryFrom<CircuitRelay_Peer> for Peer {
+impl TryFrom<circuit_relay::Peer> for Peer {
     type Error = PeerParseError;
 
-    fn try_from(mut peer: CircuitRelay_Peer) -> Result<Peer, Self::Error> {
+    fn try_from(mut peer: circuit_relay::Peer) -> Result<Peer, Self::Error> {
+        let circuit_relay::Peer { id, addrs } = peer;
         let peer_id =
-            PeerId::from_bytes(peer.take_id()).map_err(|_| PeerParseError::PeerIdParseError)?;
-        let mut addrs = SmallVec::with_capacity(peer.get_addrs().len());
-        for addr in peer.take_addrs().into_iter() {
+            PeerId::from_bytes(id).map_err(|_| PeerParseError::PeerIdParseError)?;
+        let mut parsed_addrs = SmallVec::with_capacity(addrs.len());
+        for addr in addrs.into_iter() {
             let addr = Multiaddr::try_from(addr).map_err(PeerParseError::MultiaddrParseError)?;
-            addrs.push(addr);
+            parsed_addrs.push(addr);
         }
-        Ok(Peer { peer_id, addrs })
+        Ok(Peer { peer_id, addrs: parsed_addrs })
     }
 }
 
@@ -111,7 +114,7 @@ impl From<upgrade::ReadOneError> for SendReadError {
 /// Builds a future that writes the given bytes to the substream, then reads a relay response,
 /// validates it, then returns the substream.
 pub fn send_read<TSubstream, TUserData>(
-    substream: upgrade::Negotiated<TSubstream>,
+    substream: TSubstream,
     message: Vec<u8>,
     user_data: TUserData,
 ) -> SendReadFuture<TSubstream, TUserData> {
@@ -135,25 +138,15 @@ pub struct SendReadFuture<TSubstream, TUserData> {
 enum FutureInner<TSubstream> {
     /// We are trying to push the data to the substream.
     Sending {
-        substream: upgrade::Negotiated<TSubstream>,
+        substream: TSubstream,
         message: io::Cursor<Vec<u8>>,
     },
 
     /// We are trying to flush the substream.
-    Flushing(upgrade::Negotiated<TSubstream>),
+    Flushing(TSubstream),
 
     /// We are trying to read the response from the remote.
-    Reading(
-        upgrade::ReadRespond<
-            upgrade::Negotiated<TSubstream>,
-            (),
-            fn(
-                upgrade::Negotiated<TSubstream>,
-                Vec<u8>,
-                (),
-            ) -> Result<upgrade::Negotiated<TSubstream>, SendReadError>,
-        >,
-    ),
+    Reading(BoxFuture<'static, Result<TSubstream, SendReadError>>),
 
     /// Something bad happened during the last cycle and we cannot continue.
     Poisoned,
@@ -161,56 +154,57 @@ enum FutureInner<TSubstream> {
 
 impl<TSubstream, TUserData> Future for SendReadFuture<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = (upgrade::Negotiated<TSubstream>, TUserData);
-    type Error = SendReadError;
+    type Output = Result<(TSubstream, TUserData), SendReadError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            match mem::replace(&mut self.inner, FutureInner::Poisoned) {
-                FutureInner::Sending {
-                    mut substream,
-                    mut message,
-                } => {
-                    match substream.write_buf(&mut message)? {
-                        Async::Ready(_) => {}
-                        Async::NotReady => {
-                            self.inner = FutureInner::Sending { substream, message };
-                            return Ok(Async::NotReady);
-                        }
-                    }
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unimplemented!();
+        // loop {
+        //     match mem::replace(&mut self.inner, FutureInner::Poisoned) {
+        //         FutureInner::Sending {
+        //             mut substream,
+        //             mut message,
+        //         } => {
+        //             match Pin::new(&mut substream).poll_write(cx, &mut message)? {
+        //                 // TODO: Handle error and partial sending.
+        //                 Poll::Ready(_) => {}
+        //                 Poll::Pending => {
+        //                     self.inner = FutureInner::Sending { substream, message };
+        //                     return Poll::Pending;
+        //                 }
+        //             }
 
-                    if message.remaining() == 0 {
-                        self.inner = FutureInner::Flushing(substream);
-                    } else {
-                        self.inner = FutureInner::Sending { substream, message };
-                    }
-                }
+        //             if message.remaining() == 0 {
+        //                 self.inner = FutureInner::Flushing(substream);
+        //             } else {
+        //                 self.inner = FutureInner::Sending { substream, message };
+        //             }
+        //         }
 
-                FutureInner::Flushing(mut substream) => match substream.poll_flush()? {
-                    Async::Ready(()) => {
-                        panic!() //let fut = upgrade::read_respond(substream, MAX_ACCEPTED_MESSAGE_LEN, (), |_, _, _| panic!());
-                                 //self.inner = FutureInner::Reading(fut);
-                    }
-                    Async::NotReady => {
-                        self.inner = FutureInner::Flushing(substream);
-                        return Ok(Async::NotReady);
-                    }
-                },
+        //         FutureInner::Flushing(mut substream) => match Pin::new(substream).poll_flush()? {
+        //             Poll::Ready(()) => {
+        //                 panic!() //let fut = upgrade::read_respond(substream, MAX_ACCEPTED_MESSAGE_LEN, (), |_, _, _| panic!());
+        //                          //self.inner = FutureInner::Reading(fut);
+        //             }
+        //             Poll::Pending => {
+        //                 self.inner = FutureInner::Flushing(substream);
+        //                 return Poll::Pending;
+        //             }
+        //         },
 
-                FutureInner::Reading(mut fut) => match fut.poll()? {
-                    Async::Ready(out) => {
-                        return Ok(Async::Ready((out, self.user_data.take().unwrap())))
-                    }
-                    Async::NotReady => {
-                        self.inner = FutureInner::Reading(fut);
-                        return Ok(Async::NotReady);
-                    }
-                },
+        //         FutureInner::Reading(mut fut) => match fut.poll_unpin(cx)? {
+        //             Poll::Ready(out) => {
+        //                 return Ok(Poll::Ready((out, self.user_data.take().unwrap())))
+        //             }
+        //             Poll::Pending => {
+        //                 self.inner = FutureInner::Reading(fut);
+        //                 return Ok(Poll::Pending);
+        //             }
+        //         },
 
-                FutureInner::Poisoned => panic!("Poisoned state"),
-            };
-        }
+        //         FutureInner::Poisoned => panic!("Poisoned state"),
+        //     };
+        // }
     }
 }

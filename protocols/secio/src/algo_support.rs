@@ -24,7 +24,7 @@
 //! helps you with.
 
 use crate::error::SecioError;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 use ring::digest;
 use std::cmp::Ordering;
 use crate::stream_cipher::Cipher;
@@ -204,7 +204,7 @@ pub fn select_digest(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, Se
     Err(SecioError::NoSupportIntersection)
 }
 
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 impl Into<&'static digest::Algorithm> for Digest {
     #[inline]
     fn into(self) -> &'static digest::Algorithm {
@@ -212,5 +212,15 @@ impl Into<&'static digest::Algorithm> for Digest {
             Digest::Sha256 => &digest::SHA256,
             Digest::Sha512 => &digest::SHA512,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cipher_non_null() {
+        // This test serves as a safe-guard against accidentally pushing to master a commit that
+        // sets this constant to `NULL`.
+        assert!(!super::DEFAULT_CIPHERS_PROPOSITION.contains("NULL"));
     }
 }

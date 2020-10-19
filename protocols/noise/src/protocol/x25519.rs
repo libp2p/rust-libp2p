@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Noise protocols based on X25519.
+//! Legacy Noise protocols based on X25519.
+//!
+//! **Note**: This set of protocols is not interoperable with other
+//! libp2p implementations.
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
@@ -26,7 +29,7 @@ use lazy_static::lazy_static;
 use libp2p_core::UpgradeInfo;
 use libp2p_core::{identity, identity::ed25519};
 use rand::Rng;
-use ring::digest::{SHA512, digest};
+use sha2::{Sha512, Digest};
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
 use zeroize::Zeroize;
 
@@ -83,7 +86,7 @@ impl UpgradeInfo for NoiseConfig<XX, X25519> {
     }
 }
 
-impl UpgradeInfo for NoiseConfig<IK, X25519> {
+impl<R> UpgradeInfo for NoiseConfig<IK, X25519, R> {
     type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;
 
@@ -92,16 +95,11 @@ impl UpgradeInfo for NoiseConfig<IK, X25519> {
     }
 }
 
-impl UpgradeInfo for NoiseConfig<IK, X25519, (PublicKey<X25519>, identity::PublicKey)> {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
-    }
-}
-
-/// Noise protocols for X25519.
+/// Legacy Noise protocol for X25519.
+///
+/// **Note**: This `Protocol` provides no configuration that
+/// is interoperable  with other libp2p implementations.
+/// See [`crate::X25519Spec`] instead.
 impl Protocol<X25519> for X25519 {
     fn params_ik() -> ProtocolParams {
         PARAMS_IK.clone()
@@ -221,7 +219,7 @@ impl SecretKey<X25519> {
         // the same to yield a Curve25519 keypair with the same public key.
         // let ed25519_sk = ed25519::SecretKey::from(ed);
         let mut curve25519_sk: [u8; 32] = [0; 32];
-        let hash = digest(&SHA512, ed25519_sk.as_ref());
+        let hash = Sha512::digest(ed25519_sk.as_ref());
         curve25519_sk.copy_from_slice(&hash.as_ref()[..32]);
         let sk = SecretKey(X25519(curve25519_sk)); // Copy
         curve25519_sk.zeroize();

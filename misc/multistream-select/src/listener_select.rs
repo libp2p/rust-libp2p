@@ -18,167 +18,222 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Contains the `listener_select_proto` code, which allows selecting a protocol thanks to
-//! `multistream-select` for the listener.
+//! Protocol negotiation strategies for the peer acting as the listener
+//! in a multistream-select protocol negotiation.
 
-use futures::{prelude::*, sink, stream::StreamFuture};
-use crate::protocol::{
-    DialerToListenerMessage,
-    Listener,
-    ListenerFuture,
-    ListenerToDialerMessage
-};
-use log::{debug, trace};
-use std::mem;
-use tokio_io::{AsyncRead, AsyncWrite};
-use crate::{Negotiated, ProtocolChoiceError};
+use crate::{Negotiated, NegotiationError};
+use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
 
-/// Helps selecting a protocol amongst the ones supported.
+use futures::prelude::*;
+use smallvec::SmallVec;
+use std::{convert::TryFrom as _, io, iter::FromIterator, mem, pin::Pin, task::{Context, Poll}};
+
+/// Returns a `Future` that negotiates a protocol on the given I/O stream
+/// for a peer acting as the _listener_ (or _responder_).
 ///
-/// This function expects a socket and an iterator of the list of supported protocols. The iterator
-/// must be clonable (i.e. iterable multiple times), because the list may need to be accessed
-/// multiple times.
-///
-/// The iterator must produce tuples of the name of the protocol that is advertised to the remote,
-/// a function that will check whether a remote protocol matches ours, and an identifier for the
-/// protocol of type `P` (you decide what `P` is). The parameters of the function are the name
-/// proposed by the remote, and the protocol name that we passed (so that you don't have to clone
-/// the name).
-///
-/// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
-/// socket now uses this protocol.
-pub fn listener_select_proto<R, I, X>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, X>
+/// This function is given an I/O stream and a list of protocols and returns a
+/// computation that performs the protocol negotiation with the remote. The
+/// returned `Future` resolves with the name of the negotiated protocol and
+/// a [`Negotiated`] I/O stream.
+pub fn listener_select_proto<R, I>(
+    inner: R,
+    protocols: I,
+) -> ListenerSelectFuture<R, I::Item>
 where
     R: AsyncRead + AsyncWrite,
-    for<'r> &'r I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    I: IntoIterator,
+    I::Item: AsRef<[u8]>
 {
+    let protocols = protocols.into_iter().filter_map(|n|
+        match Protocol::try_from(n.as_ref()) {
+            Ok(p) => Some((n, p)),
+            Err(e) => {
+                log::warn!("Listener: Ignoring invalid protocol: {} due to {}",
+                      String::from_utf8_lossy(n.as_ref()), e);
+                None
+            }
+        });
     ListenerSelectFuture {
-        inner: ListenerSelectState::AwaitListener {
-            listener_fut: Listener::listen(inner),
-            protocols
+        protocols: SmallVec::from_iter(protocols),
+        state: State::RecvHeader {
+            io: MessageIO::new(inner)
         }
     }
 }
 
-/// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
-pub struct ListenerSelectFuture<R, I, X>
+/// The `Future` returned by [`listener_select_proto`] that performs a
+/// multistream-select protocol negotiation on an underlying I/O stream.
+#[pin_project::pin_project]
+pub struct ListenerSelectFuture<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    N: AsRef<[u8]>
 {
-    inner: ListenerSelectState<R, I, X>
+    // TODO: It would be nice if eventually N = Protocol, which has a
+    // few more implications on the API.
+    protocols: SmallVec<[(N, Protocol); 8]>,
+    state: State<R, N>
 }
 
-enum ListenerSelectState<R, I, X>
+enum State<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    N: AsRef<[u8]>
 {
-    AwaitListener {
-        listener_fut: ListenerFuture<R, X>,
-        protocols: I
+    RecvHeader { io: MessageIO<R> },
+    SendHeader { io: MessageIO<R>, version: Version },
+    RecvMessage { io: MessageIO<R> },
+    SendMessage {
+        io: MessageIO<R>,
+        message: Message,
+        protocol: Option<N>
     },
-    Incoming {
-        stream: StreamFuture<Listener<R, X>>,
-        protocols: I
+    Flush {
+        io: MessageIO<R>,
+        protocol: Option<N>
     },
-    Outgoing {
-        sender: sink::Send<Listener<R, X>>,
-        protocols: I,
-        outcome: Option<X>
-    },
-    Undefined
+    Done
 }
 
-impl<R, I, X> Future for ListenerSelectFuture<R, I, X>
+impl<R, N> Future for ListenerSelectFuture<R, N>
 where
-    R: AsyncRead + AsyncWrite,
-    for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]> + Clone
+    // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
+    // It also makes the implementation considerably easier to write.
+    R: AsyncRead + AsyncWrite + Unpin,
+    N: AsRef<[u8]> + Clone
 {
-    type Item = (X, Negotiated<R>, I);
-    type Error = ProtocolChoiceError;
+    type Output = Result<(N, Negotiated<R>), NegotiationError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
         loop {
-            match mem::replace(&mut self.inner, ListenerSelectState::Undefined) {
-                ListenerSelectState::AwaitListener { mut listener_fut, protocols } => {
-                    let listener = match listener_fut.poll()? {
-                        Async::Ready(l) => l,
-                        Async::NotReady => {
-                            self.inner = ListenerSelectState::AwaitListener { listener_fut, protocols };
-                            return Ok(Async::NotReady)
+            match mem::replace(this.state, State::Done) {
+                State::RecvHeader { mut io } => {
+                    match io.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(Message::Header(version)))) => {
+                            *this.state = State::SendHeader { io, version }
                         }
-                    };
-                    let stream = listener.into_future();
-                    self.inner = ListenerSelectState::Incoming { stream, protocols };
+                        Poll::Ready(Some(Ok(_))) => {
+                            return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
+                        },
+                        Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
+                        Poll::Ready(None) =>
+                            return Poll::Ready(Err(NegotiationError::from(
+                                ProtocolError::IoError(
+                                    io::ErrorKind::UnexpectedEof.into())))),
+                        Poll::Pending => {
+                            *this.state = State::RecvHeader { io };
+                            return Poll::Pending
+                        }
+                    }
                 }
-                ListenerSelectState::Incoming { mut stream, protocols } => {
-                    let (msg, listener) = match stream.poll() {
-                        Ok(Async::Ready(x)) => x,
-                        Ok(Async::NotReady) => {
-                            self.inner = ListenerSelectState::Incoming { stream, protocols };
-                            return Ok(Async::NotReady)
+
+                State::SendHeader { mut io, version } => {
+                    match Pin::new(&mut io).poll_ready(cx) {
+                        Poll::Pending => {
+                            *this.state = State::SendHeader { io, version };
+                            return Poll::Pending
+                        },
+                        Poll::Ready(Ok(())) => {},
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
+                    }
+
+                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(version)) {
+                        return Poll::Ready(Err(From::from(err)));
+                    }
+
+                    *this.state = match version {
+                        Version::V1 => State::Flush { io, protocol: None },
+                        Version::V1Lazy => State::RecvMessage { io },
+                    }
+                }
+
+                State::RecvMessage { mut io } => {
+                    let msg = match Pin::new(&mut io).poll_next(cx) {
+                        Poll::Ready(Some(Ok(msg))) => msg,
+                        Poll::Ready(None) =>
+                            return Poll::Ready(Err(NegotiationError::from(
+                                ProtocolError::IoError(
+                                    io::ErrorKind::UnexpectedEof.into())))),
+                        Poll::Pending => {
+                            *this.state = State::RecvMessage { io };
+                            return Poll::Pending;
                         }
-                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
+                        Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
                     };
+
                     match msg {
-                        Some(DialerToListenerMessage::ProtocolsListRequest) => {
-                            trace!("protocols list response: {:?}", protocols
-                                   .into_iter()
-                                   .map(|p| p.as_ref().into())
-                                   .collect::<Vec<Vec<u8>>>());
-                            let list = protocols.into_iter().collect();
-                            let msg = ListenerToDialerMessage::ProtocolsListResponse { list };
-                            let sender = listener.send(msg);
-                            self.inner = ListenerSelectState::Outgoing {
-                                sender,
-                                protocols,
-                                outcome: None
-                            }
+                        Message::ListProtocols => {
+                            let supported = this.protocols.iter().map(|(_,p)| p).cloned().collect();
+                            let message = Message::Protocols(supported);
+                            *this.state = State::SendMessage { io, message, protocol: None }
                         }
-                        Some(DialerToListenerMessage::ProtocolRequest { name }) => {
-                            let mut outcome = None;
-                            let mut send_back = ListenerToDialerMessage::NotAvailable;
-                            for supported in &protocols {
-                                if name.as_ref() == supported.as_ref() {
-                                    send_back = ListenerToDialerMessage::ProtocolAck {
-                                        name: supported.clone()
-                                    };
-                                    outcome = Some(supported);
-                                    break;
+                        Message::Protocol(p) => {
+                            let protocol = this.protocols.iter().find_map(|(name, proto)| {
+                                if &p == proto {
+                                    Some(name.clone())
+                                } else {
+                                    None
                                 }
+                            });
+
+                            let message = if protocol.is_some() {
+                                log::debug!("Listener: confirming protocol: {}", p);
+                                Message::Protocol(p.clone())
+                            } else {
+                                log::debug!("Listener: rejecting protocol: {}",
+                                    String::from_utf8_lossy(p.as_ref()));
+                                Message::NotAvailable
+                            };
+
+                            *this.state = State::SendMessage { io, message, protocol };
+                        }
+                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
+                    }
+                }
+
+                State::SendMessage { mut io, message, protocol } => {
+                    match Pin::new(&mut io).poll_ready(cx) {
+                        Poll::Pending => {
+                            *this.state = State::SendMessage { io, message, protocol };
+                            return Poll::Pending
+                        },
+                        Poll::Ready(Ok(())) => {},
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
+                    }
+
+                    if let Err(err) = Pin::new(&mut io).start_send(message) {
+                        return Poll::Ready(Err(From::from(err)));
+                    }
+
+                    *this.state = State::Flush { io, protocol };
+                }
+
+                State::Flush { mut io, protocol } => {
+                    match Pin::new(&mut io).poll_flush(cx) {
+                        Poll::Pending => {
+                            *this.state = State::Flush { io, protocol };
+                            return Poll::Pending
+                        },
+                        Poll::Ready(Ok(())) => {
+                            // If a protocol has been selected, finish negotiation.
+                            // Otherwise expect to receive another message.
+                            match protocol {
+                                Some(protocol) => {
+                                    log::debug!("Listener: sent confirmed protocol: {}",
+                                        String::from_utf8_lossy(protocol.as_ref()));
+                                    let io = Negotiated::completed(io.into_inner());
+                                    return Poll::Ready(Ok((protocol, io)))
+                                }
+                                None => *this.state = State::RecvMessage { io }
                             }
-                            trace!("requested: {:?}, supported: {}", name, outcome.is_some());
-                            let sender = listener.send(send_back);
-                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome }
                         }
-                        None => {
-                            debug!("no protocol request received");
-                            return Err(ProtocolChoiceError::NoProtocolFound)
-                        }
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
                 }
-                ListenerSelectState::Outgoing { mut sender, protocols, outcome } => {
-                    let listener = match sender.poll()? {
-                        Async::Ready(l) => l,
-                        Async::NotReady => {
-                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome };
-                            return Ok(Async::NotReady)
-                        }
-                    };
-                    if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, Negotiated(listener.into_inner()), protocols)))
-                    } else {
-                        let stream = listener.into_future();
-                        self.inner = ListenerSelectState::Incoming { stream, protocols }
-                    }
-                }
-                ListenerSelectState::Undefined =>
-                    panic!("ListenerSelectState::poll called after completion")
+
+                State::Done => panic!("State::poll called after completion")
             }
         }
     }

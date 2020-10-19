@@ -26,9 +26,10 @@
 
 // Based on copy.rs from tokio-io in https://github.com/tokio-rs/tokio
 
-use futures::{try_ready, Future, Poll};
+use futures::{prelude::*, ready};
 use std::io;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Poll, Context};
+use std::pin::Pin;
 
 /// A future which will copy all data from a reader into a writer.
 ///
@@ -82,63 +83,63 @@ where
     R: AsyncRead,
     W: AsyncWrite,
 {
-    type Item = (u64, R, W);
-    type Error = io::Error;
+    type Output = Result<(u64, R, W), io::Error>;
 
-    fn poll(&mut self) -> Poll<(u64, R, W), io::Error> {
-        debug_assert!(
-            self.reader.is_some() && self.writer.is_some(),
-            "poll() has been called again after returning Ok"
-        );
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unimplemented!();
+        // debug_assert!(
+        //     self.reader.is_some() && self.writer.is_some(),
+        //     "poll() has been called again after returning Ok"
+        // );
 
-        loop {
-            // Still not finished flushing
-            if !self.flush_done {
-                try_ready!(self.writer.as_mut().unwrap().poll_flush());
-                self.flush_done = true
-            }
+        // loop {
+        //     // Still not finished flushing
+        //     if !self.flush_done {
+        //         ready!(self.writer.as_mut().unwrap().poll_flush());
+        //         self.flush_done = true
+        //     }
 
-            // If our buffer is empty, then we need to read some data to
-            // continue.
-            if self.pos == self.cap && !self.read_done {
-                let reader = self.reader.as_mut().unwrap();
-                let n = try_ready!(reader.poll_read(&mut self.buf));
-                if n == 0 {
-                    self.read_done = true;
-                } else {
-                    self.pos = 0;
-                    self.cap = n;
-                }
-            }
+        //     // If our buffer is empty, then we need to read some data to
+        //     // continue.
+        //     if self.pos == self.cap && !self.read_done {
+        //         let reader = self.reader.as_mut().unwrap();
+        //         let n = ready!(reader.poll_read(&mut self.buf));
+        //         if n == 0 {
+        //             self.read_done = true;
+        //         } else {
+        //             self.pos = 0;
+        //             self.cap = n;
+        //         }
+        //     }
 
-            // If our buffer has some data, let's write it out!
-            while self.pos < self.cap {
-                let writer = self.writer.as_mut().unwrap();
-                let i = try_ready!(writer.poll_write(&self.buf[self.pos..self.cap]));
-                if i == 0 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "write zero byte into writer",
-                    ));
-                } else {
-                    self.pos += i;
-                    self.amt += i as u64;
-                }
-            }
+        //     // If our buffer has some data, let's write it out!
+        //     while self.pos < self.cap {
+        //         let writer = self.writer.as_mut().unwrap();
+        //         let i = ready!(writer.poll_write(&self.buf[self.pos..self.cap]));
+        //         if i == 0 {
+        //             return Err(io::Error::new(
+        //                 io::ErrorKind::WriteZero,
+        //                 "write zero byte into writer",
+        //             ));
+        //         } else {
+        //             self.pos += i;
+        //             self.amt += i as u64;
+        //         }
+        //     }
 
-            // The buffered data has been written, let's flush it!
-            if self.pos == self.cap && !self.read_done {
-                self.flush_done = false;
-                continue;
-            }
+        //     // The buffered data has been written, let's flush it!
+        //     if self.pos == self.cap && !self.read_done {
+        //         self.flush_done = false;
+        //         continue;
+        //     }
 
-            // Everything has been copied.
-            if self.pos == self.cap && self.read_done {
-                try_ready!(self.writer.as_mut().unwrap().poll_flush());
-                let reader = self.reader.take().unwrap();
-                let writer = self.writer.take().unwrap();
-                return Ok((self.amt, reader, writer).into());
-            }
-        }
+        //     // Everything has been copied.
+        //     if self.pos == self.cap && self.read_done {
+        //         ready!(self.writer.as_mut().unwrap().poll_flush());
+        //         let reader = self.reader.take().unwrap();
+        //         let writer = self.writer.take().unwrap();
+        //         return Ok((self.amt, reader, writer).into());
+        //     }
+        // }
     }
 }

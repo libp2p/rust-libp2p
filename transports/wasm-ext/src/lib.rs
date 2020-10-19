@@ -32,11 +32,12 @@
 //! module.
 //!
 
-use futures::{future::FutureResult, prelude::*, stream::Stream, try_ready};
+use futures::{prelude::*, future::Ready};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
 use parity_send_wrapper::SendWrapper;
-use std::{collections::VecDeque, error, fmt, io, mem};
+use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{JsCast, prelude::*};
+use wasm_bindgen_futures::JsFuture;
 
 /// Contains the definition that one must match on the JavaScript side.
 pub mod ffi {
@@ -71,14 +72,17 @@ pub mod ffi {
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
-        /// Returns a `Readable​Stream​` that .
+        /// Returns an iterator of JavaScript `Promise`s that resolve to `ArrayBuffer` objects
+        /// (or resolve to null, see below). These `ArrayBuffer` objects contain the data that the
+        /// remote has sent to us. If the remote closes the connection, the iterator must produce
+        /// a `Promise` that resolves to `null`.
         #[wasm_bindgen(method, getter)]
         pub fn read(this: &Connection) -> js_sys::Iterator;
 
         /// Writes data to the connection. Returns a `Promise` that resolves when the connection is
         /// ready for writing again.
         ///
-        /// If the `Promise` returns an error, the writing side of the connection is considered
+        /// If the `Promise` produces an error, the writing side of the connection is considered
         /// unrecoverable and the connection should be closed as soon as possible.
         ///
         /// Guaranteed to only be called after the previous write promise has resolved.
@@ -94,7 +98,8 @@ pub mod ffi {
         #[wasm_bindgen(method)]
         pub fn close(this: &Connection);
 
-        /// List of addresses we have started listening on. Must be an array of strings of multiaddrs.
+        /// List of addresses we have started listening on. Must be an array of strings of
+        /// multiaddrs.
         #[wasm_bindgen(method, getter)]
         pub fn new_addrs(this: &ListenEvent) -> Option<Box<[JsValue]>>;
 
@@ -122,6 +127,13 @@ pub mod ffi {
         #[wasm_bindgen(method, getter)]
         pub fn local_addr(this: &ConnectionEvent) -> String;
     }
+
+    #[cfg(feature = "websocket")]
+    #[wasm_bindgen(module = "/src/websockets.js")]
+    extern "C" {
+        /// Returns a `Transport` implemented using websockets.
+        pub fn websocket_transport() -> Transport;
+    }
 }
 
 /// Implementation of `Transport` whose implementation is handled by some FFI.
@@ -139,7 +151,7 @@ impl ExtTransport {
 }
 
 impl fmt::Debug for ExtTransport {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ExtTransport").finish()
     }
 }
@@ -156,7 +168,7 @@ impl Transport for ExtTransport {
     type Output = Connection;
     type Error = JsErr;
     type Listener = Listen;
-    type ListenerUpgrade = FutureResult<Self::Output, Self::Error>;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Dial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
@@ -200,7 +212,7 @@ impl Transport for ExtTransport {
 #[must_use = "futures do nothing unless polled"]
 pub struct Dial {
     /// A promise that will resolve to a `ffi::Connection` on success.
-    inner: SendWrapper<wasm_bindgen_futures::JsFuture>,
+    inner: SendWrapper<JsFuture>,
 }
 
 impl fmt::Debug for Dial {
@@ -210,14 +222,13 @@ impl fmt::Debug for Dial {
 }
 
 impl Future for Dial {
-    type Item = Connection;
-    type Error = JsErr;
+    type Output = Result<Connection, JsErr>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.inner.poll() {
-            Ok(Async::Ready(connec)) => Ok(Async::Ready(Connection::new(connec.into()))),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => Err(JsErr::from(err)),
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match Future::poll(Pin::new(&mut *self.inner), cx) {
+            Poll::Ready(Ok(connec)) => Poll::Ready(Ok(Connection::new(connec.into()))),
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(err)) => Poll::Ready(Err(JsErr::from(err))),
         }
     }
 }
@@ -228,9 +239,9 @@ pub struct Listen {
     /// Iterator of `ListenEvent`s.
     iterator: SendWrapper<js_sys::Iterator>,
     /// Promise that will yield the next `ListenEvent`.
-    next_event: Option<SendWrapper<wasm_bindgen_futures::JsFuture>>,
+    next_event: Option<SendWrapper<JsFuture>>,
     /// List of events that we are waiting to propagate.
-    pending_events: VecDeque<ListenerEvent<FutureResult<Connection, JsErr>>>,
+    pending_events: VecDeque<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>>,
 }
 
 impl fmt::Debug for Listen {
@@ -240,29 +251,35 @@ impl fmt::Debug for Listen {
 }
 
 impl Stream for Listen {
-    type Item = ListenerEvent<FutureResult<Connection, JsErr>>;
-    type Error = JsErr;
+    type Item = Result<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>, JsErr>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(ev) = self.pending_events.pop_front() {
-                return Ok(Async::Ready(Some(ev)));
+                return Poll::Ready(Some(Ok(ev)));
             }
 
+            // Try to fill `self.next_event` if necessary and possible. If we fail, then
+            // `Ready(None)` is returned below.
             if self.next_event.is_none() {
-                let ev = self.iterator.next()?;
-                if !ev.done() {
-                    let promise: js_sys::Promise = ev.value().into();
-                    self.next_event = Some(SendWrapper::new(promise.into()));
+                if let Ok(ev) = self.iterator.next() {
+                    if !ev.done() {
+                        let promise: js_sys::Promise = ev.value().into();
+                        self.next_event = Some(SendWrapper::new(promise.into()));
+                    }
                 }
             }
 
             let event = if let Some(next_event) = self.next_event.as_mut() {
-                let e = ffi::ListenEvent::from(try_ready!(next_event.poll()));
+                let e = match Future::poll(Pin::new(&mut **next_event), cx) {
+                    Poll::Ready(Ok(ev)) => ffi::ListenEvent::from(ev),
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err.into()))),
+                };
                 self.next_event = None;
                 e
             } else {
-                return Ok(Async::Ready(None));
+                return Poll::Ready(None);
             };
 
             for addr in event
@@ -282,7 +299,7 @@ impl Stream for Listen {
             {
                 let upgrade: ffi::ConnectionEvent = upgrade.into();
                 self.pending_events.push_back(ListenerEvent::Upgrade {
-                    listen_addr: upgrade.local_addr().parse()?,
+                    local_addr: upgrade.local_addr().parse()?,
                     remote_addr: upgrade.observed_addr().parse()?,
                     upgrade: futures::future::ok(Connection::new(upgrade.connection())),
                 });
@@ -293,9 +310,10 @@ impl Stream for Listen {
                 .into_iter()
                 .flat_map(|e| e.to_vec().into_iter())
             {
-                let addr = js_value_to_addr(&addr)?;
-                self.pending_events
-                    .push_back(ListenerEvent::AddressExpired(addr));
+                match js_value_to_addr(&addr) {
+                    Ok(addr) => self.pending_events.push_back(ListenerEvent::NewAddress(addr)),
+                    Err(err) => self.pending_events.push_back(ListenerEvent::Error(err)),
+                }
             }
         }
     }
@@ -319,7 +337,7 @@ pub struct Connection {
     /// When we write data using the FFI, a promise is returned containing the moment when the
     /// underlying transport is ready to accept data again. This promise is stored here.
     /// If this is `Some`, we must wait until the contained promise is resolved to write again.
-    previous_write_promise: Option<SendWrapper<wasm_bindgen_futures::JsFuture>>,
+    previous_write_promise: Option<SendWrapper<JsFuture>>,
 }
 
 impl Connection {
@@ -341,7 +359,7 @@ enum ConnectionReadState {
     /// Some data have been read and are waiting to be transferred. Can be empty.
     PendingData(Vec<u8>),
     /// Waiting for a `Promise` containing the next data.
-    Waiting(SendWrapper<wasm_bindgen_futures::JsFuture>),
+    Waiting(SendWrapper<JsFuture>),
     /// An error occurred or an earlier read yielded EOF.
     Finished,
 }
@@ -352,11 +370,11 @@ impl fmt::Debug for Connection {
     }
 }
 
-impl io::Read for Connection {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+impl AsyncRead for Connection {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         loop {
             match mem::replace(&mut self.read_state, ConnectionReadState::Finished) {
-                ConnectionReadState::Finished => break Err(io::ErrorKind::BrokenPipe.into()),
+                ConnectionReadState::Finished => break Poll::Ready(Err(io::ErrorKind::BrokenPipe.into())),
 
                 ConnectionReadState::PendingData(ref data) if data.is_empty() => {
                     let iter_next = self.read_iterator.next().map_err(JsErr::from)?;
@@ -376,22 +394,23 @@ impl io::Read for Connection {
                         buf.copy_from_slice(&data[..buf.len()]);
                         self.read_state =
                             ConnectionReadState::PendingData(data.split_off(buf.len()));
-                        break Ok(buf.len());
+                        break Poll::Ready(Ok(buf.len()));
                     } else {
                         let len = data.len();
                         buf[..len].copy_from_slice(&data);
                         self.read_state = ConnectionReadState::PendingData(Vec::new());
-                        break Ok(len);
+                        break Poll::Ready(Ok(len));
                     }
                 }
 
                 ConnectionReadState::Waiting(mut promise) => {
-                    let data = match promise.poll().map_err(JsErr::from)? {
-                        Async::Ready(ref data) if data.is_null() => break Ok(0),
-                        Async::Ready(data) => data,
-                        Async::NotReady => {
+                    let data = match Future::poll(Pin::new(&mut *promise), cx) {
+                        Poll::Ready(Ok(ref data)) if data.is_null() => break Poll::Ready(Ok(0)),
+                        Poll::Ready(Ok(data)) => data,
+                        Poll::Ready(Err(err)) => break Poll::Ready(Err(io::Error::from(JsErr::from(err)))),
+                        Poll::Pending => {
                             self.read_state = ConnectionReadState::Waiting(promise);
-                            break Err(io::ErrorKind::WouldBlock.into());
+                            break Poll::Pending;
                         }
                     };
 
@@ -402,7 +421,7 @@ impl io::Read for Connection {
                     if data_len <= buf.len() {
                         data.copy_to(&mut buf[..data_len]);
                         self.read_state = ConnectionReadState::PendingData(Vec::new());
-                        break Ok(data_len);
+                        break Poll::Ready(Ok(data_len));
                     } else {
                         let mut tmp_buf = vec![0; data_len];
                         data.copy_to(&mut tmp_buf[..]);
@@ -415,23 +434,18 @@ impl io::Read for Connection {
     }
 }
 
-impl tokio_io::AsyncRead for Connection {
-    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
-        false
-    }
-}
-
-impl io::Write for Connection {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+impl AsyncWrite for Connection {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         // Note: as explained in the doc-comments of `Connection`, each call to this function must
         // map to exactly one call to `self.inner.write()`.
 
         if let Some(mut promise) = self.previous_write_promise.take() {
-            match promise.poll().map_err(JsErr::from)? {
-                Async::Ready(_) => (),
-                Async::NotReady => {
+            match Future::poll(Pin::new(&mut *promise), cx) {
+                Poll::Ready(Ok(_)) => (),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(io::Error::from(JsErr::from(err)))),
+                Poll::Pending => {
                     self.previous_write_promise = Some(promise);
-                    return Err(io::ErrorKind::WouldBlock.into());
+                    return Poll::Pending;
                 }
             }
         }
@@ -440,20 +454,20 @@ impl io::Write for Connection {
         self.previous_write_promise = Some(SendWrapper::new(
             self.inner.write(buf).map_err(JsErr::from)?.into(),
         ));
-        Ok(buf.len())
+        Poll::Ready(Ok(buf.len()))
     }
 
-    fn flush(&mut self) -> Result<(), io::Error> {
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // There's no flushing mechanism. In the FFI we consider that writing implicitly flushes.
-        Ok(())
+        Poll::Ready(Ok(()))
     }
-}
 
-impl tokio_io::AsyncWrite for Connection {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // Shutting down is considered instantaneous.
-        self.inner.shutdown().map_err(JsErr::from)?;
-        Ok(Async::Ready(()))
+        match self.inner.shutdown() {
+            Ok(()) => Poll::Ready(Ok(())),
+            Err(err) => Poll::Ready(Err(io::Error::from(JsErr::from(err)))),
+        }
     }
 }
 

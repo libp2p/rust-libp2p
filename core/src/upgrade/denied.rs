@@ -20,7 +20,6 @@
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future;
-use multistream_select::Negotiated;
 use std::iter;
 use void::Void;
 
@@ -41,20 +40,19 @@ impl UpgradeInfo for DeniedUpgrade {
 impl<C> InboundUpgrade<C> for DeniedUpgrade {
     type Output = Void;
     type Error = Void;
-    type Future = future::Empty<Self::Output, Self::Error>;
+    type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, _: Negotiated<C>, _: Self::Info) -> Self::Future {
-        future::empty()
+    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
+        future::pending()
     }
 }
 
 impl<C> OutboundUpgrade<C> for DeniedUpgrade {
     type Output = Void;
     type Error = Void;
-    type Future = future::Empty<Self::Output, Self::Error>;
+    type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: Negotiated<C>, _: Self::Info) -> Self::Future {
-        future::empty()
+    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
+        future::pending()
     }
 }
-

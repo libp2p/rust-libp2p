@@ -21,7 +21,10 @@
 mod behaviour;
 mod copy;
 mod error;
-mod message;
+
+mod message_proto {
+    include!(concat!(env!("OUT_DIR"), "/message.pb.rs"));
+}
 
 pub mod handler;
 pub mod protocol;

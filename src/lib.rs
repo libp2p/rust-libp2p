@@ -82,19 +82,21 @@
 //! *upgraded*. Upgrading a transport is the process of negotiating an additional protocol
 //! with the remote, mediated through a negotiation protocol called [`multistream-select`].
 //!
-//! Example ([`secio`] Protocol Upgrade):
+//! Example ([`noise`] + [`yamux`] Protocol Upgrade):
 //!
 //! ```rust
-//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair};
+//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-std", feature = "noise", feature = "yamux"))] {
+//! use libp2p::{Transport, core::upgrade, tcp::TcpConfig, noise, identity::Keypair, yamux};
 //! let tcp = TcpConfig::new();
-//! let secio_upgrade = SecioConfig::new(Keypair::generate_ed25519());
-//! let tcp_secio = tcp.with_upgrade(secio_upgrade);
-//! // let _ = tcp_secio.dial(...);
+//! let id_keys = Keypair::generate_ed25519();
+//! let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
+//! let noise = noise::NoiseConfig::xx(noise_keys).into_authenticated();
+//! let yamux = yamux::Config::default();
+//! let transport = tcp.upgrade(upgrade::Version::V1).authenticate(noise).multiplex(yamux);
 //! # }
 //! ```
-//! In this example, `tcp_secio` is a new [`Transport`] that negotiates the secio protocol
-//! on all connections.
+//! In this example, `transport` is a new [`Transport`] that negotiates the
+//! noise and yamux protocols on all connections.
 //!
 //! ## Network Behaviour
 //!
@@ -127,7 +129,7 @@
 //!      implements [`StreamMuxer`] (e.g. [`Yamux`]). The peer ID must be the
 //!      identity of the remote peer of the established connection, which is
 //!      usually obtained through a transport encryption protocol such as
-//!      [`secio`] that authenticates the peer. See the implementation of
+//!      [`noise`] that authenticates the peer. See the implementation of
 //!      [`build_development_transport`] for an example.
 //!   3. Creating a struct that implements the [`NetworkBehaviour`] trait and combines all the
 //!      desired network behaviours, implementing the event handlers as per the
@@ -135,14 +137,14 @@
 //!   4. Instantiating a [`Swarm`] with the transport, the network behaviour and the
 //!      local peer ID from the previous steps.
 //!
-//! The swarm instance can then be polled with the [tokio] library, in order to
+//! The swarm instance can then be polled e.g. with the [tokio] library, in order to
 //! continuously drive the network activity of the program.
 //!
 //! [`Keypair`]: identity::Keypair
 //! [`PublicKey`]: identity::PublicKey
 //! [`Future`]: futures::Future
 //! [`TcpConfig`]: tcp::TcpConfig
-//! [`NetworkBehaviour`]: core::swarm::NetworkBehaviour
+//! [`NetworkBehaviour`]: swarm::NetworkBehaviour
 //! [`StreamMuxer`]: core::muxing::StreamMuxer
 //! [`Yamux`]: yamux::Yamux
 //!
@@ -152,58 +154,101 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
+#[cfg(feature = "pnet")]
+use libp2p_pnet::{PnetConfig, PreSharedKey};
+
 pub use bytes;
 pub use futures;
 #[doc(inline)]
 pub use multiaddr;
 #[doc(inline)]
 pub use multihash;
-pub use tokio_io;
-pub use tokio_codec;
 
 #[doc(inline)]
 pub use libp2p_core as core;
+#[cfg(feature = "deflate")]
+#[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(feature = "dns")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
+#[cfg(feature = "identify")]
+#[cfg_attr(docsrs, doc(cfg(feature = "identify")))]
 #[doc(inline)]
 pub use libp2p_identify as identify;
+#[cfg(feature = "kad")]
+#[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
+#[cfg(feature = "floodsub")]
+#[cfg_attr(docsrs, doc(cfg(feature = "floodsub")))]
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
+#[cfg(feature = "gossipsub")]
+#[cfg_attr(docsrs, doc(cfg(feature = "gossipsub")))]
+#[doc(inline)]
+pub use libp2p_gossipsub as gossipsub;
+#[cfg(feature = "mplex")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
 #[doc(inline)]
 pub use libp2p_mplex as mplex;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(any(feature = "mdns-async-std", feature = "mdns-tokio"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "mdns-async-std", feature = "mdns-tokio"))))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(feature = "noise")]
+#[cfg_attr(docsrs, doc(cfg(feature = "noise")))]
 #[doc(inline)]
 pub use libp2p_noise as noise;
+#[cfg(feature = "ping")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ping")))]
 #[doc(inline)]
 pub use libp2p_ping as ping;
+#[cfg(feature = "plaintext")]
+#[cfg_attr(docsrs, doc(cfg(feature = "plaintext")))]
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
 #[doc(inline)]
-pub use libp2p_relay as relay;
-#[doc(inline)]
-pub use libp2p_ratelimit as ratelimit;
-#[doc(inline)]
-pub use libp2p_secio as secio;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+pub use libp2p_swarm as swarm;
+#[cfg(any(feature = "tcp-async-std", feature = "tcp-tokio"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-async-std", feature = "tcp-tokio"))))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
+#[cfg(feature = "uds")]
+#[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[cfg(feature = "wasm-ext")]
+#[cfg_attr(docsrs, doc(cfg(feature = "wasm-ext")))]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(feature = "websocket")]
+#[cfg_attr(docsrs, doc(cfg(feature = "websocket")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
+#[cfg(feature = "yamux")]
+#[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[cfg(feature = "pnet")]
+#[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
+#[doc(inline)]
+pub use libp2p_pnet as pnet;
+#[cfg(feature = "relay")]
+#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
+#[doc(inline)]
+pub use libp2p_relay as relay;
+#[cfg(feature = "request-response")]
+#[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
+#[doc(inline)]
+pub use libp2p_request_response as request_response;
 
 mod transport_ext;
 
@@ -212,113 +257,88 @@ pub mod simple;
 
 pub use self::core::{
     identity,
-    Transport, PeerId, Swarm,
+    PeerId,
+    Transport,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
+pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
-
-use futures::prelude::*;
-use std::{error, io, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
 pub fn build_development_transport(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
-     build_tcp_ws_secio_mplex_yamux(keypair)
+     build_tcp_ws_noise_mplex_yamux(keypair)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///
-/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
-///
-/// > **Note**: If you ever need to express the type of this `Transport`.
-pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
+pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
+    -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
-    CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(keypair))
-        .and_then(move |output, endpoint| {
-            let peer_id = output.remote_key.into_peer_id();
-            let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
-                // TODO: use a single `.map` instead of two maps
-                .map_inbound(move |muxer| (peer_id, muxer))
-                .map_outbound(move |muxer| (peer_id2, muxer));
-            core::upgrade::apply(output.stream, upgrade, endpoint)
-                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
-        })
-        .with_timeout(Duration::from_secs(20))
-}
-
-/// Implementation of `Transport` that supports the most common protocols.
-///
-/// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
-/// future to get new transports.
-#[derive(Debug, Clone)]
-struct CommonTransport {
-    // The actual implementation of everything.
-    inner: CommonTransportInner
-}
-
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
-type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
-type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-type InnerImplementation = core::transport::dummy::DummyTransport;
-
-#[derive(Debug, Clone)]
-struct CommonTransportInner {
-    inner: InnerImplementation,
-}
-
-impl CommonTransport {
-    /// Initializes the `CommonTransport`.
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-    pub fn new() -> CommonTransport {
+    let transport = {
+        #[cfg(feature = "tcp-async-std")]
         let tcp = tcp::TcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::new(tcp);
-        #[cfg(feature = "libp2p-websocket")]
-        let transport = {
-            let trans_clone = transport.clone();
-            transport.or_transport(websocket::WsConfig::new(trans_clone))
-        };
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp)?;
+        let trans_clone = transport.clone();
+        transport.or_transport(websocket::WsConfig::new(trans_clone))
+    };
 
-        CommonTransport {
-            inner: CommonTransportInner { inner: transport }
-        }
-    }
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&keypair)
+        .expect("Signing libp2p-noise static DH keypair failed.");
 
-    /// Initializes the `CommonTransport`.
-    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-    pub fn new() -> CommonTransport {
-        let inner = core::transport::dummy::DummyTransport::new();
-        CommonTransport {
-            inner: CommonTransportInner { inner }
-        }
-    }
+    Ok(transport
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .timeout(std::time::Duration::from_secs(20))
+        .boxed())
 }
 
-impl Transport for CommonTransport {
-    type Output = <InnerImplementation as Transport>::Output;
-    type Error = <InnerImplementation as Transport>::Error;
-    type Listener = <InnerImplementation as Transport>::Listener;
-    type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
-    type Dial = <InnerImplementation as Transport>::Dial;
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
+/// and mplex or yamux as the multiplexing layer.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))))]
+pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
+    -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
+{
+    let transport = {
+        #[cfg(feature = "tcp-async-std")]
+        let tcp = tcp::TcpConfig::new().nodelay(true);
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp)?;
+        let trans_clone = transport.clone();
+        transport.or_transport(websocket::WsConfig::new(trans_clone))
+    };
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.inner.inner.listen_on(addr)
-    }
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&keypair)
+        .expect("Signing libp2p-noise static DH keypair failed.");
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.inner.dial(addr)
-    }
+    Ok(transport
+        .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .timeout(std::time::Duration::from_secs(20))
+        .boxed())
 }

@@ -19,14 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
-use futures::{prelude::*, try_ready};
-use lazy_static::lazy_static;
-use parking_lot::Mutex;
-use smallvec::{smallvec, SmallVec};
-use std::{cmp, io, io::Read, io::Write, sync::Arc, time::Duration};
-use wasm_timer::Instant;
 
-/// Wraps around a `Transport` and logs the bandwidth that goes through all the opened connections.
+use atomic::Atomic;
+use futures::{prelude::*, io::{IoSlice, IoSliceMut}, ready};
+use std::{
+    convert::TryFrom as _, io, pin::Pin, sync::{atomic::Ordering, Arc}, task::{Context, Poll}
+};
+
+/// Wraps around a `Transport` and counts the number of bytes that go through all the opened
+/// connections.
 #[derive(Clone)]
 pub struct BandwidthLogging<TInner> {
     inner: TInner,
@@ -34,17 +35,11 @@ pub struct BandwidthLogging<TInner> {
 }
 
 impl<TInner> BandwidthLogging<TInner> {
-    /// Creates a new `BandwidthLogging` around the transport.
-    #[inline]
-    pub fn new(inner: TInner, period: Duration) -> (Self, Arc<BandwidthSinks>) {
-        let mut period_seconds = cmp::min(period.as_secs(), 86400) as u32;
-        if period.subsec_nanos() > 0 {
-            period_seconds += 1;
-        }
-
+    /// Creates a new [`BandwidthLogging`] around the transport.
+    pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
         let sink = Arc::new(BandwidthSinks {
-            download: Mutex::new(BandwidthSink::new(period_seconds)),
-            upload: Mutex::new(BandwidthSink::new(period_seconds)),
+            inbound: Atomic::new(0),
+            outbound: Atomic::new(0),
         });
 
         let trans = BandwidthLogging {
@@ -83,219 +78,130 @@ where
 
 /// Wraps around a `Stream` that produces connections. Wraps each connection around a bandwidth
 /// counter.
+#[pin_project::pin_project]
 pub struct BandwidthListener<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner, TConn> Stream for BandwidthListener<TInner>
+impl<TInner, TConn, TErr> Stream for BandwidthListener<TInner>
 where
-    TInner: Stream<Item = ListenerEvent<TConn>>,
+    TInner: TryStream<Ok = ListenerEvent<TConn, TErr>, Error = TErr>
 {
-    type Item = ListenerEvent<BandwidthFuture<TConn>>;
-    type Error = TInner::Error;
+    type Item = Result<ListenerEvent<BandwidthFuture<TConn>, TErr>, TErr>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let event = match try_ready!(self.inner.poll()) {
-            Some(v) => v,
-            None => return Ok(Async::Ready(None))
-        };
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
 
-        let event = event.map(|inner| {
-            BandwidthFuture { inner, sinks: self.sinks.clone() }
+        let event =
+            if let Some(event) = ready!(this.inner.try_poll_next(cx)?) {
+                event
+            } else {
+                return Poll::Ready(None)
+            };
+
+        let event = event.map({
+            let sinks = this.sinks.clone();
+            |inner| BandwidthFuture { inner, sinks }
         });
 
-        Ok(Async::Ready(Some(event)))
+        Poll::Ready(Some(Ok(event)))
     }
 }
 
 /// Wraps around a `Future` that produces a connection. Wraps the connection around a bandwidth
 /// counter.
+#[pin_project::pin_project]
 pub struct BandwidthFuture<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner> Future for BandwidthFuture<TInner>
-    where TInner: Future,
-{
-    type Item = BandwidthConnecLogging<TInner::Item>;
-    type Error = TInner::Error;
+impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
+    type Output = Result<BandwidthConnecLogging<TInner::Ok>, TInner::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let inner = try_ready!(self.inner.poll());
-        Ok(Async::Ready(BandwidthConnecLogging {
-            inner,
-            sinks: self.sinks.clone(),
-        }))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        let inner = ready!(this.inner.try_poll(cx)?);
+        let logged = BandwidthConnecLogging { inner, sinks: this.sinks.clone() };
+        Poll::Ready(Ok(logged))
     }
 }
 
-/// Allows obtaining the average bandwidth of the connections created from a `BandwidthLogging`.
+/// Allows obtaining the average bandwidth of the connections created from a [`BandwidthLogging`].
 pub struct BandwidthSinks {
-    download: Mutex<BandwidthSink>,
-    upload: Mutex<BandwidthSink>,
+    inbound: Atomic<u64>,
+    outbound: Atomic<u64>,
 }
 
 impl BandwidthSinks {
-    /// Returns the average number of bytes that have been downloaded in the period.
-    #[inline]
-    pub fn average_download_per_sec(&self) -> u64 {
-        self.download.lock().get()
+    /// Returns the total number of bytes that have been downloaded on all the connections spawned
+    /// through the [`BandwidthLogging`].
+    ///
+    /// > **Note**: This method is by design subject to race conditions. The returned value should
+    /// >           only ever be used for statistics purposes.
+    pub fn total_inbound(&self) -> u64 {
+        self.inbound.load(Ordering::Relaxed)
     }
 
-    /// Returns the average number of bytes that have been uploaded in the period.
-    #[inline]
-    pub fn average_upload_per_sec(&self) -> u64 {
-        self.upload.lock().get()
+    /// Returns the total number of bytes that have been uploaded on all the connections spawned
+    /// through the [`BandwidthLogging`].
+    ///
+    /// > **Note**: This method is by design subject to race conditions. The returned value should
+    /// >           only ever be used for statistics purposes.
+    pub fn total_outbound(&self) -> u64 {
+        self.outbound.load(Ordering::Relaxed)
     }
 }
 
 /// Wraps around an `AsyncRead + AsyncWrite` and logs the bandwidth that goes through it.
+#[pin_project::pin_project]
 pub struct BandwidthConnecLogging<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner> Read for BandwidthConnecLogging<TInner>
-    where TInner: Read
-{
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let num_bytes = self.inner.read(buf)?;
-        self.sinks.download.lock().inject(num_bytes);
-        Ok(num_bytes)
+impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
+        this.sinks.inbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        Poll::Ready(Ok(num_bytes))
+    }
+
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &mut [IoSliceMut<'_>]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
+        this.sinks.inbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        Poll::Ready(Ok(num_bytes))
     }
 }
 
-impl<TInner> tokio_io::AsyncRead for BandwidthConnecLogging<TInner>
-    where TInner: tokio_io::AsyncRead
-{
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        self.inner.prepare_uninitialized_buffer(buf)
+impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
+        this.sinks.outbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        Poll::Ready(Ok(num_bytes))
     }
 
-    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        self.inner.read_buf(buf)
-    }
-}
-
-impl<TInner> Write for BandwidthConnecLogging<TInner>
-    where TInner: Write
-{
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let num_bytes = self.inner.write(buf)?;
-        self.sinks.upload.lock().inject(num_bytes);
-        Ok(num_bytes)
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
+        this.sinks.outbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        Poll::Ready(Ok(num_bytes))
     }
 
-    #[inline]
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-impl<TInner> tokio_io::AsyncWrite for BandwidthConnecLogging<TInner>
-    where TInner: tokio_io::AsyncWrite
-{
-    #[inline]
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.inner.shutdown()
-    }
-}
-
-/// Returns the number of seconds that have elapsed between an arbitrary EPOCH and now.
-#[inline]
-fn current_second() -> u32 {
-    lazy_static! {
-        static ref EPOCH: Instant = Instant::now();
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_flush(cx)
     }
 
-    EPOCH.elapsed().as_secs() as u32
-}
-
-/// Structure that calculates the average bandwidth over the last few seconds.
-///
-/// If you want to calculate for example both download and upload bandwidths, create two different
-/// objects.
-struct BandwidthSink {
-    /// Bytes sent over the past seconds. Contains `rolling_seconds + 1` elements, where
-    /// `rolling_seconds` is the value passed to `new`. Only the first `rolling_seconds` elements
-    /// are taken into account for the average, while the last element is the element to be
-    /// inserted later.
-    bytes: SmallVec<[u64; 8]>,
-    /// Number of seconds between `EPOCH` and the moment we have last updated `bytes`.
-    latest_update: u32,
-}
-
-impl BandwidthSink {
-    /// Initializes a `BandwidthSink`.
-    fn new(seconds: u32) -> Self {
-        BandwidthSink {
-            bytes: smallvec![0; seconds as usize + 1],
-            latest_update: current_second(),
-        }
-    }
-
-    /// Returns the number of bytes over the last few seconds. The number of seconds is the value
-    /// configured at initialization.
-    fn get(&mut self) -> u64 {
-        self.update();
-        let seconds = self.bytes.len() - 1;
-        self.bytes.iter()
-            .take(seconds)
-            .fold(0u64, |a, &b| a.saturating_add(b)) / seconds as u64
-    }
-
-    /// Notifies the `BandwidthSink` that a certain number of bytes have been transmitted at this
-    /// moment.
-    fn inject(&mut self, bytes: usize) {
-        self.update();
-        if let Some(last) = self.bytes.last_mut() {
-            *last = last.saturating_add(bytes as u64);
-        }
-    }
-
-    /// Updates the state of the `BandwidthSink` so that the last element of `bytes` contains the
-    /// current second.
-    fn update(&mut self) {
-        let current_second = current_second();
-        debug_assert!(current_second >= self.latest_update);
-        let num_iter = cmp::min(current_second - self.latest_update, self.bytes.len() as u32);
-        for _ in 0..num_iter {
-            self.bytes.remove(0);
-            self.bytes.push(0);
-        }
-
-        self.latest_update = current_second;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{thread, time::Duration};
-    use super::*;
-
-    #[test]
-    fn sink_works() {
-        let mut sink = BandwidthSink::new(5);
-        sink.inject(100);
-        thread::sleep(Duration::from_millis(1000));
-        assert_eq!(sink.get(), 20);
-        sink.inject(100);
-        thread::sleep(Duration::from_millis(1000));
-        assert_eq!(sink.get(), 40);
-        sink.inject(100);
-        thread::sleep(Duration::from_millis(1000));
-        assert_eq!(sink.get(), 60);
-        sink.inject(100);
-        thread::sleep(Duration::from_millis(1000));
-        assert_eq!(sink.get(), 80);
-        sink.inject(100);
-        thread::sleep(Duration::from_millis(1000));
-        assert_eq!(sink.get(), 100);
-        thread::sleep(Duration::from_millis(1000));
-        assert_eq!(sink.get(), 80);
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_close(cx)
     }
 }

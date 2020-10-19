@@ -22,176 +22,159 @@
 
 #![cfg(test)]
 
-use crate::ProtocolChoiceError;
+use crate::{Version, NegotiationError};
 use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
-use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
 use crate::{dialer_select_proto, listener_select_proto};
+
+use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
-use tokio::runtime::current_thread::Runtime;
-use tokio_tcp::{TcpListener, TcpStream};
-
-/// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
-struct VecRefIntoIter<T>(Vec<T>);
-
-impl<'a, T> IntoIterator for &'a VecRefIntoIter<T>
-where T: Clone
-{
-    type Item = T;
-    type IntoIter = std::vec::IntoIter<T>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.clone().into_iter()
-    }
-}
-
-#[test]
-fn negotiate_with_self_succeeds() {
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-    let listener_addr = listener.local_addr().unwrap();
-
-    let server = listener
-        .incoming()
-        .into_future()
-        .map_err(|(e, _)| e.into())
-        .and_then(move |(connec, _)| Listener::listen(connec.unwrap()))
-        .and_then(|l| l.into_future().map_err(|(e, _)| e))
-        .and_then(|(msg, rest)| {
-            let proto = match msg {
-                Some(DialerToListenerMessage::ProtocolRequest { name }) => name,
-                _ => panic!(),
-            };
-            rest.send(ListenerToDialerMessage::ProtocolAck { name: proto })
-        });
-
-    let client = TcpStream::connect(&listener_addr)
-        .from_err()
-        .and_then(move |stream| Dialer::dial(stream))
-        .and_then(move |dialer| {
-            let p = b"/hello/1.0.0";
-            dialer.send(DialerToListenerMessage::ProtocolRequest { name: p })
-        })
-        .and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e))
-        .and_then(move |(msg, _)| {
-            let proto = match msg {
-                Some(ListenerToDialerMessage::ProtocolAck { name }) => name,
-                _ => panic!(),
-            };
-            assert_eq!(proto, "/hello/1.0.0");
-            Ok(())
-        });
-    let mut rt = Runtime::new().unwrap();
-    let _ = rt.block_on(server.join(client)).unwrap();
-}
 
 #[test]
 fn select_proto_basic() {
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-    let listener_addr = listener.local_addr().unwrap();
+    async fn run(version: Version) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener_addr = listener.local_addr().unwrap();
 
-    let server = listener
-        .incoming()
-        .into_future()
-        .map(|s| s.0.unwrap())
-        .map_err(|(e, _)| e.into())
-        .and_then(move |connec| {
+        let server = async_std::task::spawn(async move {
+            let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
+            let (proto, mut io) = listener_select_proto(connec, protos).await.unwrap();
+            assert_eq!(proto, b"/proto2");
+
+            let mut out = vec![0; 32];
+            let n = io.read(&mut out).await.unwrap();
+            out.truncate(n);
+            assert_eq!(out, b"ping");
+
+            io.write_all(b"pong").await.unwrap();
+            io.flush().await.unwrap();
         });
 
-    let client = TcpStream::connect(&listener_addr)
-        .from_err()
-        .and_then(move |connec| {
+        let client = async_std::task::spawn(async move {
+            let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            dialer_select_proto(connec, protos).map(|r| r.0)
+            let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
+                .await.unwrap();
+            assert_eq!(proto, b"/proto2");
+
+            io.write_all(b"ping").await.unwrap();
+            io.flush().await.unwrap();
+
+            let mut out = vec![0; 32];
+            let n = io.read(&mut out).await.unwrap();
+            out.truncate(n);
+            assert_eq!(out, b"pong");
         });
-    let mut rt = Runtime::new().unwrap();
-    let (dialer_chosen, listener_chosen) =
-        rt.block_on(client.join(server)).unwrap();
-    assert_eq!(dialer_chosen, b"/proto2");
-    assert_eq!(listener_chosen, b"/proto2");
+
+        server.await;
+        client.await;
+    }
+
+    async_std::task::block_on(run(Version::V1));
+    async_std::task::block_on(run(Version::V1Lazy));
 }
 
 #[test]
 fn no_protocol_found() {
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-    let listener_addr = listener.local_addr().unwrap();
+    async fn run(version: Version) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener_addr = listener.local_addr().unwrap();
 
-    let server = listener
-        .incoming()
-        .into_future()
-        .map(|s| s.0.unwrap())
-        .map_err(|(e, _)| e.into())
-        .and_then(move |connec| {
+        let server = async_std::task::spawn(async move {
+            let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
+            let io = match listener_select_proto(connec, protos).await {
+                Ok((_, io)) => io,
+                // We don't explicitly check for `Failed` because the client might close the connection when it
+                // realizes that we have no protocol in common.
+                Err(_) => return,
+            };
+            match io.complete().await {
+                Err(NegotiationError::Failed) => {},
+                _ => panic!(),
+            }
         });
 
-    let client = TcpStream::connect(&listener_addr)
-        .from_err()
-        .and_then(move |connec| {
+        let client = async_std::task::spawn(async move {
+            let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto4"];
-            dialer_select_proto(connec, protos).map(|r| r.0)
+            let io = match dialer_select_proto(connec, protos.into_iter(), version).await {
+                Err(NegotiationError::Failed) => return,
+                Ok((_, io)) => io,
+                Err(_) => panic!()
+            };
+            match io.complete().await {
+                Err(NegotiationError::Failed) => {},
+                _ => panic!(),
+            }
         });
-    let mut rt = Runtime::new().unwrap();
-    match rt.block_on(client.join(server)) {
-        Err(ProtocolChoiceError::NoProtocolFound) => (),
-        _ => panic!(),
+
+        server.await;
+        client.await;
     }
+
+    async_std::task::block_on(run(Version::V1));
+    async_std::task::block_on(run(Version::V1Lazy));
 }
 
 #[test]
 fn select_proto_parallel() {
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-    let listener_addr = listener.local_addr().unwrap();
+    async fn run(version: Version) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener_addr = listener.local_addr().unwrap();
 
-    let server = listener
-        .incoming()
-        .into_future()
-        .map(|s| s.0.unwrap())
-        .map_err(|(e, _)| e.into())
-        .and_then(move |connec| {
+        let server = async_std::task::spawn(async move {
+            let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
+            let (proto, io) = listener_select_proto(connec, protos).await.unwrap();
+            assert_eq!(proto, b"/proto2");
+            io.complete().await.unwrap();
         });
 
-    let client = TcpStream::connect(&listener_addr)
-        .from_err()
-        .and_then(move |connec| {
+        let client = async_std::task::spawn(async move {
+            let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            dialer_select_proto_parallel(connec, protos.into_iter()).map(|r| r.0)
+            let (proto, io) = dialer_select_proto_parallel(connec, protos.into_iter(), version)
+                .await.unwrap();
+            assert_eq!(proto, b"/proto2");
+            io.complete().await.unwrap();
         });
 
-    let mut rt = Runtime::new().unwrap();
-    let (dialer_chosen, listener_chosen) =
-        rt.block_on(client.join(server)).unwrap();
-    assert_eq!(dialer_chosen, b"/proto2");
-    assert_eq!(listener_chosen, b"/proto2");
+        server.await;
+        client.await;
+    }
+
+    async_std::task::block_on(run(Version::V1));
+    async_std::task::block_on(run(Version::V1Lazy));
 }
 
 #[test]
 fn select_proto_serial() {
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-    let listener_addr = listener.local_addr().unwrap();
+    async fn run(version: Version) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener_addr = listener.local_addr().unwrap();
 
-    let server = listener
-        .incoming()
-        .into_future()
-        .map(|s| s.0.unwrap())
-        .map_err(|(e, _)| e.into())
-        .and_then(move |connec| {
+        let server = async_std::task::spawn(async move {
+            let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
+            let (proto, io) = listener_select_proto(connec, protos).await.unwrap();
+            assert_eq!(proto, b"/proto2");
+            io.complete().await.unwrap();
         });
 
-    let client = TcpStream::connect(&listener_addr)
-        .from_err()
-        .and_then(move |connec| {
+        let client = async_std::task::spawn(async move {
+            let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            dialer_select_proto_serial(connec, protos.into_iter()).map(|r| r.0)
+            let (proto, io) = dialer_select_proto_serial(connec, protos.into_iter(), version)
+                .await.unwrap();
+            assert_eq!(proto, b"/proto2");
+            io.complete().await.unwrap();
         });
 
-    let mut rt = Runtime::new().unwrap();
-    let (dialer_chosen, listener_chosen) =
-        rt.block_on(client.join(server)).unwrap();
-    assert_eq!(dialer_chosen, b"/proto2");
-    assert_eq!(listener_chosen, b"/proto2");
+        server.await;
+        client.await;
+    }
+
+    async_std::task::block_on(run(Version::V1));
+    async_std::task::block_on(run(Version::V1Lazy));
 }

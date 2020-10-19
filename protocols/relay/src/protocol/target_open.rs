@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
+use crate::message_proto::{CircuitRelay, circuit_relay};
 use crate::protocol::{send_read, SendReadError, SendReadFuture};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
-use protobuf::Message as _;
 use std::iter;
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures::prelude::*;
+use prost::Message;
 
 /// Ask the remote to become a destination. The upgrade succeeds if the remote accepts, and fails
 /// if the remote refuses.
@@ -52,21 +52,25 @@ impl<TUserData> RelayTargetOpen<TUserData> {
     // TODO: change parameters?
     pub(crate) fn new(
         src_id: PeerId,
-        src_addresses: impl IntoIterator<Item = Multiaddr>, user_data: TUserData) -> Self {
-        let mut msg = CircuitRelay::new();
-        msg.set_field_type(CircuitRelay_Type::STOP);
+        src_addresses: impl IntoIterator<Item = Multiaddr>,
+        user_data: TUserData,
+    ) -> Self {
+        let message = CircuitRelay {
+            r#type:  Some(circuit_relay::Type::Stop.into()),
+            src_peer: Some(circuit_relay::Peer {
+                id: src_id.as_bytes().to_vec(),
+                addrs: src_addresses.into_iter().map(|a| a.to_vec()).collect(),
+            }),
+            dst_peer: None,
+            code: None,
+        };
+        let mut encoded_msg = Vec::new();
+        // TODO: handle error?
+        message.encode(&mut encoded_msg).expect("all the mandatory fields are always filled; QED");
 
-        let mut src = CircuitRelay_Peer::new();
-        src.set_id(src_id.as_bytes().to_vec());
-        for a in src_addresses {
-            src.mut_addrs().push(a.to_vec())
-        }
-        msg.set_srcPeer(src);
 
         RelayTargetOpen {
-            message: msg
-                .write_to_bytes()
-                .expect("all the mandatory fields are always filled; QED"),
+            message: encoded_msg,
             user_data,
         }
     }
@@ -83,15 +87,15 @@ impl<TUserData> upgrade::UpgradeInfo for RelayTargetOpen<TUserData> {
 
 impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for RelayTargetOpen<TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = (upgrade::Negotiated<TSubstream>, TUserData);
+    type Output = (TSubstream, TUserData);
     type Error = SendReadError;
     type Future = SendReadFuture<TSubstream, TUserData>;
 
     fn upgrade_outbound(
         self,
-        substream: upgrade::Negotiated<TSubstream>,
+        substream: TSubstream,
         _: Self::Info,
     ) -> Self::Future {
         send_read(substream, self.message, self.user_data)

@@ -18,16 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message::{CircuitRelay, CircuitRelay_Type};
+use crate::message_proto::{CircuitRelay, circuit_relay};
 use crate::protocol::{
     dest_request::RelayDestinationRequest, hop_request::RelayHopRequest, Peer, PeerParseError,
     MAX_ACCEPTED_MESSAGE_LEN,
 };
-use futures::{prelude::*, try_ready};
+use futures::{prelude::*, future::BoxFuture, ready};
 use libp2p_core::upgrade;
-use protobuf::ProtobufError;
+use libp2p_swarm::NegotiatedSubstream;
 use std::{convert::TryFrom, error, fmt, iter};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
+use prost::Message;
+use std::pin::Pin;
 
 /// Configuration for an inbound upgrade that handles requests from the remote for the relay
 /// protocol.
@@ -60,7 +62,7 @@ impl upgrade::UpgradeInfo for RelayListen {
 
 impl<TSubstream> upgrade::InboundUpgrade<TSubstream> for RelayListen
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = RelayRemoteRequest<TSubstream>;
     type Error = RelayListenError;
@@ -68,12 +70,14 @@ where
 
     fn upgrade_inbound(
         self,
-        substream: upgrade::Negotiated<TSubstream>,
+        mut substream: TSubstream,
         _: Self::Info,
     ) -> Self::Future {
-        let f: fn(_, _, _) -> _ = |sock, msg, ()| Ok((sock, msg));
-        let fut = upgrade::read_respond(substream, MAX_ACCEPTED_MESSAGE_LEN, (), f);
-        RelayListenFuture { inner: fut }
+
+        RelayListenFuture { inner: async {
+            let msg = upgrade::read_one(&mut substream, MAX_ACCEPTED_MESSAGE_LEN).await?;
+            Ok((substream, msg))
+        }.boxed()}
     }
 }
 
@@ -81,40 +85,34 @@ where
 #[must_use = "futures do nothing unless polled"]
 pub struct RelayListenFuture<TSubstream> {
     /// Inner stream.
-    inner: upgrade::ReadRespond<
-        upgrade::Negotiated<TSubstream>,
-        (),
-        fn(
-            upgrade::Negotiated<TSubstream>,
-            Vec<u8>,
-            (),
-        ) -> Result<(upgrade::Negotiated<TSubstream>, Vec<u8>), RelayListenError>,
-    >,
+    inner: BoxFuture<'static, Result<(TSubstream, Vec<u8>), RelayListenError>>,
 }
 
 impl<TSubstream> Future for RelayListenFuture<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Item = RelayRemoteRequest<TSubstream>;
-    type Error = RelayListenError;
+    type Output = Result<RelayRemoteRequest<TSubstream>, RelayListenError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (substream, msg) = try_ready!(self.inner.poll());
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let (substream, msg): (TSubstream, Vec<u8>) = ready!(self.inner.poll_unpin(cx))?;
 
-        let mut msg: CircuitRelay = protobuf::parse_from_bytes(&msg)?;
-        match msg.get_field_type() {
-            CircuitRelay_Type::HOP => {
-                let peer = Peer::try_from(msg.take_dstPeer())?;
+        let CircuitRelay { r#type, src_peer, dst_peer, code } = CircuitRelay::decode(&*msg)?;
+        // TODO: Handle
+        match circuit_relay::Type::from_i32(r#type.unwrap()).unwrap() {
+            circuit_relay::Type::Hop => {
+                // TODO Handle
+                let peer = Peer::try_from(dst_peer.unwrap())?;
                 let rq = RelayHopRequest::new(substream, peer);
-                Ok(Async::Ready(RelayRemoteRequest::HopRequest(rq)))
+                Poll::Ready(Ok(RelayRemoteRequest::HopRequest(rq)))
             }
-            CircuitRelay_Type::STOP => {
-                let peer = Peer::try_from(msg.take_srcPeer())?;
+            circuit_relay::Type::Stop => {
+                // TODO Handle
+                let peer = Peer::try_from(src_peer.unwrap())?;
                 let rq = RelayDestinationRequest::new(substream, peer);
-                Ok(Async::Ready(RelayRemoteRequest::DestinationRequest(rq)))
+                Poll::Ready(Ok(RelayRemoteRequest::DestinationRequest(rq)))
             }
-            _ => Err(RelayListenError::InvalidMessageTy),
+            _ => Poll::Ready(Err(RelayListenError::InvalidMessageTy)),
         }
     }
 }
@@ -125,7 +123,8 @@ pub enum RelayListenError {
     /// Error while reading the message that the remote is expected to send.
     ReadError(upgrade::ReadOneError),
     /// Failed to parse the protobuf handshake message.
-    ParseError(ProtobufError),
+    // TODO: Rename to DecodeError
+    ParseError(prost::DecodeError),
     /// Failed to parse one of the peer information in the handshake message.
     PeerParseError(PeerParseError),
     /// Received a message invalid in this context.
@@ -170,8 +169,8 @@ impl From<upgrade::ReadOneError> for RelayListenError {
     }
 }
 
-impl From<ProtobufError> for RelayListenError {
-    fn from(err: ProtobufError) -> Self {
+impl From<prost::DecodeError> for RelayListenError {
+    fn from(err: prost::DecodeError) -> Self {
         RelayListenError::ParseError(err)
     }
 }

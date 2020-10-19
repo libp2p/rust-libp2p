@@ -23,104 +23,205 @@
 use libp2p_core::{
     Multiaddr,
     PeerId,
-    Swarm,
     identity,
-    muxing::StreamMuxer,
-    upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
-    transport::Transport
+    muxing::StreamMuxerBox,
+    transport::{self, Transport},
+    upgrade
 };
+use libp2p_mplex as mplex;
+use libp2p_noise as noise;
 use libp2p_ping::*;
-use libp2p_yamux as yamux;
-use libp2p_secio::SecioConfig;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
-use futures::{future, prelude::*};
-use std::{fmt, io, time::Duration, sync::mpsc::sync_channel};
-use tokio::runtime::Runtime;
+use libp2p_yamux as yamux;
+use futures::{prelude::*, channel::mpsc};
+use quickcheck::*;
+use rand::prelude::*;
+use std::{num::NonZeroU8, time::Duration};
 
 #[test]
-fn ping() {
-    let cfg = PingConfig::new().with_keep_alive(true);
+fn ping_pong() {
+    fn prop(count: NonZeroU8, muxer: MuxerChoice) {
+        let cfg = PingConfig::new()
+            .with_keep_alive(true)
+            .with_interval(Duration::from_millis(10));
 
-    let (peer1_id, trans) = mk_transport();
-    let mut swarm1 = Swarm::new(trans, Ping::new(cfg.clone()), peer1_id.clone());
+        let (peer1_id, trans) = mk_transport(muxer);
+        let mut swarm1 = Swarm::new(trans, Ping::new(cfg.clone()), peer1_id.clone());
 
-    let (peer2_id, trans) = mk_transport();
-    let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
+        let (peer2_id, trans) = mk_transport(muxer);
+        let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
 
-    let (tx, rx) = sync_channel::<Multiaddr>(1);
+        let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
-    let pid1 = peer1_id.clone();
-    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-    let mut listening = false;
-    Swarm::listen_on(&mut swarm1, addr).unwrap();
-    let peer1 = future::poll_fn(move || -> Result<_, ()> {
-        loop {
-            match swarm1.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(PingEvent { peer, result })) => match result {
-                    Ok(PingSuccess::Ping { rtt }) =>
-                        return Ok(Async::Ready((pid1.clone(), peer, rtt))),
-                    _ => {}
-                },
-                _ => {
-                    if !listening {
-                        for l in Swarm::listeners(&swarm1) {
-                            tx.send(l.clone()).unwrap();
-                            listening = true;
+        let pid1 = peer1_id.clone();
+        let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+        Swarm::listen_on(&mut swarm1, addr).unwrap();
+
+        let mut count1 = count.get();
+        let mut count2 = count.get();
+
+        let peer1 = async move {
+            while let Some(_) = swarm1.next().now_or_never() {}
+
+            for l in Swarm::listeners(&swarm1) {
+                tx.send(l.clone()).await.unwrap();
+            }
+
+            loop {
+                match swarm1.next().await {
+                    PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                        count1 -= 1;
+                        if count1 == 0 {
+                            return (pid1.clone(), peer, rtt)
                         }
-                    }
-                    return Ok(Async::NotReady)
-                }
-            }
-        }
-    });
-
-    let pid2 = peer2_id.clone();
-    let mut dialing = false;
-    let peer2 = future::poll_fn(move || -> Result<_, ()> {
-        loop {
-            match swarm2.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(PingEvent { peer, result })) => match result {
-                    Ok(PingSuccess::Ping { rtt }) =>
-                        return Ok(Async::Ready((pid2.clone(), peer, rtt))),
+                    },
+                    PingEvent { result: Err(e), .. } => panic!("Ping failure: {:?}", e),
                     _ => {}
-                },
-                _ => {
-                    if !dialing {
-                        Swarm::dial_addr(&mut swarm2, rx.recv().unwrap()).unwrap();
-                        dialing = true;
-                    }
-                    return Ok(Async::NotReady)
                 }
             }
-        }
-    });
+        };
 
-    let result = peer1.select(peer2).map_err(|e| panic!(e));
-    let ((p1, p2, rtt), _) = Runtime::new().unwrap().block_on(result).unwrap();
-    assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
-    assert!(rtt < Duration::from_millis(50));
+        let pid2 = peer2_id.clone();
+        let peer2 = async move {
+            Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
+
+            loop {
+                match swarm2.next().await {
+                    PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                        count2 -= 1;
+                        if count2 == 0 {
+                            return (pid2.clone(), peer, rtt)
+                        }
+                    },
+                    PingEvent { result: Err(e), .. } => panic!("Ping failure: {:?}", e),
+                    _ => {}
+                }
+            }
+        };
+
+        let result = future::select(Box::pin(peer1), Box::pin(peer2));
+        let ((p1, p2, rtt), _) = async_std::task::block_on(result).factor_first();
+        assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
+        assert!(rtt < Duration::from_millis(50));
+    }
+
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_,_))
 }
 
-fn mk_transport() -> (PeerId, impl Transport<
-    Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
-    Listener = impl Send,
-    ListenerUpgrade = impl Send,
-    Dial = impl Send,
-    Error = impl fmt::Debug
-> + Clone) {
+/// Tests that the connection is closed upon a configurable
+/// number of consecutive ping failures.
+#[test]
+fn max_failures() {
+    fn prop(max_failures: NonZeroU8, muxer: MuxerChoice) {
+        let cfg = PingConfig::new()
+            .with_keep_alive(true)
+            .with_interval(Duration::from_millis(10))
+            .with_timeout(Duration::from_millis(0))
+            .with_max_failures(max_failures.into());
+
+        let (peer1_id, trans) = mk_transport(muxer);
+        let mut swarm1 = Swarm::new(trans, Ping::new(cfg.clone()), peer1_id.clone());
+
+        let (peer2_id, trans) = mk_transport(muxer);
+        let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
+
+        let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
+
+        let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+        Swarm::listen_on(&mut swarm1, addr).unwrap();
+
+        let peer1 = async move {
+            while let Some(_) = swarm1.next().now_or_never() {}
+
+            for l in Swarm::listeners(&swarm1) {
+                tx.send(l.clone()).await.unwrap();
+            }
+
+            let mut count1: u8 = 0;
+
+            loop {
+                match swarm1.next_event().await {
+                    SwarmEvent::Behaviour(PingEvent {
+                        result: Ok(PingSuccess::Ping { .. }), ..
+                    }) => {
+                        count1 = 0; // there may be an occasional success
+                    }
+                    SwarmEvent::Behaviour(PingEvent {
+                        result: Err(_), ..
+                    }) => {
+                        count1 += 1;
+                    }
+                    SwarmEvent::ConnectionClosed { .. } => {
+                        return count1
+                    }
+                    _ => {}
+                }
+            }
+        };
+
+        let peer2 = async move {
+            Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
+
+            let mut count2: u8 = 0;
+
+            loop {
+                match swarm2.next_event().await {
+                    SwarmEvent::Behaviour(PingEvent {
+                        result: Ok(PingSuccess::Ping { .. }), ..
+                    }) => {
+                        count2 = 0; // there may be an occasional success
+                    }
+                    SwarmEvent::Behaviour(PingEvent {
+                        result: Err(_), ..
+                    }) => {
+                        count2 += 1;
+                    }
+                    SwarmEvent::ConnectionClosed { .. } => {
+                        return count2
+                    }
+                    _ => {}
+                }
+            }
+        };
+
+        let future = future::join(peer1, peer2);
+        let (count1, count2) = async_std::task::block_on(future);
+        assert_eq!(u8::max(count1, count2), max_failures.get() - 1);
+    }
+
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_,_))
+}
+
+
+fn mk_transport(muxer: MuxerChoice) -> (
+    PeerId,
+    transport::Boxed<(PeerId, StreamMuxerBox)>
+) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
-    let transport = TcpConfig::new()
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
+    (peer_id, TcpConfig::new()
         .nodelay(true)
-        .with_upgrade(SecioConfig::new(id_keys))
-        .and_then(move |out, endpoint| {
-            let peer_id = out.remote_key.into_peer_id();
-            let peer_id2 = peer_id.clone();
-            let upgrade = yamux::Config::default()
-                .map_outbound(move |muxer| (peer_id, muxer))
-                .map_inbound(move |muxer| (peer_id2, muxer));
-            upgrade::apply(out.stream, upgrade, endpoint)
-        });
-    (peer_id, transport)
+        .upgrade(upgrade::Version::V1)
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(match muxer {
+            MuxerChoice::Yamux =>
+                upgrade::EitherUpgrade::A(yamux::Config::default()),
+            MuxerChoice::Mplex =>
+                upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
+        })
+        .boxed())
 }
 
+#[derive(Debug, Copy, Clone)]
+enum MuxerChoice {
+    Mplex,
+    Yamux,
+}
+
+impl Arbitrary for MuxerChoice {
+    fn arbitrary<G: Gen>(g: &mut G) -> MuxerChoice {
+        *[MuxerChoice::Mplex, MuxerChoice::Yamux].choose(g).unwrap()
+    }
+}

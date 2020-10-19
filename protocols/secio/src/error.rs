@@ -21,7 +21,6 @@
 //! Defines the `SecioError` enum that groups all possible errors in SECIO.
 
 use aes_ctr::stream_cipher::LoopError;
-use protobuf::error::ProtobufError;
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
@@ -33,7 +32,7 @@ pub enum SecioError {
     IoError(IoError),
 
     /// Protocol buffer error.
-    ProtobufError(ProtobufError),
+    ProtobufError(prost::DecodeError),
 
     /// Failed to parse one of the handshake protobuf messages.
     HandshakeParsingFailure,
@@ -90,7 +89,6 @@ impl error::Error for SecioError {
 }
 
 impl fmt::Display for SecioError {
-    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             SecioError::IoError(e) =>
@@ -128,22 +126,19 @@ impl fmt::Display for SecioError {
 }
 
 impl From<LoopError> for SecioError {
-    #[inline]
     fn from(err: LoopError) -> SecioError {
         SecioError::CipherError(err)
     }
 }
 
 impl From<IoError> for SecioError {
-    #[inline]
     fn from(err: IoError) -> SecioError {
         SecioError::IoError(err)
     }
 }
 
-impl From<ProtobufError> for SecioError {
-    #[inline]
-    fn from(err: ProtobufError) -> SecioError {
+impl From<prost::DecodeError> for SecioError {
+    fn from(err: prost::DecodeError) -> SecioError {
         SecioError::ProtobufError(err)
     }
 }

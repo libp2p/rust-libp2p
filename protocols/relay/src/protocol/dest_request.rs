@@ -18,14 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message::{CircuitRelay, CircuitRelay_Status};
+use crate::message_proto::{CircuitRelay, circuit_relay};
 use crate::protocol::Peer;
 use bytes::Buf as _;
-use futures::{prelude::*, try_ready};
+use futures::{prelude::*, future::BoxFuture, ready};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
-use protobuf::Message as _;
+use libp2p_swarm::NegotiatedSubstream;
 use std::{error, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
+use std::pin::Pin;
+use prost::Message;
 
 /// Request from a remote for us to become a destination.
 ///
@@ -39,17 +41,17 @@ use tokio_io::{AsyncRead, AsyncWrite};
 #[must_use = "A destination request should be either accepted or denied"]
 pub struct RelayDestinationRequest<TSubstream> {
     /// The stream to the source.
-    stream: upgrade::Negotiated<TSubstream>,
+    stream: TSubstream,
     /// Source of the request.
     from: Peer,
 }
 
 impl<TSubstream> RelayDestinationRequest<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     /// Creates a `RelayDestinationRequest`.
-    pub(crate) fn new(stream: upgrade::Negotiated<TSubstream>, from: Peer) -> Self {
+    pub(crate) fn new(stream: TSubstream, from: Peer) -> Self {
         RelayDestinationRequest { stream, from }
     }
 
@@ -68,11 +70,15 @@ where
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
     pub fn accept(self) -> RelayDestinationAcceptFuture<TSubstream> {
-        let mut msg = CircuitRelay::new();
-        msg.set_code(CircuitRelay_Status::SUCCESS);
-        let msg_bytes = msg
-            .write_to_bytes()
-            .expect("all the mandatory fields are always filled; QED");
+        let msg = CircuitRelay {
+            r#type: None,
+            src_peer: None,
+            dst_peer: None,
+            code: Some(circuit_relay::Status::Success.into()),
+        };
+        let mut msg_bytes = Vec::new();
+        // TODO: Handl2
+        msg.encode(&mut msg_bytes).expect("all the mandatory fields are always filled; QED");
         RelayDestinationAcceptFuture {
             inner: Some(self.stream),
             message: io::Cursor::new(msg_bytes),
@@ -82,13 +88,22 @@ where
     /// Refuses the request.
     ///
     /// The returned `Future` gracefully shuts down the request.
-    pub fn deny(self) -> upgrade::WriteOne<upgrade::Negotiated<TSubstream>> {
-        let mut msg = CircuitRelay::new();
-        msg.set_code(CircuitRelay_Status::STOP_RELAY_REFUSED);
-        let msg_bytes = msg
-            .write_to_bytes()
-            .expect("all the mandatory fields are always filled; QED");
-        upgrade::write_one(self.stream, msg_bytes)
+    pub fn deny(self) -> BoxFuture<'static, Result<(), io::Error>> {
+        let msg = CircuitRelay {
+            r#type: None,
+            src_peer: None,
+            dst_peer: None,
+            code: Some(circuit_relay::Status::StopRelayRefused.into()),
+        };
+        let mut msg_bytes = Vec::new();
+        // TODO: Handl2
+        msg.encode(&mut msg_bytes).expect("all the mandatory fields are always filled; QED");
+
+        // async {
+        //     upgrade::write_one(&mut self.stream, msg_bytes).await?;
+        // }.boxed()
+
+        unimplemented!();
     }
 }
 
@@ -96,37 +111,37 @@ where
 #[must_use = "futures do nothing unless polled"]
 pub struct RelayDestinationAcceptFuture<TSubstream> {
     /// The inner stream.
-    inner: Option<upgrade::Negotiated<TSubstream>>,
+    inner: Option<TSubstream>,
     /// The message to send to the remote.
     message: io::Cursor<Vec<u8>>,
 }
 
-impl<TSubstream> Future for RelayDestinationAcceptFuture<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    type Item = upgrade::Negotiated<TSubstream>;
-    type Error = Box<error::Error>; // TODO: change error
+impl<TSubstream> Unpin for RelayDestinationAcceptFuture<TSubstream> {}
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        while self.message.remaining() != 0 {
-            match self
-                .inner
-                .as_mut()
-                .expect("Future is already finished")
-                .write_buf(&mut self.message)?
-            {
-                Async::Ready(_) => (),
-                Async::NotReady => return Ok(Async::NotReady),
-            }
-        }
+impl<TSubstream> Future for RelayDestinationAcceptFuture<TSubstream> {
+    type Output = Result<NegotiatedSubstream, Box<dyn error::Error>>; // TODO: change error
 
-        try_ready!(self
-            .inner
-            .as_mut()
-            .expect("Future is already finished")
-            .poll_flush());
-        let stream = self.inner.take().expect("Future is already finished");
-        Ok(Async::Ready(stream))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unimplemented!();
+        // while self.message.remaining() != 0 {
+        //     match Pin::new(self
+        //         .inner
+        //         .as_mut()
+        //         .expect("Future is already finished"))
+        //         .poll_write(cx, &self.message)?
+        //     {
+        //         // TODO: Handle error and partial send.
+        //         Poll::Ready(_) => (),
+        //         Poll::Pending => return Ok(Poll::Pending),
+        //     }
+        // }
+
+        // ready!(self
+        //     .inner
+        //     .as_mut()
+        //     .expect("Future is already finished")
+        //     .poll_flush());
+        // let stream = self.inner.take().expect("Future is already finished");
+        // Poll::Ready(Ok(stream))
     }
 }

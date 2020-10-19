@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multistream_select::ProtocolChoiceError;
+use multistream_select::NegotiationError;
 use std::fmt;
 
 /// Error that can happen when upgrading a connection or substream to use a protocol.
 #[derive(Debug)]
 pub enum UpgradeError<E> {
     /// Error during the negotiation process.
-    Select(ProtocolChoiceError),
+    Select(NegotiationError),
     /// Error during the post-negotiation handshake.
     Apply(E),
 }
@@ -73,8 +73,8 @@ where
     }
 }
 
-impl<E> From<ProtocolChoiceError> for UpgradeError<E> {
-    fn from(e: ProtocolChoiceError) -> Self {
+impl<E> From<NegotiationError> for UpgradeError<E> {
+    fn from(e: NegotiationError) -> Self {
         UpgradeError::Select(e)
     }
 }

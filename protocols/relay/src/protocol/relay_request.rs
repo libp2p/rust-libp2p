@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
+use crate::message_proto::{CircuitRelay, circuit_relay};
 use crate::protocol::{send_read, SendReadError, SendReadFuture};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
-use protobuf::Message as _;
 use std::iter;
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures::prelude::*;
+use prost::Message;
 
 /// Ask a remote to act as a relay.
 ///
@@ -53,20 +53,21 @@ impl<TUserData> RelayProxyRequest<TUserData> {
         dest_addresses: impl IntoIterator<Item = Multiaddr>,
         user_data: TUserData,
     ) -> Self {
-        let mut msg = CircuitRelay::new();
-        msg.set_field_type(CircuitRelay_Type::HOP);
-
-        let mut dest = CircuitRelay_Peer::new();
-        dest.set_id(dest_id.as_bytes().to_vec());
-        for a in dest_addresses {
-            dest.mut_addrs().push(a.to_vec())
-        }
-        msg.set_dstPeer(dest);
+        let message = CircuitRelay {
+            r#type: Some(circuit_relay::Type::Hop.into()),
+            src_peer: None,
+            dst_peer: Some(circuit_relay::Peer {
+                id: dest_id.as_bytes().to_vec(),
+                addrs: dest_addresses.into_iter().map(|a| a.to_vec()).collect(),
+            }),
+            code: None,
+        };
+        let mut encoded = Vec::new();
+        // TODO: Handle failure?
+        message.encode(&mut encoded).expect("all the mandatory fields are always filled; QED");
 
         RelayProxyRequest {
-            message: msg
-                .write_to_bytes()
-                .expect("all the mandatory fields are always filled; QED"),
+            message: encoded,
             user_data,
         }
     }
@@ -83,15 +84,15 @@ impl<TUserData> upgrade::UpgradeInfo for RelayProxyRequest<TUserData> {
 
 impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for RelayProxyRequest<TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = (upgrade::Negotiated<TSubstream>, TUserData);
+    type Output = (TSubstream, TUserData);
     type Error = SendReadError;
     type Future = SendReadFuture<TSubstream, TUserData>;
 
     fn upgrade_outbound(
         self,
-        substream: upgrade::Negotiated<TSubstream>,
+        substream: TSubstream,
         _: Self::Info,
     ) -> Self::Future {
         send_read(substream, self.message, self.user_data)

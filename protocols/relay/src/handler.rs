@@ -21,13 +21,15 @@
 use crate::copy::Copy;
 use crate::protocol;
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{
+use futures::future::BoxFuture;
+use libp2p_swarm::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    NegotiatedSubstream,
 };
 use libp2p_core::{either, upgrade, upgrade::OutboundUpgrade, Multiaddr, PeerId};
 use smallvec::SmallVec;
 use std::{error, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
 
 /// Protocol handler that handles the relay protocol.
 ///
@@ -48,38 +50,38 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// - Send a `RelayHandlerIn::DestinationRequest` if the node we handle must act as a destination.
 ///   The handler will automatically notify the source whether the request was accepted or denied.
 ///
-pub struct RelayHandler<TSubstream> {
+pub struct RelayHandler {
     /// Futures that send back negative responses.
-    deny_futures: SmallVec<[upgrade::WriteOne<upgrade::Negotiated<TSubstream>>; 4]>,
+    deny_futures: SmallVec<[BoxFuture<'static, Result<(), io::Error>>; 4]>,
 
     /// Futures that send back an accept response to a source.
-    accept_futures: SmallVec<[protocol::RelayHopAcceptFuture<TSubstream, TSubstream>; 4]>,
+    accept_futures: SmallVec<[protocol::RelayHopAcceptFuture<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
 
     /// Futures that copy from a source to a destination.
-    copy_futures: SmallVec<[Copy<upgrade::Negotiated<TSubstream>, upgrade::Negotiated<TSubstream>>; 4]>,
+    copy_futures: SmallVec<[Copy<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
 
     /// List of requests to relay we should send to the node we handle.
     relay_requests: SmallVec<[(PeerId, Vec<Multiaddr>); 4]>,
 
     /// List of requests to be a destination we should send to the node we handle.
-    dest_requests: SmallVec<[(PeerId, Vec<Multiaddr>, RelayHandlerHopRequest<TSubstream>); 4]>,
+    dest_requests: SmallVec<[(PeerId, Vec<Multiaddr>, RelayHandlerHopRequest); 4]>,
 
     /// Queue of events to return when polled.
-    queued_events: Vec<RelayHandlerEvent<TSubstream>>,
+    queued_events: Vec<RelayHandlerEvent>,
 }
 
 /// Event produced by the relay handler.
 //#[derive(Debug)]      // TODO: restore
-pub enum RelayHandlerEvent<TSubstream> {
+pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back
     /// a `DenyHopRequest`, or send a `DestinationRequest` to a different handler containing this
     /// object.
-    HopRequest(RelayHandlerHopRequest<TSubstream>),
+    HopRequest(RelayHandlerHopRequest),
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
     /// destination. You must either call `accept` on the object, or send back a
     /// `DenyDestinationRequest` to the handler.
-    DestinationRequest(RelayHandlerDestRequest<TSubstream>),
+    DestinationRequest(RelayHandlerDestRequest),
 
     /// A `RelayRequest` that has previously been sent has been accepted by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -87,7 +89,7 @@ pub enum RelayHandlerEvent<TSubstream> {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    RelayRequestSuccess(PeerId, upgrade::Negotiated<TSubstream>),
+    RelayRequestSuccess(PeerId, NegotiatedSubstream),
 
     /// A `RelayRequest` that has previously been sent has been denied by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -96,12 +98,12 @@ pub enum RelayHandlerEvent<TSubstream> {
 
 /// Event that can be sent to the relay handler.
 //#[derive(Debug)]      // TODO: restore
-pub enum RelayHandlerIn<TSubstream> {
+pub enum RelayHandlerIn {
     /// Denies a hop request sent by the node we talk to.
-    DenyHopRequest(RelayHandlerHopRequest<TSubstream>),
+    DenyHopRequest(RelayHandlerHopRequest),
 
     /// Denies a destination request sent by the node we talk to.
-    DenyDestinationRequest(RelayHandlerDestRequest<TSubstream>),
+    DenyDestinationRequest(RelayHandlerDestRequest),
 
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     RelayRequest {
@@ -120,19 +122,16 @@ pub enum RelayHandlerIn<TSubstream> {
         /// Addresses of the node whose communications are being relayed.
         source_addresses: Vec<Multiaddr>,
         /// Substream to the source.
-        substream: RelayHandlerHopRequest<TSubstream>,
+        substream: RelayHandlerHopRequest,
     },
 }
 
 /// The remote wants us to become a relay.
-pub struct RelayHandlerHopRequest<TSubstream> {
-    inner: protocol::RelayHopRequest<TSubstream>,
+pub struct RelayHandlerHopRequest {
+    inner: protocol::RelayHopRequest<NegotiatedSubstream>,
 }
 
-impl<TSubstream> RelayHandlerHopRequest<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
+impl RelayHandlerHopRequest {
     /// Peer id of the destination that we should relay to.
     pub fn destination_id(&self) -> &PeerId {
         self.inner.destination_id()
@@ -145,14 +144,11 @@ where
 }
 
 /// The remote wants us to be treated as a destination.
-pub struct RelayHandlerDestRequest<TSubstream> {
-    inner: protocol::RelayDestinationRequest<TSubstream>,
+pub struct RelayHandlerDestRequest {
+    inner: protocol::RelayDestinationRequest<NegotiatedSubstream>,
 }
 
-impl<TSubstream> RelayHandlerDestRequest<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
+impl RelayHandlerDestRequest {
     /// Peer id of the source that is being relayed.
     pub fn source_id(&self) -> &PeerId {
         self.inner.source_id()
@@ -172,13 +168,13 @@ where
     // TODO: change error type
     pub fn accept(
         self,
-    ) -> impl Future<Item = upgrade::Negotiated<TSubstream>, Error = Box<dyn error::Error + 'static>>
+    ) -> impl Future<Output = Result<NegotiatedSubstream, Box<dyn error::Error + 'static>>>
     {
         self.inner.accept()
     }
 }
 
-impl<TSubstream> RelayHandler<TSubstream> {
+impl RelayHandler {
     /// Builds a new `RelayHandler`.
     pub fn new() -> Self {
         RelayHandler {
@@ -192,34 +188,32 @@ impl<TSubstream> RelayHandler<TSubstream> {
     }
 }
 
-impl<TSubstream> Default for RelayHandler<TSubstream> {
+impl Default for RelayHandler {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<TSubstream> ProtocolsHandler for RelayHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    type InEvent = RelayHandlerIn<TSubstream>;
-    type OutEvent = RelayHandlerEvent<TSubstream>;
+impl ProtocolsHandler for RelayHandler {
+    type InEvent = RelayHandlerIn;
+    type OutEvent = RelayHandlerEvent;
     type Error = io::Error;
-    type Substream = TSubstream;
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol = upgrade::EitherUpgrade<
         protocol::RelayProxyRequest<PeerId>,
-        protocol::RelayTargetOpen<RelayHandlerHopRequest<TSubstream>>,
+        protocol::RelayTargetOpen<RelayHandlerHopRequest>,
     >;
     type OutboundOpenInfo = ();
+    type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        SubstreamProtocol::new(protocol::RelayListen::new())
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(protocol::RelayListen::new(), ())
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as upgrade::InboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
+        _: Self::InboundOpenInfo,
     ) {
         match protocol {
             // We have been asked to become a destination.
@@ -243,7 +237,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo,
     ) {
         match protocol {
@@ -291,9 +285,8 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
-        >,
+        // TODO: Fix
+        _: ProtocolsHandlerUpgrErr<either::EitherError<protocol::SendReadError, protocol::SendReadError>>,
     ) {
         // TODO:
         unimplemented!()
@@ -305,69 +298,71 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            RelayHandlerEvent<TSubstream>,
+            Self::OutEvent,
+            Self::Error,
         >,
-        io::Error,
     > {
-        // Request the remote to act as a relay.
-        if !self.relay_requests.is_empty() {
-            let (peer_id, addrs) = self.relay_requests.remove(0);
-            self.relay_requests.shrink_to_fit();
-            return Ok(Async::Ready(
-                ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    info: (),
-                    protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::RelayProxyRequest::new(
-                        peer_id.clone(),
-                        addrs,
-                        peer_id,
-                    ))),
-                },
-            ));
-        }
+        unimplemented!();
+        // // Request the remote to act as a relay.
+        // if !self.relay_requests.is_empty() {
+        //     let (peer_id, addrs) = self.relay_requests.remove(0);
+        //     self.relay_requests.shrink_to_fit();
+        //     return Poll::Ready(
+        //         ProtocolsHandlerEvent::OutboundSubstreamRequest {
+        //             info: (),
+        //             protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::RelayProxyRequest::new(
+        //                 peer_id.clone(),
+        //                 addrs,
+        //                 peer_id,
+        //             ))),
+        //         },
+        //     );
+        // }
 
-        // Request the remote to act as destination.
-        if !self.dest_requests.is_empty() {
-            let (source, source_addrs, substream) = self.dest_requests.remove(0);
-            self.dest_requests.shrink_to_fit();
-            return Ok(Async::Ready(
-                ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    info: (),
-                    protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::B(protocol::RelayTargetOpen::new(
-                        source,
-                        source_addrs,
-                        substream,
-                    ))),
-                },
-            ));
-        }
+        // // Request the remote to act as destination.
+        // if !self.dest_requests.is_empty() {
+        //     let (source, source_addrs, substream) = self.dest_requests.remove(0);
+        //     self.dest_requests.shrink_to_fit();
+        //     return Ok(Poll::Ready(
+        //         ProtocolsHandlerEvent::OutboundSubstreamRequest {
+        //             info: (),
+        //             protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::B(protocol::RelayTargetOpen::new(
+        //                 source,
+        //                 source_addrs,
+        //                 substream,
+        //             ))),
+        //         },
+        //     ));
+        // }
 
-        // Report the queued events.
-        if !self.queued_events.is_empty() {
-            let event = self.queued_events.remove(0);
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(event)));
-        }
+        // // Report the queued events.
+        // if !self.queued_events.is_empty() {
+        //     let event = self.queued_events.remove(0);
+        //     return Ok(Poll::Ready(ProtocolsHandlerEvent::Custom(event)));
+        // }
 
-        // Process the accept futures.
-        for n in (0..self.accept_futures.len()).rev() {
-            let mut fut = self.accept_futures.swap_remove(n);
-            match fut.poll() {
-                // TODO: spawn in background task?
-                Ok(Async::Ready(copy_fut)) => self.copy_futures.push(copy_fut),
-                Ok(Async::NotReady) => self.accept_futures.push(fut),
-                Err(_err) => ()     // TODO: log this?
-            }
-        }
+        // // Process the accept futures.
+        // for n in (0..self.accept_futures.len()).rev() {
+        //     let mut fut = self.accept_futures.swap_remove(n);
+        //     match fut.poll() {
+        //         // TODO: spawn in background task?
+        //         Ok(Poll::Ready(copy_fut)) => self.copy_futures.push(copy_fut),
+        //         Ok(Poll::Pending) => self.accept_futures.push(fut),
+        //         Err(_err) => ()     // TODO: log this?
+        //     }
+        // }
 
-        // Process the futures.
-        self.deny_futures
-            .retain(|f| f.poll().map(|a| a.is_not_ready()).unwrap_or(false));
-        self.copy_futures
-            .retain(|f| f.poll().map(|a| a.is_not_ready()).unwrap_or(false));
+        // // Process the futures.
+        // self.deny_futures
+        //     .retain(|f| f.poll().map(|a| a.is_not_ready()).unwrap_or(false));
+        // self.copy_futures
+        //     .retain(|f| f.poll().map(|a| a.is_not_ready()).unwrap_or(false));
 
-        Ok(Async::NotReady)
+        // Ok(Poll::Pending)
     }
 }

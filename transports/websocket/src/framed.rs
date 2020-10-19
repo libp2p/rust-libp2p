@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::BytesMut;
+use async_tls::{client, server};
 use crate::{error::Error, tls};
-use futures::{future::{self, Either, Loop}, prelude::*, try_ready};
+use either::Either;
+use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
     Transport,
     either::EitherOutput,
@@ -28,16 +29,12 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
-use tokio_rustls::{client, server};
-use soketto::{base, connection::{Connection, Mode}, handshake::{self, Redirect, Response}};
-use std::io;
-use tokio_codec::{Framed, FramedParts};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_rustls::webpki;
+use soketto::{connection, extension::deflate::Deflate, handshake};
+use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
 /// Max. number of payload bytes of a single frame.
-const MAX_DATA_SIZE: u64 = 256 * 1024 * 1024;
+const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 
 /// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
 /// frame payloads which does not implement [`AsyncRead`] or
@@ -45,9 +42,10 @@ const MAX_DATA_SIZE: u64 = 256 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub struct WsConfig<T> {
     transport: T,
-    max_data_size: u64,
+    max_data_size: usize,
     tls_config: tls::Config,
-    max_redirects: u8
+    max_redirects: u8,
+    use_deflate: bool
 }
 
 impl<T> WsConfig<T> {
@@ -57,7 +55,8 @@ impl<T> WsConfig<T> {
             transport,
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
-            max_redirects: 0
+            max_redirects: 0,
+            use_deflate: false
         }
     }
 
@@ -73,12 +72,12 @@ impl<T> WsConfig<T> {
     }
 
     /// Get the max. frame data size we support.
-    pub fn max_data_size(&self) -> u64 {
+    pub fn max_data_size(&self) -> usize {
         self.max_data_size
     }
 
     /// Set the max. frame data size we support.
-    pub fn set_max_data_size(&mut self, size: u64) -> &mut Self {
+    pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
         self.max_data_size = size;
         self
     }
@@ -88,7 +87,15 @@ impl<T> WsConfig<T> {
         self.tls_config = c;
         self
     }
+
+    /// Should the deflate extension (RFC 7692) be used if supported?
+    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
+        self.use_deflate = flag;
+        self
+    }
 }
+
+type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
 impl<T> Transport for WsConfig<T>
 where
@@ -97,13 +104,13 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Send + 'static
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = BytesConnection<T::Output>;
+    type Output = Connection<T::Output>;
     type Error = Error<T::Error>;
-    type Listener = Box<dyn Stream<Item = ListenerEvent<Self::ListenerUpgrade>, Error = Self::Error> + Send>;
-    type ListenerUpgrade = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
-    type Dial = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
+    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
@@ -125,10 +132,11 @@ where
 
         let tls_config = self.tls_config;
         let max_size = self.max_data_size;
-        let listen = self.transport.listen_on(inner_addr)
-            .map_err(|e| e.map(Error::Transport))?
+        let use_deflate = self.use_deflate;
+        let transport = self.transport.listen_on(inner_addr).map_err(|e| e.map(Error::Transport))?;
+        let listen = transport
             .map_err(Error::Transport)
-            .map(move |event| match event {
+            .map_ok(move |event| match event {
                 ListenerEvent::NewAddress(mut a) => {
                     a = a.with(proto.clone());
                     debug!("Listening on {}", a);
@@ -138,60 +146,88 @@ where
                     a = a.with(proto.clone());
                     ListenerEvent::AddressExpired(a)
                 }
-                ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
-                    listen_addr = listen_addr.with(proto.clone());
+                ListenerEvent::Error(err) => {
+                    ListenerEvent::Error(Error::Transport(err))
+                }
+                ListenerEvent::Upgrade { upgrade, mut local_addr, mut remote_addr } => {
+                    local_addr = local_addr.with(proto.clone());
                     remote_addr = remote_addr.with(proto.clone());
                     let remote1 = remote_addr.clone(); // used for logging
                     let remote2 = remote_addr.clone(); // used for logging
                     let tls_config = tls_config.clone();
-                    let upgraded = upgrade.map_err(Error::Transport)
-                        .and_then(move |stream| {
-                            trace!("incoming connection from {}", remote1);
+
+                    let upgrade = async move {
+                        let stream = upgrade.map_err(Error::Transport).await?;
+                        trace!("incoming connection from {}", remote1);
+
+                        let stream =
                             if use_tls { // begin TLS session
-                                let server = tls_config.server.expect("for use_tls we checked server");
+                                let server = tls_config
+                                    .server
+                                    .expect("for use_tls we checked server is not none");
+
                                 trace!("awaiting TLS handshake with {}", remote1);
-                                let future = server.accept(stream)
+
+                                let stream = server.accept(stream)
                                     .map_err(move |e| {
                                         debug!("TLS handshake with {} failed: {}", remote1, e);
                                         Error::Tls(tls::Error::from(e))
                                     })
-                                    .map(|s| EitherOutput::First(EitherOutput::Second(s)));
-                                Either::A(future)
+                                    .await?;
+
+                                let stream: TlsOrPlain<_> =
+                                    EitherOutput::First(EitherOutput::Second(stream));
+
+                                stream
                             } else { // continue with plain stream
-                                Either::B(future::ok(EitherOutput::Second(stream)))
-                            }
-                        })
-                        .and_then(move |stream| {
-                            trace!("receiving websocket handshake request from {}", remote2);
-                            Framed::new(stream, handshake::Server::new())
-                                .into_future()
-                                .map_err(|(e, _framed)| Error::Handshake(Box::new(e)))
-                                .and_then(move |(request, framed)| {
-                                    if let Some(r) = request {
-                                        trace!("accepting websocket handshake request from {}", remote2);
-                                        let key = Vec::from(r.key());
-                                        Either::A(framed.send(Ok(handshake::Accept::new(key)))
-                                            .map_err(|e| Error::Base(Box::new(e)))
-                                            .map(move |f| {
-                                                trace!("websocket handshake with {} successful", remote2);
-                                                let c = new_connection(f, max_size, Mode::Server);
-                                                BytesConnection { inner: c }
-                                            }))
-                                    } else {
-                                        debug!("connection to {} terminated during handshake", remote2);
-                                        let e: io::Error = io::ErrorKind::ConnectionAborted.into();
-                                        Either::B(future::err(Error::Handshake(Box::new(e))))
-                                    }
-                                })
-                        });
+                                EitherOutput::Second(stream)
+                            };
+
+                        trace!("receiving websocket handshake request from {}", remote2);
+
+                        let mut server = handshake::Server::new(stream);
+
+                        if use_deflate {
+                            server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
+                        }
+
+                        let ws_key = {
+                            let request = server.receive_request()
+                                .map_err(|e| Error::Handshake(Box::new(e)))
+                                .await?;
+                            request.into_key()
+                        };
+
+                        trace!("accepting websocket handshake request from {}", remote2);
+
+                        let response =
+                            handshake::server::Response::Accept {
+                                key: &ws_key,
+                                protocol: None
+                            };
+
+                        server.send_response(&response)
+                            .map_err(|e| Error::Handshake(Box::new(e)))
+                            .await?;
+
+                        let conn = {
+                            let mut builder = server.into_builder();
+                            builder.set_max_message_size(max_size);
+                            builder.set_max_frame_size(max_size);
+                            Connection::new(builder)
+                        };
+
+                        Ok(conn)
+                    };
+
                     ListenerEvent::Upgrade {
-                        upgrade: Box::new(upgraded) as Box<dyn Future<Item = _, Error = _> + Send>,
-                        listen_addr,
+                        upgrade: Box::pin(upgrade) as BoxFuture<'static, _>,
+                        local_addr,
                         remote_addr
                     }
                 }
             });
-        Ok(Box::new(listen) as Box<_>)
+        Ok(Box::pin(listen))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -202,116 +238,110 @@ where
             debug!("{} is not a websocket multiaddr", addr);
             return Err(TransportError::MultiaddrNotSupported(addr))
         }
+
         // We are looping here in order to follow redirects (if any):
-        let max_redirects = self.max_redirects;
-        let future = future::loop_fn((addr, self, max_redirects), |(addr, cfg, remaining)| {
-            dial(addr, cfg.clone()).and_then(move |result| match result {
-                Either::A(redirect) => {
-                    if remaining == 0 {
-                        debug!("too many redirects");
-                        return Err(Error::TooManyRedirects)
+        let mut remaining_redirects = self.max_redirects;
+        let mut addr = addr;
+        let future = async move {
+            loop {
+                let this = self.clone();
+                match this.dial_once(addr).await {
+                    Ok(Either::Left(redirect)) => {
+                        if remaining_redirects == 0 {
+                            debug!("too many redirects");
+                            return Err(Error::TooManyRedirects)
+                        }
+                        remaining_redirects -= 1;
+                        addr = location_to_multiaddr(&redirect)?
                     }
-                    let a = location_to_multiaddr(redirect.location())?;
-                    Ok(Loop::Continue((a, cfg, remaining - 1)))
+                    Ok(Either::Right(conn)) => return Ok(conn),
+                    Err(e) => return Err(e)
                 }
-                Either::B(conn) => Ok(Loop::Break(conn))
-            })
-        });
-        Ok(Box::new(future) as Box<_>)
+            }
+        };
+
+        Ok(Box::pin(future))
     }
 }
 
-/// Attempty to dial the given address and perform a websocket handshake.
-fn dial<T>(address: Multiaddr, config: WsConfig<T>)
-    -> impl Future<Item = Either<Redirect, BytesConnection<T::Output>>, Error = Error<T::Error>>
+impl<T> WsConfig<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    trace!("dial address: {}", address);
+    /// Attempty to dial the given address and perform a websocket handshake.
+    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+        trace!("dial address: {}", address);
 
-    let WsConfig { transport, max_data_size, tls_config, .. } = config;
+        let (host_port, dns_name) = host_and_dnsname(&address)?;
 
-    let (host_port, dns_name) = match host_and_dnsname(&address) {
-        Ok(x) => x,
-        Err(e) => return Either::A(future::err(e))
-    };
+        let mut inner_addr = address.clone();
 
-    let mut inner_addr = address.clone();
+        let (use_tls, path) =
+            match inner_addr.pop() {
+                Some(Protocol::Ws(path)) => (false, path),
+                Some(Protocol::Wss(path)) => {
+                    if dns_name.is_none() {
+                        debug!("no DNS name in {}", address);
+                        return Err(Error::InvalidMultiaddr(address))
+                    }
+                    (true, path)
+                }
+                _ => {
+                    debug!("{} is not a websocket multiaddr", address);
+                    return Err(Error::InvalidMultiaddr(address))
+                }
+            };
 
-    let (use_tls, path) = match inner_addr.pop() {
-        Some(Protocol::Ws(path)) => (false, path),
-        Some(Protocol::Wss(path)) => {
-            if dns_name.is_none() {
-                debug!("no DNS name in {}", address);
-                return Either::A(future::err(Error::InvalidMultiaddr(address)))
-            }
-            (true, path)
-        }
-        _ => {
-            debug!("{} is not a websocket multiaddr", address);
-            return Either::A(future::err(Error::InvalidMultiaddr(address)))
-        }
-    };
+        let dial = self.transport.dial(inner_addr)
+            .map_err(|e| match e {
+                TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
+                TransportError::Other(e) => Error::Transport(e)
+            })?;
 
-    let dial = match transport.dial(inner_addr) {
-        Ok(dial) => dial,
-        Err(TransportError::MultiaddrNotSupported(a)) =>
-            return Either::A(future::err(Error::InvalidMultiaddr(a))),
-        Err(TransportError::Other(e)) =>
-            return Either::A(future::err(Error::Transport(e)))
-    };
+        let stream = dial.map_err(Error::Transport).await?;
+        trace!("connected to {}", address);
 
-    let address1 = address.clone(); // used for logging
-    let address2 = address.clone(); // used for logging
-    let future = dial.map_err(Error::Transport)
-        .and_then(move |stream| {
-            trace!("connected to {}", address);
+        let stream =
             if use_tls { // begin TLS session
                 let dns_name = dns_name.expect("for use_tls we have checked that dns_name is some");
                 trace!("starting TLS handshake with {}", address);
-                let future = tls_config.client.connect(dns_name.as_ref(), stream)
-                    .map_err(move |e| {
+                let stream = self.tls_config.client.connect(&dns_name, stream)
+                    .map_err(|e| {
                         debug!("TLS handshake with {} failed: {}", address, e);
                         Error::Tls(tls::Error::from(e))
                     })
-                    .map(|s| EitherOutput::First(EitherOutput::First(s)));
-                return Either::A(future)
-            }
-            // continue with plain stream
-            Either::B(future::ok(EitherOutput::Second(stream)))
-        })
-        .and_then(move |stream| {
-            trace!("sending websocket handshake request to {}", address1);
-            let client = handshake::Client::new(host_port, path);
-            Framed::new(stream, client)
-                .send(())
-                .map_err(|e| Error::Handshake(Box::new(e)))
-                .and_then(move |framed| {
-                    trace!("awaiting websocket handshake response form {}", address2);
-                    framed.into_future().map_err(|(e, _)| Error::Base(Box::new(e)))
-                })
-                .and_then(move |(response, framed)| {
-                    match response {
-                        None => {
-                            debug!("connection to {} terminated during handshake", address1);
-                            let e: io::Error = io::ErrorKind::ConnectionAborted.into();
-                            return Err(Error::Handshake(Box::new(e)))
-                        }
-                        Some(Response::Redirect(r)) => {
-                            debug!("received {}", r);
-                            return Ok(Either::A(r))
-                        }
-                        Some(Response::Accepted(_)) => {
-                            trace!("websocket handshake with {} successful", address1)
-                        }
-                    }
-                    let c = new_connection(framed, max_data_size, Mode::Client);
-                    Ok(Either::B(BytesConnection { inner: c }))
-                })
-        });
+                    .await?;
 
-    Either::B(future)
+                let stream: TlsOrPlain<_> = EitherOutput::First(EitherOutput::First(stream));
+                stream
+            } else { // continue with plain stream
+                EitherOutput::Second(stream)
+            };
+
+        trace!("sending websocket handshake request to {}", address);
+
+        let mut client = handshake::Client::new(stream, &host_port, path.as_ref());
+
+        if self.use_deflate {
+            client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
+        }
+
+        match client.handshake().map_err(|e| Error::Handshake(Box::new(e))).await? {
+            handshake::ServerResponse::Redirect { status_code, location } => {
+                debug!("received redirect ({}); location: {}", status_code, location);
+                Ok(Either::Left(location))
+            }
+            handshake::ServerResponse::Rejected { status_code } => {
+                let msg = format!("server rejected handshake; status code = {}", status_code);
+                Err(Error::Handshake(msg.into()))
+            }
+            handshake::ServerResponse::Accepted { .. } => {
+                trace!("websocket handshake with {} successful", address);
+                Ok(Either::Right(Connection::new(client.into_builder())))
+            }
+        }
+    }
 }
 
 // Extract host, port and optionally the DNS name from the given [`Multiaddr`].
@@ -322,6 +352,8 @@ fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSNa
             Ok((format!("{}:{}", ip, port), None)),
         (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port))) =>
             Ok((format!("{}:{}", ip, port), None)),
+        (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port))) =>
+            Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
         (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port))) =>
             Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
         (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) =>
@@ -340,7 +372,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
             let mut a = Multiaddr::empty();
             match url.host() {
                 Some(url::Host::Domain(h)) => {
-                    a.push(Protocol::Dns4(h.into()))
+                    a.push(Protocol::Dns(h.into()))
                 }
                 Some(url::Host::Ipv4(ip)) => {
                     a.push(Protocol::Ip4(ip))
@@ -371,61 +403,187 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
     }
 }
 
-/// Create a `Connection` from an existing `Framed` value.
-fn new_connection<T, C>(framed: Framed<T, C>, max_size: u64, mode: Mode) -> Connection<T>
-where
-    T: AsyncRead + AsyncWrite
-{
-    let mut codec = base::Codec::new();
-    codec.set_max_data_size(max_size);
-    let old = framed.into_parts();
-    let mut new = FramedParts::new(old.io, codec);
-    new.read_buf = old.read_buf;
-    new.write_buf = old.write_buf;
-    let framed = Framed::from_parts(new);
-    Connection::from_framed(framed, mode)
+/// The websocket connection.
+pub struct Connection<T> {
+    receiver: BoxStream<'static, Result<IncomingData, connection::Error>>,
+    sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
+    _marker: std::marker::PhantomData<T>
 }
 
-// BytesConnection ////////////////////////////////////////////////////////////////////////////////
-
-/// A [`Stream`] and [`Sink`] that produces and consumes [`BytesMut`] values
-/// which correspond to the payload data of websocket frames.
-#[derive(Debug)]
-pub struct BytesConnection<T> {
-    inner: Connection<EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>>
+/// Data received over the websocket connection.
+#[derive(Debug, Clone)]
+pub enum IncomingData {
+    /// Binary application data.
+    Binary(Vec<u8>),
+    /// UTF-8 encoded application data.
+    Text(Vec<u8>),
+    /// PONG control frame data.
+    Pong(Vec<u8>)
 }
 
-impl<T: AsyncRead + AsyncWrite> Stream for BytesConnection<T> {
-    type Item = BytesMut;
-    type Error = io::Error;
+impl IncomingData {
+    pub fn is_data(&self) -> bool {
+        self.is_binary() || self.is_text()
+    }
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let data = try_ready!(self.inner.poll().map_err(|e| io::Error::new(io::ErrorKind::Other, e)));
-        Ok(Async::Ready(data.map(base::Data::into_bytes)))
+    pub fn is_binary(&self) -> bool {
+        if let IncomingData::Binary(_) = self { true } else { false }
+    }
+
+    pub fn is_text(&self) -> bool {
+        if let IncomingData::Text(_) = self { true } else { false }
+    }
+
+    pub fn is_pong(&self) -> bool {
+        if let IncomingData::Pong(_) = self { true } else { false }
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            IncomingData::Binary(d) => d,
+            IncomingData::Text(d) => d,
+            IncomingData::Pong(d) => d
+        }
     }
 }
 
-impl<T: AsyncRead + AsyncWrite> Sink for BytesConnection<T> {
-    type SinkItem = BytesMut;
-    type SinkError = io::Error;
+impl AsRef<[u8]> for IncomingData {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            IncomingData::Binary(d) => d,
+            IncomingData::Text(d) => d,
+            IncomingData::Pong(d) => d
+        }
+    }
+}
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        let result = self.inner.start_send(base::Data::Binary(item))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+/// Data sent over the websocket connection.
+#[derive(Debug, Clone)]
+pub enum OutgoingData {
+    /// Send some bytes.
+    Binary(Vec<u8>),
+    /// Send a PING message.
+    Ping(Vec<u8>),
+    /// Send an unsolicited PONG message.
+    /// (Incoming PINGs are answered automatically.)
+    Pong(Vec<u8>)
+}
 
-        if let AsyncSink::NotReady(data) = result? {
-            Ok(AsyncSink::NotReady(data.into_bytes()))
-        } else {
-            Ok(AsyncSink::Ready)
+impl<T> fmt::Debug for Connection<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Connection")
+    }
+}
+
+impl<T> Connection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    fn new(builder: connection::Builder<TlsOrPlain<T>>) -> Self {
+        let (sender, receiver) = builder.finish();
+        let sink = quicksink::make_sink(sender, |mut sender, action| async move {
+            match action {
+                quicksink::Action::Send(OutgoingData::Binary(x)) => {
+                    sender.send_binary_mut(x).await?
+                }
+                quicksink::Action::Send(OutgoingData::Ping(x)) => {
+                    let data = x[..].try_into().map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "PING data must be < 126 bytes")
+                    })?;
+                    sender.send_ping(data).await?
+                }
+                quicksink::Action::Send(OutgoingData::Pong(x)) => {
+                    let data = x[..].try_into().map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "PONG data must be < 126 bytes")
+                    })?;
+                    sender.send_pong(data).await?
+                }
+                quicksink::Action::Flush => sender.flush().await?,
+                quicksink::Action::Close => sender.close().await?
+            }
+            Ok(sender)
+        });
+        let stream = stream::unfold((Vec::new(), receiver), |(mut data, mut receiver)| async {
+            match receiver.receive(&mut data).await {
+                Ok(soketto::Incoming::Data(soketto::Data::Text(_))) => {
+                    Some((Ok(IncomingData::Text(mem::take(&mut data))), (data, receiver)))
+                }
+                Ok(soketto::Incoming::Data(soketto::Data::Binary(_))) => {
+                    Some((Ok(IncomingData::Binary(mem::take(&mut data))), (data, receiver)))
+                }
+                Ok(soketto::Incoming::Pong(pong)) => {
+                    Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
+                }
+                Err(connection::Error::Closed) => None,
+                Err(e) => Some((Err(e), (data, receiver)))
+            }
+        });
+        Connection {
+            receiver: stream.boxed(),
+            sender: Box::pin(sink),
+            _marker: std::marker::PhantomData
         }
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.poll_complete().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    /// Send binary application data to the remote.
+    pub fn send_data(&mut self, data: Vec<u8>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Binary(data))
     }
 
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.close().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    /// Send a PING to the remote.
+    pub fn send_ping(&mut self, data: Vec<u8>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Ping(data))
+    }
+
+    /// Send an unsolicited PONG to the remote.
+    pub fn send_pong(&mut self, data: Vec<u8>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Pong(data))
+    }
+}
+
+impl<T> Stream for Connection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Item = io::Result<IncomingData>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let item = ready!(self.receiver.poll_next_unpin(cx));
+        let item = item.map(|result| {
+            result.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        });
+        Poll::Ready(item)
+    }
+}
+
+impl<T> Sink<OutgoingData> for Connection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Error = io::Error;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.sender)
+            .poll_ready(cx)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: OutgoingData) -> io::Result<()> {
+        Pin::new(&mut self.sender)
+            .start_send(item)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.sender)
+            .poll_flush(cx)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.sender)
+            .poll_close(cx)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 

@@ -21,7 +21,7 @@
 //! A node's network identity keys.
 
 pub mod ed25519;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rsa;
 #[cfg(feature = "secp256k1")]
 pub mod secp256k1;
@@ -44,7 +44,7 @@ use crate::{PeerId, keys_proto};
 /// Loading the keys:
 ///
 /// ```text
-/// let mut bytes = std::fs::read("private.pem").unwrap();
+/// let mut bytes = std::fs::read("private.pk8").unwrap();
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
 ///
@@ -52,7 +52,7 @@ use crate::{PeerId, keys_proto};
 pub enum Keypair {
     /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     /// An RSA keypair.
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
@@ -76,7 +76,7 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         rsa::Keypair::from_pkcs8(pkcs8_der).map(Keypair::Rsa)
     }
@@ -97,7 +97,7 @@ impl Keypair {
         use Keypair::*;
         match self {
             Ed25519(ref pair) => Ok(pair.sign(msg)),
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
             Secp256k1(ref pair) => pair.secret().sign(msg)
@@ -109,7 +109,7 @@ impl Keypair {
         use Keypair::*;
         match self {
             Ed25519(pair) => PublicKey::Ed25519(pair.public()),
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             Rsa(pair) => PublicKey::Rsa(pair.public()),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
@@ -122,7 +122,7 @@ impl Keypair {
 pub enum PublicKey {
     /// A public Ed25519 key.
     Ed25519(ed25519::PublicKey),
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     /// A public RSA key.
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
@@ -139,7 +139,7 @@ impl PublicKey {
         use PublicKey::*;
         match self {
             Ed25519(pk) => pk.verify(msg, sig),
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             Rsa(pk) => pk.verify(msg, sig),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pk) => pk.verify(msg, sig)
@@ -149,62 +149,67 @@ impl PublicKey {
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use protobuf::Message;
-        let mut public_key = keys_proto::PublicKey::new();
-        match self {
-            PublicKey::Ed25519(key) => {
-                public_key.set_Type(keys_proto::KeyType::Ed25519);
-                public_key.set_Data(key.encode().to_vec());
-            },
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-            PublicKey::Rsa(key) => {
-                public_key.set_Type(keys_proto::KeyType::RSA);
-                public_key.set_Data(key.encode_x509());
-            },
+        use prost::Message;
+
+        let public_key = match self {
+            PublicKey::Ed25519(key) =>
+                keys_proto::PublicKey {
+                    r#type: keys_proto::KeyType::Ed25519 as i32,
+                    data: key.encode().to_vec()
+                },
+            #[cfg(not(target_arch = "wasm32"))]
+            PublicKey::Rsa(key) =>
+                keys_proto::PublicKey {
+                    r#type: keys_proto::KeyType::Rsa as i32,
+                    data: key.encode_x509()
+                },
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(key) => {
-                public_key.set_Type(keys_proto::KeyType::Secp256k1);
-                public_key.set_Data(key.encode().to_vec());
-            },
+            PublicKey::Secp256k1(key) =>
+                keys_proto::PublicKey {
+                    r#type: keys_proto::KeyType::Secp256k1 as i32,
+                    data: key.encode().to_vec()
+                }
         };
 
-        public_key
-            .write_to_bytes()
-            .expect("Encoding public key into protobuf failed.")
+        let mut buf = Vec::with_capacity(public_key.encoded_len());
+        public_key.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        buf
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+        use prost::Message;
+
         #[allow(unused_mut)] // Due to conditional compilation.
-        let mut pubkey = protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes)
+        let mut pubkey = keys_proto::PublicKey::decode(bytes)
             .map_err(|e| DecodingError::new("Protobuf").source(e))?;
 
-        match pubkey.get_Type() {
+        let key_type = keys_proto::KeyType::from_i32(pubkey.r#type)
+            .ok_or_else(|| DecodingError::new(format!("unknown key type: {}", pubkey.r#type)))?;
+
+        match key_type {
             keys_proto::KeyType::Ed25519 => {
-                ed25519::PublicKey::decode(pubkey.get_Data())
-                    .map(PublicKey::Ed25519)
+                ed25519::PublicKey::decode(&pubkey.data).map(PublicKey::Ed25519)
             },
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-            keys_proto::KeyType::RSA => {
-                rsa::PublicKey::decode_x509(&pubkey.take_Data())
-                    .map(PublicKey::Rsa)
+            #[cfg(not(target_arch = "wasm32"))]
+            keys_proto::KeyType::Rsa => {
+                rsa::PublicKey::decode_x509(&pubkey.data).map(PublicKey::Rsa)
             }
-            #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-            keys_proto::KeyType::RSA => {
+            #[cfg(target_arch = "wasm32")]
+            keys_proto::KeyType::Rsa => {
                 log::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))
             },
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
-                secp256k1::PublicKey::decode(pubkey.get_Data())
-                    .map(PublicKey::Secp256k1)
+                secp256k1::PublicKey::decode(&pubkey.data).map(PublicKey::Secp256k1)
             }
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err("Unsupported".to_string().into())
-            },
+            }
         }
     }
 

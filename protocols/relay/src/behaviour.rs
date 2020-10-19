@@ -21,44 +21,37 @@
 use crate::handler::{RelayHandler, RelayHandlerIn, RelayHandlerEvent, RelayHandlerHopRequest};
 use fnv::FnvHashSet;
 use futures::prelude::*;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
+use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, DialPeerCondition, PollParameters, ProtocolsHandler};
+use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
 
 /// Network behaviour that allows reaching nodes through relaying.
-pub struct Relay<TSubstream> {
+pub struct Relay {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<RelayHandlerIn<TSubstream>, ()>>,
+    events: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
 
     /// List of peers the network is connected to.
     connected_peers: FnvHashSet<PeerId>,
 
     /// Requests for us to act as a destination, that are in the process of being fulfilled.
     /// Contains the request and the source of the request.
-    pending_hop_requests: Vec<(PeerId, RelayHandlerHopRequest<TSubstream>)>,
-
-    /// Marker to pin the generics.
-    marker: PhantomData<TSubstream>,
+    pending_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
 }
 
-impl<TSubstream> Relay<TSubstream> {
+impl Relay {
     /// Builds a new `Relay` behaviour.
     pub fn new() -> Self {
         Relay {
             events: VecDeque::new(),
             connected_peers: FnvHashSet::default(),
             pending_hop_requests: Vec::new(),
-            marker: PhantomData,
         }
     }
 }
 
-impl<TSubstream> NetworkBehaviour for Relay<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    type ProtocolsHandler = RelayHandler<TSubstream>;
+impl NetworkBehaviour for Relay {
+    type ProtocolsHandler = RelayHandler;
     type OutEvent = ();
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -78,11 +71,11 @@ where
             .collect()
     }
 
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
+    fn inject_connected(&mut self, id: &PeerId) {
         self.connected_peers.insert(id.clone());
 
         // Ask the newly-opened connection to be used as destination if relevant.
-        while let Some(pos) = self.pending_hop_requests.iter().position(|p| p.1.destination_id() == &id) {
+        while let Some(pos) = self.pending_hop_requests.iter().position(|p| p.1.destination_id() == id) {
             let (source, hop_request) = self.pending_hop_requests.remove(pos);
 
             let send_back = RelayHandlerIn::DestinationRequest {
@@ -91,24 +84,26 @@ where
                 substream: hop_request,
             };
 
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: id.clone(),
+                handler: NotifyHandler::Any,
                 event: send_back
             });
         }
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
+    fn inject_disconnected(&mut self, id: &PeerId) {
         self.connected_peers.remove(id);
 
         // TODO: send back proper refusal message to the source
         self.pending_hop_requests.retain(|rq| rq.1.destination_id() != id);
     }
 
-    fn inject_node_event(
+    fn inject_event(
         &mut self,
         event_source: PeerId,
-        event: RelayHandlerEvent<TSubstream>,
+        _connection: ConnectionId,
+        event: RelayHandlerEvent,
     ) {
         match event {
             // Remote wants us to become a relay.
@@ -120,8 +115,10 @@ where
                         source_addresses: Vec::new(),       // TODO: wrong
                         substream: hop_request,
                     };
-                    self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: dest_id,
+                        // TODO: Any correct here?
+                        handler: NotifyHandler::Any,
                         event: send_back
                     });
 
@@ -130,6 +127,7 @@ where
                     self.pending_hop_requests.push((event_source, hop_request));
                     self.events.push_back(NetworkBehaviourAction::DialPeer {
                         peer_id: dest_id,
+                        condition: DialPeerCondition::NotDialing,
                     });
                 }
             },
@@ -139,8 +137,10 @@ where
                 // TODO: we would like to accept the destination request, but no API allows that
                 // at the moment
                 let send_back = RelayHandlerIn::DenyDestinationRequest(dest_request);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: event_source,
+                    // TODO: Any correct here?
+                    handler: NotifyHandler::Any,
                     event: send_back
                 });
             },
@@ -152,17 +152,18 @@ where
 
     fn poll(
         &mut self,
-        _: &mut PollParameters<'_>,
-    ) -> Async<
+        cx: &mut Context<'_>,
+        _: &mut impl PollParameters,
+    ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(event);
+            return Poll::Ready(event);
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
