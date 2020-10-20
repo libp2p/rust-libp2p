@@ -1,3 +1,7 @@
+# 0.23.1 [unreleased]
+
+- Update dependencies.
+
 # 0.23.0 [2020-10-16]
 
 - Rework transport boxing and move timeout configuration
