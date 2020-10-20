@@ -154,9 +154,7 @@ mod types;
 #[macro_use]
 extern crate derive_builder;
 
-mod rpc_proto {
-    include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));
-}
+mod rpc_proto;
 
 pub use self::behaviour::{
     GenericGossipsub, GenericGossipsubEvent, Gossipsub, GossipsubEvent, MessageAuthenticity,

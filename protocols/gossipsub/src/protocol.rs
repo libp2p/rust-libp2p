@@ -334,11 +334,7 @@ impl Decoder for GossipsubCodec {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
-                    topics: message
-                        .topic_ids
-                        .into_iter()
-                        .map(TopicHash::from_raw)
-                        .collect(),
+                    topic: TopicHash::from_raw(message.topic),
                     signature: None, // don't inform the application
                     key: message.key,
                     validated: false,
@@ -358,11 +354,7 @@ impl Decoder for GossipsubCodec {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
-                    topics: message
-                        .topic_ids
-                        .into_iter()
-                        .map(TopicHash::from_raw)
-                        .collect(),
+                    topic: TopicHash::from_raw(message.topic),
                     signature: None, // don't inform the application
                     key: message.key,
                     validated: false,
@@ -387,11 +379,7 @@ impl Decoder for GossipsubCodec {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
                             sequence_number: None, // don't inform the application
-                            topics: message
-                                .topic_ids
-                                .into_iter()
-                                .map(TopicHash::from_raw)
-                                .collect(),
+                            topic: TopicHash::from_raw(message.topic),
                             signature: message.signature, // don't inform the application
                             key: message.key,
                             validated: false,
@@ -410,11 +398,7 @@ impl Decoder for GossipsubCodec {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
                         sequence_number: None, // don't inform the application
-                        topics: message
-                            .topic_ids
-                            .into_iter()
-                            .map(TopicHash::from_raw)
-                            .collect(),
+                        topic: TopicHash::from_raw(message.topic),
                         signature: message.signature, // don't inform the application
                         key: message.key,
                         validated: false,
@@ -440,11 +424,7 @@ impl Decoder for GossipsubCodec {
                                     source: None, // don't bother inform the application
                                     data: message.data.unwrap_or_default(),
                                     sequence_number,
-                                    topics: message
-                                        .topic_ids
-                                        .into_iter()
-                                        .map(TopicHash::from_raw)
-                                        .collect(),
+                                    topic: TopicHash::from_raw(message.topic),
                                     signature: message.signature, // don't inform the application
                                     key: message.key,
                                     validated: false,
@@ -468,11 +448,7 @@ impl Decoder for GossipsubCodec {
                 source,
                 data: message.data.unwrap_or_default(),
                 sequence_number,
-                topics: message
-                    .topic_ids
-                    .into_iter()
-                    .map(TopicHash::from_raw)
-                    .collect(),
+                topic: TopicHash::from_raw(message.topic),
                 signature: message.signature,
                 key: message.key,
                 validated: false,
@@ -595,11 +571,8 @@ mod tests {
             )
             .unwrap();
             let data = (0..g.gen_range(10, 10024)).map(|_| g.gen()).collect();
-            let topics = Vec::arbitrary(g)
-                .into_iter()
-                .map(|id: TopicId| id.0)
-                .collect();
-            Message(gs.build_message(topics, data).unwrap())
+            let topic_id = TopicId::arbitrary(g).0;
+            Message(gs.build_message(topic_id, data).unwrap())
         }
     }
 

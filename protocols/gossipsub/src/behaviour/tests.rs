@@ -238,11 +238,7 @@ mod tests {
                 source: message.from.map(|x| PeerId::from_bytes(x).unwrap()),
                 data: message.data.unwrap_or_default(),
                 sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
-                topics: message
-                    .topic_ids
-                    .into_iter()
-                    .map(TopicHash::from_raw)
-                    .collect(),
+                topic: TopicHash::from_raw(message.topic),
                 signature: message.signature, // don't inform the application
                 key: None,
                 validated: false,
@@ -938,7 +934,7 @@ mod tests {
             source: Some(peers[11].clone()),
             data: vec![1, 2, 3, 4],
             sequence_number: Some(1u64),
-            topics: Vec::new(),
+            topic: TopicHash::from_raw("topic"),
             signature: None,
             key: None,
             validated: true,
@@ -987,7 +983,7 @@ mod tests {
                 source: Some(peers[11].clone()),
                 data: vec![1, 2, 3, 4],
                 sequence_number: Some(shift),
-                topics: Vec::new(),
+                topic: TopicHash::from_raw("topic"),
                 signature: None,
                 key: None,
                 validated: true,
@@ -1465,7 +1461,7 @@ mod tests {
             source: Some(peers[1].clone()),
             data: vec![12],
             sequence_number: Some(0),
-            topics: vec![topic_hashes[0].clone()],
+            topic: topic_hashes[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -1623,7 +1619,7 @@ mod tests {
             source: Some(peers[1].clone()),
             data: vec![],
             sequence_number: Some(0),
-            topics: vec![topic_hashes[0].clone()],
+            topic: topic_hashes[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -1980,16 +1976,9 @@ mod tests {
             .to_subscribe(true)
             .create_network();
 
-        let other_topic = Topic::new("test2");
-
-        // subscribe an additional new peer to test2
-        gs.subscribe(&other_topic).unwrap();
-        add_peer(&mut gs, &vec![other_topic.hash()], false, false);
-
         //publish message
         let publish_data = vec![0; 42];
-        gs.publish_many(vec![Topic::new(topic), other_topic.clone()], publish_data)
-            .unwrap();
+        gs.publish(Topic::new(topic), publish_data).unwrap();
 
         // Collect all publish messages
         let publishes = gs
@@ -2013,7 +2002,7 @@ mod tests {
         let config = GossipsubConfig::default();
         assert_eq!(
             publishes.len(),
-            config.mesh_n_high() + 10 + 1,
+            config.mesh_n_high() + 10,
             "Should send a publish message to all known peers"
         );
 
@@ -2040,7 +2029,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
-            topics: vec![topic_hashes[0].clone()],
+            topic: topic_hashes[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2082,7 +2071,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
-            topics: vec![topic_hashes[0].clone()],
+            topic: topic_hashes[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2450,7 +2439,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
-            topics: vec![topics[0].clone()],
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2521,7 +2510,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
-            topics: vec![topics[0].clone()],
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2598,7 +2587,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
-            topics: vec![topics[0].clone()],
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2771,7 +2760,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4],
             sequence_number: Some(1u64),
-            topics: topics.clone(),
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2781,7 +2770,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4, 5],
             sequence_number: Some(2u64),
-            topics: topics.clone(),
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2791,7 +2780,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4, 5, 6],
             sequence_number: Some(3u64),
-            topics: topics.clone(),
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -2801,7 +2790,7 @@ mod tests {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4, 5, 6, 7],
             sequence_number: Some(4u64),
-            topics: topics.clone(),
+            topic: topics[0].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -3071,7 +3060,7 @@ mod tests {
                 .map(|_| rng.gen())
                 .collect(),
             sequence_number: Some(*seq),
-            topics: topics.clone(),
+            topic: topics[rng.gen_range(0, topics.len())].clone(),
             signature: None,
             key: None,
             validated: true,
@@ -4969,7 +4958,7 @@ mod tests {
             source: None,
             data: counters_address.to_be_bytes().to_vec(),
             sequence_number: None,
-            topics: vec![topic_hashes[0].clone()],
+            topic: topic_hashes[0].clone(),
             signature: None,
             key: None,
             validated: true,

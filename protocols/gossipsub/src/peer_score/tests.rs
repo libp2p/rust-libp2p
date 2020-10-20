@@ -38,7 +38,7 @@ fn make_test_message(seq: u64) -> GossipsubMessage {
         source: Some(PeerId::random()),
         data: vec![12, 34, 56],
         sequence_number: Some(seq),
-        topics: vec![Topic::new("test").hash()],
+        topic: Topic::new("test").hash(),
         signature: None,
         key: None,
         validated: true,

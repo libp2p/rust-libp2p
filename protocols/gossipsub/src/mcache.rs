@@ -29,7 +29,7 @@ use std::{collections::HashMap, fmt};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
     mid: MessageId,
-    topics: Vec<TopicHash>,
+    topic: TopicHash,
 }
 
 /// MessageCache struct holding history of messages.
@@ -71,7 +71,7 @@ impl<T> MessageCache<T> {
         debug!("Put message {:?} in mcache", message_id);
         let cache_entry = CacheEntry {
             mid: message_id.clone(),
-            topics: msg.topics.clone(),
+            topic: msg.topic.clone(),
         };
 
         let seen_message = self.msgs.insert(message_id.clone(), msg);
@@ -126,7 +126,7 @@ impl<T> MessageCache<T> {
                 let mut found_entries: Vec<MessageId> = entries
                     .iter()
                     .filter_map(|entry| {
-                        if entry.topics.iter().any(|t| t == topic) {
+                        if &entry.topic == topic {
                             let mid = &entry.mid;
                             // Only gossip validated messages
                             if let Some(true) = self.msgs.get(mid).map(|msg| msg.validated) {
@@ -186,7 +186,7 @@ mod tests {
     use crate::{GossipsubMessage, IdentTopic as Topic, TopicHash};
     use libp2p_core::PeerId;
 
-    fn gen_testm(x: u64, topics: Vec<TopicHash>) -> GossipsubMessage {
+    fn gen_testm(x: u64, topic: TopicHash) -> GossipsubMessage {
         let default_id = |message: &RawGossipsubMessage| {
             // default message id is: source + sequence number
             let mut source_string = message.source.as_ref().unwrap().to_base58();
@@ -202,7 +202,7 @@ mod tests {
             source,
             data,
             sequence_number,
-            topics,
+            topic: topic,
             signature: None,
             key: None,
             validated: false,
@@ -231,9 +231,7 @@ mod tests {
         let mut mc = new_cache(10, 15);
 
         let topic1_hash = Topic::new("topic1").hash().clone();
-        let topic2_hash = Topic::new("topic2").hash().clone();
-
-        let m = gen_testm(10, vec![topic1_hash, topic2_hash]);
+        let m = gen_testm(10, topic1_hash);
 
         mc.put(m.clone());
 
@@ -257,9 +255,7 @@ mod tests {
         let mut mc = new_cache(10, 15);
 
         let topic1_hash = Topic::new("topic1").hash().clone();
-        let topic2_hash = Topic::new("topic2").hash().clone();
-
-        let m = gen_testm(10, vec![topic1_hash, topic2_hash]);
+        let m = gen_testm(10, topic1_hash);
 
         mc.put(m.clone());
 
@@ -281,34 +277,15 @@ mod tests {
     }
 
     #[test]
-    /// Test adding a message with no topics.
-    fn test_no_topic_put() {
-        let mut mc = new_cache(3, 5);
-
-        // Build the message
-        let m = gen_testm(1, vec![]);
-        mc.put(m.clone());
-
-        let fetched = mc.get(m.message_id());
-
-        // Make sure it is the same fetched message
-        match fetched {
-            Some(x) => assert_eq!(*x, m),
-            _ => assert!(false),
-        }
-    }
-
-    #[test]
     /// Test shift mechanism.
     fn test_shift() {
         let mut mc = new_cache(1, 5);
 
         let topic1_hash = Topic::new("topic1").hash().clone();
-        let topic2_hash = Topic::new("topic2").hash().clone();
 
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            let m = gen_testm(i, topic1_hash.clone());
             mc.put(m.clone());
         }
 
@@ -328,10 +305,10 @@ mod tests {
         let mut mc = new_cache(1, 5);
 
         let topic1_hash = Topic::new("topic1").hash().clone();
-        let topic2_hash = Topic::new("topic2").hash().clone();
+
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            let m = gen_testm(i, topic1_hash.clone());
             mc.put(m.clone());
         }
 
@@ -354,10 +331,10 @@ mod tests {
         let mut mc = new_cache(4, 5);
 
         let topic1_hash = Topic::new("topic1").hash().clone();
-        let topic2_hash = Topic::new("topic2").hash().clone();
+
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            let m = gen_testm(i, topic1_hash.clone());
             mc.put(m.clone());
         }
 

@@ -100,10 +100,8 @@ pub struct GenericGossipsubMessage<T> {
     /// A random sequence number.
     pub sequence_number: Option<u64>,
 
-    /// List of topics this message belongs to.
-    ///
-    /// Each message can belong to multiple topics at once.
-    pub topics: Vec<TopicHash>,
+    /// The topic this message belongs to
+    pub topic: TopicHash,
 
     /// The signature of the message if it's signed.
     pub signature: Option<Vec<u8>>,
@@ -121,7 +119,7 @@ impl<T> GenericGossipsubMessage<T> {
             source: m.source,
             data: m.data.into(),
             sequence_number: m.sequence_number,
-            topics: m.topics,
+            topic: m.topic,
             signature: m.signature,
             key: m.key,
             validated: m.validated,
@@ -157,7 +155,7 @@ impl<T> GossipsubMessageWithId<T> {
             source: m.source,
             data: DataWithId { id, data: m.data },
             sequence_number: m.sequence_number,
-            topics: m.topics,
+            topic: m.topic,
             signature: m.signature,
             key: m.key,
             validated: m.validated,
@@ -185,7 +183,7 @@ impl<T: Debug + AsRef<[u8]>> fmt::Debug for GenericGossipsubMessage<T> {
             )
             .field("source", &self.source)
             .field("sequence_number", &self.sequence_number)
-            .field("topics", &self.topics)
+            .field("topic", &self.topic)
             .finish()
     }
 }
@@ -277,11 +275,7 @@ impl Into<rpc_proto::Rpc> for GossipsubRpc {
                 from: message.source.map(|m| m.into_bytes()),
                 data: Some(message.data),
                 seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
-                topic_ids: message
-                    .topics
-                    .into_iter()
-                    .map(TopicHash::into_string)
-                    .collect(),
+                topic: TopicHash::into_string(message.topic),
                 signature: message.signature,
                 key: message.key,
             };

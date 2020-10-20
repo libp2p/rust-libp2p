@@ -562,16 +562,15 @@ impl PeerScore {
             .or_insert_with(|| DeliveryRecord::default());
 
         if let Some(callback) = self.message_delivery_time_callback {
-            for topic in &_msg.topics {
-                if self
-                    .peer_stats
-                    .get(_from)
-                    .and_then(|s| s.topics.get(topic))
-                    .map(|ts| ts.in_mesh())
-                    .unwrap_or(false)
-                {
-                    callback(_from, topic, 0.0);
-                }
+            let topic = &_msg.topic;
+            if self
+                .peer_stats
+                .get(_from)
+                .and_then(|s| s.topics.get(topic))
+                .map(|ts| ts.in_mesh())
+                .unwrap_or(false)
+            {
+                callback(_from, topic, 0.0);
             }
         }
     }
@@ -673,16 +672,15 @@ impl PeerScore {
             } else {
                 0.0
             };
-            for topic in &msg.topics {
-                if self
-                    .peer_stats
-                    .get(from)
-                    .and_then(|s| s.topics.get(topic))
-                    .map(|ts| ts.in_mesh())
-                    .unwrap_or(false)
-                {
-                    callback(from, topic, time);
-                }
+            let topic = &msg.topic;
+            if self
+                .peer_stats
+                .get(from)
+                .and_then(|s| s.topics.get(topic))
+                .map(|ts| ts.in_mesh())
+                .unwrap_or(false)
+            {
+                callback(from, topic, time);
             }
         }
 
@@ -761,17 +759,16 @@ impl PeerScore {
         msg: &GossipsubMessageWithId<T>,
     ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            for topic_hash in msg.topics.iter() {
-                if let Some(topic_stats) =
-                    peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
-                {
-                    debug!(
-                        "Peer {} delivered an invalid message in topic {} and gets penalized \
+            let topic_hash = &msg.topic;
+            if let Some(topic_stats) =
+                peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
+            {
+                debug!(
+                    "Peer {} delivered an invalid message in topic {} and gets penalized \
                     for it",
-                        peer_id, topic_hash
-                    );
-                    topic_stats.invalid_message_deliveries += 1f64;
-                }
+                    peer_id, topic_hash
+                );
+                topic_stats.invalid_message_deliveries += 1f64;
             }
         }
     }
@@ -785,38 +782,37 @@ impl PeerScore {
         msg: &GossipsubMessageWithId<T>,
     ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            for topic_hash in msg.topics.iter() {
-                if let Some(topic_stats) =
-                    peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
-                {
+            let topic_hash = &msg.topic;
+            if let Some(topic_stats) =
+                peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
+            {
+                let cap = self
+                    .params
+                    .topics
+                    .get(topic_hash)
+                    .expect("Topic must exist if there are known topic_stats")
+                    .first_message_deliveries_cap;
+                topic_stats.first_message_deliveries =
+                    if topic_stats.first_message_deliveries + 1f64 > cap {
+                        cap
+                    } else {
+                        topic_stats.first_message_deliveries + 1f64
+                    };
+
+                if let MeshStatus::Active { .. } = topic_stats.mesh_status {
                     let cap = self
                         .params
                         .topics
                         .get(topic_hash)
                         .expect("Topic must exist if there are known topic_stats")
-                        .first_message_deliveries_cap;
-                    topic_stats.first_message_deliveries =
-                        if topic_stats.first_message_deliveries + 1f64 > cap {
+                        .mesh_message_deliveries_cap;
+
+                    topic_stats.mesh_message_deliveries =
+                        if topic_stats.mesh_message_deliveries + 1f64 > cap {
                             cap
                         } else {
-                            topic_stats.first_message_deliveries + 1f64
+                            topic_stats.mesh_message_deliveries + 1f64
                         };
-
-                    if let MeshStatus::Active { .. } = topic_stats.mesh_status {
-                        let cap = self
-                            .params
-                            .topics
-                            .get(topic_hash)
-                            .expect("Topic must exist if there are known topic_stats")
-                            .mesh_message_deliveries_cap;
-
-                        topic_stats.mesh_message_deliveries =
-                            if topic_stats.mesh_message_deliveries + 1f64 > cap {
-                                cap
-                            } else {
-                                topic_stats.mesh_message_deliveries + 1f64
-                            };
-                    }
                 }
             }
         }
@@ -836,32 +832,34 @@ impl PeerScore {
             } else {
                 None
             };
-            for topic_hash in msg.topics.iter() {
-                if let Some(topic_stats) =
-                    peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
-                {
-                    if let MeshStatus::Active { .. } = topic_stats.mesh_status {
-                        let topic_params = self
-                            .params
-                            .topics
-                            .get(topic_hash)
-                            .expect("Topic must exist if there are known topic_stats");
+            let topic_hash = &msg.topic;
+            if let Some(topic_stats) =
+                peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
+            {
+                if let MeshStatus::Active { .. } = topic_stats.mesh_status {
+                    let topic_params = self
+                        .params
+                        .topics
+                        .get(topic_hash)
+                        .expect("Topic must exist if there are known topic_stats");
 
-                        // check against the mesh delivery window -- if the validated time is passed as 0, then
-                        // the message was received before we finished validation and thus falls within the mesh
-                        // delivery window.
-                        if let Some(validated_time) = validated_time {
-                            if let Some(now) = &now {
-                                //should always be true
-                                let window_time = validated_time
-                                    .checked_add(topic_params.mesh_message_deliveries_window)
-                                    .unwrap_or_else(|| now.clone());
-                                if now > &window_time {
-                                    continue;
-                                }
+                    // check against the mesh delivery window -- if the validated time is passed as 0, then
+                    // the message was received before we finished validation and thus falls within the mesh
+                    // delivery window.
+                    let mut falls_in_mesh_deliver_window = true;
+                    if let Some(validated_time) = validated_time {
+                        if let Some(now) = &now {
+                            //should always be true
+                            let window_time = validated_time
+                                .checked_add(topic_params.mesh_message_deliveries_window)
+                                .unwrap_or_else(|| now.clone());
+                            if now > &window_time {
+                                falls_in_mesh_deliver_window = false;
                             }
                         }
+                    }
 
+                    if falls_in_mesh_deliver_window {
                         let cap = topic_params.mesh_message_deliveries_cap;
                         topic_stats.mesh_message_deliveries =
                             if topic_stats.mesh_message_deliveries + 1f64 > cap {
