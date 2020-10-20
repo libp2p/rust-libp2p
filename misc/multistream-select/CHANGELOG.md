@@ -1,3 +1,9 @@
+# 0.8.4 [2020-10-20]
+
+- Temporarily disable the internal selection of "parallel" protocol
+  negotiation for the dialer to later change the response format of the "ls"
+  message for spec compliance. See https://github.com/libp2p/rust-libp2p/issues/1795.
+
 # 0.8.3 [2020-10-16]
 
 - Fix a regression resulting in a panic with the `V1Lazy` protocol.
