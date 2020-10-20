@@ -56,12 +56,17 @@ where
     I::Item: AsRef<[u8]>
 {
     let iter = protocols.into_iter();
+    // NOTE: Temporarily disabled "parallel" negotiation in order to correct the
+    // "ls" responses towards interoperability and (new) spec compliance.
+    // See https://github.com/libp2p/rust-libp2p/issues/1795.
+    Either::Left(dialer_select_proto_serial(inner, iter, version))
+
     // We choose between the "serial" and "parallel" strategies based on the number of protocols.
-    if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
-        Either::Left(dialer_select_proto_serial(inner, iter, version))
-    } else {
-        Either::Right(dialer_select_proto_parallel(inner, iter, version))
-    }
+    // if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
+    //    Either::Left(dialer_select_proto_serial(inner, iter, version))
+    // } else {
+    //     Either::Right(dialer_select_proto_parallel(inner, iter, version))
+    // }
 }
 
 /// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
@@ -76,7 +81,7 @@ pub type DialerSelectFuture<R, I> = Either<DialerSelectSeq<R, I>, DialerSelectPa
 /// trying the given list of supported protocols one-by-one.
 ///
 /// This strategy is preferable if the dialer only supports a few protocols.
-pub fn dialer_select_proto_serial<R, I>(
+pub(crate) fn dialer_select_proto_serial<R, I>(
     inner: R,
     protocols: I,
     version: Version
@@ -105,7 +110,7 @@ where
 ///
 /// This strategy may be beneficial if the dialer supports many protocols
 /// and it is unclear whether the remote supports one of the first few.
-pub fn dialer_select_proto_parallel<R, I>(
+pub(crate) fn dialer_select_proto_parallel<R, I>(
     inner: R,
     protocols: I,
     version: Version
