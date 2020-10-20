@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.29.0"
+version = "0.29.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -62,7 +62,7 @@ atomic = "0.5.0"
 bytes = "0.5"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.23.0", path = "core" }
+libp2p-core = { version = "0.23.1", path = "core" }
 libp2p-core-derive = { version = "0.20.2", path = "misc/core-derive" }
 libp2p-floodsub = { version = "0.23.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.23.0", path = "./protocols/gossipsub", optional = true }
