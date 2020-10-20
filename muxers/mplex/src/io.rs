@@ -988,6 +988,7 @@ mod tests {
     use futures_codec::{Decoder, Encoder};
     use quickcheck::*;
     use rand::prelude::*;
+    use std::collections::HashSet;
     use std::num::NonZeroU8;
     use std::ops::DerefMut;
     use std::pin::Pin;
@@ -1016,6 +1017,8 @@ mod tests {
         r_buf: BytesMut,
         /// The buffer that the `Multiplexed` stream writes to.
         w_buf: BytesMut,
+        /// Whether the connection should return EOF on the next read.
+        eof: bool,
     }
 
     impl AsyncRead for Connection {
@@ -1024,6 +1027,9 @@ mod tests {
             _: &mut Context<'_>,
             buf: &mut [u8]
         ) -> Poll<io::Result<usize>> {
+            if self.eof {
+                return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
+            }
             let n = std::cmp::min(buf.len(), self.r_buf.len());
             let data = self.r_buf.split_to(n);
             buf[..n].copy_from_slice(&data[..]);
@@ -1082,7 +1088,7 @@ mod tests {
             }
 
             // Setup the multiplexed connection.
-            let conn = Connection { r_buf, w_buf: BytesMut::new() };
+            let conn = Connection { r_buf, w_buf: BytesMut::new(), eof: false };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
             task::block_on(future::poll_fn(move |cx| {
@@ -1163,6 +1169,50 @@ mod tests {
 
                 Poll::Ready(())
             }));
+        }
+
+        quickcheck(prop as fn(_,_))
+    }
+
+    #[test]
+    fn close_on_error() {
+        let _ = env_logger::try_init();
+
+        fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
+            let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);
+
+            // Setup the multiplexed connection.
+            let conn = Connection {
+                r_buf: BytesMut::new(),
+                w_buf: BytesMut::new(),
+                eof: false
+            };
+            let mut m = Multiplexed::new(conn, cfg.clone());
+
+            // Run the test.
+            let mut opened = HashSet::new();
+            task::block_on(future::poll_fn(move |cx| {
+                // Open a number of streams.
+                for _ in 0 .. num_streams {
+                    let id = ready!(m.poll_open_stream(cx)).unwrap();
+                    assert!(opened.insert(id));
+                    assert!(m.poll_read_stream(cx, id).is_pending());
+                }
+
+                // Abruptly "close" the connection.
+                m.io.get_mut().deref_mut().eof = true;
+
+                // Reading from any stream should yield an error and all streams
+                // should be closed due to the failed connection.
+                assert!(opened.iter().all(|id| match m.poll_read_stream(cx, *id) {
+                    Poll::Ready(Err(e)) => e.kind() == io::ErrorKind::UnexpectedEof,
+                    _ => false
+                }));
+
+                assert!(m.substreams.is_empty());
+
+                Poll::Ready(())
+            }))
         }
 
         quickcheck(prop as fn(_,_))
