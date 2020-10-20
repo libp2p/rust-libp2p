@@ -28,7 +28,7 @@ snow = { version = "0.7.1", features = ["ring-resolver"], default-features = fal
 snow = { version = "0.7.1", features = ["default-resolver"], default-features = false }
 
 [dev-dependencies]
-env_logger = "0.7.1"
+env_logger = "0.8.1"
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
 quickcheck = "0.9.0"
 sodiumoxide = "0.2.5"
