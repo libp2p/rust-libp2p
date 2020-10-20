@@ -1,4 +1,4 @@
-# 0.23.0 [unreleased]
+# 0.23.0 [2020-10-16]
 
 - More granular execution of pending flushes, better logging and
   avoiding unnecessary hashing.

@@ -23,7 +23,7 @@ unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 
 [dev-dependencies]
 async-std = "1.6.2"
-env_logger = "0.6"
+env_logger = "0.8"
 futures = "0.3"
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
 quickcheck = "0.9"

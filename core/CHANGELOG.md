@@ -1,4 +1,4 @@
-# 0.23.0 [unreleased]
+# 0.23.0 [2020-10-16]
 
 - Rework transport boxing and move timeout configuration
   to the transport builder.
