@@ -2,7 +2,7 @@
 
 - Temporarily disable the internal selection of "parallel" protocol
   negotiation for the dialer to later change the response format of the "ls"
-  message for spec compliance.
+  message for spec compliance. See https://github.com/libp2p/rust-libp2p/issues/1795.
 
 # 0.8.3 [2020-10-16]
 
