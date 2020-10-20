@@ -15,7 +15,7 @@ maintenance = { status = "deprecated" }
 [dependencies]
 aes-ctr = "0.3"
 aesni = { version = "0.6", features = ["nocheck"], optional = true }
-ctr = "0.3"
+ctr = "0.6"
 futures = "0.3.1"
 hmac = "0.9.0"
 lazy_static = "1.2.0"
