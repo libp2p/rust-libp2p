@@ -1583,6 +1583,13 @@ where
     }
 
     fn print_bucket_table(&mut self) {
+        use log::trace as log;
+        use log::Level::Trace as TargetLevel;
+
+        if log::max_level() < TargetLevel {
+            return
+        }
+
         let mut size = 0;
         let buckets = self.kbuckets.iter().filter_map(|KBucketRef { index, bucket }| {
             use multiaddr::Protocol::{Ip4, Ip6, Tcp};
@@ -1646,9 +1653,9 @@ where
         self.metrics.report_routing_table_size(size);
 
         if size == 0 {
-            log::info!("[bcktdbg] Bucket table is empty.")
+            log!("[bcktdbg] Bucket table is empty.")
         } else {
-            log::info!("\n{}", buckets);
+            log!("\n{}", buckets);
         }
     }
 }

@@ -389,7 +389,7 @@ impl ClosestPeersIter {
     /// Immediately transitions the iterator to [`PeersIterState::Finished`].
     pub fn finish(&mut self) {
         self.state = State::Finished;
-        log::info!(
+        log::trace!(
             "[iterlog] ClosestPeerIter: target = {}; finished +{}ms. Log:",
             bs58::encode(&self.target).into_string(),
             self.created_at.elapsed().as_millis(),
@@ -397,11 +397,11 @@ impl ClosestPeersIter {
 
         let created_at = self.created_at;
         self.closest_peers.iter().for_each(|(_, p)| {
-            log::info!("[iterlog] {}:", p.key.preimage());
+            log::trace!("[iterlog] {}:", p.key.preimage());
             p.log.iter().for_each(|(i, s)| {
                 // TODO: show negative difference?
                 let elapsed = i.saturating_duration_since(created_at).as_millis().to_string();
-                log::info!("[iterlog] \t{: <45?}\t+{}ms\n", s, elapsed)
+                log::trace!("[iterlog] \t{: <45?}\t+{}ms\n", s, elapsed)
             });
         });
 
