@@ -831,6 +831,14 @@ impl<T: Clone> GenericGossipsubConfigBuilder<T> {
         self
     }
 
+    /// By default, gossipsub will reject messages that are sent to us that has the same message
+    /// source as we have specified locally. Enabling this, allows these messages and prevents
+    /// penalizing the peer that sent us the message. Default is false.
+    pub fn allow_self_origin(&mut self, allow_self_origin: bool) -> &mut Self {
+        self.config.allow_self_origin = allow_self_origin;
+        self
+    }
+
     pub fn iwant_followup_time(&mut self, iwant_followup_time: Duration) -> &mut Self {
         self.config.iwant_followup_time = iwant_followup_time;
         self

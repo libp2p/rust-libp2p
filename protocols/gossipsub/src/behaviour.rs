@@ -544,7 +544,9 @@ where
         // If the message is anonymous or has a random author add it to the published message ids
         // cache.
         if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
-            self.published_message_ids.insert(msg_id.clone());
+            if !self.config.allow_self_origin() {
+                self.published_message_ids.insert(msg_id.clone());
+            }
         }
 
         // If we are not flood publishing forward the message to mesh peers.
@@ -1429,13 +1431,12 @@ where
         }
 
         // reject messages claiming to be from ourselves but not locally published
-        let self_published = if let Some(own_id) = self.publish_config.get_own_id() {
-            !self.config.allow_self_origin()
-                && own_id != propagation_source
-                && msg.source.as_ref().map_or(false, |s| s == own_id)
-        } else {
-            self.published_message_ids.contains(msg.message_id())
-        };
+        let self_published = !self.config.allow_self_origin()
+            && if let Some(own_id) = self.publish_config.get_own_id() {
+                own_id != propagation_source && msg.source.as_ref().map_or(false, |s| s == own_id)
+            } else {
+                self.published_message_ids.contains(msg.message_id())
+            };
 
         if self_published {
             debug!(
