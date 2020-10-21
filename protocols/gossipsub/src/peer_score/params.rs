@@ -31,11 +31,11 @@ const DEFAULT_DECAY_TO_ZERO: f64 = 0.1;
 /// Computes the decay factor for a parameter, assuming the `decay_interval` is 1s
 /// and that the value decays to zero if it drops below 0.01.
 pub fn score_parameter_decay(decay: Duration) -> f64 {
-    return score_parameter_decay_with_base(
+    score_parameter_decay_with_base(
         decay,
         Duration::from_secs(DEFAULT_DECAY_INTERVAL),
         DEFAULT_DECAY_TO_ZERO,
-    );
+    )
 }
 
 /// Computes the decay factor for a parameter using base as the `decay_interval`.
@@ -43,7 +43,7 @@ pub fn score_parameter_decay_with_base(decay: Duration, base: Duration, decay_to
     // the decay is linear, so after n ticks the value is factor^n
     // so factor^n = decay_to_zero => factor = decay_to_zero^(1/n)
     let ticks = decay.as_secs_f64() / base.as_secs_f64();
-    return decay_to_zero.powf(1f64 / ticks);
+    decay_to_zero.powf(1f64 / ticks)
 }
 
 #[derive(Debug, Clone)]

@@ -125,11 +125,7 @@ struct TopicStats {
 impl TopicStats {
     /// Returns true if the peer is in the `mesh`.
     pub fn in_mesh(&self) -> bool {
-        if let MeshStatus::Active { .. } = self.mesh_status {
-            true
-        } else {
-            false
-        }
+        matches!(self.mesh_status, MeshStatus::Active { .. })
     }
 }
 
@@ -260,23 +256,22 @@ impl PeerScore {
                 topic_score += p2 * topic_params.first_message_deliveries_weight;
 
                 // P3: mesh message deliveries
-                if topic_stats.mesh_message_deliveries_active {
-                    if topic_stats.mesh_message_deliveries
+                if topic_stats.mesh_message_deliveries_active
+                    && topic_stats.mesh_message_deliveries
                         < topic_params.mesh_message_deliveries_threshold
-                    {
-                        let deficit = topic_params.mesh_message_deliveries_threshold
-                            - topic_stats.mesh_message_deliveries;
-                        let p3 = deficit * deficit;
-                        topic_score += p3 * topic_params.mesh_message_deliveries_weight;
-                        debug!(
-                            "The peer {} has a mesh message delivieries deficit of {} in topic\
+                {
+                    let deficit = topic_params.mesh_message_deliveries_threshold
+                        - topic_stats.mesh_message_deliveries;
+                    let p3 = deficit * deficit;
+                    topic_score += p3 * topic_params.mesh_message_deliveries_weight;
+                    debug!(
+                        "The peer {} has a mesh message delivieries deficit of {} in topic\
                          {} and will get penalized by {}",
-                            peer_id,
-                            deficit,
-                            topic,
-                            p3 * topic_params.mesh_message_deliveries_weight
-                        );
-                    }
+                        peer_id,
+                        deficit,
+                        topic,
+                        p3 * topic_params.mesh_message_deliveries_weight
+                    );
                 }
 
                 // P3b:
@@ -422,14 +417,14 @@ impl PeerScore {
             if peer_stats.behaviour_penalty < params_ref.decay_to_zero {
                 peer_stats.behaviour_penalty = 0.0;
             }
-            return true;
+            true
         });
     }
 
     /// Adds a connected peer to `PeerScore`, initialising with empty ips (ips get added later
     /// through add_ip.
     pub fn add_peer(&mut self, peer_id: PeerId) {
-        let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
+        let peer_stats = self.peer_stats.entry(peer_id).or_default();
 
         // mark the peer as connected
         peer_stats.status = ConnectionStatus::Connected;
@@ -445,10 +440,10 @@ impl PeerScore {
         peer_stats.status = ConnectionStatus::Connected;
 
         // Insert the ip
-        peer_stats.known_ips.insert(ip.clone());
+        peer_stats.known_ips.insert(ip);
         self.peer_ips
             .entry(ip)
-            .or_insert_with(|| HashSet::new())
+            .or_insert_with(HashSet::new)
             .insert(peer_id.clone());
     }
 
@@ -559,7 +554,7 @@ impl PeerScore {
         // adds an empty record with the message id
         self.deliveries
             .entry(_msg.message_id().clone())
-            .or_insert_with(|| DeliveryRecord::default());
+            .or_insert_with(DeliveryRecord::default);
 
         if let Some(callback) = self.message_delivery_time_callback {
             let topic = &_msg.topic;
@@ -581,7 +576,7 @@ impl PeerScore {
         let record = self
             .deliveries
             .entry(msg.message_id().clone())
-            .or_insert_with(|| DeliveryRecord::default());
+            .or_insert_with(DeliveryRecord::default);
 
         // this should be the first delivery trace
         if record.status != DeliveryStatus::Unknown {
@@ -627,7 +622,7 @@ impl PeerScore {
             let mut record = self
                 .deliveries
                 .entry(msg.message_id().clone())
-                .or_insert_with(|| DeliveryRecord::default());
+                .or_insert_with(DeliveryRecord::default);
 
             // this should be the first delivery trace
             if record.status != DeliveryStatus::Unknown {
@@ -659,7 +654,7 @@ impl PeerScore {
         let record = self
             .deliveries
             .entry(msg.message_id().clone())
-            .or_insert_with(|| DeliveryRecord::default());
+            .or_insert_with(DeliveryRecord::default);
 
         if record.peers.get(from).is_some() {
             // we have already seen this duplicate!
@@ -726,7 +721,7 @@ impl PeerScore {
                 let old_params = entry.insert(params);
 
                 if old_params.first_message_deliveries_cap > first_message_deliveries_cap {
-                    for (_, stats) in &mut self.peer_stats {
+                    for stats in &mut self.peer_stats.values_mut() {
                         if let Some(tstats) = stats.topics.get_mut(&topic_hash) {
                             if tstats.first_message_deliveries > first_message_deliveries_cap {
                                 tstats.first_message_deliveries = first_message_deliveries_cap;
@@ -736,7 +731,7 @@ impl PeerScore {
                 }
 
                 if old_params.mesh_message_deliveries_cap > mesh_message_delivieries_cap {
-                    for (_, stats) in &mut self.peer_stats {
+                    for stats in self.peer_stats.values_mut() {
                         if let Some(tstats) = stats.topics.get_mut(&topic_hash) {
                             if tstats.mesh_message_deliveries > mesh_message_delivieries_cap {
                                 tstats.mesh_message_deliveries = mesh_message_delivieries_cap;
@@ -852,7 +847,7 @@ impl PeerScore {
                             //should always be true
                             let window_time = validated_time
                                 .checked_add(topic_params.mesh_message_deliveries_window)
-                                .unwrap_or_else(|| now.clone());
+                                .unwrap_or_else(|| *now);
                             if now > &window_time {
                                 falls_in_mesh_deliver_window = false;
                             }

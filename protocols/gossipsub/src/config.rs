@@ -866,7 +866,7 @@ impl<T: Clone> GenericGossipsubConfigBuilder<T> {
             return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
         }
 
-        if !(self.config.history_length >= self.config.history_gossip) {
+        if self.config.history_length < self.config.history_gossip {
             return Err(
                 "The history_length must be greater than or equal to the history_gossip \
                 length",
@@ -881,7 +881,7 @@ impl<T: Clone> GenericGossipsubConfigBuilder<T> {
                 mesh_outbound_min < mesh_n_low <= mesh_n <= mesh_n_high");
         }
 
-        if !(self.config.mesh_outbound_min * 2 <= self.config.mesh_n) {
+        if self.config.mesh_outbound_min * 2 > self.config.mesh_n {
             return Err(
                 "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
             );

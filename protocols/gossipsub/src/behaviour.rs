@@ -34,7 +34,6 @@ use std::{
 use futures::StreamExt;
 use log::{debug, error, info, trace, warn};
 use prost::Message;
-use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use wasm_timer::{Instant, Interval};
 
@@ -106,17 +105,11 @@ pub enum MessageAuthenticity {
 impl MessageAuthenticity {
     /// Returns true if signing is enabled.
     pub fn is_signing(&self) -> bool {
-        match self {
-            MessageAuthenticity::Signed(_) => true,
-            _ => false,
-        }
+        matches!(self, MessageAuthenticity::Signed(_))
     }
 
     pub fn is_anonymous(&self) -> bool {
-        match self {
-            MessageAuthenticity::Anonymous => true,
-            _ => false,
-        }
+        matches!(self, MessageAuthenticity::Anonymous)
     }
 }
 
@@ -378,7 +371,7 @@ where
         self.mesh
             .get(topic_hash)
             .into_iter()
-            .map(|x| x.into_iter())
+            .map(|x| x.iter())
             .flatten()
     }
 
@@ -564,7 +557,7 @@ where
                             self.explicit_peers.contains(*p)
                                 || !self.score_below_threshold(*p, |ts| ts.publish_threshold).0
                         })
-                        .map(|p| p.clone()),
+                        .cloned(),
                 );
             } else {
                 // Explicit peers
@@ -1126,15 +1119,18 @@ where
                 .into_iter()
                 .map(|entry| RawGossipsubMessage::from(entry.1))
                 .collect();
-            if let Err(_) = self.send_message(
-                peer_id.clone(),
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: message_list,
-                    control_msgs: Vec::new(),
-                }
-                .into_protobuf(),
-            ) {
+            if self
+                .send_message(
+                    peer_id.clone(),
+                    GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: message_list,
+                        control_msgs: Vec::new(),
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
                 error!("Failed to send cached messages. Messages too large");
             }
         }
@@ -1259,15 +1255,18 @@ where
                 peer_id
             );
 
-            if let Err(_) = self.send_message(
-                peer_id.clone(),
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: prune_messages,
-                }
-                .into_protobuf(),
-            ) {
+            if self
+                .send_message(
+                    peer_id.clone(),
+                    GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control_msgs: prune_messages,
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
                 error!("Failed to send graft. Message too large");
             }
         }
@@ -1529,7 +1528,7 @@ where
         // forward the message to mesh peers, if no validation is required
         if !self.config.validate_messages() {
             let msg_id = msg.message_id().clone();
-            if let Err(_) = self.forward_msg(msg, Some(propagation_source)) {
+            if self.forward_msg(msg, Some(propagation_source)).is_err() {
                 error!("Failed to forward message. Too large");
             }
             debug!("Completed message handling for message: {:?}", msg_id);
@@ -1620,29 +1619,27 @@ where
                             .is_backoff_with_slack(&subscription.topic_hash, propagation_source)
                     {
                         if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
-                            if peers.len() < self.config.mesh_n_low() {
-                                if peers.insert(propagation_source.clone()) {
-                                    debug!(
-                                        "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
-                                        propagation_source.to_string(),
-                                        subscription.topic_hash
-                                    );
-                                    // send graft to the peer
-                                    debug!(
-                                        "Sending GRAFT to peer {} for topic {:?}",
-                                        propagation_source.to_string(),
-                                        subscription.topic_hash
-                                    );
-                                    if let Some((peer_score, ..)) = &mut self.peer_score {
-                                        peer_score.graft(
-                                            propagation_source,
-                                            subscription.topic_hash.clone(),
-                                        );
-                                    }
-                                    grafts.push(GossipsubControlAction::Graft {
-                                        topic_hash: subscription.topic_hash.clone(),
-                                    });
+                            if peers.len() < self.config.mesh_n_low()
+                                && peers.insert(propagation_source.clone())
+                            {
+                                debug!(
+                                    "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
+                                    propagation_source.to_string(),
+                                    subscription.topic_hash
+                                );
+                                // send graft to the peer
+                                debug!(
+                                    "Sending GRAFT to peer {} for topic {:?}",
+                                    propagation_source.to_string(),
+                                    subscription.topic_hash
+                                );
+                                if let Some((peer_score, ..)) = &mut self.peer_score {
+                                    peer_score
+                                        .graft(propagation_source, subscription.topic_hash.clone());
                                 }
+                                grafts.push(GossipsubControlAction::Graft {
+                                    topic_hash: subscription.topic_hash.clone(),
+                                });
                             }
                         }
                     }
@@ -1684,18 +1681,20 @@ where
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
         // heartbeat.
-        if !grafts.is_empty() {
-            if let Err(_) = self.send_message(
-                propagation_source.clone(),
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: grafts,
-                }
-                .into_protobuf(),
-            ) {
-                error!("Failed sending grafts. Message too large");
-            }
+        if !grafts.is_empty()
+            && self
+                .send_message(
+                    propagation_source.clone(),
+                    GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control_msgs: grafts,
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+        {
+            error!("Failed sending grafts. Message too large");
         }
 
         // Notify the application of the subscriptions
@@ -2041,7 +2040,7 @@ where
 
         if self.peer_score.is_some() {
             trace!("Peer_scores: {:?}", {
-                for (peer, _) in &self.peer_topics {
+                for peer in self.peer_topics.keys() {
                     score(peer);
                 }
                 scores
@@ -2195,15 +2194,18 @@ where
             }
 
             // send the control messages
-            if let Err(_) = self.send_message(
-                peer.clone(),
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs,
-                }
-                .into_protobuf(),
-            ) {
+            if self
+                .send_message(
+                    peer.clone(),
+                    GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control_msgs,
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
                 error!("Failed to send control messages. Message too large");
             }
         }
@@ -2220,15 +2222,18 @@ where
                     )
                 })
                 .collect();
-            if let Err(_) = self.send_message(
-                peer.clone(),
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: remaining_prunes,
-                }
-                .into_protobuf(),
-            ) {
+            if self
+                .send_message(
+                    peer.clone(),
+                    GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control_msgs: remaining_prunes,
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
                 error!("Failed to send prune messages. Message too large");
             }
         }
@@ -2450,7 +2455,7 @@ where
         control: GossipsubControlAction,
     ) {
         control_pool
-            .entry(peer.clone())
+            .entry(peer)
             .or_insert_with(Vec::new)
             .push(control);
     }
@@ -2458,15 +2463,18 @@ where
     /// Takes each control action mapping and turns it into a message
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
-            if let Err(_) = self.send_message(
-                peer,
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: controls,
-                }
-                .into_protobuf(),
-            ) {
+            if self
+                .send_message(
+                    peer,
+                    GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control_msgs: controls,
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
                 error!("Failed to flush control pool. Message too large");
             }
         }
@@ -2617,7 +2625,7 @@ where
             }
         }
 
-        return Ok(rpc_list.into_iter().map(|v| Arc::new(v)).collect());
+        Ok(rpc_list.into_iter().map(Arc::new).collect())
     }
 }
 
@@ -2676,15 +2684,18 @@ where
 
         if !subscriptions.is_empty() {
             // send our subscriptions to the peer
-            if let Err(_) = self.send_message(
-                peer_id.clone(),
-                GossipsubRpc {
-                    messages: Vec::new(),
-                    subscriptions,
-                    control_msgs: Vec::new(),
-                }
-                .into_protobuf(),
-            ) {
+            if self
+                .send_message(
+                    peer_id.clone(),
+                    GossipsubRpc {
+                        messages: Vec::new(),
+                        subscriptions,
+                        control_msgs: Vec::new(),
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
                 error!("Failed to send subscriptions, message too large");
             }
         }

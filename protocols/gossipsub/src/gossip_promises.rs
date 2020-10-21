@@ -47,8 +47,8 @@ impl GossipPromises {
             // If a promise for this message id and peer already exists we don't update expires!
             self.promises
                 .entry(message_id.clone())
-                .or_insert_with(|| HashMap::new())
-                .entry(peer.clone())
+                .or_insert_with(HashMap::new)
+                .entry(peer)
                 .or_insert(expires);
         }
     }
@@ -64,9 +64,11 @@ impl GossipPromises {
         // We do take exception and apply promise penalty regardless in the following cases, where
         // the peer delivered an obviously invalid message.
         match reason {
-            RejectReason::ValidationError(ValidationError::InvalidSignature) => return,
-            RejectReason::SelfOrigin => return,
-            _ => self.promises.remove(message_id),
+            RejectReason::ValidationError(ValidationError::InvalidSignature) => (),
+            RejectReason::SelfOrigin => (),
+            _ => {
+                self.promises.remove(message_id);
+            }
         };
     }
 

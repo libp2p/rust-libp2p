@@ -41,7 +41,7 @@ use prost::Message as ProtobufMessage;
 use std::{borrow::Cow, pin::Pin};
 use unsigned_varint::codec;
 
-pub(crate) const SIGNING_PREFIX: &'static [u8] = b"libp2p-pubsub:";
+pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
 #[derive(Clone)]
@@ -279,7 +279,7 @@ impl Decoder for GossipsubCodec {
             None => return Ok(None),
         };
 
-        let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(|e| std::io::Error::from(e))?;
+        let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(std::io::Error::from)?;
 
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
@@ -367,7 +367,7 @@ impl Decoder for GossipsubCodec {
             // ensure the sequence number is a u64
             let sequence_number = if verify_sequence_no {
                 if let Some(seq_no) = message.seqno {
-                    if seq_no.len() == 0 {
+                    if seq_no.is_empty() {
                         None
                     } else if seq_no.len() != 8 {
                         debug!(
@@ -414,7 +414,7 @@ impl Decoder for GossipsubCodec {
             // Verify the message source if required
             let source = if verify_source {
                 if let Some(bytes) = message.from {
-                    if bytes.len() > 0 {
+                    if !bytes.is_empty() {
                         match PeerId::from_bytes(bytes) {
                             Ok(peer_id) => Some(peer_id), // valid peer id
                             Err(_) => {
