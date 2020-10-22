@@ -239,6 +239,13 @@ impl Message {
         let mut protocols = Vec::new();
         let mut remaining: &[u8] = &msg;
         loop {
+            // A well-formed message must be terminated with a newline.
+            if remaining == &[b'\n'] {
+                break
+            } else if protocols.len() == MAX_PROTOCOLS {
+                return Err(ProtocolError::TooManyProtocols)
+            }
+
             // Decode the length of the next protocol name and check that
             // it ends with a line feed.
             let (len, tail) = uvi::decode::usize(remaining)?;
@@ -252,13 +259,6 @@ impl Message {
 
             // Skip ahead to the next protocol.
             remaining = &tail[len ..];
-
-            // A well-formed message must be terminated with a newline.
-            if remaining == &[b'\n'] {
-                break
-            } else if protocols.len() == MAX_PROTOCOLS {
-                return Err(ProtocolError::TooManyProtocols)
-            }
         }
 
         return Ok(Message::Protocols(protocols));
@@ -510,12 +510,7 @@ mod tests {
                 1 => Message::NotAvailable,
                 2 => Message::ListProtocols,
                 3 => Message::Protocol(Protocol::arbitrary(g)),
-                4 => loop {
-                    let ps = Vec::arbitrary(g);
-                    if !ps.is_empty() {
-                        break Message::Protocols(ps.into())
-                    }
-                }
+                4 => Message::Protocols(Vec::arbitrary(g)),
                 _ => panic!()
             }
         }
