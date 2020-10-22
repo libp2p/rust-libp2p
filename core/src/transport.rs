@@ -29,10 +29,8 @@ use crate::ConnectedPoint;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
-use std::time::Duration;
 
 pub mod and_then;
-pub mod boxed;
 pub mod choice;
 pub mod dummy;
 pub mod map;
@@ -41,8 +39,10 @@ pub mod memory;
 pub mod timeout;
 pub mod upgrade;
 
+mod boxed;
 mod optional;
 
+pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
@@ -128,12 +128,14 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// Turns the transport into an abstract boxed (i.e. heap-allocated) transport.
-    fn boxed(self) -> boxed::Boxed<Self::Output, Self::Error>
-    where Self: Sized + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
+    /// Boxes the transport, including custom transport errors.
+    fn boxed(self) -> boxed::Boxed<Self::Output>
+    where
+        Self: Transport + Sized + Clone + Send + Sync + 'static,
+        Self::Dial: Send + 'static,
+        Self::Listener: Send + 'static,
+        Self::ListenerUpgrade: Send + 'static,
+        Self::Error: Send + Sync,
     {
         boxed::boxed(self)
     }
@@ -185,33 +187,6 @@ pub trait Transport {
         <F as TryFuture>::Error: Error + 'static
     {
         and_then::AndThen::new(self, f)
-    }
-
-    /// Adds a timeout to the connection setup (including upgrades) for all
-    /// inbound and outbound connections established through the transport.
-    fn timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
-    where
-        Self: Sized
-    {
-        timeout::TransportTimeout::new(self, timeout)
-    }
-
-    /// Adds a timeout to the connection setup (including upgrades) for all outbound
-    /// connections established through the transport.
-    fn outbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
-    where
-        Self: Sized
-    {
-        timeout::TransportTimeout::with_outgoing_timeout(self, timeout)
-    }
-
-    /// Adds a timeout to the connection setup (including upgrades) for all inbound
-    /// connections established through the transport.
-    fn inbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
-    where
-        Self: Sized
-    {
-        timeout::TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 
     /// Begins a series of protocol upgrades via an

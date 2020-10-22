@@ -1,4 +1,12 @@
-# 0.22.2 [unreleased]
+# 0.23.1 [2020-10-20]
+
+- Update dependencies.
+
+# 0.23.0 [2020-10-16]
+
+- Rework transport boxing and move timeout configuration
+  to the transport builder.
+  [PR 1794](https://github.com/libp2p/rust-libp2p/pull/1794).
 
 - Update dependencies.
 

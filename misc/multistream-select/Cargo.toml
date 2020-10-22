@@ -1,7 +1,7 @@
 [package]
 name = "multistream-select"
 description = "Multistream-select negotiation protocol for libp2p"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,12 +13,16 @@ edition = "2018"
 bytes = "0.5"
 futures = "0.3"
 log = "0.4"
-pin-project = "0.4.17"
+pin-project = "1.0.0"
 smallvec = "1.0"
 unsigned-varint = "0.5"
 
 [dev-dependencies]
 async-std = "1.6.2"
+env_logger = "0.8"
+libp2p-core = { path = "../../core" }
+libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-plaintext = { path = "../../protocols/plaintext" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
 rw-stream-sink = "0.2.1"

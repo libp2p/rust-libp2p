@@ -1,3 +1,9 @@
+# 0.23.0 [2020-10-16]
+
+- Update `libp2p-swarm` and `libp2p-core`.
+
+- Double receive buffer to 4KiB. [PR 1779](https://github.com/libp2p/rust-libp2p/pull/1779/files).
+
 # 0.22.0 [2020-09-09]
 
 - Update `libp2p-swarm` and `libp2p-core`.

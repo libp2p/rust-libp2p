@@ -2,7 +2,7 @@
 name = "libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
-version = "0.22.0"
+version = "0.23.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,6 +10,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.22.0", path = "../../core" }
+libp2p-core = { version = "0.23.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"

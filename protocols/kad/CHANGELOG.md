@@ -1,4 +1,6 @@
-# 0.23.1 [unreleased]
+# 0.24.0 [2020-10-16]
+
+- Update `libp2p-core` and `libp2p-swarm`.
 
 - Update `sha2` dependency.
 

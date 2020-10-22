@@ -18,11 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::Endpoint;
-use futures_codec::{Decoder, Encoder};
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::{fmt, mem};
 use bytes::{BufMut, Bytes, BytesMut};
+use futures_codec::{Decoder, Encoder};
+use libp2p_core::Endpoint;
+use std::{fmt, hash::{Hash, Hasher}, io, mem};
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.
@@ -46,7 +45,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > we initiated the stream, so the local ID has the role `Endpoint::Dialer`.
 /// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
 /// > the corresponding local ID has the role `Endpoint::Listener`.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct LocalStreamId {
     num: u32,
     role: Endpoint,
@@ -60,6 +59,14 @@ impl fmt::Display for LocalStreamId {
         }
     }
 }
+
+impl Hash for LocalStreamId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u32(self.num);
+    }
+}
+
+impl nohash_hasher::IsEnabled for LocalStreamId {}
 
 /// A unique identifier used by the remote node for a substream.
 ///
@@ -77,10 +84,23 @@ impl LocalStreamId {
         Self { num, role: Endpoint::Dialer }
     }
 
+    #[cfg(test)]
+    pub fn listener(num: u32) -> Self {
+        Self { num, role: Endpoint::Listener }
+    }
+
     pub fn next(self) -> Self {
         Self {
             num: self.num.checked_add(1).expect("Mplex substream ID overflowed"),
             .. self
+        }
+    }
+
+    #[cfg(test)]
+    pub fn into_remote(self) -> RemoteStreamId {
+        RemoteStreamId {
+            num: self.num,
+            role: !self.role,
         }
     }
 }
@@ -105,7 +125,7 @@ impl RemoteStreamId {
 }
 
 /// An Mplex protocol frame.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame<T> {
     Open { stream_id: T },
     Data { stream_id: T, data: Bytes },
@@ -114,19 +134,13 @@ pub enum Frame<T> {
 }
 
 impl Frame<RemoteStreamId> {
-    fn remote_id(&self) -> RemoteStreamId {
+    pub fn remote_id(&self) -> RemoteStreamId {
         match *self {
             Frame::Open { stream_id } => stream_id,
             Frame::Data { stream_id, .. } => stream_id,
             Frame::Close { stream_id, .. } => stream_id,
             Frame::Reset { stream_id, .. } => stream_id,
         }
-    }
-
-    /// Gets the `LocalStreamId` corresponding to the `RemoteStreamId`
-    /// received with this frame.
-    pub fn local_id(&self) -> LocalStreamId {
-        self.remote_id().into_local()
     }
 }
 
@@ -154,7 +168,7 @@ impl Codec {
 
 impl Decoder for Codec {
     type Item = Frame<RemoteStreamId>;
-    type Error = IoError;
+    type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
@@ -175,7 +189,7 @@ impl Decoder for Codec {
                         Some(len) => {
                             if len as usize > MAX_FRAME_SIZE {
                                 let msg = format!("Mplex frame length {} exceeds maximum", len);
-                                return Err(IoError::new(IoErrorKind::InvalidData, msg));
+                                return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                             }
 
                             self.decoder_state = CodecDecodeState::HasHeaderAndLen(header, len as usize);
@@ -206,7 +220,7 @@ impl Decoder for Codec {
                         6 => Frame::Reset { stream_id: RemoteStreamId::dialer(num) },
                         _ => {
                             let msg = format!("Invalid mplex header value 0x{:x}", header);
-                            return Err(IoError::new(IoErrorKind::InvalidData, msg));
+                            return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                         },
                     };
 
@@ -215,7 +229,7 @@ impl Decoder for Codec {
                 },
 
                 CodecDecodeState::Poisoned => {
-                    return Err(IoError::new(IoErrorKind::InvalidData, "Mplex codec poisoned"));
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "Mplex codec poisoned"));
                 }
             }
         }
@@ -224,7 +238,7 @@ impl Decoder for Codec {
 
 impl Encoder for Codec {
     type Item = Frame<LocalStreamId>;
-    type Error = IoError;
+    type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
@@ -259,7 +273,7 @@ impl Encoder for Codec {
         let data_len_bytes = encode::usize(data_len, &mut data_buf);
 
         if data_len > MAX_FRAME_SIZE {
-            return Err(IoError::new(IoErrorKind::InvalidData, "data size exceed maximum"));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "data size exceed maximum"));
         }
 
         dst.reserve(header_bytes.len() + data_len_bytes.len() + data_len);

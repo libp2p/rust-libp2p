@@ -1,3 +1,9 @@
+# 0.23.0 [2020-10-16]
+
+- Update `libp2p-core`.
+
+- Replace `get_if_addrs` with `if-addrs`.
+
 # 0.22.0 [2020-09-09]
 
 - Bump `libp2p-core` dependency.

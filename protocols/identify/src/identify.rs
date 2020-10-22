@@ -273,7 +273,8 @@ mod tests {
     use libp2p_core::{
         identity,
         PeerId,
-        muxing::StreamMuxer,
+        muxing::StreamMuxerBox,
+        transport,
         Transport,
         upgrade
     };
@@ -281,15 +282,8 @@ mod tests {
     use libp2p_tcp::TcpConfig;
     use libp2p_swarm::{Swarm, SwarmEvent};
     use libp2p_mplex::MplexConfig;
-    use std::{fmt, io};
 
-    fn transport() -> (identity::PublicKey, impl Transport<
-        Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
-        Listener = impl Send,
-        ListenerUpgrade = impl Send,
-        Dial = impl Send,
-        Error = impl fmt::Debug
-    > + Clone) {
+    fn transport() -> (identity::PublicKey, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         let id_keys = identity::Keypair::generate_ed25519();
         let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
         let pubkey = id_keys.public();
@@ -297,7 +291,8 @@ mod tests {
             .nodelay(true)
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(MplexConfig::new());
+            .multiplex(MplexConfig::new())
+            .boxed();
         (pubkey, transport)
     }
 

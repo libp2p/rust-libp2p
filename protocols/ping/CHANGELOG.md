@@ -1,4 +1,6 @@
-# 0.22.1 [unreleased]
+# 0.23.0 [2020-10-16]
+
+- Update `libp2p-swarm` and `libp2p-core`.
 
 - Ensure the outbound ping is flushed before awaiting
   the response. Otherwise the behaviour depends on

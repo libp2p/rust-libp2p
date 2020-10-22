@@ -23,7 +23,6 @@ use log::debug;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{random, seq::SliceRandom, SeedableRng};
 use std::{
-    io::Error,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -31,7 +30,7 @@ use std::{
 
 use futures::StreamExt;
 use libp2p_core::{
-    identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
+    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade,
     Multiaddr, Transport,
 };
 use libp2p_gossipsub::{
@@ -150,8 +149,6 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
             local_public_key: public_key.clone(),
         })
         .multiplex(yamux::Config::default())
-        .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-        .map_err(|e| -> Error { panic!("Failed to create transport: {:?}", e) })
         .boxed();
 
     let peer_id = public_key.clone().into_peer_id();

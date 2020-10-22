@@ -34,7 +34,7 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    core::{either::EitherTransport, transport::upgrade::Version, StreamMuxer},
+    core::{either::EitherTransport, transport, transport::upgrade::Version, muxing::StreamMuxerBox},
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify::{Identify, IdentifyEvent},
     identity,
@@ -61,21 +61,8 @@ use std::{
 pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
-) -> impl Transport<
-    Output = (
-        PeerId,
-        impl StreamMuxer<
-                OutboundSubstream = impl Send,
-                Substream = impl Send,
-                Error = impl Into<io::Error>,
-            > + Send
-            + Sync,
-    ),
-    Error = impl Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send,
-> + Clone {
+) -> transport::Boxed<(PeerId, StreamMuxerBox)>
+{
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&key_pair).unwrap();
     let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
     let yamux_config = YamuxConfig::default();
@@ -92,6 +79,7 @@ pub fn build_transport(
         .authenticate(noise_config)
         .multiplex(yamux_config)
         .timeout(Duration::from_secs(20))
+        .boxed()
 }
 
 /// Get the current ipfs repo path, either from the IPFS_PATH environment variable or

@@ -1,3 +1,7 @@
+# 0.26.0 [2020-10-16]
+
+- Update `libp2p-core`.
+
 # 0.25.0 [2020-09-09]
 
 - Update to `yamux-0.8.0`. Upgrade step 4 of 4. This version always implements
