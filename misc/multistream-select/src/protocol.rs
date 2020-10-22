@@ -234,19 +234,23 @@ impl Message {
             return Ok(Message::Protocol(p));
         }
 
-        // At this point, it must be an `ls` response, i.e.
-        // one or more newline-delimited protocol names.
+        // At this point, it must be an `ls` response, i.e. one or more
+        // length-prefixed, newline-delimited protocol names.
         let mut protocols = Vec::new();
         let mut remaining: &[u8] = &msg;
         loop {
+            // Decode the length of the next protocol name and check that
+            // it ends with a line feed.
             let (len, tail) = uvi::decode::usize(remaining)?;
             if len == 0 || len > tail.len() || tail[len - 1] != b'\n' {
                 return Err(ProtocolError::InvalidMessage)
             }
 
+            // Parse the protocol name.
             let p = Protocol::try_from(Bytes::copy_from_slice(&tail[.. len - 1]))?;
             protocols.push(p);
 
+            // Skip ahead to the next protocol.
             remaining = &tail[len ..];
 
             // A well-formed message must be terminated with a newline.
