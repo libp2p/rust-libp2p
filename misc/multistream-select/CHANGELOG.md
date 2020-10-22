@@ -1,3 +1,9 @@
+# 0.9.0 [unreleased]
+
+- Fix the encoding and decoding of `ls` responses to
+  be spec-compliant and interoperable with other implementations.
+  For a clean upgrade, `0.8.4` must already be deployed.
+
 # 0.8.4 [2020-10-20]
 
 - Temporarily disable the internal selection of "parallel" protocol

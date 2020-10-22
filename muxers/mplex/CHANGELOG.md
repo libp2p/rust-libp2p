@@ -1,3 +1,7 @@
+# 0.24.0 [unreleased]
+
+- Update `libp2p-core`.
+
 # 0.23.0 [2020-10-16]
 
 - More granular execution of pending flushes, better logging and
