@@ -1050,10 +1050,9 @@ where
         -> Option<KademliaEvent>
     {
         let query_id = q.id();
-        log::trace!("Query {:?} finished.", query_id);
         let result = q.into_result();
 
-        log::info!("Query {} finished", format!("{:#?}", result.inner.info).lines().take(1).next().unwrap());
+        log::trace!("Query {} ({:?}) finished", format!("{:#?}", result.inner.info).lines().take(1).next().unwrap(), query_id);
         match result.inner.info {
             QueryInfo::Bootstrap { peer, remaining } => {
                 self.print_bucket_table();
@@ -1179,7 +1178,7 @@ where
                 phase: AddProviderPhase::AddProvider { get_closest_peers_stats, .. },
                 ..
             } => {
-                log::info!("AddProvider finished {:?}!", context);
+                log::debug!("AddProvider finished {:?}!", context);
                 match context {
                     AddProviderContext::Publish => {
                         Some(KademliaEvent::QueryResult {
