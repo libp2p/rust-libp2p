@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{RelayHandler, RelayHandlerIn, RelayHandlerEvent, RelayHandlerHopRequest};
+use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
 use futures::prelude::*;
 use futures::channel::mpsc;
@@ -30,8 +31,8 @@ use std::task::{Context, Poll};
 /// Network behaviour that allows reaching nodes through relaying.
 pub struct Relay {
     // TODO: Document
-    to_transport: mpsc::Sender<crate::BehaviourToTransportMsg>,
-    from_transport: mpsc::Receiver<crate::TransportToBehaviourMsg>,
+    to_transport: mpsc::Sender<BehaviourToTransportMsg>,
+    from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
@@ -47,8 +48,8 @@ pub struct Relay {
 impl Relay {
     /// Builds a new `Relay` behaviour.
     pub fn new(
-        to_transport: mpsc::Sender<crate::BehaviourToTransportMsg>,
-        from_transport: mpsc::Receiver<crate::TransportToBehaviourMsg>,
+        to_transport: mpsc::Sender<BehaviourToTransportMsg>,
+        from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
     ) -> Self {
         Relay {
             to_transport,
@@ -177,3 +178,5 @@ impl NetworkBehaviour for Relay {
         Poll::Pending
     }
 }
+
+pub enum BehaviourToTransportMsg {}

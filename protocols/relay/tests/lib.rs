@@ -17,18 +17,22 @@ fn build_swarm() -> Swarm<Relay> {
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let transport = MemoryTransport::default()
+
+
+    let memory_transport = MemoryTransport::default();
+    let (relay_wrapped_transport, (to_transport, from_transport)) =
+        RelayTransportWrapper::new(memory_transport);
+
+    let transport = relay_wrapped_transport
         .upgrade(upgrade::Version::V1)
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
-    let (relay_wrapped_transport, (to_transport, from_transport)) =
-        RelayTransportWrapper::new(transport);
 
     let relay_behaviour = Relay::new(to_transport, from_transport);
 
     let local_id = local_public_key.clone().into_peer_id();
-    let mut swarm = Swarm::new(relay_wrapped_transport.boxed(), relay_behaviour, local_id);
+    let mut swarm = Swarm::new(transport, relay_behaviour, local_id);
 
     swarm
 }
