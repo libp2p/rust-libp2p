@@ -18,7 +18,6 @@ fn build_swarm() -> Swarm<Relay> {
         local_public_key: local_public_key.clone(),
     };
 
-
     let memory_transport = MemoryTransport::default();
     let (relay_wrapped_transport, (to_transport, from_transport)) =
         RelayTransportWrapper::new(memory_transport);
@@ -51,5 +50,5 @@ fn connect_to_relay() {
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(node_a_peer_id.into()));
-    Swarm::listen_on(&mut node_a_swarm, node_a_address.clone()).unwrap();
+    Swarm::dial_addr(&mut node_a_swarm, node_a_address.clone()).unwrap();
 }

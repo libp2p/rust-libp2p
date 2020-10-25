@@ -7,9 +7,11 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use futures::channel::mpsc;
-use futures::future::{Future, Ready};
+use futures::future::{BoxFuture, Future, FutureExt, Ready};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::stream::Stream;
+use futures::channel::oneshot;
+use futures::sink::SinkExt;
 use libp2p_core::{
     either::{EitherError, EitherFuture, EitherListenStream, EitherOutput},
     multiaddr::{Multiaddr, Protocol},
@@ -55,7 +57,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
-    type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial<T>>;
+    type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if !is_relay_address(&addr) {
@@ -73,6 +75,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             });
         }
 
+
         unimplemented!();
     }
 
@@ -89,7 +92,12 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             };
         }
 
-        unimplemented!();
+        let mut to_behaviour = self.to_behaviour.clone();
+        Ok(EitherFuture::Second(async move {
+            let (tx, rx) = oneshot::channel();
+            to_behaviour.send(TransportToBehaviourMsg::RelayedDial(addr, tx)).await.unwrap();
+            Ok(rx.await.unwrap())
+        }.boxed()))
     }
 }
 
@@ -112,17 +120,7 @@ impl<T: Transport> Stream for RelayListener<T> {
     }
 }
 
-pub struct RelayedDial<T> {
-    marker: PhantomData<T>,
-}
-
-impl<T: Transport> Future for RelayedDial<T> {
-    type Output = Result<RelayConnection, RelayError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        unimplemented!();
-    }
-}
+pub type RelayedDial = BoxFuture<'static, Result<RelayConnection, RelayError>>;
 
 pub struct RelayedListenerUpgrade<T> {
     marker: PhantomData<T>,
@@ -139,7 +137,8 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 }
 
 #[derive(Debug)]
-pub struct RelayError {}
+pub struct RelayError {
+}
 
 impl std::fmt::Display for RelayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -180,5 +179,5 @@ impl AsyncWrite for RelayConnection {
 }
 
 pub enum TransportToBehaviourMsg {
-    RelayedDial(Multiaddr),
+    RelayedDial(Multiaddr, oneshot::Sender<RelayConnection>),
 }
