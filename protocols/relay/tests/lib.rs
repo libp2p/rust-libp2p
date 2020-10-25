@@ -49,6 +49,5 @@ fn connect_to_relay() {
         .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(node_a_peer_id.into()));
-    Swarm::dial_addr(&mut node_a_swarm, node_a_address.clone()).unwrap();
+    Swarm::listen_on(&mut node_a_swarm, node_a_address.clone()).unwrap();
 }
