@@ -25,3 +25,8 @@ void = "1.0"
 
 [build-dependencies]
 prost-build = "0.6"
+
+[dev-dependencies]
+libp2p-plaintext = { path = "../plaintext" }
+libp2p-yamux = { path = "../../muxers/yamux" }
+rand = "0.7.2"

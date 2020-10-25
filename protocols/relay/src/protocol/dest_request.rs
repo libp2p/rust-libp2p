@@ -25,6 +25,7 @@ use futures::{prelude::*, future::BoxFuture, ready};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use std::{error, io};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::pin::Pin;
 use prost::Message;
@@ -41,9 +42,19 @@ use prost::Message;
 #[must_use = "A destination request should be either accepted or denied"]
 pub struct RelayDestinationRequest<TSubstream> {
     /// The stream to the source.
-    stream: TSubstream,
+    // TODO: Cleanup arc mutex.
+    stream: Arc<Mutex<TSubstream>>,
     /// Source of the request.
     from: Peer,
+}
+
+impl<TSubstream> Clone for RelayDestinationRequest<TSubstream> {
+    fn clone(&self) -> Self {
+        RelayDestinationRequest {
+            stream: self.stream.clone(),
+            from: self.from.clone(),
+        }
+    }
 }
 
 impl<TSubstream> RelayDestinationRequest<TSubstream>
@@ -52,7 +63,7 @@ where
 {
     /// Creates a `RelayDestinationRequest`.
     pub(crate) fn new(stream: TSubstream, from: Peer) -> Self {
-        RelayDestinationRequest { stream, from }
+        RelayDestinationRequest { stream: Arc::new(Mutex::new(stream)), from }
     }
 
     /// Returns the peer id of the source that is being relayed.
@@ -111,7 +122,8 @@ where
 #[must_use = "futures do nothing unless polled"]
 pub struct RelayDestinationAcceptFuture<TSubstream> {
     /// The inner stream.
-    inner: Option<TSubstream>,
+    // TODO: Cleanup arc mutex
+    inner: Option<Arc<Mutex<TSubstream>>>,
     /// The message to send to the remote.
     message: io::Cursor<Vec<u8>>,
 }

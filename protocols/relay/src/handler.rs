@@ -97,7 +97,7 @@ pub enum RelayHandlerEvent {
 }
 
 /// Event that can be sent to the relay handler.
-//#[derive(Debug)]      // TODO: restore
+#[derive(Clone)]
 pub enum RelayHandlerIn {
     /// Denies a hop request sent by the node we talk to.
     DenyHopRequest(RelayHandlerHopRequest),
@@ -127,6 +127,7 @@ pub enum RelayHandlerIn {
 }
 
 /// The remote wants us to become a relay.
+#[derive(Clone)]
 pub struct RelayHandlerHopRequest {
     inner: protocol::RelayHopRequest<NegotiatedSubstream>,
 }
@@ -144,6 +145,7 @@ impl RelayHandlerHopRequest {
 }
 
 /// The remote wants us to be treated as a destination.
+#[derive(Clone)]
 pub struct RelayHandlerDestRequest {
     inner: protocol::RelayDestinationRequest<NegotiatedSubstream>,
 }

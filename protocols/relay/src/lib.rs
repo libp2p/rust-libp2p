@@ -28,5 +28,6 @@ mod message_proto {
 
 pub mod handler;
 pub mod protocol;
+pub mod transport;
 
 pub use behaviour::Relay;

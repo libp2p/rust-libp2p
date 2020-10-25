@@ -29,6 +29,7 @@ use std::{error, io};
 use std::task::{Context, Poll};
 use std::pin::Pin;
 use prost::Message;
+use std::sync::{Arc, Mutex};
 
 /// Request from a remote for us to relay communications to another node.
 ///
@@ -42,9 +43,19 @@ use prost::Message;
 #[must_use = "A HOP request should be either accepted or denied"]
 pub struct RelayHopRequest<TSubstream> {
     /// The stream to the source.
-    stream: TSubstream,
+    // TODO: Clean up mutex arc
+    stream: Arc<Mutex<TSubstream>>,
     /// Target of the request.
     dest: Peer,
+}
+
+impl<TSubstream> Clone for RelayHopRequest<TSubstream> {
+    fn clone(&self) -> Self {
+        RelayHopRequest {
+            stream: self.stream.clone(),
+            dest: self.dest.clone(),
+        }
+    }
 }
 
 impl<TSubstream> RelayHopRequest<TSubstream>
@@ -53,7 +64,7 @@ where
 {
     /// Creates a `RelayHopRequest`.
     pub(crate) fn new(stream: TSubstream, dest: Peer) -> Self {
-        RelayHopRequest { stream, dest }
+        RelayHopRequest { stream: Arc::new(Mutex::new(stream)), dest }
     }
 
     /// Peer id of the node we should relay communications to.

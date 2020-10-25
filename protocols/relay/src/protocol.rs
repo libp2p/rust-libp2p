@@ -47,6 +47,7 @@ pub use self::target_open::RelayTargetOpen;
 /// Strong typed version of a `CircuitRelay_Peer`.
 ///
 /// Can be parsed from a `CircuitRelay_Peer` using the `TryFrom` trait.
+#[derive(Clone)]
 pub(crate) struct Peer {
     pub(crate) peer_id: PeerId,
     pub(crate) addrs: SmallVec<[Multiaddr; 4]>,
