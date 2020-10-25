@@ -22,12 +22,13 @@ fn build_swarm() -> Swarm<Relay> {
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
-    let relay_wrapped_transport = RelayTransportWrapper::new(transport).boxed();
+    let (relay_wrapped_transport, (to_transport, from_transport)) =
+        RelayTransportWrapper::new(transport);
 
-    let relay_behaviour = Relay::new();
+    let relay_behaviour = Relay::new(to_transport, from_transport);
 
     let local_id = local_public_key.clone().into_peer_id();
-    let mut swarm = Swarm::new(relay_wrapped_transport, relay_behaviour, local_id);
+    let mut swarm = Swarm::new(relay_wrapped_transport.boxed(), relay_behaviour, local_id);
 
     swarm
 }
@@ -43,6 +44,7 @@ fn connect_to_relay() {
     let node_a_peer_id = Swarm::local_peer_id(&node_a_swarm).clone();
     let node_a_address = relay_address
         .clone()
+        .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(node_a_peer_id.into()));
     Swarm::listen_on(&mut node_a_swarm, node_a_address.clone()).unwrap();

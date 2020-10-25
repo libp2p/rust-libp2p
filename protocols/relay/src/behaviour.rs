@@ -21,6 +21,7 @@
 use crate::handler::{RelayHandler, RelayHandlerIn, RelayHandlerEvent, RelayHandlerHopRequest};
 use fnv::FnvHashSet;
 use futures::prelude::*;
+use futures::channel::mpsc;
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, DialPeerCondition, PollParameters, ProtocolsHandler};
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
@@ -28,6 +29,10 @@ use std::task::{Context, Poll};
 
 /// Network behaviour that allows reaching nodes through relaying.
 pub struct Relay {
+    // TODO: Document
+    to_transport: mpsc::Sender<crate::BehaviourToTransportMsg>,
+    from_transport: mpsc::Receiver<crate::TransportToBehaviourMsg>,
+
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
 
@@ -41,8 +46,13 @@ pub struct Relay {
 
 impl Relay {
     /// Builds a new `Relay` behaviour.
-    pub fn new() -> Self {
+    pub fn new(
+        to_transport: mpsc::Sender<crate::BehaviourToTransportMsg>,
+        from_transport: mpsc::Receiver<crate::TransportToBehaviourMsg>,
+    ) -> Self {
         Relay {
+            to_transport,
+            from_transport,
             events: VecDeque::new(),
             connected_peers: FnvHashSet::default(),
             pending_hop_requests: Vec::new(),

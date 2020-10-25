@@ -31,3 +31,7 @@ pub mod protocol;
 pub mod transport;
 
 pub use behaviour::Relay;
+
+pub enum TransportToBehaviourMsg {}
+
+pub enum BehaviourToTransportMsg {}
