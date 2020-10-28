@@ -1,3 +1,7 @@
+# 0.24.0 [unreleased]
+
+- Update dependencies.
+
 # 0.23.1 [2020-10-28]
 
 - Be lenient with duplicate `Close` frames received. Version
