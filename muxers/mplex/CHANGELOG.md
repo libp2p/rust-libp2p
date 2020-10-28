@@ -1,3 +1,12 @@
+# 0.23.1 [2020-10-28]
+
+- Be lenient with duplicate `Close` frames received. Version
+  `0.23.0` started treating duplicate `Close` frames for a
+  substream as a protocol violation. As some libp2p implementations
+  seem to occasionally send such frames and it is a harmless
+  redundancy, this releases reverts back to the pre-0.23 behaviour
+  of ignoring duplicate `Close` frames.
+
 # 0.23.0 [2020-10-16]
 
 - More granular execution of pending flushes, better logging and

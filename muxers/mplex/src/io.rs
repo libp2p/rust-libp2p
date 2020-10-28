@@ -666,11 +666,9 @@ where
         if let Some(state) = self.substreams.remove(&id) {
             match state {
                 SubstreamState::RecvClosed { .. } | SubstreamState::Closed { .. } => {
-                    debug!("{}: Received unexpected `Close` frame for closed substream {}",
+                    debug!("{}: Ignoring `Close` frame for closed substream {}",
                         self.id, id);
-                    return self.on_error(
-                        io::Error::new(io::ErrorKind::Other,
-                        "Protocol error: Received `Close` frame for closed substream."))
+                    self.substreams.insert(id, state);
                 },
                 SubstreamState::Reset { buf } => {
                     debug!("{}: Ignoring `Close` frame for already reset substream {}",
