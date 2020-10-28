@@ -45,6 +45,10 @@ pub struct Relay {
     pending_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
 }
 
+// TODO: Should one be able to only specify relay servers via
+// Swarm::listen_on(Multiaddress(<realy_server>/p2p-circuit/)) or should one also be able to add
+// them via the Relay behaviour? The latter would allow other behaviours to manage ones relay
+// servers.
 impl Relay {
     /// Builds a new `Relay` behaviour.
     pub fn new(
