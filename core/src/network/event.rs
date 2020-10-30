@@ -34,14 +34,15 @@ use crate::{
         PendingConnectionError,
     },
     transport::Transport,
+    PeerId
 };
 use std::{fmt, num::NonZeroU32};
 
 /// Event that can happen on the `Network`.
-pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
+    THandler: IntoConnectionHandler,
 {
     /// One of the listeners gracefully closed.
     ListenerClosed {
@@ -104,7 +105,7 @@ where
     /// A new connection to a peer has been established.
     ConnectionEstablished {
         /// The newly established connection.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
+        connection: EstablishedConnection<'a, TInEvent>,
         /// The total number of established connections to the same peer,
         /// including the one that has just been opened.
         num_established: NonZeroU32,
@@ -126,7 +127,7 @@ where
         /// The ID of the connection that encountered an error.
         id: ConnectionId,
         /// Information about the connection that encountered the error.
-        connected: Connected<TConnInfo>,
+        connected: Connected,
         /// The error that occurred.
         error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// The remaining number of established connections to the same peer.
@@ -139,7 +140,7 @@ where
         attempts_remaining: u32,
 
         /// Id of the peer we were trying to dial.
-        peer_id: TPeerId,
+        peer_id: PeerId,
 
         /// The multiaddr we failed to reach.
         multiaddr: Multiaddr,
@@ -160,7 +161,7 @@ where
     /// An established connection produced an event.
     ConnectionEvent {
         /// The connection on which the event occurred.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
+        connection: EstablishedConnection<'a, TInEvent>,
         /// Event that was produced by the node.
         event: TOutEvent,
     },
@@ -168,7 +169,7 @@ where
     /// An established connection has changed its address.
     AddressChange {
         /// The connection whose address has changed.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
+        connection: EstablishedConnection<'a, TInEvent>,
         /// New endpoint of this connection.
         new_endpoint: ConnectedPoint,
         /// Old endpoint of this connection.
@@ -176,17 +177,15 @@ where
     },
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for
+    NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler>
 where
     TInEvent: fmt::Debug,
     TOutEvent: fmt::Debug,
     TTrans: Transport,
     TTrans::Error: fmt::Debug,
-    THandler: IntoConnectionHandler<TConnInfo>,
+    THandler: IntoConnectionHandler,
     <THandler::Handler as ConnectionHandler>::Error: fmt::Debug,
-    TConnInfo: fmt::Debug,
-    TPeerId: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
