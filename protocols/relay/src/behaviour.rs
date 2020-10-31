@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerHopRequest, RelayHandlerIn};
-use crate::transport::TransportToBehaviourMsg;
+use crate::transport::{RelayConnection, TransportToBehaviourMsg};
 use fnv::FnvHashSet;
-use futures::channel::mpsc;
+use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
@@ -59,7 +59,6 @@ pub struct Relay {
 
     /// List of relay nodes that act as a listener for us.
     relay_listeners: HashMap<PeerId, RelayListener>,
-
 }
 
 enum OutgoingHopRequest {
@@ -68,6 +67,7 @@ enum OutgoingHopRequest {
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
+        send_back: oneshot::Sender<RelayConnection>,
     },
 }
 
@@ -104,7 +104,7 @@ impl NetworkBehaviour for Relay {
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
         println!("Relay::addresses_of_peer()");
-        self.relay_listeners
+        let relay_listener_addresses = self.relay_listeners
             .iter()
             .filter_map(|(peer_id, r)| {
                 if let RelayListener::Connecting(address) = r {
@@ -113,8 +113,17 @@ impl NetworkBehaviour for Relay {
                     }
                 }
                 None
-            })
-            .collect()
+            });
+        let outgoing_hop_request_addresses = self.pending_outgoing_hop_requests.iter().filter_map(|(peer_id, r)| {
+            if let OutgoingHopRequest::Dialing { relay_addr, .. } = r {
+                if peer_id == remote_peer_id {
+                    return Some(relay_addr.clone());
+                }
+            }
+            None
+        });
+
+        relay_listener_addresses.chain(outgoing_hop_request_addresses).collect()
 
         // We return the addresses that potential relaying sources have given us for potential
         // destination.
@@ -133,9 +142,20 @@ impl NetworkBehaviour for Relay {
     fn inject_connected(&mut self, id: &PeerId) {
         self.connected_peers.insert(id.clone());
 
-        if let Some(RelayListener::Connecting(addr)) = self.relay_listeners.remove(id) {
+        if let Some(RelayListener::Connecting(addr)) = self.relay_listeners.get(id) {
             self.relay_listeners
-                .insert(id.clone(), RelayListener::Connected(addr));
+                .insert(id.clone(), RelayListener::Connected(addr.clone()));
+        }
+
+        if let Some(OutgoingHopRequest::Dialing {
+            relay_addr,
+            relay_peer_id,
+            destination_addr,
+            destination_peer_id,
+            send_back,
+        }) = self.pending_outgoing_hop_requests.get(id)
+        {
+            unimplemented!();
         }
 
         // // Ask the newly-opened connection to be used as destination if relevant.
@@ -198,7 +218,8 @@ impl NetworkBehaviour for Relay {
                         });
                 } else {
                     let dest_id = hop_request.destination_id().clone();
-                    self.pending_incoming_hop_requests.push((event_source, hop_request));
+                    self.pending_incoming_hop_requests
+                        .push((event_source, hop_request));
                     self.events.push_back(NetworkBehaviourAction::DialPeer {
                         peer_id: dest_id,
                         condition: DialPeerCondition::NotDialing,
@@ -248,6 +269,24 @@ impl NetworkBehaviour for Relay {
                     destination_peer_id,
                     send_back,
                 })) => {
+                    if self.connected_peers.contains(&relay_peer_id) {
+                        unimplemented!();
+                    } else {
+                        self.pending_outgoing_hop_requests.insert(
+                            relay_peer_id.clone(),
+                            OutgoingHopRequest::Dialing {
+                                relay_addr,
+                                relay_peer_id: relay_peer_id.clone(),
+                                destination_addr,
+                                destination_peer_id,
+                                send_back,
+                            },
+                        );
+                        return Poll::Ready(NetworkBehaviourAction::DialPeer {
+                            peer_id: relay_peer_id,
+                            condition: DialPeerCondition::Disconnected,
+                        });
+                    }
                 }
                 Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest { address, peer_id })) => {
                     if self.connected_peers.contains(&peer_id) {
