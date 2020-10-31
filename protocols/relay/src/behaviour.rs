@@ -50,12 +50,25 @@ pub struct Relay {
     /// List of peers the network is connected to.
     connected_peers: FnvHashSet<PeerId>,
 
-    /// Requests for us to act as a destination, that are in the process of being fulfilled.
+    /// Requests for us to act as a relay, that are in the process of being fulfilled.
     /// Contains the request and the source of the request.
-    pending_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
+    pending_incoming_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
+
+    /// Us requesting a relay to relay for us.
+    pending_outgoing_hop_requests: HashMap<PeerId, OutgoingHopRequest>,
 
     /// List of relay nodes that act as a listener for us.
     relay_listeners: HashMap<PeerId, RelayListener>,
+
+}
+
+enum OutgoingHopRequest {
+    Dialing {
+        relay_addr: Multiaddr,
+        relay_peer_id: PeerId,
+        destination_addr: Multiaddr,
+        destination_peer_id: PeerId,
+    },
 }
 
 // TODO: Should one be able to only specify relay servers via
@@ -73,7 +86,8 @@ impl Relay {
             from_transport,
             events: Default::default(),
             connected_peers: Default::default(),
-            pending_hop_requests: Default::default(),
+            pending_incoming_hop_requests: Default::default(),
+            pending_outgoing_hop_requests: Default::default(),
             relay_listeners: Default::default(),
         }
     }
@@ -155,7 +169,7 @@ impl NetworkBehaviour for Relay {
         self.connected_peers.remove(id);
 
         // TODO: send back proper refusal message to the source
-        self.pending_hop_requests
+        self.pending_incoming_hop_requests
             .retain(|rq| rq.1.destination_id() != id);
     }
 
@@ -184,7 +198,7 @@ impl NetworkBehaviour for Relay {
                         });
                 } else {
                     let dest_id = hop_request.destination_id().clone();
-                    self.pending_hop_requests.push((event_source, hop_request));
+                    self.pending_incoming_hop_requests.push((event_source, hop_request));
                     self.events.push_back(NetworkBehaviourAction::DialPeer {
                         peer_id: dest_id,
                         condition: DialPeerCondition::NotDialing,
@@ -227,7 +241,14 @@ impl NetworkBehaviour for Relay {
 
         loop {
             match self.from_transport.poll_next_unpin(cx) {
-                Poll::Ready(Some(TransportToBehaviourMsg::DialRequest(destination, oneshot))) => {}
+                Poll::Ready(Some(TransportToBehaviourMsg::DialRequest {
+                    relay_addr,
+                    relay_peer_id,
+                    destination_addr,
+                    destination_peer_id,
+                    send_back,
+                })) => {
+                }
                 Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest { address, peer_id })) => {
                     if self.connected_peers.contains(&peer_id) {
                         self.relay_listeners

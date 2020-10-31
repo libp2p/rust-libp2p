@@ -21,8 +21,17 @@ use libp2p_core::{
 use pin_project::pin_project;
 
 pub enum TransportToBehaviourMsg {
-    DialRequest(Multiaddr, oneshot::Sender<RelayConnection>),
-    ListenRequest { address: Multiaddr, peer_id: PeerId },
+    DialRequest {
+        relay_addr: Multiaddr,
+        relay_peer_id: PeerId,
+        destination_addr: Multiaddr,
+        destination_peer_id: PeerId,
+        send_back: oneshot::Sender<RelayConnection>,
+    },
+    ListenRequest {
+        address: Multiaddr,
+        peer_id: PeerId,
+    },
 }
 
 #[derive(Clone)]
@@ -122,12 +131,22 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             };
         }
 
+        let (relay, destination) = split_relay_and_destination(addr).unwrap();
+        let (relay_addr, relay_peer_id) = split_off_peer_id(relay).unwrap();
+        let (destination_addr, destination_peer_id) = split_off_peer_id(destination).unwrap();
+
         let mut to_behaviour = self.to_behaviour.clone();
         Ok(EitherFuture::Second(
             async move {
                 let (tx, rx) = oneshot::channel();
                 to_behaviour
-                    .send(TransportToBehaviourMsg::DialRequest(addr, tx))
+                    .send(TransportToBehaviourMsg::DialRequest {
+                        relay_addr,
+                        relay_peer_id,
+                        destination_addr,
+                        destination_peer_id,
+                        send_back: tx,
+                    })
                     .await
                     .unwrap();
                 Ok(rx.await.unwrap())
@@ -150,6 +169,38 @@ fn is_relay_listen_address(addr: Multiaddr) -> (bool, Multiaddr) {
         .collect();
 
     (new_addr.len() != original_len, new_addr)
+}
+
+fn split_relay_and_destination(addr: Multiaddr) -> Option<(Multiaddr, Multiaddr)> {
+    let mut relay = Vec::new();
+    let mut destination = Vec::new();
+    let mut passed_circuit = false;
+
+    for protocol in addr.into_iter() {
+        if matches!(protocol, Protocol::P2pCircuit) {
+            passed_circuit = true;
+            continue;
+        }
+
+        if !passed_circuit {
+            relay.push(protocol);
+        } else {
+            destination.push(protocol);
+        }
+    }
+
+    Some((
+        relay.into_iter().collect(),
+        destination.into_iter().collect(),
+    ))
+}
+
+fn split_off_peer_id(mut addr: Multiaddr) -> Option<(Multiaddr, PeerId)> {
+    if let Some(Protocol::P2p(hash)) = addr.pop() {
+        Some((addr, PeerId::from_multihash(hash).unwrap()))
+    } else {
+        None
+    }
 }
 
 #[pin_project]
@@ -226,7 +277,7 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
             RelayedListenerUpgradeProj::Inner(upgrade) => match upgrade.poll(cx) {
                 Poll::Ready(Ok(out)) => return Poll::Ready(Ok(EitherOutput::First(out))),
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::A(err))),
-                Poll::Pending => {},
+                Poll::Pending => {}
             },
         }
 
@@ -272,13 +323,5 @@ impl AsyncWrite for RelayConnection {
 
     fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
         unimplemented!();
-    }
-}
-
-fn split_off_peer_id(mut addr: Multiaddr) -> Option<(Multiaddr, PeerId)> {
-    if let Some(Protocol::P2p(hash)) = addr.pop() {
-        Some((addr, PeerId::from_multihash(hash).unwrap()))
-    } else {
-        None
     }
 }
