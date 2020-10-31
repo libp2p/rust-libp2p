@@ -18,15 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{RelayHandler, RelayHandlerIn, RelayHandlerEvent, RelayHandlerHopRequest};
+use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerHopRequest, RelayHandlerIn};
 use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
-use futures::prelude::*;
 use futures::channel::mpsc;
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, DialPeerCondition, PollParameters, ProtocolsHandler};
+use futures::prelude::*;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
-use std::{collections::VecDeque, marker::PhantomData};
+use libp2p_swarm::{
+    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ProtocolsHandler,
+};
 use std::task::{Context, Poll};
+use std::{collections::VecDeque, marker::PhantomData};
 
 /// Network behaviour that allows reaching nodes through relaying.
 pub struct Relay {
@@ -90,20 +93,25 @@ impl NetworkBehaviour for Relay {
         self.connected_peers.insert(id.clone());
 
         // Ask the newly-opened connection to be used as destination if relevant.
-        while let Some(pos) = self.pending_hop_requests.iter().position(|p| p.1.destination_id() == id) {
+        while let Some(pos) = self
+            .pending_hop_requests
+            .iter()
+            .position(|p| p.1.destination_id() == id)
+        {
             let (source, hop_request) = self.pending_hop_requests.remove(pos);
 
             let send_back = RelayHandlerIn::DestinationRequest {
                 source,
-                source_addresses: Vec::new(),       // TODO: wrong
+                source_addresses: Vec::new(), // TODO: wrong
                 substream: hop_request,
             };
 
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: id.clone(),
-                handler: NotifyHandler::Any,
-                event: send_back
-            });
+            self.events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: id.clone(),
+                    handler: NotifyHandler::Any,
+                    event: send_back,
+                });
         }
     }
 
@@ -111,7 +119,8 @@ impl NetworkBehaviour for Relay {
         self.connected_peers.remove(id);
 
         // TODO: send back proper refusal message to the source
-        self.pending_hop_requests.retain(|rq| rq.1.destination_id() != id);
+        self.pending_hop_requests
+            .retain(|rq| rq.1.destination_id() != id);
     }
 
     fn inject_event(
@@ -127,16 +136,16 @@ impl NetworkBehaviour for Relay {
                     let dest_id = hop_request.destination_id().clone();
                     let send_back = RelayHandlerIn::DestinationRequest {
                         source: event_source,
-                        source_addresses: Vec::new(),       // TODO: wrong
+                        source_addresses: Vec::new(), // TODO: wrong
                         substream: hop_request,
                     };
-                    self.events.push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: dest_id,
-                        // TODO: Any correct here?
-                        handler: NotifyHandler::Any,
-                        event: send_back
-                    });
-
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: dest_id,
+                            // TODO: Any correct here?
+                            handler: NotifyHandler::Any,
+                            event: send_back,
+                        });
                 } else {
                     let dest_id = hop_request.destination_id().clone();
                     self.pending_hop_requests.push((event_source, hop_request));
@@ -145,20 +154,21 @@ impl NetworkBehaviour for Relay {
                         condition: DialPeerCondition::NotDialing,
                     });
                 }
-            },
+            }
 
             // Remote wants us to become a destination.
             RelayHandlerEvent::DestinationRequest(dest_request) => {
                 // TODO: we would like to accept the destination request, but no API allows that
                 // at the moment
                 let send_back = RelayHandlerIn::DenyDestinationRequest(dest_request);
-                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: event_source,
-                    // TODO: Any correct here?
-                    handler: NotifyHandler::Any,
-                    event: send_back
-                });
-            },
+                self.events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: event_source,
+                        // TODO: Any correct here?
+                        handler: NotifyHandler::Any,
+                        event: send_back,
+                    });
+            }
 
             RelayHandlerEvent::RelayRequestDenied(_) => {}
             RelayHandlerEvent::RelayRequestSuccess(_, _) => {}
@@ -177,6 +187,15 @@ impl NetworkBehaviour for Relay {
     > {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        loop {
+            match self.from_transport.poll_next_unpin(cx) {
+                Poll::Ready(Some(TransportToBehaviourMsg::DialRequest(destination, oneshot))) => {}
+                Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest(destination))) => {}
+                Poll::Ready(None) => panic!("Channel to transport wrapper is closed"),
+                Poll::Pending => break,
+            }
         }
 
         Poll::Pending

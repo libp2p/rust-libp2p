@@ -19,6 +19,11 @@ use libp2p_core::{
     Transport,
 };
 
+pub enum TransportToBehaviourMsg {
+    DialRequest(Multiaddr, oneshot::Sender<RelayConnection>),
+    ListenRequest(Multiaddr),
+}
+
 #[derive(Clone)]
 pub struct RelayTransportWrapper<T: Clone> {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
@@ -72,11 +77,24 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             };
             return Ok(RelayListener {
                 inner_listener: Some(inner_listener),
+                // TODO: Do we want a listener for inner incoming connections to also yield relayed
+                // connections?
+                from_behaviour: self.from_behaviour.clone(),
+                msg_to_behaviour: None,
             });
         }
 
 
-        unimplemented!();
+        let mut to_behaviour = self.to_behaviour.clone();
+        let msg_to_behaviour = Some(async move {
+            to_behaviour.send(TransportToBehaviourMsg::ListenRequest(addr)).await.unwrap();
+        }.boxed());
+
+        Ok(RelayListener {
+            inner_listener: None,
+            from_behaviour: self.from_behaviour.clone(),
+            msg_to_behaviour,
+        })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -95,7 +113,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
         let mut to_behaviour = self.to_behaviour.clone();
         Ok(EitherFuture::Second(async move {
             let (tx, rx) = oneshot::channel();
-            to_behaviour.send(TransportToBehaviourMsg::RelayedDial(addr, tx)).await.unwrap();
+            to_behaviour.send(TransportToBehaviourMsg::DialRequest(addr, tx)).await.unwrap();
             Ok(rx.await.unwrap())
         }.boxed()))
     }
@@ -107,6 +125,9 @@ fn is_relay_address(addr: &Multiaddr) -> bool {
 
 pub struct RelayListener<T: Transport> {
     inner_listener: Option<<T as Transport>::Listener>,
+    from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
+
+    msg_to_behaviour: Option<BoxFuture<'static, ()>>,
 }
 
 impl<T: Transport> Stream for RelayListener<T> {
@@ -176,8 +197,4 @@ impl AsyncWrite for RelayConnection {
     fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
         unimplemented!();
     }
-}
-
-pub enum TransportToBehaviourMsg {
-    RelayedDial(Multiaddr, oneshot::Sender<RelayConnection>),
 }
