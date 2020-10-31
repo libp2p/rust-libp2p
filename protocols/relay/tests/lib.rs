@@ -39,6 +39,8 @@ fn build_swarm() -> Swarm<Relay> {
 
 #[test]
 fn connect_to_relay() {
+    env_logger::init();
+
     let mut pool = LocalPool::new();
 
     let mut relay_swarm = build_swarm();

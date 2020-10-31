@@ -23,7 +23,11 @@ use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
 use futures::channel::mpsc;
 use futures::prelude::*;
-use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
+use libp2p_core::{
+    connection::ConnectionId,
+    multiaddr::{Multiaddr, Protocol},
+    PeerId,
+};
 use libp2p_swarm::{
     DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
     ProtocolsHandler,
@@ -46,6 +50,8 @@ pub struct Relay {
     /// Requests for us to act as a destination, that are in the process of being fulfilled.
     /// Contains the request and the source of the request.
     pending_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
+
+    local_listen_requests: Vec<LocalListenRequest>,
 }
 
 // TODO: Should one be able to only specify relay servers via
@@ -61,9 +67,10 @@ impl Relay {
         Relay {
             to_transport,
             from_transport,
-            events: VecDeque::new(),
-            connected_peers: FnvHashSet::default(),
-            pending_hop_requests: Vec::new(),
+            events: Default::default(),
+            connected_peers: Default::default(),
+            pending_hop_requests: Default::default(),
+            local_listen_requests: Default::default(),
         }
     }
 }
@@ -73,23 +80,38 @@ impl NetworkBehaviour for Relay {
     type OutEvent = ();
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        println!("Relay::new_handler()");
         RelayHandler::default()
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
+        println!("Relay::addresses_of_peer()");
+        self.local_listen_requests
+            .iter()
+            .filter_map(|r| {
+                if let LocalListenRequest::ConnectingToRelay { peer_id, address } = r {
+                    if peer_id == remote_peer_id {
+                        return Some(address.clone());
+                    }
+                }
+                None
+            })
+            .collect()
+
         // We return the addresses that potential relaying sources have given us for potential
         // destination.
         // For example, if node A connects to us and says "I want to connect to node B whose
         // address is M", and then `addresses_of_peer(B)` is called, then we return `M`.
-        self.pending_hop_requests
-            .iter()
-            .filter(|rq| rq.1.destination_id() == peer_id)
-            .flat_map(|rq| rq.1.destination_addresses())
-            .cloned()
-            .collect()
+        // self.pending_hop_requests
+        //     .iter()
+        //     .filter(|rq| rq.1.destination_id() == remote_peer_id)
+        //     .flat_map(|rq| rq.1.destination_addresses())
+        //     .cloned()
+        //     .collect()
     }
 
     fn inject_connected(&mut self, id: &PeerId) {
+        unimplemented!();
         self.connected_peers.insert(id.clone());
 
         // Ask the newly-opened connection to be used as destination if relevant.
@@ -192,7 +214,22 @@ impl NetworkBehaviour for Relay {
         loop {
             match self.from_transport.poll_next_unpin(cx) {
                 Poll::Ready(Some(TransportToBehaviourMsg::DialRequest(destination, oneshot))) => {}
-                Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest(destination))) => {}
+                Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest { address, peer_id })) => {
+                    if self.connected_peers.contains(&peer_id) {
+                        self.local_listen_requests
+                            .push(LocalListenRequest::Negotiating);
+                    } else {
+                        self.local_listen_requests
+                            .push(LocalListenRequest::ConnectingToRelay {
+                                address,
+                                peer_id: peer_id.clone(),
+                            });
+                        return Poll::Ready(NetworkBehaviourAction::DialPeer {
+                            peer_id,
+                            condition: DialPeerCondition::Disconnected,
+                        });
+                    }
+                }
                 Poll::Ready(None) => panic!("Channel to transport wrapper is closed"),
                 Poll::Pending => break,
             }
@@ -203,3 +240,8 @@ impl NetworkBehaviour for Relay {
 }
 
 pub enum BehaviourToTransportMsg {}
+
+enum LocalListenRequest {
+    ConnectingToRelay { address: Multiaddr, peer_id: PeerId },
+    Negotiating,
+}

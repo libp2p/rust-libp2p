@@ -7,21 +7,21 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use futures::channel::mpsc;
+use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt, Ready};
 use futures::io::{AsyncRead, AsyncWrite};
-use futures::stream::Stream;
-use futures::channel::oneshot;
 use futures::sink::SinkExt;
+use futures::stream::Stream;
 use libp2p_core::{
     either::{EitherError, EitherFuture, EitherListenStream, EitherOutput},
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
-    Transport,
+    PeerId, Transport,
 };
 
 pub enum TransportToBehaviourMsg {
     DialRequest(Multiaddr, oneshot::Sender<RelayConnection>),
-    ListenRequest(Multiaddr),
+    ListenRequest { address: Multiaddr, peer_id: PeerId },
 }
 
 #[derive(Clone)]
@@ -57,7 +57,8 @@ impl<T: Clone> RelayTransportWrapper<T> {
     }
 }
 
-impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
+// TODO: Should one really require T to be Unpin?
+impl<T: Transport + Clone + Unpin> Transport for RelayTransportWrapper<T> {
     type Output = EitherOutput<<T as Transport>::Output, RelayConnection>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
@@ -65,7 +66,8 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if !is_relay_address(&addr) {
+        let (is_relay, addr) = is_relay_listen_address(addr);
+        if !is_relay {
             let inner_listener = match self.inner_transport.listen_on(addr) {
                 Ok(listener) => listener,
                 Err(TransportError::MultiaddrNotSupported(addr)) => {
@@ -84,11 +86,20 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             });
         }
 
-
         let mut to_behaviour = self.to_behaviour.clone();
-        let msg_to_behaviour = Some(async move {
-            to_behaviour.send(TransportToBehaviourMsg::ListenRequest(addr)).await.unwrap();
-        }.boxed());
+        let peer_id = extract_peer_id(&addr).unwrap();
+        let msg_to_behaviour = Some(
+            async move {
+                to_behaviour
+                    .send(TransportToBehaviourMsg::ListenRequest {
+                        address: addr,
+                        peer_id,
+                    })
+                    .await
+                    .unwrap();
+            }
+            .boxed(),
+        );
 
         Ok(RelayListener {
             inner_listener: None,
@@ -98,7 +109,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if !is_relay_address(&addr) {
+        if !contains_circuit_protocol(&addr) {
             match self.inner_transport.dial(addr) {
                 Ok(dialer) => return Ok(EitherFuture::First(dialer)),
                 Err(TransportError::MultiaddrNotSupported(addr)) => {
@@ -111,16 +122,33 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
         }
 
         let mut to_behaviour = self.to_behaviour.clone();
-        Ok(EitherFuture::Second(async move {
-            let (tx, rx) = oneshot::channel();
-            to_behaviour.send(TransportToBehaviourMsg::DialRequest(addr, tx)).await.unwrap();
-            Ok(rx.await.unwrap())
-        }.boxed()))
+        Ok(EitherFuture::Second(
+            async move {
+                let (tx, rx) = oneshot::channel();
+                to_behaviour
+                    .send(TransportToBehaviourMsg::DialRequest(addr, tx))
+                    .await
+                    .unwrap();
+                Ok(rx.await.unwrap())
+            }
+            .boxed(),
+        ))
     }
 }
 
-fn is_relay_address(addr: &Multiaddr) -> bool {
+fn contains_circuit_protocol(addr: &Multiaddr) -> bool {
     addr.iter().any(|p| matches!(p, Protocol::P2pCircuit))
+}
+
+fn is_relay_listen_address(addr: Multiaddr) -> (bool, Multiaddr) {
+    let original_len = addr.len();
+
+    let new_addr: Multiaddr = addr
+        .into_iter()
+        .take_while(|p| !matches!(p, Protocol::P2pCircuit))
+        .collect();
+
+    (new_addr.len() != original_len, new_addr)
 }
 
 pub struct RelayListener<T: Transport> {
@@ -130,14 +158,24 @@ pub struct RelayListener<T: Transport> {
     msg_to_behaviour: Option<BoxFuture<'static, ()>>,
 }
 
-impl<T: Transport> Stream for RelayListener<T> {
+impl<T: Unpin + Transport> Unpin for RelayListener<T> {}
+
+impl<T: Transport + Unpin> Stream for RelayListener<T> {
     type Item = Result<
         ListenerEvent<RelayedListenerUpgrade<T>, EitherError<<T as Transport>::Error, RelayError>>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        unimplemented!();
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = &mut *self;
+        if let Some(msg) = &mut this.msg_to_behaviour {
+            match Future::poll(msg.as_mut(), cx) {
+                Poll::Ready(()) => self.msg_to_behaviour = None,
+                Poll::Pending => {}
+            }
+        }
+
+        Poll::Pending
     }
 }
 
@@ -158,8 +196,7 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 }
 
 #[derive(Debug)]
-pub struct RelayError {
-}
+pub struct RelayError {}
 
 impl std::fmt::Display for RelayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -197,4 +234,15 @@ impl AsyncWrite for RelayConnection {
     fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
         unimplemented!();
     }
+}
+
+fn extract_peer_id(addr: &Multiaddr) -> Option<PeerId> {
+    addr.iter().find_map(|p| {
+        if let Protocol::P2p(hash) = p {
+            // TODO: Handle unwrap.
+            Some(PeerId::from_multihash(hash).unwrap())
+        } else {
+            None
+        }
+    })
 }
