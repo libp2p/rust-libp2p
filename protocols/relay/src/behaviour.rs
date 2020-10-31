@@ -33,7 +33,10 @@ use libp2p_swarm::{
     ProtocolsHandler,
 };
 use std::task::{Context, Poll};
-use std::{collections::VecDeque, marker::PhantomData};
+use std::{
+    collections::{HashMap, VecDeque},
+    marker::PhantomData,
+};
 
 /// Network behaviour that allows reaching nodes through relaying.
 pub struct Relay {
@@ -51,7 +54,8 @@ pub struct Relay {
     /// Contains the request and the source of the request.
     pending_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
 
-    local_listen_requests: Vec<LocalListenRequest>,
+    /// List of relay nodes that act as a listener for us.
+    relay_listeners: HashMap<PeerId, RelayListener>,
 }
 
 // TODO: Should one be able to only specify relay servers via
@@ -70,7 +74,7 @@ impl Relay {
             events: Default::default(),
             connected_peers: Default::default(),
             pending_hop_requests: Default::default(),
-            local_listen_requests: Default::default(),
+            relay_listeners: Default::default(),
         }
     }
 }
@@ -86,10 +90,10 @@ impl NetworkBehaviour for Relay {
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
         println!("Relay::addresses_of_peer()");
-        self.local_listen_requests
+        self.relay_listeners
             .iter()
-            .filter_map(|r| {
-                if let LocalListenRequest::ConnectingToRelay { peer_id, address } = r {
+            .filter_map(|(peer_id, r)| {
+                if let RelayListener::Connecting(address) = r {
                     if peer_id == remote_peer_id {
                         return Some(address.clone());
                     }
@@ -110,35 +114,37 @@ impl NetworkBehaviour for Relay {
         //     .collect()
     }
 
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {
-        unimplemented!();
-    }
+    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
 
     fn inject_connected(&mut self, id: &PeerId) {
-        unimplemented!();
         self.connected_peers.insert(id.clone());
 
-        // Ask the newly-opened connection to be used as destination if relevant.
-        while let Some(pos) = self
-            .pending_hop_requests
-            .iter()
-            .position(|p| p.1.destination_id() == id)
-        {
-            let (source, hop_request) = self.pending_hop_requests.remove(pos);
-
-            let send_back = RelayHandlerIn::DestinationRequest {
-                source,
-                source_addresses: Vec::new(), // TODO: wrong
-                substream: hop_request,
-            };
-
-            self.events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: id.clone(),
-                    handler: NotifyHandler::Any,
-                    event: send_back,
-                });
+        if let Some(RelayListener::Connecting(addr)) = self.relay_listeners.remove(id) {
+            self.relay_listeners
+                .insert(id.clone(), RelayListener::Connected(addr));
         }
+
+        // // Ask the newly-opened connection to be used as destination if relevant.
+        // while let Some(pos) = self
+        //     .pending_hop_requests
+        //     .iter()
+        //     .position(|p| p.1.destination_id() == id)
+        // {
+        //     let (source, hop_request) = self.pending_hop_requests.remove(pos);
+
+        //     let send_back = RelayHandlerIn::DestinationRequest {
+        //         source,
+        //         source_addresses: Vec::new(), // TODO: wrong
+        //         substream: hop_request,
+        //     };
+
+        //     self.events
+        //         .push_back(NetworkBehaviourAction::NotifyHandler {
+        //             peer_id: id.clone(),
+        //             handler: NotifyHandler::Any,
+        //             event: send_back,
+        //         });
+        // }
     }
 
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
@@ -224,14 +230,11 @@ impl NetworkBehaviour for Relay {
                 Poll::Ready(Some(TransportToBehaviourMsg::DialRequest(destination, oneshot))) => {}
                 Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest { address, peer_id })) => {
                     if self.connected_peers.contains(&peer_id) {
-                        self.local_listen_requests
-                            .push(LocalListenRequest::Negotiating);
+                        self.relay_listeners
+                            .insert(peer_id, RelayListener::Connected(address));
                     } else {
-                        self.local_listen_requests
-                            .push(LocalListenRequest::ConnectingToRelay {
-                                address,
-                                peer_id: peer_id.clone(),
-                            });
+                        self.relay_listeners
+                            .insert(peer_id.clone(), RelayListener::Connecting(address));
                         return Poll::Ready(NetworkBehaviourAction::DialPeer {
                             peer_id,
                             condition: DialPeerCondition::Disconnected,
@@ -249,7 +252,7 @@ impl NetworkBehaviour for Relay {
 
 pub enum BehaviourToTransportMsg {}
 
-enum LocalListenRequest {
-    ConnectingToRelay { address: Multiaddr, peer_id: PeerId },
-    Negotiating,
+enum RelayListener {
+    Connecting(Multiaddr),
+    Connected(Multiaddr),
 }

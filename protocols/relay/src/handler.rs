@@ -312,7 +312,7 @@ impl ProtocolsHandler for RelayHandler {
             Self::Error,
         >,
     > {
-        unimplemented!();
+        Poll::Pending
         // // Request the remote to act as a relay.
         // if !self.relay_requests.is_empty() {
         //     let (peer_id, addrs) = self.relay_requests.remove(0);
