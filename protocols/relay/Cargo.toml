@@ -22,6 +22,7 @@ smallvec = "0.6.9"
 futures_codec = "0.4"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
+pin-project = "1"
 
 [build-dependencies]
 prost-build = "0.6"

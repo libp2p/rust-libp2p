@@ -11,13 +11,14 @@ use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt, Ready};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::sink::SinkExt;
-use futures::stream::Stream;
+use futures::stream::{Stream, StreamExt};
 use libp2p_core::{
     either::{EitherError, EitherFuture, EitherListenStream, EitherOutput},
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     PeerId, Transport,
 };
+use pin_project::pin_project;
 
 pub enum TransportToBehaviourMsg {
     DialRequest(Multiaddr, oneshot::Sender<RelayConnection>),
@@ -57,8 +58,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
     }
 }
 
-// TODO: Should one really require T to be Unpin?
-impl<T: Transport + Clone + Unpin> Transport for RelayTransportWrapper<T> {
+impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     type Output = EitherOutput<<T as Transport>::Output, RelayConnection>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
@@ -66,6 +66,7 @@ impl<T: Transport + Clone + Unpin> Transport for RelayTransportWrapper<T> {
     type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        println!("RelayTransportWrapper::listen_on({:?})", addr);
         let (is_relay, addr) = is_relay_listen_address(addr);
         if !is_relay {
             let inner_listener = match self.inner_transport.listen_on(addr) {
@@ -87,7 +88,7 @@ impl<T: Transport + Clone + Unpin> Transport for RelayTransportWrapper<T> {
         }
 
         let mut to_behaviour = self.to_behaviour.clone();
-        let peer_id = extract_peer_id(&addr).unwrap();
+        let (addr, peer_id) = split_off_peer_id(addr).unwrap();
         let msg_to_behaviour = Some(
             async move {
                 to_behaviour
@@ -151,26 +152,55 @@ fn is_relay_listen_address(addr: Multiaddr) -> (bool, Multiaddr) {
     (new_addr.len() != original_len, new_addr)
 }
 
+#[pin_project]
 pub struct RelayListener<T: Transport> {
+    #[pin]
     inner_listener: Option<<T as Transport>::Listener>,
     from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
 
     msg_to_behaviour: Option<BoxFuture<'static, ()>>,
 }
 
-impl<T: Unpin + Transport> Unpin for RelayListener<T> {}
-
-impl<T: Transport + Unpin> Stream for RelayListener<T> {
+impl<T: Transport> Stream for RelayListener<T> {
     type Item = Result<
         ListenerEvent<RelayedListenerUpgrade<T>, EitherError<<T as Transport>::Error, RelayError>>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = &mut *self;
-        if let Some(msg) = &mut this.msg_to_behaviour {
+        let this = self.project();
+
+        if let Some(msg) = this.msg_to_behaviour {
             match Future::poll(msg.as_mut(), cx) {
-                Poll::Ready(()) => self.msg_to_behaviour = None,
+                Poll::Ready(()) => *this.msg_to_behaviour = None,
+                Poll::Pending => {}
+            }
+        }
+
+        if let Some(listener) = this.inner_listener.as_pin_mut() {
+            match listener.poll_next(cx) {
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(EitherError::A(e)))),
+                Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                    upgrade,
+                    local_addr,
+                    remote_addr,
+                }))) => {
+                    return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                        upgrade: RelayedListenerUpgrade::Inner(upgrade),
+                        local_addr,
+                        remote_addr,
+                    })))
+                }
+                Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr)))) => {
+                    return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))))
+                }
+                Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(addr)))) => {
+                    return Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(addr))))
+                }
+                Poll::Ready(Some(Ok(ListenerEvent::Error(err)))) => {
+                    return Poll::Ready(Some(Ok(ListenerEvent::Error(EitherError::A(err)))))
+                }
+                Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => {}
             }
         }
@@ -181,8 +211,9 @@ impl<T: Transport + Unpin> Stream for RelayListener<T> {
 
 pub type RelayedDial = BoxFuture<'static, Result<RelayConnection, RelayError>>;
 
-pub struct RelayedListenerUpgrade<T> {
-    marker: PhantomData<T>,
+#[pin_project(project = RelayedListenerUpgradeProj)]
+pub enum RelayedListenerUpgrade<T: Transport> {
+    Inner(#[pin] <T as Transport>::ListenerUpgrade),
 }
 
 impl<T: Transport> Future for RelayedListenerUpgrade<T> {
@@ -191,7 +222,15 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
         EitherError<<T as Transport>::Error, RelayError>,
     >;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        unimplemented!();
+        match self.project() {
+            RelayedListenerUpgradeProj::Inner(upgrade) => match upgrade.poll(cx) {
+                Poll::Ready(Ok(out)) => return Poll::Ready(Ok(EitherOutput::First(out))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::A(err))),
+                Poll::Pending => {},
+            },
+        }
+
+        Poll::Pending
     }
 }
 
@@ -236,13 +275,10 @@ impl AsyncWrite for RelayConnection {
     }
 }
 
-fn extract_peer_id(addr: &Multiaddr) -> Option<PeerId> {
-    addr.iter().find_map(|p| {
-        if let Protocol::P2p(hash) = p {
-            // TODO: Handle unwrap.
-            Some(PeerId::from_multihash(hash).unwrap())
-        } else {
-            None
-        }
-    })
+fn split_off_peer_id(mut addr: Multiaddr) -> Option<(Multiaddr, PeerId)> {
+    if let Some(Protocol::P2p(hash)) = addr.pop() {
+        Some((addr, PeerId::from_multihash(hash).unwrap()))
+    } else {
+        None
+    }
 }

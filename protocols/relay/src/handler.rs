@@ -209,6 +209,7 @@ impl ProtocolsHandler for RelayHandler {
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        println!("RelayHandler::listen_protocol");
         SubstreamProtocol::new(protocol::RelayListen::new(), ())
     }
 
@@ -217,6 +218,7 @@ impl ProtocolsHandler for RelayHandler {
         protocol: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
+        println!("RelayHandler::inject_fully_negotiated_inbound");
         match protocol {
             // We have been asked to become a destination.
             protocol::RelayRemoteRequest::DestinationRequest(dest_request) => {
@@ -242,6 +244,7 @@ impl ProtocolsHandler for RelayHandler {
         protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo,
     ) {
+        println!("RelayHandler::inject_fully_negotiated_outbound");
         match protocol {
             // We have successfully negotiated a substream towards a destination.
             either::EitherOutput::First((substream_to_dest, dest_id)) => {

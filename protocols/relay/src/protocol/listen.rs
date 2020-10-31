@@ -73,7 +73,6 @@ where
         mut substream: TSubstream,
         _: Self::Info,
     ) -> Self::Future {
-
         RelayListenFuture { inner: async {
             let msg = upgrade::read_one(&mut substream, MAX_ACCEPTED_MESSAGE_LEN).await?;
             Ok((substream, msg))

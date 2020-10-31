@@ -24,7 +24,7 @@ use fnv::FnvHashSet;
 use futures::channel::mpsc;
 use futures::prelude::*;
 use libp2p_core::{
-    connection::ConnectionId,
+    connection::{ConnectedPoint, ConnectionId},
     multiaddr::{Multiaddr, Protocol},
     PeerId,
 };
@@ -110,6 +110,10 @@ impl NetworkBehaviour for Relay {
         //     .collect()
     }
 
+    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {
+        unimplemented!();
+    }
+
     fn inject_connected(&mut self, id: &PeerId) {
         unimplemented!();
         self.connected_peers.insert(id.clone());
@@ -135,6 +139,10 @@ impl NetworkBehaviour for Relay {
                     event: send_back,
                 });
         }
+    }
+
+    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
+        unimplemented!();
     }
 
     fn inject_disconnected(&mut self, id: &PeerId) {
