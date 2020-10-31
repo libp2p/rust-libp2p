@@ -1,3 +1,4 @@
+use futures::{executor::LocalPool, future::FutureExt, task::Spawn};
 use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
@@ -10,7 +11,6 @@ use libp2p_relay::{transport::RelayTransportWrapper, Relay};
 use libp2p_swarm::Swarm;
 use rand::random;
 use std::iter::FromIterator;
-use futures::{executor::LocalPool, future::FutureExt, task::Spawn, channel::oneshot};
 
 fn build_swarm() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
@@ -38,35 +38,49 @@ fn build_swarm() -> Swarm<Relay> {
 }
 
 #[test]
-fn connect_to_relay() {
+fn node_a_relay_via_relay_to_node_b() {
     env_logger::init();
 
     let mut pool = LocalPool::new();
-    // let (start_listening, is_listening) = oneshot::channel();
 
+    // Start relay.
     let mut relay_swarm = build_swarm();
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    println!("relay peer id: {:?}", relay_peer_id);
     let relay_address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     Swarm::listen_on(&mut relay_swarm, relay_address.clone()).unwrap();
-    pool.spawner().spawn_obj(async move {
-        loop {
-            println!("relay swarm event: {:?}", relay_swarm.next_event().await);
-        }
-    }.boxed().into()).unwrap();
+    pool.spawner()
+        .spawn_obj(
+            async move {
+                loop {
+                    relay_swarm.next_event().await;
+                }
+            }
+            .boxed()
+            .into(),
+        )
+        .unwrap();
 
-    let mut node_a_swarm = build_swarm();
-    let node_a_peer_id = Swarm::local_peer_id(&node_a_swarm).clone();
-    println!("node a peer id: {:?}", node_a_peer_id);
-    let node_a_address = relay_address
+    // Start node b listening via relay.
+    let mut node_b_swarm = build_swarm();
+    let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
+    let node_b_address = relay_address
         .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
-        .with(Protocol::P2pCircuit);
-    Swarm::listen_on(&mut node_a_swarm, node_a_address.clone()).unwrap();
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(node_b_peer_id.into()));
+    Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    pool.spawner().spawn_obj(async move {
+        loop {
+            node_b_swarm.next_event().await;
+        }
+    }.boxed().into());
 
+    // Start node a dialing node b via relay.
+    let mut node_a_swarm = build_swarm();
+    Swarm::dial_addr(&mut node_a_swarm, node_b_address);
     pool.run_until(async move {
         loop {
-            println!("node a swarm event: {:?}", node_a_swarm.next_event().await);
+            node_a_swarm.next_event().await;
         }
     });
 }
