@@ -18,6 +18,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     PeerId, Transport,
 };
+use libp2p_swarm::NegotiatedSubstream;
 use pin_project::pin_project;
 
 pub enum TransportToBehaviourMsg {
@@ -26,7 +27,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
-        send_back: oneshot::Sender<RelayConnection>,
+        send_back: oneshot::Sender<NegotiatedSubstream>,
     },
     ListenRequest {
         address: Multiaddr,
@@ -68,7 +69,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
 }
 
 impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
-    type Output = EitherOutput<<T as Transport>::Output, RelayConnection>;
+    type Output = EitherOutput<<T as Transport>::Output, NegotiatedSubstream>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
@@ -256,20 +257,33 @@ impl<T: Transport> Stream for RelayListener<T> {
             }
         }
 
+        match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {
+            Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection(conn))) => {
+                return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                    upgrade: RelayedListenerUpgrade::Relayed(Some(conn)),
+                    local_addr: unimplemented!(),
+                    remote_addr: unimplemented!(),
+                })));
+            }
+            Poll::Ready(None) => unimplemented!(),
+            Poll::Pending => {}
+        }
+
         Poll::Pending
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<RelayConnection, RelayError>>;
+pub type RelayedDial = BoxFuture<'static, Result<NegotiatedSubstream, RelayError>>;
 
 #[pin_project(project = RelayedListenerUpgradeProj)]
 pub enum RelayedListenerUpgrade<T: Transport> {
     Inner(#[pin] <T as Transport>::ListenerUpgrade),
+    Relayed(Option<NegotiatedSubstream>),
 }
 
 impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     type Output = Result<
-        EitherOutput<<T as Transport>::Output, RelayConnection>,
+        EitherOutput<<T as Transport>::Output, NegotiatedSubstream>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -279,6 +293,9 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::A(err))),
                 Poll::Pending => {}
             },
+            RelayedListenerUpgradeProj::Relayed(substream) => {
+                return Poll::Ready(Ok(EitherOutput::Second(substream.take().unwrap())))
+            }
         }
 
         Poll::Pending
@@ -295,33 +312,3 @@ impl std::fmt::Display for RelayError {
 }
 
 impl std::error::Error for RelayError {}
-
-pub struct RelayConnection {}
-
-impl AsyncRead for RelayConnection {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        unimplemented!();
-    }
-}
-
-impl AsyncWrite for RelayConnection {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        unimplemented!();
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        unimplemented!();
-    }
-
-    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        unimplemented!();
-    }
-}

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerHopRequest, RelayHandlerIn};
-use crate::transport::{RelayConnection, TransportToBehaviourMsg};
+use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
@@ -69,7 +69,7 @@ enum OutgoingHopRequest {
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
-        send_back: oneshot::Sender<RelayConnection>,
+        send_back: oneshot::Sender<NegotiatedSubstream>,
     },
 }
 
@@ -86,6 +86,7 @@ impl Relay {
         Relay {
             to_transport,
             from_transport,
+            outbox_to_transport: Default::default(),
             events: Default::default(),
             connected_peers: Default::default(),
             pending_incoming_hop_requests: Default::default(),
@@ -256,7 +257,9 @@ impl NetworkBehaviour for Relay {
 
             RelayHandlerEvent::RelayRequestDenied(_) => {}
             RelayHandlerEvent::OutgoingRelayRequestSuccess(_, _) => unimplemented!(),
-            RelayHandlerEvent::IncomingRelayRequestSuccess(_) => unimplemented!(),
+            RelayHandlerEvent::IncomingRelayRequestSuccess(substream) => {
+                self.outbox_to_transport.push(substream)
+            }
         }
     }
 
@@ -270,6 +273,20 @@ impl NetworkBehaviour for Relay {
             Self::OutEvent,
         >,
     > {
+        if !self.outbox_to_transport.is_empty() {
+            match self.to_transport.poll_ready(cx) {
+                Poll::Ready(Ok(())) => {
+                    self.to_transport
+                        .start_send(BehaviourToTransportMsg::IncomingRelayedConnection(
+                            self.outbox_to_transport.pop().unwrap(),
+                        ))
+                        .unwrap();
+                }
+                Poll::Ready(Err(_)) => unimplemented!(),
+                Poll::Pending => {}
+            }
+        }
+
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -324,7 +341,9 @@ impl NetworkBehaviour for Relay {
     }
 }
 
-pub enum BehaviourToTransportMsg {}
+pub enum BehaviourToTransportMsg {
+    IncomingRelayedConnection(NegotiatedSubstream),
+}
 
 enum RelayListener {
     Connecting(Multiaddr),
