@@ -18,18 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{CircuitRelay, circuit_relay};
+use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{
     dest_request::RelayDestinationRequest, hop_request::RelayHopRequest, Peer, PeerParseError,
     MAX_ACCEPTED_MESSAGE_LEN,
 };
-use futures::{prelude::*, future::BoxFuture, ready};
+use futures::{future::BoxFuture, prelude::*, ready};
+use futures_codec::Framed;
 use libp2p_core::upgrade;
 use libp2p_swarm::NegotiatedSubstream;
-use std::{convert::TryFrom, error, fmt, iter};
-use std::task::{Context, Poll};
 use prost::Message;
 use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::{convert::TryFrom, error, fmt, iter};
+use unsigned_varint::codec::UviBytes;
 
 /// Configuration for an inbound upgrade that handles requests from the remote for the relay
 /// protocol.
@@ -66,53 +68,41 @@ where
 {
     type Output = RelayRemoteRequest<TSubstream>;
     type Error = RelayListenError;
-    type Future = RelayListenFuture<TSubstream>;
+    type Future = BoxFuture<'static, Result<RelayRemoteRequest<TSubstream>, RelayListenError>>;
 
-    fn upgrade_inbound(
-        self,
-        mut substream: TSubstream,
-        _: Self::Info,
-    ) -> Self::Future {
-        RelayListenFuture { inner: async {
-            let msg = upgrade::read_one(&mut substream, MAX_ACCEPTED_MESSAGE_LEN).await?;
-            Ok((substream, msg))
-        }.boxed()}
-    }
-}
+    fn upgrade_inbound(self, mut substream: TSubstream, _: Self::Info) -> Self::Future {
+        async move {
+            let codec = UviBytes::<bytes::Bytes>::default();
+            // TODO: Do we need this?
+            // codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
+            let mut substream = Framed::<TSubstream, _>::new(substream, codec);
 
-/// Future that negotiates an inbound substream for the relay protocol.
-#[must_use = "futures do nothing unless polled"]
-pub struct RelayListenFuture<TSubstream> {
-    /// Inner stream.
-    inner: BoxFuture<'static, Result<(TSubstream, Vec<u8>), RelayListenError>>,
-}
+            let msg: bytes::BytesMut = substream.next().await.unwrap().unwrap();
+            let msg =std::io::Cursor::new(msg);
+            let CircuitRelay {
+                r#type,
+                src_peer,
+                dst_peer,
+                code,
+            } = CircuitRelay::decode(msg)?;
 
-impl<TSubstream> Future for RelayListenFuture<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = Result<RelayRemoteRequest<TSubstream>, RelayListenError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let (substream, msg): (TSubstream, Vec<u8>) = ready!(self.inner.poll_unpin(cx))?;
-
-        let CircuitRelay { r#type, src_peer, dst_peer, code } = CircuitRelay::decode(&*msg)?;
-        // TODO: Handle
-        match circuit_relay::Type::from_i32(r#type.unwrap()).unwrap() {
-            circuit_relay::Type::Hop => {
-                // TODO Handle
-                let peer = Peer::try_from(dst_peer.unwrap())?;
-                let rq = RelayHopRequest::new(substream, peer);
-                Poll::Ready(Ok(RelayRemoteRequest::HopRequest(rq)))
+            match circuit_relay::Type::from_i32(r#type.unwrap()).unwrap() {
+                circuit_relay::Type::Hop => {
+                    // TODO Handle
+                    let peer = Peer::try_from(dst_peer.unwrap())?;
+                    let rq = RelayHopRequest::new(substream.into_inner(), peer);
+                    Ok(RelayRemoteRequest::HopRequest(rq))
+                }
+                circuit_relay::Type::Stop => {
+                    // TODO Handle
+                    let peer = Peer::try_from(src_peer.unwrap())?;
+                    let rq = RelayDestinationRequest::new(substream.into_inner(), peer);
+                    Ok(RelayRemoteRequest::DestinationRequest(rq))
+                }
+                _ => Err(RelayListenError::InvalidMessageTy),
             }
-            circuit_relay::Type::Stop => {
-                // TODO Handle
-                let peer = Peer::try_from(src_peer.unwrap())?;
-                let rq = RelayDestinationRequest::new(substream, peer);
-                Poll::Ready(Ok(RelayRemoteRequest::DestinationRequest(rq)))
-            }
-            _ => Poll::Ready(Err(RelayListenError::InvalidMessageTy)),
         }
+        .boxed()
     }
 }
 

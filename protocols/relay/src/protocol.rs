@@ -44,7 +44,7 @@ mod target_open;
 
 pub use self::dest_request::{RelayDestinationAcceptFuture, RelayDestinationRequest};
 pub use self::hop_request::{RelayHopAcceptFuture, RelayHopRequest}; // TODO: one missing
-pub use self::listen::{RelayListen, RelayListenError, RelayListenFuture, RelayRemoteRequest};
+pub use self::listen::{RelayListen, RelayListenError, RelayRemoteRequest};
 pub use self::relay_request::RelayProxyRequest; // TODO:
 pub use self::target_open::RelayTargetOpen;
 
