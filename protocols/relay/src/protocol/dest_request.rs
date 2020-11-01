@@ -18,17 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{CircuitRelay, circuit_relay};
+use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::Peer;
 use bytes::Buf as _;
-use futures::{prelude::*, future::BoxFuture, ready};
+use futures::{future::BoxFuture, prelude::*, ready};
+use futures_codec::Framed;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
-use std::{error, io};
+use prost::Message;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use std::pin::Pin;
-use prost::Message;
+use std::{error, io};
+use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to become a destination.
 ///
@@ -43,7 +45,7 @@ use prost::Message;
 pub struct RelayDestinationRequest<TSubstream> {
     /// The stream to the source.
     // TODO: Cleanup arc mutex.
-    stream: Arc<Mutex<TSubstream>>,
+    stream: Arc<Mutex<Option<TSubstream>>>,
     /// Source of the request.
     from: Peer,
 }
@@ -63,7 +65,10 @@ where
 {
     /// Creates a `RelayDestinationRequest`.
     pub(crate) fn new(stream: TSubstream, from: Peer) -> Self {
-        RelayDestinationRequest { stream: Arc::new(Mutex::new(stream)), from }
+        RelayDestinationRequest {
+            stream: Arc::new(Mutex::new(Some(stream))),
+            from,
+        }
     }
 
     /// Returns the peer id of the source that is being relayed.
@@ -80,7 +85,7 @@ where
     ///
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
-    pub fn accept(self) -> RelayDestinationAcceptFuture<TSubstream> {
+    pub fn accept(self) -> impl Future<Output = Result<TSubstream, Box<dyn error::Error + 'static>>> {
         let msg = CircuitRelay {
             r#type: None,
             src_peer: None,
@@ -89,11 +94,18 @@ where
         };
         let mut msg_bytes = Vec::new();
         // TODO: Handl2
-        msg.encode(&mut msg_bytes).expect("all the mandatory fields are always filled; QED");
-        RelayDestinationAcceptFuture {
-            inner: Some(self.stream),
-            message: io::Cursor::new(msg_bytes),
-        }
+        msg.encode(&mut msg_bytes)
+            .expect("all the mandatory fields are always filled; QED");
+
+        let codec = UviBytes::default();
+        // TODO: Do we need this?
+        // codec.set_max_len(self.max_packet_size);
+        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
+
+        async move {
+            substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
+            Ok(substream.into_inner())
+        }.boxed()
     }
 
     /// Refuses the request.
@@ -108,7 +120,8 @@ where
         };
         let mut msg_bytes = Vec::new();
         // TODO: Handl2
-        msg.encode(&mut msg_bytes).expect("all the mandatory fields are always filled; QED");
+        msg.encode(&mut msg_bytes)
+            .expect("all the mandatory fields are always filled; QED");
 
         // async {
         //     upgrade::write_one(&mut self.stream, msg_bytes).await?;

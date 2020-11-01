@@ -20,16 +20,17 @@
 
 use crate::copy::Copy;
 use crate::protocol;
-use futures::prelude::*;
 use futures::future::BoxFuture;
-use libp2p_swarm::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
-    NegotiatedSubstream,
-};
+use futures::prelude::*;
+use futures::stream::FuturesUnordered;
 use libp2p_core::{either, upgrade, upgrade::OutboundUpgrade, Multiaddr, PeerId};
+use libp2p_swarm::{
+    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+};
 use smallvec::SmallVec;
-use std::{error, io};
 use std::task::{Context, Poll};
+use std::{error, io};
 
 /// Protocol handler that handles the relay protocol.
 ///
@@ -52,10 +53,17 @@ use std::task::{Context, Poll};
 ///
 pub struct RelayHandler {
     /// Futures that send back negative responses.
+    // TODO: Use FuturesUnordered here and below.
     deny_futures: SmallVec<[BoxFuture<'static, Result<(), io::Error>>; 4]>,
 
     /// Futures that send back an accept response to a source.
-    accept_futures: SmallVec<[protocol::RelayHopAcceptFuture<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
+    accept_hop_futures:
+        SmallVec<[protocol::RelayHopAcceptFuture<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
+
+    /// Futures that send back an accept response to a relay.
+    accept_destination_futures: FuturesUnordered<
+        BoxFuture<'static, Result<NegotiatedSubstream, Box<dyn error::Error + 'static>>>,
+    >,
 
     /// Futures that copy from a source to a destination.
     copy_futures: SmallVec<[Copy<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
@@ -89,7 +97,10 @@ pub enum RelayHandlerEvent {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    RelayRequestSuccess(PeerId, NegotiatedSubstream),
+    OutgoingRelayRequestSuccess(PeerId, NegotiatedSubstream),
+
+    // TODO: Should this have a PeerId?
+    IncomingRelayRequestSuccess(NegotiatedSubstream),
 
     /// A `RelayRequest` that has previously been sent has been denied by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -104,6 +115,8 @@ pub enum RelayHandlerIn {
 
     /// Denies a destination request sent by the node we talk to.
     DenyDestinationRequest(RelayHandlerDestRequest),
+
+    AcceptDestinationRequest(RelayHandlerDestRequest),
 
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     RelayRequest {
@@ -170,8 +183,7 @@ impl RelayHandlerDestRequest {
     // TODO: change error type
     pub fn accept(
         self,
-    ) -> impl Future<Output = Result<NegotiatedSubstream, Box<dyn error::Error + 'static>>>
-    {
+    ) -> impl Future<Output = Result<NegotiatedSubstream, Box<dyn error::Error + 'static>>> {
         self.inner.accept()
     }
 }
@@ -181,7 +193,8 @@ impl RelayHandler {
     pub fn new() -> Self {
         RelayHandler {
             deny_futures: SmallVec::new(),
-            accept_futures: SmallVec::new(),
+            accept_hop_futures: SmallVec::new(),
+            accept_destination_futures: Default::default(),
             copy_futures: SmallVec::new(),
             relay_requests: SmallVec::new(),
             dest_requests: SmallVec::new(),
@@ -246,11 +259,15 @@ impl ProtocolsHandler for RelayHandler {
             // We have successfully negotiated a substream towards a destination.
             either::EitherOutput::First((substream_to_dest, dest_id)) => {
                 self.queued_events
-                    .push(RelayHandlerEvent::RelayRequestSuccess(dest_id, substream_to_dest));
+                    .push(RelayHandlerEvent::OutgoingRelayRequestSuccess(
+                        dest_id,
+                        substream_to_dest,
+                    ));
             }
             // We have successfully asked the node to be a destination.
             either::EitherOutput::Second((to_dest_substream, hop_request)) => {
-                self.accept_futures.push(hop_request.inner.fulfill(to_dest_substream));
+                self.accept_hop_futures
+                    .push(hop_request.inner.fulfill(to_dest_substream));
             }
         }
     }
@@ -261,6 +278,10 @@ impl ProtocolsHandler for RelayHandler {
             RelayHandlerIn::DenyHopRequest(rq) => {
                 let fut = rq.inner.deny();
                 self.deny_futures.push(fut);
+            }
+            RelayHandlerIn::AcceptDestinationRequest(rq) => {
+                let fut = rq.inner.accept();
+                self.accept_destination_futures.push(fut.boxed());
             }
             // Deny a destination request from the node we handle.
             RelayHandlerIn::DenyDestinationRequest(rq) => {
@@ -288,7 +309,9 @@ impl ProtocolsHandler for RelayHandler {
         &mut self,
         _: Self::OutboundOpenInfo,
         // TODO: Fix
-        _: ProtocolsHandlerUpgrErr<either::EitherError<protocol::SendReadError, protocol::SendReadError>>,
+        _: ProtocolsHandlerUpgrErr<
+            either::EitherError<protocol::SendReadError, protocol::SendReadError>,
+        >,
     ) {
         // TODO:
         unimplemented!()
@@ -313,30 +336,42 @@ impl ProtocolsHandler for RelayHandler {
         if !self.relay_requests.is_empty() {
             let (peer_id, addrs) = self.relay_requests.remove(0);
             self.relay_requests.shrink_to_fit();
-            return Poll::Ready(
-                ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::RelayProxyRequest::new(
+            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(
+                    upgrade::EitherUpgrade::A(protocol::RelayProxyRequest::new(
                         peer_id.clone(),
                         addrs,
                         peer_id,
-                    )), ()),
-                },
-            );
+                    )),
+                    (),
+                ),
+            });
         }
 
         // Request the remote to act as destination.
         if !self.dest_requests.is_empty() {
             let (source, source_addrs, substream) = self.dest_requests.remove(0);
             self.dest_requests.shrink_to_fit();
-            return Poll::Ready(
-                ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::B(protocol::RelayTargetOpen::new(
+            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(
+                    upgrade::EitherUpgrade::B(protocol::RelayTargetOpen::new(
                         source,
                         source_addrs,
                         substream,
-                    )), ()),
-                },
-            );
+                    )),
+                    (),
+                ),
+            });
+        }
+
+        match self.accept_destination_futures.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(substream))) => {
+                let event = RelayHandlerEvent::IncomingRelayRequestSuccess(substream);
+                return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
+            }
+            Poll::Ready(Some(Err(e))) => panic!("{:?}", e),
+            Poll::Ready(None) => {}
+            Poll::Pending => {}
         }
 
         // Report the queued events.
@@ -345,18 +380,18 @@ impl ProtocolsHandler for RelayHandler {
             return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
         }
 
-        Poll::Pending
-
         // // Process the accept futures.
-        // for n in (0..self.accept_futures.len()).rev() {
-        //     let mut fut = self.accept_futures.swap_remove(n);
+        // for n in (0..self.accept_hop_futures.len()).rev() {
+        //     let mut fut = self.accept_hop_futures.swap_remove(n);
         //     match fut.poll() {
         //         // TODO: spawn in background task?
         //         Ok(Poll::Ready(copy_fut)) => self.copy_futures.push(copy_fut),
-        //         Ok(Poll::Pending) => self.accept_futures.push(fut),
-        //         Err(_err) => ()     // TODO: log this?
+        //         Ok(Poll::Pending) => self.accept_hop_futures.push(fut),
+        //         Err(_err) => (), // TODO: log this?
         //     }
         // }
+
+        Poll::Pending
 
         // // Process the futures.
         // self.deny_futures

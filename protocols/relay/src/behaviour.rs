@@ -29,8 +29,8 @@ use libp2p_core::{
     PeerId,
 };
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    ProtocolsHandler,
+    DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use std::task::{Context, Poll};
 use std::{
@@ -43,6 +43,8 @@ pub struct Relay {
     // TODO: Document
     to_transport: mpsc::Sender<BehaviourToTransportMsg>,
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
+
+    outbox_to_transport: Vec<NegotiatedSubstream>,
 
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
@@ -242,8 +244,7 @@ impl NetworkBehaviour for Relay {
             RelayHandlerEvent::DestinationRequest(dest_request) => {
                 // TODO: we would like to accept the destination request, but no API allows that
                 // at the moment
-                unimplemented!();
-                let send_back = RelayHandlerIn::DenyDestinationRequest(dest_request);
+                let send_back = RelayHandlerIn::AcceptDestinationRequest(dest_request);
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -254,7 +255,8 @@ impl NetworkBehaviour for Relay {
             }
 
             RelayHandlerEvent::RelayRequestDenied(_) => {}
-            RelayHandlerEvent::RelayRequestSuccess(_, _) => {}
+            RelayHandlerEvent::OutgoingRelayRequestSuccess(_, _) => unimplemented!(),
+            RelayHandlerEvent::IncomingRelayRequestSuccess(_) => unimplemented!(),
         }
     }
 
