@@ -169,27 +169,27 @@ impl NetworkBehaviour for Relay {
                 });
         }
 
-        // // Ask the newly-opened connection to be used as destination if relevant.
-        // while let Some(pos) = self
-        //     .pending_hop_requests
-        //     .iter()
-        //     .position(|p| p.1.destination_id() == id)
-        // {
-        //     let (source, hop_request) = self.pending_hop_requests.remove(pos);
+        // Ask the newly-opened connection to be used as destination if relevant.
+        while let Some(pos) = self
+            .pending_incoming_hop_requests
+            .iter()
+            .position(|p| p.1.destination_id() == id)
+        {
+            let (source, hop_request) = self.pending_incoming_hop_requests.remove(pos);
 
-        //     let send_back = RelayHandlerIn::DestinationRequest {
-        //         source,
-        //         source_addresses: Vec::new(), // TODO: wrong
-        //         substream: hop_request,
-        //     };
+            let send_back = RelayHandlerIn::DestinationRequest {
+                source,
+                source_addresses: Vec::new(), // TODO: wrong
+                substream: hop_request,
+            };
 
-        //     self.events
-        //         .push_back(NetworkBehaviourAction::NotifyHandler {
-        //             peer_id: id.clone(),
-        //             handler: NotifyHandler::Any,
-        //             event: send_back,
-        //         });
-        // }
+            self.events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: id.clone(),
+                    handler: NotifyHandler::Any,
+                    event: send_back,
+                });
+        }
     }
 
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
@@ -242,6 +242,7 @@ impl NetworkBehaviour for Relay {
             RelayHandlerEvent::DestinationRequest(dest_request) => {
                 // TODO: we would like to accept the destination request, but no API allows that
                 // at the moment
+                unimplemented!();
                 let send_back = RelayHandlerIn::DenyDestinationRequest(dest_request);
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {

@@ -18,12 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{CircuitRelay, circuit_relay};
+use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{send_read, SendReadError, SendReadFuture};
-use libp2p_core::{upgrade, Multiaddr, PeerId};
-use std::iter;
+use futures::future::BoxFuture;
 use futures::prelude::*;
+use futures_codec::Framed;
+use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
+use std::iter;
+use unsigned_varint::codec::UviBytes;
 
 /// Ask the remote to become a destination. The upgrade succeeds if the remote accepts, and fails
 /// if the remote refuses.
@@ -56,7 +59,7 @@ impl<TUserData> RelayTargetOpen<TUserData> {
         user_data: TUserData,
     ) -> Self {
         let message = CircuitRelay {
-            r#type:  Some(circuit_relay::Type::Stop.into()),
+            r#type: Some(circuit_relay::Type::Stop.into()),
             src_peer: Some(circuit_relay::Peer {
                 id: src_id.as_bytes().to_vec(),
                 addrs: src_addresses.into_iter().map(|a| a.to_vec()).collect(),
@@ -66,8 +69,9 @@ impl<TUserData> RelayTargetOpen<TUserData> {
         };
         let mut encoded_msg = Vec::new();
         // TODO: handle error?
-        message.encode(&mut encoded_msg).expect("all the mandatory fields are always filled; QED");
-
+        message
+            .encode(&mut encoded_msg)
+            .expect("all the mandatory fields are always filled; QED");
 
         RelayTargetOpen {
             message: encoded_msg,
@@ -81,23 +85,35 @@ impl<TUserData> upgrade::UpgradeInfo for RelayTargetOpen<TUserData> {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
+        // TODO: Move to constant.
         iter::once(b"/libp2p/relay/circuit/0.1.0")
     }
 }
 
 impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for RelayTargetOpen<TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TUserData: Send + 'static,
 {
     type Output = (TSubstream, TUserData);
     type Error = SendReadError;
-    type Future = SendReadFuture<TSubstream, TUserData>;
+    type Future = BoxFuture<'static, Result<(TSubstream, TUserData), SendReadError>>;
 
-    fn upgrade_outbound(
-        self,
-        substream: TSubstream,
-        _: Self::Info,
-    ) -> Self::Future {
-        send_read(substream, self.message, self.user_data)
+    fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
+        let codec = UviBytes::default();
+        // TODO: Do we need this?
+        // codec.set_max_len(self.max_packet_size);
+
+        let mut substream = Framed::new(substream, codec);
+
+        async move {
+            substream
+                .send(std::io::Cursor::new(self.message))
+                .await
+                .unwrap();
+            let resp = substream.next().await.unwrap();
+            unimplemented!();
+        }
+        .boxed()
     }
 }

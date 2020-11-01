@@ -324,29 +324,28 @@ impl ProtocolsHandler for RelayHandler {
             );
         }
 
+        // Request the remote to act as destination.
+        if !self.dest_requests.is_empty() {
+            let (source, source_addrs, substream) = self.dest_requests.remove(0);
+            self.dest_requests.shrink_to_fit();
+            return Poll::Ready(
+                ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::B(protocol::RelayTargetOpen::new(
+                        source,
+                        source_addrs,
+                        substream,
+                    )), ()),
+                },
+            );
+        }
+
+        // Report the queued events.
+        if !self.queued_events.is_empty() {
+            let event = self.queued_events.remove(0);
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
+        }
+
         Poll::Pending
-
-        // // Request the remote to act as destination.
-        // if !self.dest_requests.is_empty() {
-        //     let (source, source_addrs, substream) = self.dest_requests.remove(0);
-        //     self.dest_requests.shrink_to_fit();
-        //     return Ok(Poll::Ready(
-        //         ProtocolsHandlerEvent::OutboundSubstreamRequest {
-        //             info: (),
-        //             protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::B(protocol::RelayTargetOpen::new(
-        //                 source,
-        //                 source_addrs,
-        //                 substream,
-        //             ))),
-        //         },
-        //     ));
-        // }
-
-        // // Report the queued events.
-        // if !self.queued_events.is_empty() {
-        //     let event = self.queued_events.remove(0);
-        //     return Ok(Poll::Ready(ProtocolsHandlerEvent::Custom(event)));
-        // }
 
         // // Process the accept futures.
         // for n in (0..self.accept_futures.len()).rev() {
