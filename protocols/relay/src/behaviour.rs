@@ -104,26 +104,29 @@ impl NetworkBehaviour for Relay {
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
         println!("Relay::addresses_of_peer()");
-        let relay_listener_addresses = self.relay_listeners
-            .iter()
-            .filter_map(|(peer_id, r)| {
-                if let RelayListener::Connecting(address) = r {
-                    if peer_id == remote_peer_id {
-                        return Some(address.clone());
-                    }
-                }
-                None
-            });
-        let outgoing_hop_request_addresses = self.pending_outgoing_hop_requests.iter().filter_map(|(peer_id, r)| {
-            if let OutgoingHopRequest::Dialing { relay_addr, .. } = r {
+        let relay_listener_addresses = self.relay_listeners.iter().filter_map(|(peer_id, r)| {
+            if let RelayListener::Connecting(address) = r {
                 if peer_id == remote_peer_id {
-                    return Some(relay_addr.clone());
+                    return Some(address.clone());
                 }
             }
             None
         });
+        let outgoing_hop_request_addresses =
+            self.pending_outgoing_hop_requests
+                .iter()
+                .filter_map(|(peer_id, r)| {
+                    if let OutgoingHopRequest::Dialing { relay_addr, .. } = r {
+                        if peer_id == remote_peer_id {
+                            return Some(relay_addr.clone());
+                        }
+                    }
+                    None
+                });
 
-        relay_listener_addresses.chain(outgoing_hop_request_addresses).collect()
+        relay_listener_addresses
+            .chain(outgoing_hop_request_addresses)
+            .collect()
 
         // We return the addresses that potential relaying sources have given us for potential
         // destination.
@@ -155,7 +158,15 @@ impl NetworkBehaviour for Relay {
             send_back,
         }) = self.pending_outgoing_hop_requests.get(id)
         {
-            unimplemented!();
+            self.events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: id.clone(),
+                    handler: NotifyHandler::Any,
+                    event: RelayHandlerIn::RelayRequest {
+                        target: destination_peer_id.clone(),
+                        addresses: vec![destination_addr.clone()],
+                    },
+                });
         }
 
         // // Ask the newly-opened connection to be used as destination if relevant.

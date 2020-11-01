@@ -209,7 +209,6 @@ impl ProtocolsHandler for RelayHandler {
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        println!("RelayHandler::listen_protocol");
         SubstreamProtocol::new(protocol::RelayListen::new(), ())
     }
 
@@ -218,7 +217,6 @@ impl ProtocolsHandler for RelayHandler {
         protocol: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        println!("RelayHandler::inject_fully_negotiated_inbound");
         match protocol {
             // We have been asked to become a destination.
             protocol::RelayRemoteRequest::DestinationRequest(dest_request) => {
@@ -244,7 +242,6 @@ impl ProtocolsHandler for RelayHandler {
         protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo,
     ) {
-        println!("RelayHandler::inject_fully_negotiated_outbound");
         match protocol {
             // We have successfully negotiated a substream towards a destination.
             either::EitherOutput::First((substream_to_dest, dest_id)) => {
@@ -312,22 +309,22 @@ impl ProtocolsHandler for RelayHandler {
             Self::Error,
         >,
     > {
+        // Request the remote to act as a relay.
+        if !self.relay_requests.is_empty() {
+            let (peer_id, addrs) = self.relay_requests.remove(0);
+            self.relay_requests.shrink_to_fit();
+            return Poll::Ready(
+                ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::RelayProxyRequest::new(
+                        peer_id.clone(),
+                        addrs,
+                        peer_id,
+                    )), ()),
+                },
+            );
+        }
+
         Poll::Pending
-        // // Request the remote to act as a relay.
-        // if !self.relay_requests.is_empty() {
-        //     let (peer_id, addrs) = self.relay_requests.remove(0);
-        //     self.relay_requests.shrink_to_fit();
-        //     return Poll::Ready(
-        //         ProtocolsHandlerEvent::OutboundSubstreamRequest {
-        //             info: (),
-        //             protocol: SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::RelayProxyRequest::new(
-        //                 peer_id.clone(),
-        //                 addrs,
-        //                 peer_id,
-        //             ))),
-        //         },
-        //     );
-        // }
 
         // // Request the remote to act as destination.
         // if !self.dest_requests.is_empty() {

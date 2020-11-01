@@ -18,12 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{CircuitRelay, circuit_relay};
+use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{send_read, SendReadError, SendReadFuture};
-use libp2p_core::{upgrade, Multiaddr, PeerId};
-use std::iter;
+use futures::future::BoxFuture;
 use futures::prelude::*;
+use futures_codec::Framed;
+use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
+use std::iter;
+use unsigned_varint::codec::UviBytes;
 
 /// Ask a remote to act as a relay.
 ///
@@ -64,7 +67,9 @@ impl<TUserData> RelayProxyRequest<TUserData> {
         };
         let mut encoded = Vec::new();
         // TODO: Handle failure?
-        message.encode(&mut encoded).expect("all the mandatory fields are always filled; QED");
+        message
+            .encode(&mut encoded)
+            .expect("all the mandatory fields are always filled; QED");
 
         RelayProxyRequest {
             message: encoded,
@@ -85,16 +90,27 @@ impl<TUserData> upgrade::UpgradeInfo for RelayProxyRequest<TUserData> {
 impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for RelayProxyRequest<TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    TUserData: Send + 'static,
 {
     type Output = (TSubstream, TUserData);
     type Error = SendReadError;
-    type Future = SendReadFuture<TSubstream, TUserData>;
+    type Future = BoxFuture<'static, Result<(TSubstream, TUserData), SendReadError>>;
 
-    fn upgrade_outbound(
-        self,
-        substream: TSubstream,
-        _: Self::Info,
-    ) -> Self::Future {
-        send_read(substream, self.message, self.user_data)
+    fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
+        let RelayProxyRequest { message, user_data } = self;
+
+        let codec = UviBytes::default();
+        // TODO: Do we need this?
+        // codec.set_max_len(self.max_packet_size);
+
+        let mut substream = Framed::new(substream, codec);
+
+        async move {
+            substream.send(std::io::Cursor::new(message)).await.unwrap();
+            let resp = substream.next().await.unwrap();
+            unimplemented!();
+            // Ok((resp, self.user_data))
+        }
+        .boxed()
     }
 }

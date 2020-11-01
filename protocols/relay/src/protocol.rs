@@ -20,13 +20,13 @@
 
 use crate::message_proto::circuit_relay;
 use bytes::Buf as _;
-use futures::prelude::*;
 use futures::future::BoxFuture;
+use futures::prelude::*;
 use libp2p_core::{multiaddr::Error as MultiaddrError, upgrade, Multiaddr, PeerId};
 use smallvec::SmallVec;
-use std::{convert::TryFrom, error, fmt, io, mem};
-use std::task::{Context, Poll};
 use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::{convert::TryFrom, error, fmt, io, mem};
 
 /// Any message received on the wire whose length is superior to that will be refused and will
 /// trigger an error.
@@ -62,14 +62,16 @@ impl TryFrom<circuit_relay::Peer> for Peer {
 
     fn try_from(mut peer: circuit_relay::Peer) -> Result<Peer, Self::Error> {
         let circuit_relay::Peer { id, addrs } = peer;
-        let peer_id =
-            PeerId::from_bytes(id).map_err(|_| PeerParseError::PeerIdParseError)?;
+        let peer_id = PeerId::from_bytes(id).map_err(|_| PeerParseError::PeerIdParseError)?;
         let mut parsed_addrs = SmallVec::with_capacity(addrs.len());
         for addr in addrs.into_iter() {
             let addr = Multiaddr::try_from(addr).map_err(PeerParseError::MultiaddrParseError)?;
             parsed_addrs.push(addr);
         }
-        Ok(Peer { peer_id, addrs: parsed_addrs })
+        Ok(Peer {
+            peer_id,
+            addrs: parsed_addrs,
+        })
     }
 }
 

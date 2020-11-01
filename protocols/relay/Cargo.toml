@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
+bytes = "0.5"
 fnv = "1.0"
 futures = "0.3.1"
 libp2p-core = { version = "0.23.0", path = "../../core" }
@@ -20,7 +20,7 @@ prost = "0.6.1"
 rand = "0.6"
 smallvec = "0.6.9"
 futures_codec = "0.4"
-unsigned-varint = { version = "0.2.1", features = ["codec"] }
+unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 void = "1.0"
 pin-project = "1"
 
