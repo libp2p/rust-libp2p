@@ -123,6 +123,11 @@ impl Transport for $tcp_config {
             socket.bind(&socket_addr.into())?;
             socket.listen(1024)?; // we may want to make this configurable
 
+            // Note: Tokio's TcpListener::from_std, which the TcpListener's TryFrom implementation
+            // uses, does not set the socket into non-blocking mode.
+            #[cfg(feature = "tokio")]
+            socket.set_nonblocking(true);
+
             let listener = <$tcp_listener>::try_from(socket.into_tcp_listener())
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
