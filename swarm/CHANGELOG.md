@@ -1,3 +1,7 @@
+# 0.24.0 [unreleased]
+
+- Update dependencies.
+
 # 0.23.0 [2020-10-16]
 
 - Require a `Boxed` transport to be given to the `Swarm`

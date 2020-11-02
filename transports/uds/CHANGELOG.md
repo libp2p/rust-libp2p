@@ -1,4 +1,4 @@
-# 0.23.1 [unreleased]
+# 0.24.0 [unreleased]
 
 - Update dependencies.
 
