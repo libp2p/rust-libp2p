@@ -1113,10 +1113,27 @@ fn network_behaviour_inject_address_change() {
         MemoryStore::new(local_peer_id),
     );
 
+    let endpoint = ConnectedPoint::Dialer { address:  old_address.clone() };
+
+    // Mimick a connection being established.
     kademlia.inject_connection_established(
         &remote_peer_id,
         &connection_id,
-        &ConnectedPoint::Dialer { address:  old_address.clone() },
+        &endpoint,
+    );
+    kademlia.inject_connected(&remote_peer_id);
+
+    // At this point the remote is not yet known to support the
+    // configured protocol name, so the peer is not yet in the
+    // local routing table and hence no addresses are known.
+    assert!(kademlia.addresses_of_peer(&remote_peer_id).is_empty());
+
+    // Mimick the connection handler confirming the protocol for
+    // the test connection, so that the peer is added to the routing table.
+    kademlia.inject_event(
+        remote_peer_id.clone(),
+        connection_id.clone(),
+        KademliaHandlerEvent::ProtocolConfirmed { endpoint }
     );
 
     assert_eq!(
