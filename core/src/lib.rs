@@ -55,6 +55,7 @@ pub mod transport;
 pub mod upgrade;
 
 pub use multiaddr::Multiaddr;
+pub use multihash;
 pub use muxing::StreamMuxer;
 pub use peer_id::PeerId;
 pub use identity::PublicKey;
