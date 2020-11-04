@@ -61,7 +61,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(yamux::Config::default())
+        .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
     let local_id = local_public_key.clone().into_peer_id();

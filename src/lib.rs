@@ -91,7 +91,7 @@
 //! let id_keys = Keypair::generate_ed25519();
 //! let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
 //! let noise = noise::NoiseConfig::xx(noise_keys).into_authenticated();
-//! let yamux = yamux::Config::default();
+//! let yamux = yamux::YamuxConfig::default();
 //! let transport = tcp.upgrade(upgrade::Version::V1).authenticate(noise).multiplex(yamux);
 //! # }
 //! ```
@@ -302,7 +302,7 @@ pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
 }
@@ -334,7 +334,7 @@ pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreS
         .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
 }
