@@ -1,3 +1,9 @@
+# 0.8.5 [unreleased]
+
+- Do not interpret EOF error after sending a `NotAvailable` message as an IO
+  error, but instead as a negotiation error. See
+  https://github.com/libp2p/rust-libp2p/pull/1823.
+
 # 0.8.4 [2020-10-20]
 
 - Temporarily disable the internal selection of "parallel" protocol
