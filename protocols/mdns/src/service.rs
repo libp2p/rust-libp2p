@@ -298,8 +298,9 @@ impl fmt::Debug for $service_name {
 #[cfg(feature = "async-std")]
 codegen!("async-std", MdnsService, async_std::net::UdpSocket, (|socket| Ok::<_, std::io::Error>(async_std::net::UdpSocket::from(socket))));
 
+// Note: Tokio's UdpSocket::from_std does not set the socket into non-blocking mode.
 #[cfg(feature = "tokio")]
-codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket| tokio::net::UdpSocket::from_std(socket)));
+codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket: std::net::UdpSocket| { socket.set_nonblocking(true); tokio::net::UdpSocket::from_std(socket) }));
 
 
 /// A valid mDNS packet received by the service.
