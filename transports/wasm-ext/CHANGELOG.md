@@ -1,6 +1,7 @@
-# 0.23.1 [2020-11-05]
+# 0.24.0 [unreleased]
 
 - Fix the WebSocket implementation parsing `x-parity-ws` multiaddresses as `x-parity-wss`.
+- Update dependencies.
 
 # 0.23.0 [2020-10-16]
 
