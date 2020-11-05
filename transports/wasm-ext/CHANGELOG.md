@@ -1,3 +1,7 @@
+# 0.23.1 [2020-11-05]
+
+- Fix the WebSocket implementation parsing `x-parity-ws` multiaddresses as `x-parity-wss`.
+
 # 0.23.0 [2020-10-16]
 
 - Update `libp2p-core` dependency.
