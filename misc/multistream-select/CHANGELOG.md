@@ -1,8 +1,7 @@
 # 0.8.5 [unreleased]
 
-- Do not interpret EOF error after sending a `NotAvailable` message as an IO
-  error, but instead as a negotiation error. See
-  https://github.com/libp2p/rust-libp2p/pull/1823.
+- As a listener do not interpret EOF error as an IO error, but instead as a
+  negotiation error. See https://github.com/libp2p/rust-libp2p/pull/1823.
 
 # 0.8.4 [2020-10-20]
 
