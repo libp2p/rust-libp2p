@@ -82,7 +82,11 @@ where
 {
     RecvHeader { io: MessageIO<R> },
     SendHeader { io: MessageIO<R>, version: Version },
-    RecvMessage { io: MessageIO<R> },
+    RecvMessage {
+        io: MessageIO<R>,
+        /// Whether the last sent message was a [`Message::NotAvailable`].
+        prev_sent_na: bool,
+    },
     SendMessage {
         io: MessageIO<R>,
         message: Message,
@@ -90,7 +94,9 @@ where
     },
     Flush {
         io: MessageIO<R>,
-        protocol: Option<N>
+        protocol: Option<N>,
+        /// Whether the last sent message was a [`Message::NotAvailable`].
+        prev_sent_na: bool
     },
     Done
 }
@@ -144,20 +150,32 @@ where
                     }
 
                     *this.state = match version {
-                        Version::V1 => State::Flush { io, protocol: None },
-                        Version::V1Lazy => State::RecvMessage { io },
+                        Version::V1 => State::Flush { io, protocol: None, prev_sent_na: false },
+                        Version::V1Lazy => State::RecvMessage { io, prev_sent_na: false },
                     }
                 }
 
-                State::RecvMessage { mut io } => {
+                State::RecvMessage { mut io, prev_sent_na } => {
                     let msg = match Pin::new(&mut io).poll_next(cx) {
                         Poll::Ready(Some(Ok(msg))) => msg,
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                ProtocolError::IoError(
-                                    io::ErrorKind::UnexpectedEof.into())))),
+                        Poll::Ready(None) => {
+                            // When a listener rejects a protocol with [`Message::NotAvailable`] and
+                            // the dialer does not have alternative protocols to propose then the
+                            // dialer will stop the negotiation and drop the corresponding stream.
+                            // As a listener interpret an EOF after sending a
+                            // [`Message::NotAvailable`] as a failed negotiation. Interpret an EOF
+                            // as an io error in all other cases.
+                            let err = if prev_sent_na {
+                                NegotiationError::Failed
+                            } else {
+                                NegotiationError::from(ProtocolError::IoError(
+                                    io::ErrorKind::UnexpectedEof.into(),
+                                ))
+                            };
+                            return Poll::Ready(Err(err));
+                        }
                         Poll::Pending => {
-                            *this.state = State::RecvMessage { io };
+                            *this.state = State::RecvMessage { io, prev_sent_na };
                             return Poll::Pending;
                         }
                         Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
@@ -203,17 +221,19 @@ where
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
+                    let is_na_msg = matches!(message, Message::NotAvailable);
+
                     if let Err(err) = Pin::new(&mut io).start_send(message) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
-                    *this.state = State::Flush { io, protocol };
+                    *this.state = State::Flush { io, protocol, prev_sent_na: is_na_msg };
                 }
 
-                State::Flush { mut io, protocol } => {
+                State::Flush { mut io, protocol, prev_sent_na } => {
                     match Pin::new(&mut io).poll_flush(cx) {
                         Poll::Pending => {
-                            *this.state = State::Flush { io, protocol };
+                            *this.state = State::Flush { io, protocol, prev_sent_na };
                             return Poll::Pending
                         },
                         Poll::Ready(Ok(())) => {
@@ -226,7 +246,7 @@ where
                                     let io = Negotiated::completed(io.into_inner());
                                     return Poll::Ready(Ok((protocol, io)))
                                 }
-                                None => *this.state = State::RecvMessage { io }
+                                None => *this.state = State::RecvMessage { io, prev_sent_na }
                             }
                         }
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
