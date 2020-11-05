@@ -1,5 +1,14 @@
 # 0.25.0 [unreleased]
 
+- Upon newly established connections, delay routing table
+  updates until after the configured protocol name has
+  been confirmed by the connection handler, i.e. until
+  after at least one substream has been successfully
+  negotiated. In configurations with different protocol names,
+  this avoids undesirable nodes being included in the
+  local routing table at least temporarily.
+  [PR 1821](https://github.com/libp2p/rust-libp2p/pull/1821).
+
 - Update dependencies.
 
 # 0.24.0 [2020-10-16]
