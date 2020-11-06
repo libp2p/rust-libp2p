@@ -18,7 +18,7 @@ ipnet = "2.0.0"
 libp2p-core = { version = "0.24.0", path = "../../core" }
 log = "0.4.1"
 socket2 = "0.3.12"
-tokio = { version = "0.2", default-features = false, features = ["tcp"], optional = true }
+tokio = { version = "0.3", default-features = false, features = ["net"], optional = true }
 
 [dev-dependencies]
 libp2p-tcp = { path = ".", features = ["async-std"] }

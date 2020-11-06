@@ -22,9 +22,10 @@ log = "0.4"
 net2 = "0.2"
 rand = "0.7"
 smallvec = "1.0"
-tokio = { version = "0.2", default-features = false, features = ["udp"], optional = true }
+tokio = { version = "0.3", default-features = false, features = ["net"], optional = true }
 void = "1.0"
 wasm-timer = "0.2.4"
 
 [dev-dependencies]
 if-addrs = "0.6.4"
+tokio = { version = "0.3", default-features = false, features = ["rt", "rt-multi-thread"] }

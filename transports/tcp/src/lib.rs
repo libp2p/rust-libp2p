@@ -123,6 +123,11 @@ impl Transport for $tcp_config {
             socket.bind(&socket_addr.into())?;
             socket.listen(1024)?; // we may want to make this configurable
 
+            // Note: Tokio's TcpListener::from_std, which the TcpListener's TryFrom implementation
+            // uses, does not set the socket into non-blocking mode.
+            #[cfg(feature = "tokio")]
+            socket.set_nonblocking(true);
+
             let listener = <$tcp_listener>::try_from(socket.into_tcp_listener())
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
@@ -353,7 +358,11 @@ impl AsyncWrite for TcpTransStream {
 #[cfg(feature = "tokio")]
 impl AsyncRead for TokioTcpTransStream {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
-        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
+        // Adapted from
+        // https://github.com/tokio-rs/tokio/blob/6d99e1c7dec4c6a37c4c7bf2801bc82cc210351d/tokio-util/src/compat.rs#L126.
+        let mut read_buf = tokio::io::ReadBuf::new(buf);
+        futures::ready!(tokio::io::AsyncRead::poll_read(Pin::new(&mut self.inner), cx, &mut read_buf))?;
+        Poll::Ready(Ok(read_buf.filled().len()))
     }
 }
 
