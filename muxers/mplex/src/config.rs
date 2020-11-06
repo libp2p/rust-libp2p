@@ -55,7 +55,7 @@ impl MplexConfig {
     /// accumulates too quickly (judged by internal bounds), the
     /// connection is closed with an error due to the misbehaved
     /// remote.
-    pub fn max_substreams(&mut self, max: usize) -> &mut Self {
+    pub fn set_max_num_streams(&mut self, max: usize) -> &mut Self {
         self.max_substreams = max;
         self
     }
@@ -63,7 +63,7 @@ impl MplexConfig {
     /// Sets the maximum number of frames buffered per substream.
     ///
     /// A limit is necessary in order to avoid DoS attacks.
-    pub fn max_buffer_len(&mut self, max: usize) -> &mut Self {
+    pub fn set_max_buffer_size(&mut self, max: usize) -> &mut Self {
         self.max_buffer_len = max;
         self
     }
@@ -72,14 +72,14 @@ impl MplexConfig {
     /// for a substream.
     ///
     /// See the documentation of [`MaxBufferBehaviour`].
-    pub fn max_buffer_len_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
+    pub fn set_max_buffer_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
         self.max_buffer_behaviour = behaviour;
         self
     }
 
     /// Sets the frame size used when sending data. Capped at 1Mbyte as per the
     /// Mplex spec.
-    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+    pub fn set_split_send_size(&mut self, size: usize) -> &mut Self {
         let size = cmp::min(size, MAX_FRAME_SIZE);
         self.split_send_size = size;
         self
