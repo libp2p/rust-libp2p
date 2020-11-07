@@ -31,4 +31,6 @@ prost-build = "0.6"
 env_logger = "0.7.1"
 libp2p-plaintext = { path = "../plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-ping = { path = "../ping" }
+libp2p = { path = "../.." }
 rand = "0.7.2"
