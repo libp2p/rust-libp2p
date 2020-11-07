@@ -144,7 +144,8 @@ impl NetworkBehaviour for Relay {
         //     .collect()
     }
 
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
+    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {
+    }
 
     fn inject_connected(&mut self, id: &PeerId) {
         self.connected_peers.insert(id.clone());
