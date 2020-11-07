@@ -76,7 +76,6 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        println!("RelayTransportWrapper::listen_on({:?})", addr);
         let (is_relay, addr) = is_relay_listen_address(addr);
         if !is_relay {
             let inner_listener = match self.inner_transport.listen_on(addr) {
@@ -150,7 +149,8 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                     })
                     .await
                     .unwrap();
-                Ok(rx.await.unwrap())
+                let stream = rx.await.unwrap();
+                Ok(stream)
             }
             .boxed(),
         ))

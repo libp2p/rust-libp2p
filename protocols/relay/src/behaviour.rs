@@ -71,6 +71,9 @@ enum OutgoingHopRequest {
         destination_peer_id: PeerId,
         send_back: oneshot::Sender<NegotiatedSubstream>,
     },
+    Upgrading {
+        send_back: oneshot::Sender<NegotiatedSubstream>,
+    },
 }
 
 // TODO: Should one be able to only specify relay servers via
@@ -101,12 +104,10 @@ impl NetworkBehaviour for Relay {
     type OutEvent = ();
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        println!("Relay::new_handler()");
         RelayHandler::default()
     }
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
-        println!("Relay::addresses_of_peer()");
         let relay_listener_addresses = self.relay_listeners.iter().filter_map(|(peer_id, r)| {
             if let RelayListener::Connecting(address) = r {
                 if peer_id == remote_peer_id {
@@ -159,7 +160,7 @@ impl NetworkBehaviour for Relay {
             destination_addr,
             destination_peer_id,
             send_back,
-        }) = self.pending_outgoing_hop_requests.get(id)
+        }) = self.pending_outgoing_hop_requests.remove(id)
         {
             self.events
                 .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -170,6 +171,9 @@ impl NetworkBehaviour for Relay {
                         addresses: vec![destination_addr.clone()],
                     },
                 });
+
+            self.pending_outgoing_hop_requests
+                .insert(destination_peer_id, OutgoingHopRequest::Upgrading { send_back });
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
@@ -256,7 +260,19 @@ impl NetworkBehaviour for Relay {
             }
 
             RelayHandlerEvent::RelayRequestDenied(_) => {}
-            RelayHandlerEvent::OutgoingRelayRequestSuccess(_, _) => unimplemented!(),
+            RelayHandlerEvent::OutgoingRelayRequestSuccess(destination, stream) => {
+                // TODO: Instead of this unnecessary check, one could as well not safe dialing and
+                // upgrading outbound relay requests in the same HashMap.
+                let send_back = match self
+                    .pending_outgoing_hop_requests
+                    .remove(&destination)
+                    .unwrap() {
+                        OutgoingHopRequest::Upgrading { send_back } => send_back,
+                        _ => todo!("Handle"),
+
+                    };
+                send_back.send(stream).unwrap();
+            }
             RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self
                 .outbox_to_transport
                 .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, source }),
