@@ -56,6 +56,7 @@ pub struct RelayHandler {
     // TODO: Use FuturesUnordered here and below.
     deny_futures: SmallVec<[BoxFuture<'static, Result<(), io::Error>>; 4]>,
 
+    // TODO: Still needed?
     /// Futures that send back an accept response to a source.
     accept_hop_futures:
         SmallVec<[protocol::RelayHopAcceptFuture<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
@@ -66,7 +67,7 @@ pub struct RelayHandler {
     >,
 
     /// Futures that copy from a source to a destination.
-    copy_futures: SmallVec<[Copy<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
+    copy_futures: FuturesUnordered<BoxFuture<'static, ()>>,
 
     /// List of requests to relay we should send to the node we handle.
     relay_requests: SmallVec<[(PeerId, Vec<Multiaddr>); 4]>,
@@ -194,13 +195,13 @@ impl RelayHandler {
     /// Builds a new `RelayHandler`.
     pub fn new() -> Self {
         RelayHandler {
-            deny_futures: SmallVec::new(),
-            accept_hop_futures: SmallVec::new(),
+            deny_futures: Default::default(),
+            accept_hop_futures: Default::default(),
             accept_destination_futures: Default::default(),
-            copy_futures: SmallVec::new(),
-            relay_requests: SmallVec::new(),
-            dest_requests: SmallVec::new(),
-            queued_events: Vec::new(),
+            copy_futures: Default::default(),
+            relay_requests: Default::default(),
+            dest_requests: Default::default(),
+            queued_events: Default::default(),
         }
     }
 }
@@ -268,8 +269,7 @@ impl ProtocolsHandler for RelayHandler {
             }
             // We have successfully asked the node to be a destination.
             either::EitherOutput::Second((to_dest_substream, hop_request)) => {
-                self.accept_hop_futures
-                    .push(hop_request.inner.fulfill(to_dest_substream));
+                self.copy_futures.push(hop_request.inner.fulfill(to_dest_substream));
             }
         }
     }
@@ -377,6 +377,12 @@ impl ProtocolsHandler for RelayHandler {
             Poll::Ready(Some(Err(e))) => panic!("{:?}", e),
             Poll::Ready(None) => {}
             Poll::Pending => {}
+        }
+
+        match self.copy_futures.poll_next_unpin(cx) {
+            Poll::Ready(Some(())) => panic!("a copy future finished"),
+            Poll::Ready(None) => {},
+            Poll::Pending => {},
         }
 
         // Report the queued events.

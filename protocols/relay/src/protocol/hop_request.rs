@@ -19,17 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::copy::Copy;
-use crate::message_proto::{CircuitRelay, circuit_relay::Status};
+use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::Peer;
 use bytes::Buf as _;
-use futures::{prelude::*, future::BoxFuture, ready};
+use futures::{future::BoxFuture, prelude::*, ready};
+use futures_codec::Framed;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
-use std::{error, io};
-use std::task::{Context, Poll};
-use std::pin::Pin;
 use prost::Message;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use std::{error, io};
+use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to relay communications to another node.
 ///
@@ -44,7 +46,7 @@ use std::sync::{Arc, Mutex};
 pub struct RelayHopRequest<TSubstream> {
     /// The stream to the source.
     // TODO: Clean up mutex arc
-    stream: Arc<Mutex<TSubstream>>,
+    stream: Arc<Mutex<Option<TSubstream>>>,
     /// Target of the request.
     dest: Peer,
 }
@@ -64,7 +66,10 @@ where
 {
     /// Creates a `RelayHopRequest`.
     pub(crate) fn new(stream: TSubstream, dest: Peer) -> Self {
-        RelayHopRequest { stream: Arc::new(Mutex::new(stream)), dest }
+        RelayHopRequest {
+            stream: Arc::new(Mutex::new(Some(stream))),
+            dest,
+        }
     }
 
     /// Peer id of the node we should relay communications to.
@@ -88,11 +93,44 @@ where
     pub fn fulfill<TDestSubstream>(
         self,
         dest_stream: TDestSubstream,
-    ) -> RelayHopAcceptFuture<NegotiatedSubstream, NegotiatedSubstream>
+    ) -> BoxFuture<'static, ()>
     where
-        TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin,
+        TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        unimplemented!() // TODO:
+        let msg = CircuitRelay {
+            r#type: Some(circuit_relay::Type::Status.into()),
+            src_peer: None,
+            dst_peer: None,
+            code: Some(circuit_relay::Status::Success.into()),
+        };
+        let mut msg_bytes = Vec::new();
+        // TODO: Handl2
+        msg.encode(&mut msg_bytes)
+            .expect("all the mandatory fields are always filled; QED");
+
+        let codec = UviBytes::default();
+        // TODO: Do we need this?
+        // codec.set_max_len(self.max_packet_size);
+        let mut substream = Framed::new(
+            self.stream.lock().unwrap().take().unwrap(),
+            codec,
+        );
+
+        async move {
+            substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
+
+            let (from_source, mut to_source) = substream.into_inner().split();
+            let (from_destination, mut to_destination) = dest_stream.split();
+
+            let source_to_destination = futures::io::copy(from_source, &mut to_destination);
+            let destination_to_source = futures::io::copy(from_destination, &mut to_source);
+
+            let (res1, res2) = futures::future::join(source_to_destination, destination_to_source).await;
+            res1.unwrap();
+            res2.unwrap();
+        }.boxed()
+
+        // TODO:
                          /*RelayHopAcceptFuture {
                              inner: Some(self.stream),
                              message: Some(message),
@@ -153,7 +191,8 @@ where
         };
         let mut encoded_msg = Vec::new();
         // TODO: Rework.
-        msg.encode(&mut encoded_msg).expect("all the mandatory fields are always filled; QED");
+        msg.encode(&mut encoded_msg)
+            .expect("all the mandatory fields are always filled; QED");
         unimplemented!();
         // Box::pin(async {
         //     upgrade::write_one(&mut self.stream, encoded_msg).await

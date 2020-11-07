@@ -87,7 +87,7 @@ where
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
     pub fn accept(self) -> impl Future<Output = Result<(PeerId, TSubstream), Box<dyn error::Error + 'static>>> {
         let msg = CircuitRelay {
-            r#type: None,
+            r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
             dst_peer: None,
             code: Some(circuit_relay::Status::Success.into()),

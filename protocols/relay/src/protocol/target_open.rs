@@ -97,7 +97,7 @@ where
 {
     type Output = (TSubstream, TUserData);
     type Error = SendReadError;
-    type Future = BoxFuture<'static, Result<(TSubstream, TUserData), SendReadError>>;
+    type Future = BoxFuture<'static, Result<Self::Output, SendReadError>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         let codec = UviBytes::default();
@@ -111,8 +111,25 @@ where
                 .send(std::io::Cursor::new(self.message))
                 .await
                 .unwrap();
-            let resp = substream.next().await.unwrap();
-            unimplemented!();
+            let msg = substream.next().await.unwrap().unwrap();
+
+            let msg =std::io::Cursor::new(msg);
+            let CircuitRelay {
+                r#type,
+                src_peer,
+                dst_peer,
+                code,
+            } = CircuitRelay::decode(msg).unwrap();
+
+            if !matches!(circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(), circuit_relay::Type::Status) {
+                panic!("expected status");
+            }
+
+            if !matches!(circuit_relay::Status::from_i32(code.unwrap()).unwrap(), circuit_relay::Status::Success) {
+                panic!("expected success");
+            }
+
+            Ok((substream.into_inner(), self.user_data))
         }
         .boxed()
     }
