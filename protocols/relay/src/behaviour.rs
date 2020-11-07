@@ -24,18 +24,16 @@ use fnv::FnvHashSet;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use libp2p_core::{
-    connection::{ConnectedPoint, ConnectionId},
-    multiaddr::{Multiaddr},
+    connection::{ConnectedPoint, ConnectionId, ListenerId},
+    multiaddr::Multiaddr,
     PeerId,
 };
 use libp2p_swarm::{
     DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters, ProtocolsHandler,
 };
+use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
-use std::{
-    collections::{HashMap, VecDeque},
-};
 
 /// Network behaviour that allows reaching nodes through relaying.
 pub struct Relay {
@@ -143,8 +141,7 @@ impl NetworkBehaviour for Relay {
         //     .collect()
     }
 
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {
-    }
+    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
 
     fn inject_connected(&mut self, id: &PeerId) {
         self.connected_peers.insert(id.clone());
@@ -172,8 +169,10 @@ impl NetworkBehaviour for Relay {
                     },
                 });
 
-            self.pending_outgoing_hop_requests
-                .insert(destination_peer_id, OutgoingHopRequest::Upgrading { send_back });
+            self.pending_outgoing_hop_requests.insert(
+                destination_peer_id,
+                OutgoingHopRequest::Upgrading { send_back },
+            );
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
@@ -200,6 +199,25 @@ impl NetworkBehaviour for Relay {
     }
 
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
+        unimplemented!();
+    }
+
+    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
+
+    fn inject_addr_reach_failure(
+        &mut self,
+        _peer_id: Option<&PeerId>,
+        _addr: &Multiaddr,
+        _error: &dyn std::error::Error,
+    ) {
+        unimplemented!();
+    }
+
+    fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
+        unimplemented!();
+    }
+
+    fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {
         unimplemented!();
     }
 
@@ -264,11 +282,11 @@ impl NetworkBehaviour for Relay {
                 let send_back = match self
                     .pending_outgoing_hop_requests
                     .remove(&destination)
-                    .unwrap() {
-                        OutgoingHopRequest::Upgrading { send_back } => send_back,
-                        _ => todo!("Handle"),
-
-                    };
+                    .unwrap()
+                {
+                    OutgoingHopRequest::Upgrading { send_back } => send_back,
+                    _ => todo!("Handle"),
+                };
                 send_back.send(stream).unwrap();
             }
             RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self

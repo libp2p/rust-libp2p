@@ -34,7 +34,7 @@ fn build_swarm() -> Swarm<Relay> {
 }
 
 #[test]
-fn node_a_relay_via_relay_to_node_b() {
+fn node_a_connect_to_node_b_via_relay() {
     env_logger::init();
 
     let mut pool = LocalPool::new();
@@ -44,12 +44,9 @@ fn node_a_relay_via_relay_to_node_b() {
     let mut relay_swarm = build_swarm();
 
     let node_a_peer_id = Swarm::local_peer_id(&node_a_swarm).clone();
-    println!("NodeA: {:?}", node_a_peer_id);
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
-    println!("NodeB: {:?}", node_b_peer_id);
     let node_b_peer_id_clone = node_b_peer_id.clone();
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    println!("Relay: {:?}", relay_peer_id);
     let relay_peer_id_clone = relay_peer_id.clone();
     let relay_peer_id_clone_clone = relay_peer_id.clone();
 
@@ -65,7 +62,6 @@ fn node_a_relay_via_relay_to_node_b() {
         .spawn_obj(
             async move {
                 loop {
-                    // println!("Relay: {:?}",relay_swarm.next_event().await);
                     relay_swarm.next_event().await;
                 }
             }
@@ -75,52 +71,67 @@ fn node_a_relay_via_relay_to_node_b() {
         .unwrap();
 
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
-    let node_b_incoming_connection_established = async move {
-        loop {
+
+    pool.run_until(async {
+        // Node B dialing Relay.
+        match node_b_swarm.next_event().await {
+            SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id_clone),
+            e => panic!("{:?}", e),
+        }
+
+        // Node B establishing connection to Relay.
+        match node_b_swarm.next_event().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                assert_eq!(peer_id, relay_peer_id_clone);
+            }
+            e => panic!("{:?}", e),
+        }
+
+        let node_b_incoming_connection_established = async move {
+            // Node B receiving connection from Node A via Relay.
             match node_b_swarm.next_event().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == node_a_peer_id => {
-                    println!("node b connected to node a");
-                    return;
-                }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    assert_eq!(peer_id, relay_peer_id_clone);
-                    println!("NodeB->Relay");
-                }
-                SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id_clone),
                 SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                     assert_eq!(
                         send_back_addr,
                         Protocol::P2p(node_a_peer_id.clone().into()).into()
                     );
-                    println!("NodeA->NodeB")
                 }
                 e => panic!("{:?}", e),
             }
-        }
-    };
 
-    // Start node a dialing node b via relay.
-    Swarm::dial_addr(&mut node_a_swarm, node_b_address).unwrap();
-    let node_a_dial_connection_established = async move {
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. }
-                    if peer_id == node_b_peer_id_clone =>
-                {
-                    println!("node a connected to node b");
+            // Node B establishing connection from Node A via Relay.
+            match node_b_swarm.next_event().await {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == node_a_peer_id => {
                     return;
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    assert_eq!(peer_id, relay_peer_id_clone_clone);
-                    println!("NodeA->Relay");
-                }
+                e => panic!("{:?}", e),
+            }
+        };
+
+        Swarm::dial_addr(&mut node_a_swarm, node_b_address).unwrap();
+        let node_a_dial_connection_established = async move {
+            // Node A dialing Relay to connect to Node B.
+            match node_a_swarm.next_event().await {
                 SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id_clone_clone),
                 e => panic!("{:?}", e),
             }
-        }
-    };
 
-    pool.run_until(async move {
+            // Node A establishing connection to Relay to connect to Node B.
+            match node_a_swarm.next_event().await {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    assert_eq!(peer_id, relay_peer_id_clone_clone);
+                }
+                e => panic!("{:?}", e),
+            }
+
+            // Node A establishing connection to node B via Relay.
+            match node_a_swarm.next_event().await {
+                SwarmEvent::ConnectionEstablished { peer_id, .. }
+                    if peer_id == node_b_peer_id_clone => {}
+                e => panic!("{:?}", e),
+            }
+        };
+
         futures::future::join(
             node_b_incoming_connection_established,
             node_a_dial_connection_established,

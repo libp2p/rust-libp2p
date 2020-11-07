@@ -150,6 +150,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                     .await
                     .unwrap();
                 let stream = rx.await.unwrap();
+                println!("Got stream back from Behaviour for dial.");
                 Ok(stream)
             }
             .boxed(),
