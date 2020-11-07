@@ -258,11 +258,16 @@ impl<T: Transport> Stream for RelayListener<T> {
         }
 
         match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {
-            Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection(conn))) => {
+            Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
+                stream,
+                source,
+            })) => {
                 return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                    upgrade: RelayedListenerUpgrade::Relayed(Some(conn)),
-                    local_addr: unimplemented!(),
-                    remote_addr: unimplemented!(),
+                    upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
+                    // TODO: Fix. Empty is not the right thing here. Should the address of the relay
+                    // be mentioned here?
+                    local_addr: Multiaddr::empty(),
+                    remote_addr: Protocol::P2p(source.into()).into(),
                 })));
             }
             Poll::Ready(None) => unimplemented!(),

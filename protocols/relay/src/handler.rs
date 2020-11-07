@@ -62,7 +62,7 @@ pub struct RelayHandler {
 
     /// Futures that send back an accept response to a relay.
     accept_destination_futures: FuturesUnordered<
-        BoxFuture<'static, Result<NegotiatedSubstream, Box<dyn error::Error + 'static>>>,
+        BoxFuture<'static, Result<(PeerId, NegotiatedSubstream), Box<dyn error::Error + 'static>>>,
     >,
 
     /// Futures that copy from a source to a destination.
@@ -99,8 +99,10 @@ pub enum RelayHandlerEvent {
     /// >           avoid MITM attacks.
     OutgoingRelayRequestSuccess(PeerId, NegotiatedSubstream),
 
-    // TODO: Should this have a PeerId?
-    IncomingRelayRequestSuccess(NegotiatedSubstream),
+    IncomingRelayRequestSuccess{
+        stream: NegotiatedSubstream,
+        source: PeerId,
+    },
 
     /// A `RelayRequest` that has previously been sent has been denied by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -183,7 +185,7 @@ impl RelayHandlerDestRequest {
     // TODO: change error type
     pub fn accept(
         self,
-    ) -> impl Future<Output = Result<NegotiatedSubstream, Box<dyn error::Error + 'static>>> {
+    ) -> impl Future<Output = Result<(PeerId, NegotiatedSubstream), Box<dyn error::Error + 'static>>> {
         self.inner.accept()
     }
 }
@@ -365,8 +367,11 @@ impl ProtocolsHandler for RelayHandler {
         }
 
         match self.accept_destination_futures.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(substream))) => {
-                let event = RelayHandlerEvent::IncomingRelayRequestSuccess(substream);
+            Poll::Ready(Some(Ok((source, substream)))) => {
+                let event = RelayHandlerEvent::IncomingRelayRequestSuccess{
+                    stream: substream,
+                    source,
+                };
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
             }
             Poll::Ready(Some(Err(e))) => panic!("{:?}", e),

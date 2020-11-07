@@ -44,7 +44,7 @@ pub struct Relay {
     to_transport: mpsc::Sender<BehaviourToTransportMsg>,
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
-    outbox_to_transport: Vec<NegotiatedSubstream>,
+    outbox_to_transport: Vec<BehaviourToTransportMsg>,
 
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
@@ -257,9 +257,9 @@ impl NetworkBehaviour for Relay {
 
             RelayHandlerEvent::RelayRequestDenied(_) => {}
             RelayHandlerEvent::OutgoingRelayRequestSuccess(_, _) => unimplemented!(),
-            RelayHandlerEvent::IncomingRelayRequestSuccess(substream) => {
-                self.outbox_to_transport.push(substream)
-            }
+            RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self
+                .outbox_to_transport
+                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, source }),
         }
     }
 
@@ -277,9 +277,7 @@ impl NetworkBehaviour for Relay {
             match self.to_transport.poll_ready(cx) {
                 Poll::Ready(Ok(())) => {
                     self.to_transport
-                        .start_send(BehaviourToTransportMsg::IncomingRelayedConnection(
-                            self.outbox_to_transport.pop().unwrap(),
-                        ))
+                        .start_send(self.outbox_to_transport.pop().unwrap())
                         .unwrap();
                 }
                 Poll::Ready(Err(_)) => unimplemented!(),
@@ -342,7 +340,10 @@ impl NetworkBehaviour for Relay {
 }
 
 pub enum BehaviourToTransportMsg {
-    IncomingRelayedConnection(NegotiatedSubstream),
+    IncomingRelayedConnection {
+        stream: NegotiatedSubstream,
+        source: PeerId,
+    },
 }
 
 enum RelayListener {

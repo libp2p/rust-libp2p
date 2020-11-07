@@ -85,7 +85,7 @@ where
     ///
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
-    pub fn accept(self) -> impl Future<Output = Result<TSubstream, Box<dyn error::Error + 'static>>> {
+    pub fn accept(self) -> impl Future<Output = Result<(PeerId, TSubstream), Box<dyn error::Error + 'static>>> {
         let msg = CircuitRelay {
             r#type: None,
             src_peer: None,
@@ -104,7 +104,7 @@ where
 
         async move {
             substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
-            Ok(substream.into_inner())
+            Ok((self.source_id().clone(), substream.into_inner()))
         }.boxed()
     }
 
