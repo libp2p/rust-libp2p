@@ -20,15 +20,12 @@
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::Peer;
-use bytes::Buf as _;
-use futures::{future::BoxFuture, prelude::*, ready};
+
+use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
-use libp2p_core::{upgrade, Multiaddr, PeerId};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
 use std::{error, io};
 use unsigned_varint::codec::UviBytes;
 
@@ -128,45 +125,5 @@ where
         // }.boxed()
 
         unimplemented!();
-    }
-}
-
-/// Future that accepts the request.
-#[must_use = "futures do nothing unless polled"]
-pub struct RelayDestinationAcceptFuture<TSubstream> {
-    /// The inner stream.
-    // TODO: Cleanup arc mutex
-    inner: Option<Arc<Mutex<TSubstream>>>,
-    /// The message to send to the remote.
-    message: io::Cursor<Vec<u8>>,
-}
-
-impl<TSubstream> Unpin for RelayDestinationAcceptFuture<TSubstream> {}
-
-impl<TSubstream> Future for RelayDestinationAcceptFuture<TSubstream> {
-    type Output = Result<NegotiatedSubstream, Box<dyn error::Error>>; // TODO: change error
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        unimplemented!();
-        // while self.message.remaining() != 0 {
-        //     match Pin::new(self
-        //         .inner
-        //         .as_mut()
-        //         .expect("Future is already finished"))
-        //         .poll_write(cx, &self.message)?
-        //     {
-        //         // TODO: Handle error and partial send.
-        //         Poll::Ready(_) => (),
-        //         Poll::Pending => return Ok(Poll::Pending),
-        //     }
-        // }
-
-        // ready!(self
-        //     .inner
-        //     .as_mut()
-        //     .expect("Future is already finished")
-        //     .poll_flush());
-        // let stream = self.inner.take().expect("Future is already finished");
-        // Poll::Ready(Ok(stream))
     }
 }

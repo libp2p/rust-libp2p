@@ -25,7 +25,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
-    multiaddr::{Multiaddr, Protocol},
+    multiaddr::{Multiaddr},
     PeerId,
 };
 use libp2p_swarm::{
@@ -35,7 +35,6 @@ use libp2p_swarm::{
 use std::task::{Context, Poll};
 use std::{
     collections::{HashMap, VecDeque},
-    marker::PhantomData,
 };
 
 /// Network behaviour that allows reaching nodes through relaying.
@@ -66,7 +65,7 @@ pub struct Relay {
 enum OutgoingHopRequest {
     Dialing {
         relay_addr: Multiaddr,
-        relay_peer_id: PeerId,
+        // relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
         send_back: oneshot::Sender<NegotiatedSubstream>,
@@ -150,14 +149,14 @@ impl NetworkBehaviour for Relay {
     fn inject_connected(&mut self, id: &PeerId) {
         self.connected_peers.insert(id.clone());
 
-        if let Some(RelayListener::Connecting(addr)) = self.relay_listeners.get(id) {
+        if let Some(RelayListener::Connecting(addr)) = self.relay_listeners.remove(id) {
             self.relay_listeners
                 .insert(id.clone(), RelayListener::Connected(addr.clone()));
         }
 
         if let Some(OutgoingHopRequest::Dialing {
-            relay_addr,
-            relay_peer_id,
+            relay_addr: _,
+            // relay_peer_id: _,
             destination_addr,
             destination_peer_id,
             send_back,
@@ -248,8 +247,6 @@ impl NetworkBehaviour for Relay {
 
             // Remote wants us to become a destination.
             RelayHandlerEvent::DestinationRequest(dest_request) => {
-                // TODO: we would like to accept the destination request, but no API allows that
-                // at the moment
                 let send_back = RelayHandlerIn::AcceptDestinationRequest(dest_request);
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -322,7 +319,7 @@ impl NetworkBehaviour for Relay {
                             relay_peer_id.clone(),
                             OutgoingHopRequest::Dialing {
                                 relay_addr,
-                                relay_peer_id: relay_peer_id.clone(),
+                                // relay_peer_id: relay_peer_id.clone(),
                                 destination_addr,
                                 destination_peer_id,
                                 send_back,

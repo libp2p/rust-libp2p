@@ -21,15 +21,13 @@
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{
     dest_request::RelayDestinationRequest, hop_request::RelayHopRequest, Peer, PeerParseError,
-    MAX_ACCEPTED_MESSAGE_LEN,
 };
-use futures::{future::BoxFuture, prelude::*, ready};
+use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
 use libp2p_core::upgrade;
-use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+
+
 use std::{convert::TryFrom, error, fmt, iter};
 use unsigned_varint::codec::UviBytes;
 
@@ -70,7 +68,7 @@ where
     type Error = RelayListenError;
     type Future = BoxFuture<'static, Result<RelayRemoteRequest<TSubstream>, RelayListenError>>;
 
-    fn upgrade_inbound(self, mut substream: TSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         async move {
             let codec = UviBytes::<bytes::Bytes>::default();
             // TODO: Do we need this?
@@ -83,7 +81,7 @@ where
                 r#type,
                 src_peer,
                 dst_peer,
-                code,
+                code: _,
             } = CircuitRelay::decode(msg)?;
 
             match circuit_relay::Type::from_i32(r#type.unwrap()).unwrap() {

@@ -18,12 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::copy::Copy;
 use crate::protocol;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
-use libp2p_core::{either, upgrade, upgrade::OutboundUpgrade, Multiaddr, PeerId};
+use libp2p_core::{either, upgrade, Multiaddr, PeerId};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -55,11 +54,6 @@ pub struct RelayHandler {
     /// Futures that send back negative responses.
     // TODO: Use FuturesUnordered here and below.
     deny_futures: SmallVec<[BoxFuture<'static, Result<(), io::Error>>; 4]>,
-
-    // TODO: Still needed?
-    /// Futures that send back an accept response to a source.
-    accept_hop_futures:
-        SmallVec<[protocol::RelayHopAcceptFuture<NegotiatedSubstream, NegotiatedSubstream>; 4]>,
 
     /// Futures that send back an accept response to a relay.
     accept_destination_futures: FuturesUnordered<
@@ -196,7 +190,6 @@ impl RelayHandler {
     pub fn new() -> Self {
         RelayHandler {
             deny_futures: Default::default(),
-            accept_hop_futures: Default::default(),
             accept_destination_futures: Default::default(),
             copy_futures: Default::default(),
             relay_requests: Default::default(),
@@ -391,25 +384,6 @@ impl ProtocolsHandler for RelayHandler {
             return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
         }
 
-        // // Process the accept futures.
-        // for n in (0..self.accept_hop_futures.len()).rev() {
-        //     let mut fut = self.accept_hop_futures.swap_remove(n);
-        //     match fut.poll() {
-        //         // TODO: spawn in background task?
-        //         Ok(Poll::Ready(copy_fut)) => self.copy_futures.push(copy_fut),
-        //         Ok(Poll::Pending) => self.accept_hop_futures.push(fut),
-        //         Err(_err) => (), // TODO: log this?
-        //     }
-        // }
-
         Poll::Pending
-
-        // // Process the futures.
-        // self.deny_futures
-        //     .retain(|f| f.poll().map(|a| a.is_not_ready()).unwrap_or(false));
-        // self.copy_futures
-        //     .retain(|f| f.poll().map(|a| a.is_not_ready()).unwrap_or(false));
-
-        // Ok(Poll::Pending)
     }
 }

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{send_read, SendReadError, SendReadFuture};
+use crate::protocol::SendReadError;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -110,19 +110,25 @@ where
             substream.send(std::io::Cursor::new(message)).await.unwrap();
             let msg = substream.next().await.unwrap().unwrap();
 
-            let msg =std::io::Cursor::new(msg);
+            let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
-                src_peer,
-                dst_peer,
+                src_peer: _,
+                dst_peer: _,
                 code,
             } = CircuitRelay::decode(msg).unwrap();
 
-            if !matches!(circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(), circuit_relay::Type::Status) {
+            if !matches!(
+                circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(),
+                circuit_relay::Type::Status
+            ) {
                 panic!("expected status");
             }
 
-            if !matches!(circuit_relay::Status::from_i32(code.unwrap()).unwrap(), circuit_relay::Status::Success) {
+            if !matches!(
+                circuit_relay::Status::from_i32(code.unwrap()).unwrap(),
+                circuit_relay::Status::Success
+            ) {
                 panic!("expected success");
             }
 

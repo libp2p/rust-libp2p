@@ -1,19 +1,19 @@
 use crate::behaviour::BehaviourToTransportMsg;
 
-use std::io;
-use std::marker::PhantomData;
+
+
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use futures::channel::mpsc;
 use futures::channel::oneshot;
-use futures::future::{BoxFuture, Future, FutureExt, Ready};
-use futures::io::{AsyncRead, AsyncWrite};
+use futures::future::{BoxFuture, Future, FutureExt};
+
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use libp2p_core::{
-    either::{EitherError, EitherFuture, EitherListenStream, EitherOutput},
+    either::{EitherError, EitherFuture, EitherOutput},
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     PeerId, Transport,
@@ -219,7 +219,7 @@ impl<T: Transport> Stream for RelayListener<T> {
         EitherError<<T as Transport>::Error, RelayError>,
     >;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         if let Some(msg) = this.msg_to_behaviour {
@@ -311,7 +311,7 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 pub struct RelayError {}
 
 impl std::fmt::Display for RelayError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unimplemented!();
     }
 }

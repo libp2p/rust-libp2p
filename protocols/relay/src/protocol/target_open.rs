@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{send_read, SendReadError, SendReadFuture};
+use crate::protocol::{SendReadError};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -116,8 +116,8 @@ where
             let msg =std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
-                src_peer,
-                dst_peer,
+                src_peer: _,
+                dst_peer: _,
                 code,
             } = CircuitRelay::decode(msg).unwrap();
 

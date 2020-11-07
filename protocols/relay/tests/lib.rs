@@ -3,14 +3,12 @@ use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
     transport::MemoryTransport,
-    transport::{ListenerEvent, Transport},
+    transport::Transport,
     upgrade,
 };
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{transport::RelayTransportWrapper, Relay};
 use libp2p_swarm::{Swarm, SwarmEvent};
-use rand::random;
-use std::iter::FromIterator;
 
 fn build_swarm() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
@@ -32,9 +30,7 @@ fn build_swarm() -> Swarm<Relay> {
     let relay_behaviour = Relay::new(to_transport, from_transport);
 
     let local_id = local_public_key.clone().into_peer_id();
-    let mut swarm = Swarm::new(transport, relay_behaviour, local_id);
-
-    swarm
+    Swarm::new(transport, relay_behaviour, local_id)
 }
 
 #[test]
@@ -57,7 +53,7 @@ fn node_a_relay_via_relay_to_node_b() {
     let relay_peer_id_clone = relay_peer_id.clone();
     let relay_peer_id_clone_clone = relay_peer_id.clone();
 
-    let relay_address: Multiaddr = Protocol::Memory(random::<u64>()).into();
+    let relay_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let node_b_address = relay_address
         .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
@@ -84,7 +80,7 @@ fn node_a_relay_via_relay_to_node_b() {
             match node_b_swarm.next_event().await {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == node_a_peer_id => {
                     println!("node b connected to node a");
-                    return
+                    return;
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     assert_eq!(peer_id, relay_peer_id_clone);
@@ -92,7 +88,10 @@ fn node_a_relay_via_relay_to_node_b() {
                 }
                 SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id_clone),
                 SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                    assert_eq!(send_back_addr, Protocol::P2p(node_a_peer_id.clone().into()).into());
+                    assert_eq!(
+                        send_back_addr,
+                        Protocol::P2p(node_a_peer_id.clone().into()).into()
+                    );
                     println!("NodeA->NodeB")
                 }
                 e => panic!("{:?}", e),
@@ -101,13 +100,15 @@ fn node_a_relay_via_relay_to_node_b() {
     };
 
     // Start node a dialing node b via relay.
-    Swarm::dial_addr(&mut node_a_swarm, node_b_address);
+    Swarm::dial_addr(&mut node_a_swarm, node_b_address).unwrap();
     let node_a_dial_connection_established = async move {
         loop {
             match node_a_swarm.next_event().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == node_b_peer_id_clone => {
+                SwarmEvent::ConnectionEstablished { peer_id, .. }
+                    if peer_id == node_b_peer_id_clone =>
+                {
                     println!("node a connected to node b");
-                    return
+                    return;
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     assert_eq!(peer_id, relay_peer_id_clone_clone);
@@ -117,13 +118,13 @@ fn node_a_relay_via_relay_to_node_b() {
                 e => panic!("{:?}", e),
             }
         }
-
     };
 
     pool.run_until(async move {
         futures::future::join(
             node_b_incoming_connection_established,
             node_a_dial_connection_established,
-        ).await
+        )
+        .await
     });
 }

@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod behaviour;
-mod copy;
 mod error;
 
 mod message_proto {

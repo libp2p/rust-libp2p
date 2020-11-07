@@ -18,19 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::copy::Copy;
 use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::Peer;
-use bytes::Buf as _;
-use futures::{future::BoxFuture, prelude::*, ready};
+
+use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
-use libp2p_core::{upgrade, Multiaddr, PeerId};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_core::{Multiaddr, PeerId};
+
 use prost::Message;
-use std::pin::Pin;
+
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
-use std::{error, io};
+
+use std::{io};
 use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to relay communications to another node.
@@ -182,7 +181,7 @@ where
     /// Refuses the request.
     ///
     /// The returned `Future` gracefully shuts down the request.
-    pub fn deny(mut self) -> BoxFuture<'static, Result<(), io::Error>> {
+    pub fn deny(self) -> BoxFuture<'static, Result<(), io::Error>> {
         let msg = CircuitRelay {
             r#type: None,
             code: Some(Status::StopRelayRefused.into()),
@@ -197,50 +196,5 @@ where
         // Box::pin(async {
         //     upgrade::write_one(&mut self.stream, encoded_msg).await
         // })
-    }
-}
-
-/// Future that accepts the request.
-#[must_use = "futures do nothing unless polled"]
-pub struct RelayHopAcceptFuture<TSrcSubstream, TDestSubstream> {
-    /// The inner stream.
-    inner: Option<TSrcSubstream>,
-    /// The message to send to the remote.
-    message: io::Cursor<Vec<u8>>,
-    dest_substream: TDestSubstream,
-}
-
-impl<TSrcSubstream, TDestSubstream> Unpin for RelayHopAcceptFuture<TSrcSubstream, TDestSubstream> {}
-
-impl<TSrcSubstream, TDestSubstream> Future for RelayHopAcceptFuture<TSrcSubstream, TDestSubstream>
-where
-    TSrcSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    type Output = Result<Copy<TSrcSubstream, TDestSubstream>, Box<dyn error::Error>>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        // TODO: Fix.
-        Poll::Pending
-        // while self.message.remaining() != 0 {
-        //     match self
-        //         .inner
-        //         .as_mut()
-        //         .expect("Future is already finished")
-        //         .poll_write(&mut self.message, cx)
-        //     {
-        //         // TODO: Handle error and partial send.
-        //         Poll::Ready(_) => (),
-        //         Poll::Pending => return Poll::Pending,
-        //     }
-        // }
-
-        // ready!(self
-        //     .inner
-        //     .as_mut()
-        //     .expect("Future is already finished")
-        //     .poll_flush(cx));
-        // let stream = self.inner.take().expect("Future is already finished");
-        // panic!()
     }
 }
