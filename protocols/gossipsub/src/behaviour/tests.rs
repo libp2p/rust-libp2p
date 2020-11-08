@@ -20,7 +20,6 @@
 
 // collection of tests for the gossipsub network behaviour
 
-#[cfg(test)]
 mod tests {
     use byteorder::{BigEndian, ByteOrder};
     use std::thread::sleep;

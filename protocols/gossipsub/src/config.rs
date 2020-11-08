@@ -118,10 +118,8 @@ pub struct GenericGossipsubConfig<T> {
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call `validate_message()` on the behaviour to forward message
-    /// once validated (default is `false`). Furthermore, the application may optionally call
-    /// `invalidate_message()` on the behaviour to remove the message from the memcache. The
-    /// default is false.
+    /// true, the user must manually call [crate::GenericGossipsub::report_message_validation_result()] on the behaviour to forward message
+    /// once validated (default is `false`).
     validate_messages: bool,
 
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
@@ -180,9 +178,9 @@ pub struct GenericGossipsubConfig<T> {
     /// get not punished for too early grafting. The default is 1.
     backoff_slack: u32,
 
-    /// Whether to do flood publishing or not. If enabled newly created messages will always be
-    /// sent to all peers that are subscribed to the topic and have a good enough score.
-    /// The default is true.
+    /// Whether to do flood publishing or not. If enabled newly created messages authored by the
+    /// local node will always be sent to all peers that are subscribed to the topic and have a
+    /// good enough score. The default is true.
     flood_publish: bool,
 
     // If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
@@ -233,11 +231,11 @@ pub struct GenericGossipsubConfig<T> {
     published_message_ids_cache_time: Duration,
 }
 
-// for backwards compatibility
+// For backwards compatibility
 pub type GossipsubConfig = GenericGossipsubConfig<Vec<u8>>;
 
 impl<T> GenericGossipsubConfig<T> {
-    //all the getters
+    // All the getters
 
     /// The protocol id prefix to negotiate this protocol. The protocol id is of the form
     /// `/<prefix>/<supported-versions>`. As gossipsub supports version 1.0 and 1.1, there are two
@@ -375,7 +373,7 @@ impl<T> GenericGossipsubConfig<T> {
             .map(|fast_message_id_fn| fast_message_id_fn(message))
     }
 
-    /// By default, gossipsub will reject messages that are sent to us that has the same message
+    /// By default, gossipsub will reject messages that are sent to us that have the same message
     /// source as we have specified locally. Enabling this, allows these messages and prevents
     /// penalizing the peer that sent us the message. Default is false.
     pub fn allow_self_origin(&self) -> bool {

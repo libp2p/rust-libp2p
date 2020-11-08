@@ -67,6 +67,7 @@ use crate::{rpc_proto, TopicScoreParams};
 use std::cmp::Ordering::Equal;
 use std::fmt::Debug;
 
+#[cfg(test)]
 mod tests;
 
 /// Determines if published messages should be signed or not.
@@ -113,7 +114,7 @@ impl MessageAuthenticity {
     }
 }
 
-/// Event that can happen on the gossipsub behaviour.
+/// Event that can be emitted by the gossipsub behaviour.
 #[derive(Debug)]
 pub enum GenericGossipsubEvent<T: AsRef<[u8]>> {
     /// A message has been received.    
@@ -133,7 +134,6 @@ pub enum GenericGossipsubEvent<T: AsRef<[u8]>> {
         /// The topic it has subscribed to.
         topic: TopicHash,
     },
-
     /// A remote unsubscribed from a topic.
     Unsubscribed {
         /// Remote that has unsubscribed.
@@ -219,7 +219,7 @@ pub struct GenericGossipsub<T: AsRef<[u8]>, Filter: TopicSubscriptionFilter> {
 
     /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
     /// duplicates from being propagated to the application and on the network.
-    duplication_cache: DuplicateCache<MessageId>,
+    duplicate_cache: DuplicateCache<MessageId>,
 
     /// A map of peers to their protocol kind. This is to identify different kinds of gossipsub
     /// peers.
@@ -256,7 +256,7 @@ pub struct GenericGossipsub<T: AsRef<[u8]>, Filter: TopicSubscriptionFilter> {
     /// Heartbeat interval stream.
     heartbeat: Interval,
 
-    /// number of heartbeats since the beginning of time; this allows us to amortize some resource
+    /// Number of heartbeats since the beginning of time; this allows us to amortize some resource
     /// clean up -- eg backoff clean up.
     heartbeat_ticks: u64,
 
@@ -329,7 +329,7 @@ where
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
-            duplication_cache: DuplicateCache::new(config.duplicate_cache_time()),
+            duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
             fast_messsage_id_cache: TimeCache::new(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
@@ -519,7 +519,7 @@ where
         }
 
         // Add published message to the duplicate cache.
-        if !self.duplication_cache.insert(msg_id.clone()) {
+        if !self.duplicate_cache.insert(msg_id.clone()) {
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
             warn!(
@@ -1028,7 +1028,7 @@ where
             }
 
             for id in ids {
-                if !self.duplication_cache.contains(&id) {
+                if !self.duplicate_cache.contains(&id) {
                     // have not seen this message, request it
                     iwant_ids.insert(id);
                 }
@@ -1475,14 +1475,14 @@ where
             return;
         }
 
-        // Add the message to the duplication caches and memcache.
+        // Add the message to the duplicate caches and memcache.
         if let Some(fast_message_id) = fast_message_id {
             //add id to cache
             self.fast_messsage_id_cache
                 .entry(fast_message_id)
                 .or_insert_with(|| msg.message_id().clone());
         }
-        if !self.duplication_cache.insert(msg.message_id().clone()) {
+        if !self.duplicate_cache.insert(msg.message_id().clone()) {
             debug!(
                 "Message already received, ignoring. Message: {}",
                 msg.message_id()
@@ -1493,7 +1493,7 @@ where
             return;
         }
         debug!(
-            "Put message {:?} in duplication_cache and resolve promises",
+            "Put message {:?} in duplicate_cache and resolve promises",
             msg.message_id()
         );
 
@@ -1501,7 +1501,7 @@ where
         // Consider message as delivered for gossip promises
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             peer_score.validate_message(propagation_source, &msg);
-            gossip_promises.deliver_message(msg.message_id());
+            gossip_promises.message_delivered(msg.message_id());
         }
 
         // Add the message to our memcache

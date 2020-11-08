@@ -53,8 +53,8 @@ impl GossipPromises {
         }
     }
 
-    pub fn deliver_message(&mut self, message_id: &MessageId) {
-        // Someone delivered a message, we can stop tracking all promises for it
+    pub fn message_delivered(&mut self, message_id: &MessageId) {
+        // Someone delivered a message, we can stop tracking all promises for it.
         self.promises.remove(message_id);
     }
 

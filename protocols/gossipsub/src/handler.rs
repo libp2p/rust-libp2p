@@ -96,9 +96,9 @@ pub struct GossipsubHandler {
     peer_kind_sent: bool,
 
     /// If the peer doesn't support the gossipsub protocol we do not immediately disconnect.
-    /// Rather, we disable the handler and prevent any ingoing or outgoing substreams from being
+    /// Rather, we disable the handler and prevent any incoming or outgoing substreams from being
     /// established.
-    /// This value is set to true to indicate the peer doesn't not support gossipsub.
+    /// This value is set to true to indicate the peer doesn't support gossipsub.
     protocol_unsupported: bool,
 
     /// Collection of errors from attempting an upgrade.

@@ -35,7 +35,7 @@
 //! cargo run --example gossipsub-chat
 //! ```
 //!
-//! It will print the `PeerId` and the listening address, e.g. `Listening on
+//! It will print the [`PeerId`] and the listening address, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
@@ -51,7 +51,7 @@ use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
-    GossipsubEvent, RawGossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
+    GossipsubEvent, IdentTopic as Topic, MessageAuthenticity, RawGossipsubMessage, ValidationMode,
 };
 use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;

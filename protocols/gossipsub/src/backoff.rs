@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Data structure for efficiently storing known back-off's when Pruning peers.
+//! Data structure for efficiently storing known back-off's when pruning peers.
 use crate::topic::TopicHash;
 use libp2p_core::PeerId;
 use std::collections::{
@@ -28,15 +28,18 @@ use std::collections::{
 use std::time::Duration;
 use wasm_timer::Instant;
 
+#[derive(Copy, Clone)]
+struct HeartbeatIndex(usize);
+
 /// Stores backoffs in an efficient manner.
 pub struct BackoffStorage {
     /// Stores backoffs and the index in backoffs_by_heartbeat per peer per topic.
-    backoffs: HashMap<TopicHash, HashMap<PeerId, (Instant, usize)>>,
+    backoffs: HashMap<TopicHash, HashMap<PeerId, (Instant, HeartbeatIndex)>>,
     /// Stores peer topic pairs per heartbeat (this is cyclic the current index is
     /// heartbeat_index).
     backoffs_by_heartbeat: Vec<HashSet<(TopicHash, PeerId)>>,
     /// The index in the backoffs_by_heartbeat vector corresponding to the current heartbeat.
-    heartbeat_index: usize,
+    heartbeat_index: HeartbeatIndex,
     /// The heartbeat interval duration from the config.
     heartbeat_interval: Duration,
     /// Backoff slack from the config.
@@ -60,7 +63,7 @@ impl BackoffStorage {
         BackoffStorage {
             backoffs: HashMap::new(),
             backoffs_by_heartbeat: vec![HashSet::new(); max_heartbeats],
-            heartbeat_index: 0,
+            heartbeat_index: HeartbeatIndex(0),
             heartbeat_interval,
             backoff_slack,
         }
@@ -71,17 +74,17 @@ impl BackoffStorage {
     pub fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
         let instant = Instant::now() + time;
         let insert_into_backoffs_by_heartbeat =
-            |heartbeat_index: usize,
+            |heartbeat_index: HeartbeatIndex,
              backoffs_by_heartbeat: &mut Vec<HashSet<_>>,
              heartbeat_interval,
              backoff_slack| {
                 let pair = (topic.clone(), peer.clone());
-                let index = (heartbeat_index
+                let index = (heartbeat_index.0
                     + Self::heartbeats(&time, heartbeat_interval)
                     + backoff_slack as usize)
                     % backoffs_by_heartbeat.len();
                 backoffs_by_heartbeat[index].insert(pair);
-                index
+                HeartbeatIndex(index)
             };
         match self
             .backoffs
@@ -90,10 +93,10 @@ impl BackoffStorage {
             .entry(peer.clone())
         {
             Entry::Occupied(mut o) => {
-                let &(backoff, index) = o.get();
-                if backoff < instant {
+                let (backoff, index) = o.get();
+                if backoff < &instant {
                     let pair = (topic.clone(), peer.clone());
-                    if let Some(s) = self.backoffs_by_heartbeat.get_mut(index) {
+                    if let Some(s) = self.backoffs_by_heartbeat.get_mut(index.0) {
                         s.remove(&pair);
                     }
                     let index = insert_into_backoffs_by_heartbeat(
@@ -135,7 +138,7 @@ impl BackoffStorage {
     }
 
     fn get_backoff_time_from_backoffs(
-        backoffs: &HashMap<TopicHash, HashMap<PeerId, (Instant, usize)>>,
+        backoffs: &HashMap<TopicHash, HashMap<PeerId, (Instant, HeartbeatIndex)>>,
         topic: &TopicHash,
         peer: &PeerId,
     ) -> Option<Instant> {
@@ -148,7 +151,7 @@ impl BackoffStorage {
     /// `heartbeat_interval`.
     pub fn heartbeat(&mut self) {
         // Clean up backoffs_by_heartbeat
-        if let Some(s) = self.backoffs_by_heartbeat.get_mut(self.heartbeat_index) {
+        if let Some(s) = self.backoffs_by_heartbeat.get_mut(self.heartbeat_index.0) {
             let backoffs = &mut self.backoffs;
             let slack = self.heartbeat_interval * self.backoff_slack;
             let now = Instant::now();
@@ -171,6 +174,7 @@ impl BackoffStorage {
         }
 
         // Increase heartbeat index
-        self.heartbeat_index = (self.heartbeat_index + 1) % self.backoffs_by_heartbeat.len();
+        self.heartbeat_index =
+            HeartbeatIndex((self.heartbeat_index.0 + 1) % self.backoffs_by_heartbeat.len());
     }
 }
