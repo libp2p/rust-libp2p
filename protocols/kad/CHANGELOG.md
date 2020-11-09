@@ -1,4 +1,4 @@
-# 0.25.0 [unreleased]
+# 0.25.0 [2020-11-09]
 
 - Upon newly established connections, delay routing table
   updates until after the configured protocol name has
