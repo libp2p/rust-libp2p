@@ -21,7 +21,7 @@ lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.9.2", path = "../misc/multiaddr" }
-multihash = "0.11.0"
+multihash = "0.11.3"
 multistream-select = { version = "0.8.4", path = "../misc/multistream-select" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
