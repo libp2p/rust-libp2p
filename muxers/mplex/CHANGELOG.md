@@ -1,4 +1,4 @@
-# 0.24.0 [unreleased]
+# 0.24.0 [2020-11-09]
 
 - Change the default configuration to use `MaxBufferBehaviour::Block`
   and yield from waiting for the next substream or reading from a
@@ -7,6 +7,7 @@
   chance to read from the buffer(s) before the `MaxBufferBehaviour`
   takes effect. This is primarily relevant for
   `MaxBufferBehaviour::ResetStream`.
+  [PR 1825](https://github.com/libp2p/rust-libp2p/pull/1825/).
 
 - Tweak the naming in the `MplexConfig` API for better
   consistency with `libp2p-yamux`.
