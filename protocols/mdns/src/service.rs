@@ -72,9 +72,9 @@ macro_rules! codegen {
 /// # let my_listened_addrs: Vec<Multiaddr> = vec![];
 /// # async {
 /// # #[cfg(feature = "async-std")]
-/// # let mut service = libp2p_mdns::service::MdnsService::new().unwrap();
+/// # let mut service = libp2p_mdns::service::MdnsService::new().await.unwrap();
 /// # #[cfg(feature = "tokio")]
-/// # let mut service = libp2p_mdns::service::TokioMdnsService::new().unwrap();
+/// # let mut service = libp2p_mdns::service::TokioMdnsService::new().await.unwrap();
 /// let _future_to_poll = async {
 ///     let (mut service, packet) = service.next().await;
 ///
@@ -133,46 +133,44 @@ pub struct $service_name {
     send_buffers: Vec<Vec<u8>>,
     /// Buffers pending to send on the query socket.
     query_send_buffers: Vec<Vec<u8>>,
+    /// Iface watch.
+    if_watch: if_watch::IfWatcher,
 }
 
 impl $service_name {
     /// Starts a new mDNS service.
-    pub fn new() -> io::Result<$service_name> {
-        Self::new_inner(false)
+    pub async fn new() -> io::Result<$service_name> {
+        Self::new_inner(false).await
     }
 
     /// Same as `new`, but we don't automatically send queries on the network.
-    pub fn silent() -> io::Result<$service_name> {
-        Self::new_inner(true)
+    pub async fn silent() -> io::Result<$service_name> {
+        Self::new_inner(true).await
     }
 
     /// Starts a new mDNS service.
-    fn new_inner(silent: bool) -> io::Result<$service_name> {
-        let std_socket = {
-            #[cfg(unix)]
-            fn platform_specific(s: &net2::UdpBuilder) -> io::Result<()> {
-                net2::unix::UnixUdpBuilderExt::reuse_port(s, true)?;
-                Ok(())
-            }
-            #[cfg(not(unix))]
-            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> { Ok(()) }
+    async fn new_inner(silent: bool) -> io::Result<$service_name> {
+        let socket = {
             let builder = net2::UdpBuilder::new_v4()?;
             builder.reuse_address(true)?;
-            platform_specific(&builder)?;
-            builder.bind(("0.0.0.0", 5353))?
+            #[cfg(unix)]
+            net2::unix::UnixUdpBuilderExt::reuse_port(&builder, true)?;
+            let socket = builder.bind((Ipv4Addr::UNSPECIFIED, 5353))?;
+            let socket = $udp_socket_from_std(socket)?;
+            socket.set_multicast_loop_v4(true)?;
+            socket.set_multicast_ttl_v4(255)?;
+            socket
         };
 
-        let socket = $udp_socket_from_std(std_socket)?;
         // Given that we pass an IP address to bind, which does not need to be resolved, we can
         // use std::net::UdpSocket::bind, instead of its async counterpart from async-std.
-        let query_socket = $udp_socket_from_std(
-            std::net::UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16))?,
-        )?;
+        let query_socket = {
+            let socket = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+            $udp_socket_from_std(socket)?
+        };
 
-        socket.set_multicast_loop_v4(true)?;
-        socket.set_multicast_ttl_v4(255)?;
-        // TODO: correct interfaces?
-        socket.join_multicast_v4(From::from([224, 0, 0, 251]), Ipv4Addr::UNSPECIFIED)?;
+
+        let if_watch = if_watch::IfWatcher::new().await?;
 
         Ok($service_name {
             socket,
@@ -182,6 +180,7 @@ impl $service_name {
             recv_buffer: [0; 4096],
             send_buffers: Vec::new(),
             query_send_buffers: Vec::new(),
+            if_watch,
         })
     }
 
@@ -213,6 +212,17 @@ impl $service_name {
     // resolves, not forcing self-referential structures on the caller.
     pub async fn next(mut self) -> (Self, MdnsPacket) {
         loop {
+            while let Some(event) = self.if_watch.next().now_or_never() {
+                // errors are non fatal.
+                if let Ok(if_watch::IfEvent::Up(inet)) = event {
+                    if inet.addr().is_ipv4() && !inet.addr().is_loopback() {
+                        self.socket
+                            .join_multicast_v4(From::from([224, 0, 0, 251]), Ipv4Addr::UNSPECIFIED)
+                            .ok();
+                    }
+                }
+            }
+
             // Flush the send buffer of the main socket.
             while !self.send_buffers.is_empty() {
                 let to_send = self.send_buffers.remove(0);
@@ -595,7 +605,7 @@ mod tests {
 
         fn discover(peer_id: PeerId) {
             let fut = async {
-                let mut service = <$service_name>::new().unwrap();
+                let mut service = <$service_name>::new().await.unwrap();
 
                 loop {
                     let next = service.next().await;
@@ -639,7 +649,7 @@ mod tests {
                 .collect();
 
             let fut = async {
-                let mut service = <$service_name>::new().unwrap();
+                let mut service = <$service_name>::new().await.unwrap();
 
                 let mut sent_queries = vec![];
 

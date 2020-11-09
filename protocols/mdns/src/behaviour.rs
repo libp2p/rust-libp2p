@@ -94,9 +94,9 @@ impl fmt::Debug for $maybe_busy_wrapper {
 
 impl $behaviour_name {
     /// Builds a new `Mdns` behaviour.
-    pub fn new() -> io::Result<$behaviour_name> {
+    pub async fn new() -> io::Result<$behaviour_name> {
         Ok($behaviour_name {
-            service: $maybe_busy_wrapper::Free(<$service_name>::new()?),
+            service: $maybe_busy_wrapper::Free(<$service_name>::new().await?),
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
         })
