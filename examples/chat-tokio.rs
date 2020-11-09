@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = TokioMdns::new()?;
+        let mdns = TokioMdns::new().await?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(peer_id.clone()),
             mdns,

@@ -151,7 +151,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id.clone());
         let kademlia = Kademlia::new(local_peer_id.clone(), store);
-        let mdns = Mdns::new()?;
+        let mdns = task::block_on(Mdns::new())?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
     };
