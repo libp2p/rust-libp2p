@@ -90,14 +90,26 @@ impl MplexConfig {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MaxBufferBehaviour {
     /// Reset the substream whose frame buffer overflowed.
-    ResetStream,
-    /// No new message can be read from any substream as long as the buffer
-    /// for a single substream is full.
     ///
-    /// This can potentially introduce a deadlock if you are waiting for a
-    /// message from a substream before processing the messages received
-    /// on another substream, i.e. if there are data dependencies across
-    /// substreams.
+    /// > **Note**: If more than [`MplexConfig::set_max_buffer_size()`] frames
+    /// > are received in succession for a substream in the context of
+    /// > trying to read data from a different substream, the former substream
+    /// > may be reset before application code had a chance to read from the
+    /// > buffer. The max. buffer size needs to be sized appropriately when
+    /// > using this option to balance maximum resource usage and the
+    /// > probability of premature termination of a substream.
+    ResetStream,
+    /// No new message can be read from the underlying connection from any
+    /// substream as long as the buffer for a single substream is full,
+    /// i.e. application code is expected to read from the full buffer.
+    ///
+    /// > **Note**: To avoid blocking without making progress, application
+    /// > tasks should ensure that, when woken, always try to read (i.e.
+    /// > make progress) from every substream on which data is expected.
+    /// > This is imperative in general, as a woken task never knows for
+    /// > which substream it has been woken, but failure to do so with
+    /// > [`MaxBufferBehaviour::Block`] in particular may lead to stalled
+    /// > execution or spinning of a task without progress.
     Block,
 }
 
@@ -106,9 +118,8 @@ impl Default for MplexConfig {
         MplexConfig {
             max_substreams: 128,
             max_buffer_len: 32,
-            max_buffer_behaviour: MaxBufferBehaviour::ResetStream,
+            max_buffer_behaviour: MaxBufferBehaviour::Block,
             split_send_size: 1024,
         }
     }
 }
-

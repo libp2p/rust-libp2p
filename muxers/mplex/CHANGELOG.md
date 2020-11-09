@@ -1,5 +1,13 @@
 # 0.24.0 [unreleased]
 
+- Change the default configuration to use `MaxBufferBehaviour::Block`
+  and yield from waiting for the next substream or reading from a
+  particular substream whenever the current read loop may have
+  already filled a substream buffer, to give the current task a
+  chance to read from the buffer(s) before the `MaxBufferBehaviour`
+  takes effect. This is primarily relevant for
+  `MaxBufferBehaviour::ResetStream`.
+
 - Tweak the naming in the `MplexConfig` API for better
   consistency with `libp2p-yamux`.
   [PR 1822](https://github.com/libp2p/rust-libp2p/pull/1822).
