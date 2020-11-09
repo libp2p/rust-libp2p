@@ -24,7 +24,7 @@ use crate::{Negotiated, NegotiationError};
 use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
 
 use futures::{future::Either, prelude::*};
-use std::{convert::TryFrom as _, io, iter, mem, pin::Pin, task::{Context, Poll}};
+use std::{convert::TryFrom as _, iter, mem, pin::Pin, task::{Context, Poll}};
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
 /// for a peer acting as the _dialer_ (or _initiator_).
@@ -235,9 +235,10 @@ where
                             *this.state = SeqState::AwaitProtocol { io, protocol };
                             return Poll::Pending
                         }
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                io::Error::from(io::ErrorKind::UnexpectedEof)))),
+                        // Treat EOF error as [`NegotiationError::Failed`], not as
+                        // [`NegotiationError::ProtocolError`], allowing dropping or closing an I/O
+                        // stream as a permissible way to "gracefully" fail a negotiation.
+                        Poll::Ready(None) => return Poll::Ready(Err(NegotiationError::Failed)),
                     };
 
                     match msg {
@@ -358,9 +359,10 @@ where
                             *this.state = ParState::RecvProtocols { io };
                             return Poll::Pending
                         }
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                io::Error::from(io::ErrorKind::UnexpectedEof)))),
+                        // Treat EOF error as [`NegotiationError::Failed`], not as
+                        // [`NegotiationError::ProtocolError`], allowing dropping or closing an I/O
+                        // stream as a permissible way to "gracefully" fail a negotiation.
+                        Poll::Ready(None) => return Poll::Ready(Err(NegotiationError::Failed)),
                     };
 
                     match &msg {
