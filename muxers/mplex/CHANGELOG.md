@@ -1,5 +1,9 @@
 # 0.24.0 [unreleased]
 
+- Tweak the naming in the `MplexConfig` API for better
+  consistency with `libp2p-yamux`.
+  [PR 1822](https://github.com/libp2p/rust-libp2p/pull/1822).
+
 - Update dependencies.
 
 # 0.23.1 [2020-10-28]

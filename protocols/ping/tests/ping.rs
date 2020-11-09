@@ -207,7 +207,7 @@ fn mk_transport(muxer: MuxerChoice) -> (
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(match muxer {
             MuxerChoice::Yamux =>
-                upgrade::EitherUpgrade::A(yamux::Config::default()),
+                upgrade::EitherUpgrade::A(yamux::YamuxConfig::default()),
             MuxerChoice::Mplex =>
                 upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
         })
