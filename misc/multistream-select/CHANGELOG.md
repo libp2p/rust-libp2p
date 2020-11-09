@@ -1,4 +1,4 @@
-# 0.8.5 [unreleased]
+# 0.8.5 [2020-11-09]
 
 - During negotiation do not interpret EOF error as an IO error, but instead as a
   negotiation error. See https://github.com/libp2p/rust-libp2p/pull/1823.
