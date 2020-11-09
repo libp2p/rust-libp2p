@@ -1,3 +1,8 @@
+# 0.8.5 [unreleased]
+
+- During negotiation do not interpret EOF error as an IO error, but instead as a
+  negotiation error. See https://github.com/libp2p/rust-libp2p/pull/1823.
+
 # 0.8.4 [2020-10-20]
 
 - Temporarily disable the internal selection of "parallel" protocol
