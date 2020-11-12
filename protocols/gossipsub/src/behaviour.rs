@@ -1412,8 +1412,8 @@ impl NetworkBehaviour for Gossipsub {
                 NetworkBehaviourAction::DialPeer { peer_id, condition } => {
                     NetworkBehaviourAction::DialPeer { peer_id, condition }
                 }
-                NetworkBehaviourAction::ReportObservedAddr { address } => {
-                    NetworkBehaviourAction::ReportObservedAddr { address }
+                NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+                    NetworkBehaviourAction::ReportObservedAddr { address, score }
                 }
             });
         }
