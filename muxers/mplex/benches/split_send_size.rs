@@ -93,7 +93,6 @@ fn run(transport: &BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
                     match poll_fn(|cx| conn.poll_event(cx)).await {
                         Ok(muxing::StreamMuxerEvent::InboundSubstream(mut s)) => {
                             let mut buf = vec![0u8; payload_len];
-                            // let start = std::time::Instant::now();
                             let mut off = 0;
                             loop {
                                 // Read in typical chunk sizes of up to 8KiB.
@@ -118,7 +117,6 @@ fn run(transport: &BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
 
     // Spawn and block on the sender, i.e. until all data is sent.
     task::block_on(async move {
-        // let start = std::time::Instant::now();
         let addr = addr_receiver.await.unwrap();
         let (_peer, conn) = transport.clone().dial(addr).unwrap().await.unwrap();
         let mut handle = conn.open_outbound();
