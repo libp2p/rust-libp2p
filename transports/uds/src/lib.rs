@@ -109,6 +109,10 @@ impl Transport for $uds_config {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
+
+    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        None
+    }
 }
 
 };

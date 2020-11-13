@@ -128,6 +128,9 @@ pub trait Transport {
     where
         Self: Sized;
 
+    /// Perform transport specific multiaddr translation.
+    fn address_translation(&self, _server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where

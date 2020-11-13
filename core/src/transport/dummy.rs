@@ -67,6 +67,10 @@ impl<TOut> Transport for DummyTransport<TOut> {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
+
+    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        None
+    }
 }
 
 /// Implementation of `AsyncRead` and `AsyncWrite`. Not meant to be instanciated.

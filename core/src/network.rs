@@ -30,7 +30,6 @@ use crate::{
     Executor,
     Multiaddr,
     PeerId,
-    address_translation,
     connection::{
         ConnectionId,
         ConnectionLimit,
@@ -198,8 +197,9 @@ where
         TMuxer: 'a,
         THandler: 'a,
     {
+        let transport = self.listeners.transport();
         let mut addrs: Vec<_> = self.listen_addrs()
-            .filter_map(move |server| address_translation(server, observed_addr))
+            .filter_map(move |server| transport.address_translation(server, observed_addr))
             .collect();
 
         // remove duplicates
