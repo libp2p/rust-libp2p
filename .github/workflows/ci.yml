@@ -11,19 +11,23 @@ jobs:
     name: Build and test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.1
+      with:
+        access_token: ${{ github.token }}
+    - uses: actions/checkout@v2
     - name: Cache cargo registry
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: ~/.cargo/registry
         key: cargo-registry-${{ hashFiles('Cargo.toml') }}
     - name: Cache cargo index
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: ~/.cargo/git
         key: cargo-index-${{ hashFiles('Cargo.toml') }}
     - name: Cache cargo build
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -40,7 +44,7 @@ jobs:
       env:
         CC: clang-10
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -56,17 +60,17 @@ jobs:
     - name: Install CMake
       run: apt-get install -y cmake
     - name: Cache cargo registry
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: ~/.cargo/registry
         key: wasm-cargo-registry-${{ hashFiles('Cargo.toml') }}
     - name: Cache cargo index
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: ~/.cargo/git
         key: wasm-cargo-index-${{ hashFiles('Cargo.toml') }}
     - name: Cache cargo build
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -81,7 +85,7 @@ jobs:
     container:
       image: rust
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install nightly Rust
       # TODO: intra-doc links are available on nightly only
       # see https://doc.rust-lang.org/nightly/rustdoc/lints.html#intra_doc_link_resolution_failure
@@ -95,19 +99,19 @@ jobs:
     container:
       image: rust
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Cache cargo registry
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: ~/.cargo/registry
         key: cargo-registry-${{ hashFiles('Cargo.toml') }}
     - name: Cache cargo index
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: ~/.cargo/git
         key: cargo-index-${{ hashFiles('Cargo.toml') }}
     - name: Cache cargo build
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
