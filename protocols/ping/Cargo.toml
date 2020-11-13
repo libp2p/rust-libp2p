@@ -20,7 +20,7 @@ wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-noise = { path = "../../protocols/noise" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-mplex = { path = "../../muxers/mplex" }
