@@ -1,3 +1,7 @@
+# 0.9.4 [2020-11-09]
+
+- Update dependencies.
+
 # 0.9.3 [2020-10-16]
 
 - Update dependencies.

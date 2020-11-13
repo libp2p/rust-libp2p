@@ -25,22 +25,54 @@ use crate::protocol::{
 use crate::record::{self, Record};
 use futures::prelude::*;
 use libp2p_swarm::{
-    NegotiatedSubstream,
+    IntoProtocolsHandler,
     KeepAlive,
+    NegotiatedSubstream,
     SubstreamProtocol,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
 use libp2p_core::{
+    ConnectedPoint,
+    PeerId,
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade}
 };
 use log::trace;
-use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
+use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
-/// Protocol handler that handles Kademlia communications with the remote.
+/// A prototype from which [`KademliaHandler`]s can be constructed.
+pub struct KademliaHandlerProto<T> {
+    config: KademliaHandlerConfig,
+    _type: PhantomData<T>,
+}
+
+impl<T> KademliaHandlerProto<T> {
+    pub fn new(config: KademliaHandlerConfig) -> Self {
+        KademliaHandlerProto { config, _type: PhantomData }
+    }
+}
+
+impl<T: Clone + Send + 'static> IntoProtocolsHandler for KademliaHandlerProto<T> {
+    type Handler = KademliaHandler<T>;
+
+    fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+        KademliaHandler::new(self.config, endpoint.clone())
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        if self.config.allow_listening {
+            upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
+        } else {
+            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+        }
+    }
+}
+
+/// Protocol handler that manages substreams for the Kademlia protocol
+/// on a single connection with a peer.
 ///
 /// The handler will automatically open a Kademlia substream with the remote for each request we
 /// make.
@@ -58,6 +90,27 @@ pub struct KademliaHandler<TUserData> {
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
+
+    /// The connected endpoint of the connection that the handler
+    /// is associated with.
+    endpoint: ConnectedPoint,
+
+    /// The current state of protocol confirmation.
+    protocol_status: ProtocolStatus,
+}
+
+/// The states of protocol confirmation that a connection
+/// handler transitions through.
+enum ProtocolStatus {
+    /// It is as yet unknown whether the remote supports the
+    /// configured protocol name.
+    Unconfirmed,
+    /// The configured protocol name has been confirmed by the remote
+    /// but has not yet been reported to the `Kademlia` behaviour.
+    Confirmed,
+    /// The configured protocol has been confirmed by the remote
+    /// and the confirmation reported to the `Kademlia` behaviour.
+    Reported,
 }
 
 /// Configuration of a [`KademliaHandler`].
@@ -135,6 +188,15 @@ impl<TUserData> SubstreamState<TUserData> {
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
 pub enum KademliaHandlerEvent<TUserData> {
+    /// The configured protocol name has been confirmed by the peer through
+    /// a successfully negotiated substream.
+    ///
+    /// This event is only emitted once by a handler upon the first
+    /// successfully negotiated inbound or outbound substream and
+    /// indicates that the connected peer participates in the Kademlia
+    /// overlay network identified by the configured protocol name.
+    ProtocolConfirmed { endpoint: ConnectedPoint },
+
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
@@ -379,21 +441,17 @@ struct UniqueConnecId(u64);
 
 impl<TUserData> KademliaHandler<TUserData> {
     /// Create a [`KademliaHandler`] using the given configuration.
-    pub fn new(config: KademliaHandlerConfig) -> Self {
+    pub fn new(config: KademliaHandlerConfig, endpoint: ConnectedPoint) -> Self {
         let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
 
         KademliaHandler {
             config,
+            endpoint,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
             keep_alive,
+            protocol_status: ProtocolStatus::Unconfirmed,
         }
-    }
-}
-
-impl<TUserData> Default for KademliaHandler<TUserData> {
-    fn default() -> Self {
-        KademliaHandler::new(Default::default())
     }
 }
 
@@ -423,8 +481,13 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
-        self.substreams
-            .push(SubstreamState::OutPendingSend(protocol, msg, user_data));
+        self.substreams.push(SubstreamState::OutPendingSend(protocol, msg, user_data));
+        if let ProtocolStatus::Unconfirmed = self.protocol_status {
+            // Upon the first successfully negotiated substream, we know that the
+            // remote is configured with the same protocol name and we want
+            // the behaviour to add this peer to the routing table, if possible.
+            self.protocol_status = ProtocolStatus::Confirmed;
+        }
     }
 
     fn inject_fully_negotiated_inbound(
@@ -442,8 +505,13 @@ where
         debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
-        self.substreams
-            .push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
+        self.substreams.push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
+        if let ProtocolStatus::Unconfirmed = self.protocol_status {
+            // Upon the first successfully negotiated substream, we know that the
+            // remote is configured with the same protocol name and we want
+            // the behaviour to add this peer to the routing table, if possible.
+            self.protocol_status = ProtocolStatus::Confirmed;
+        }
     }
 
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
@@ -616,6 +684,14 @@ where
     > {
         if self.substreams.is_empty() {
             return Poll::Pending;
+        }
+
+        if let ProtocolStatus::Confirmed = self.protocol_status {
+            self.protocol_status = ProtocolStatus::Reported;
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                KademliaHandlerEvent::ProtocolConfirmed {
+                    endpoint: self.endpoint.clone()
+                }))
         }
 
         // We remove each element from `substreams` one by one and add them back.

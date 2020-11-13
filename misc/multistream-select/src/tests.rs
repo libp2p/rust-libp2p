@@ -85,9 +85,8 @@ fn no_protocol_found() {
             let protos = vec![b"/proto1", b"/proto2"];
             let io = match listener_select_proto(connec, protos).await {
                 Ok((_, io)) => io,
-                // We don't explicitly check for `Failed` because the client might close the connection when it
-                // realizes that we have no protocol in common.
-                Err(_) => return,
+                Err(NegotiationError::Failed) => return,
+                Err(NegotiationError::ProtocolError(e)) => panic!("Unexpected protocol error {}", e),
             };
             match io.complete().await {
                 Err(NegotiationError::Failed) => {},

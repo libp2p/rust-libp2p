@@ -1,4 +1,10 @@
-# 0.24.0 [unreleased]
+# 0.24.1 [2020-11-11]
+
+- Ensure that no follow-up protocol data is dropped at the end of the
+  plaintext protocol handshake.
+  [PR 1831](https://github.com/libp2p/rust-libp2p/pull/1831).
+
+# 0.24.0 [2020-11-09]
 
 - Update dependencies.
 
