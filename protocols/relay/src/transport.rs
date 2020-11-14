@@ -38,6 +38,20 @@ pub struct RelayTransportWrapper<T: Clone> {
 }
 
 impl<T: Clone> RelayTransportWrapper<T> {
+    /// Wrap an existing [`Transport`] into a [`RelayTransportWrapper`] allowing dialing and
+    /// listening for both relayed as well as native connections.
+    ///
+    ///```
+    /// # use libp2p_core::transport::dummy::DummyTransport;
+    /// # use libp2p_relay::Relay;
+    /// # use libp2p_relay::transport::RelayTransportWrapper;
+    ///
+    /// let inner_transport = DummyTransport::<()>::new();
+    /// let (wrapper_transport, (channels)) = RelayTransportWrapper::new(inner_transport);
+    /// let (to_transport, from_transport) = channels;
+    ///
+    /// let behaviour = Relay::new(to_transport, from_transport);
+    ///```
     pub fn new(
         t: T,
     ) -> (
