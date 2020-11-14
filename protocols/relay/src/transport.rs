@@ -104,7 +104,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
         }
 
         let mut to_behaviour = self.to_behaviour.clone();
-        let (addr, peer_id) = split_off_peer_id(addr).unwrap();
+        let (addr, peer_id) = split_off_peer_id(addr)?;
         let msg_to_behaviour = Some(
             async move {
                 to_behaviour
@@ -203,11 +203,14 @@ fn split_relay_and_destination(addr: Multiaddr) -> Option<(Multiaddr, Multiaddr)
     ))
 }
 
-fn split_off_peer_id(mut addr: Multiaddr) -> Option<(Multiaddr, PeerId)> {
+fn split_off_peer_id(mut addr: Multiaddr) -> Result<(Multiaddr, PeerId), RelayError> {
     if let Some(Protocol::P2p(hash)) = addr.pop() {
-        Some((addr, PeerId::from_multihash(hash).unwrap()))
+        Ok((
+            addr,
+            PeerId::from_multihash(hash).map_err(|_| RelayError::InvalidHash)?,
+        ))
     } else {
-        None
+        Err(RelayError::MissingPeerId)
     }
 }
 
@@ -315,8 +318,17 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct RelayError {}
+#[derive(Debug, Eq, PartialEq)]
+pub enum RelayError {
+    MissingPeerId,
+    InvalidHash,
+}
+
+impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
+    fn from(error: RelayError) -> Self {
+        TransportError::Other(EitherError::B(error))
+    }
+}
 
 impl std::fmt::Display for RelayError {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -325,3 +337,26 @@ impl std::fmt::Display for RelayError {
 }
 
 impl std::error::Error for RelayError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_off_peer_id() {
+        let ip_address: Multiaddr = "/ip6/2001:db8::".parse().unwrap();
+        assert_eq!(
+            split_off_peer_id(ip_address.clone()),
+            Err(RelayError::MissingPeerId)
+        );
+
+        let peer_id = PeerId::random();
+        let ip_and_peer_id_address = ip_address
+            .clone()
+            .with(Protocol::P2p(peer_id.clone().into()));
+        assert_eq!(
+            split_off_peer_id(ip_and_peer_id_address.clone()),
+            Ok((ip_address, peer_id))
+        );
+    }
+}
