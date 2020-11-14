@@ -33,7 +33,7 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*,
 /// this struct is the message that the *relay* sends to the *destination* at initialization. The
-/// parameters passed to `RelayTargetOpen::new()` are the information of the *source* and the
+/// parameters passed to `OutgoingDestinationRequest::new()` are the information of the *source* and the
 /// *destination* (not the information of the *relay*).
 ///
 /// The upgrade should be performed on a substream to the *destination*.
@@ -41,15 +41,15 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and we must link it with the data sent from
 /// the source.
 #[derive(Debug, Clone)] // TODO: better Debug
-pub struct RelayTargetOpen<TUserData> {
+pub struct OutgoingDestinationRequest<TUserData> {
     /// The message to send to the destination. Pre-computed.
     message: Vec<u8>,
     /// User data, passed back on success or error.
     user_data: TUserData,
 }
 
-impl<TUserData> RelayTargetOpen<TUserData> {
-    /// Creates a `RelayTargetOpen`. Must pass the parameters of the message.
+impl<TUserData> OutgoingDestinationRequest<TUserData> {
+    /// Creates a `OutgoingDestinationRequest`. Must pass the parameters of the message.
     ///
     /// The `user_data` is passed back in the result.
     // TODO: change parameters?
@@ -73,14 +73,14 @@ impl<TUserData> RelayTargetOpen<TUserData> {
             .encode(&mut encoded_msg)
             .expect("all the mandatory fields are always filled; QED");
 
-        RelayTargetOpen {
+        OutgoingDestinationRequest {
             message: encoded_msg,
             user_data,
         }
     }
 }
 
-impl<TUserData> upgrade::UpgradeInfo for RelayTargetOpen<TUserData> {
+impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationRequest<TUserData> {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -90,7 +90,7 @@ impl<TUserData> upgrade::UpgradeInfo for RelayTargetOpen<TUserData> {
     }
 }
 
-impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for RelayTargetOpen<TUserData>
+impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for OutgoingDestinationRequest<TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     TUserData: Send + 'static,

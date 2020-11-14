@@ -20,7 +20,7 @@
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{
-    dest_request::RelayDestinationRequest, hop_request::RelayHopRequest, Peer, PeerParseError,
+    incoming_destination_request::IncomingDestinationRequest, incoming_relay_request::IncomingRelayRequest, Peer, PeerParseError,
 };
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
@@ -39,9 +39,9 @@ pub struct RelayListen {}
 /// Outcome of the listening.
 pub enum RelayRemoteRequest<TSubstream> {
     /// We have been asked to become a destination.
-    DestinationRequest(RelayDestinationRequest<TSubstream>),
+    DestinationRequest(IncomingDestinationRequest<TSubstream>),
     /// We have been asked to relay communications to another node.
-    HopRequest(RelayHopRequest<TSubstream>),
+    HopRequest(IncomingRelayRequest<TSubstream>),
 }
 
 impl RelayListen {
@@ -88,13 +88,13 @@ where
                 circuit_relay::Type::Hop => {
                     // TODO Handle
                     let peer = Peer::try_from(dst_peer.unwrap())?;
-                    let rq = RelayHopRequest::new(substream.into_inner(), peer);
+                    let rq = IncomingRelayRequest::new(substream.into_inner(), peer);
                     Ok(RelayRemoteRequest::HopRequest(rq))
                 }
                 circuit_relay::Type::Stop => {
                     // TODO Handle
                     let peer = Peer::try_from(src_peer.unwrap())?;
-                    let rq = RelayDestinationRequest::new(substream.into_inner(), peer);
+                    let rq = IncomingDestinationRequest::new(substream.into_inner(), peer);
                     Ok(RelayRemoteRequest::DestinationRequest(rq))
                 }
                 _ => Err(RelayListenError::InvalidMessageTy),

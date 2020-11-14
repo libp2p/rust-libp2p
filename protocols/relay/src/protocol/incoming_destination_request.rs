@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,84 +18,71 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
+use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::Peer;
 
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
-
 use prost::Message;
-
 use std::sync::{Arc, Mutex};
-
-use std::{io};
+use std::{error, io};
 use unsigned_varint::codec::UviBytes;
 
-/// Request from a remote for us to relay communications to another node.
+/// Request from a remote for us to become a destination.
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*, and
-/// we are the *relay*, this struct is a message that the *source* sent to us. The parameters
-/// passed to `RelayHopRequest::new()` are the information of the *destination*.
+/// we are the *destination*, this struct is a message that the *relay* sent to us. The
+/// parameters passed to `IncomingDestinationRequest::new()` are the information of the *source*.
 ///
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
-/// source on it. This data must be transmitted to the destination.
+/// source on it.
 // TODO: debug
-#[must_use = "A HOP request should be either accepted or denied"]
-pub struct RelayHopRequest<TSubstream> {
+#[must_use = "A destination request should be either accepted or denied"]
+pub struct IncomingDestinationRequest<TSubstream> {
     /// The stream to the source.
-    // TODO: Clean up mutex arc
+    // TODO: Cleanup arc mutex.
     stream: Arc<Mutex<Option<TSubstream>>>,
-    /// Target of the request.
-    dest: Peer,
+    /// Source of the request.
+    from: Peer,
 }
 
-impl<TSubstream> Clone for RelayHopRequest<TSubstream> {
+impl<TSubstream> Clone for IncomingDestinationRequest<TSubstream> {
     fn clone(&self) -> Self {
-        RelayHopRequest {
+        IncomingDestinationRequest {
             stream: self.stream.clone(),
-            dest: self.dest.clone(),
+            from: self.from.clone(),
         }
     }
 }
 
-impl<TSubstream> RelayHopRequest<TSubstream>
+impl<TSubstream> IncomingDestinationRequest<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    /// Creates a `RelayHopRequest`.
-    pub(crate) fn new(stream: TSubstream, dest: Peer) -> Self {
-        RelayHopRequest {
+    /// Creates a `IncomingDestinationRequest`.
+    pub(crate) fn new(stream: TSubstream, from: Peer) -> Self {
+        IncomingDestinationRequest {
             stream: Arc::new(Mutex::new(Some(stream))),
-            dest,
+            from,
         }
     }
 
-    /// Peer id of the node we should relay communications to.
-    pub fn destination_id(&self) -> &PeerId {
-        &self.dest.peer_id
+    /// Returns the peer id of the source that is being relayed.
+    pub fn source_id(&self) -> &PeerId {
+        &self.from.peer_id
     }
 
-    /// Returns the addresses of the target, as reported by the requester.
-    pub fn destination_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.dest.addrs.iter()
+    /// Returns the addresses of the source that is being relayed.
+    pub fn source_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.from.addrs.iter()
     }
 
-    /// Accepts the request by providing a stream to the destination.
+    /// Accepts the request.
     ///
-    /// The `dest_stream` should be a brand new dialing substream. This method will negotiate the
-    /// `relay` protocol on it, send a relay message, and then relay to it the connection from the
-    /// source.
-    ///
-    /// The future that this method returns succeeds after the negotiation has succeeded. It
-    /// returns another future that will copy the data.
-    pub fn fulfill<TDestSubstream>(
-        self,
-        dest_stream: TDestSubstream,
-    ) -> BoxFuture<'static, ()>
-    where
-        TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+    /// The returned `Future` sends back a success message then returns the raw stream. This raw
+    /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
+    pub fn accept(self) -> impl Future<Output = Result<(PeerId, TSubstream), Box<dyn error::Error + 'static>>> {
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
@@ -110,23 +97,11 @@ where
         let codec = UviBytes::default();
         // TODO: Do we need this?
         // codec.set_max_len(self.max_packet_size);
-        let mut substream = Framed::new(
-            self.stream.lock().unwrap().take().unwrap(),
-            codec,
-        );
+        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
 
         async move {
             substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
-
-            let (from_source, mut to_source) = substream.into_inner().split();
-            let (from_destination, mut to_destination) = dest_stream.split();
-
-            let source_to_destination = futures::io::copy(from_source, &mut to_destination);
-            let destination_to_source = futures::io::copy(from_destination, &mut to_source);
-
-            let (res1, res2) = futures::future::join(source_to_destination, destination_to_source).await;
-            res1.unwrap();
-            res2.unwrap();
+            Ok((self.source_id().clone(), substream.into_inner()))
         }.boxed()
     }
 
@@ -136,14 +111,19 @@ where
     pub fn deny(self) -> BoxFuture<'static, Result<(), io::Error>> {
         let msg = CircuitRelay {
             r#type: None,
-            code: Some(Status::StopRelayRefused.into()),
             src_peer: None,
             dst_peer: None,
+            code: Some(circuit_relay::Status::StopRelayRefused.into()),
         };
-        let mut encoded_msg = Vec::new();
-        // TODO: Rework.
-        msg.encode(&mut encoded_msg)
+        let mut msg_bytes = Vec::new();
+        // TODO: Handl2
+        msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
+
+        // async {
+        //     upgrade::write_one(&mut self.stream, msg_bytes).await?;
+        // }.boxed()
+
         unimplemented!();
     }
 }

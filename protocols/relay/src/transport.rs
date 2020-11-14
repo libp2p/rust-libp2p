@@ -259,6 +259,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                     upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
                     // TODO: Fix. Empty is not the right thing here. Should the address of the relay
                     // be mentioned here?
+                    // Could one do this via IntoProtoHandler trait?
                     local_addr: Multiaddr::empty(),
                     remote_addr: Protocol::P2p(source.into()).into(),
                 })));

@@ -28,21 +28,21 @@ use std::{convert::TryFrom, error, fmt, io};
 /// trigger an error.
 const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
 
-// Relay -> Destination
-mod dest_request;
 // Source -> Relay
-mod hop_request;
-mod listen;
-// Source -> Relay
-mod relay_request;
-// Relay -> Destination
-mod target_open;
+mod outgoing_relay_request;
+mod incoming_relay_request;
+pub use self::outgoing_relay_request::OutgoingRelayRequest;
+pub use self::incoming_relay_request::IncomingRelayRequest;
 
-pub use self::dest_request::RelayDestinationRequest;
-pub use self::hop_request::RelayHopRequest;
+// Relay -> Destination
+mod outgoing_destination_request;
+mod incoming_destination_request;
+pub use self::incoming_destination_request::IncomingDestinationRequest;
+pub use self::outgoing_destination_request::OutgoingDestinationRequest;
+
+mod listen;
 pub use self::listen::{RelayListen, RelayListenError, RelayRemoteRequest};
-pub use self::relay_request::RelayProxyRequest; // TODO:
-pub use self::target_open::RelayTargetOpen;
+
 
 /// Strong typed version of a `CircuitRelay_Peer`.
 ///

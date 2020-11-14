@@ -32,7 +32,7 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*,
 /// this struct is the message that the *source* sends to the *relay* at initialization. The
-/// parameters passed to `RelayProxyRequest::new()` are the information of the *destination*
+/// parameters passed to `OutgoingRelayRequest::new()` are the information of the *destination*
 /// (not the information of the *relay*).
 ///
 /// The upgrade should be performed on a substream to the *relay*.
@@ -40,14 +40,14 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and is now a brand new connection pointing
 /// to the *destination*.
 // TODO: debug
-pub struct RelayProxyRequest<TUserData> {
+pub struct OutgoingRelayRequest<TUserData> {
     /// The message to send to the relay. Pre-computed.
     message: Vec<u8>,
     /// User data that is passed back to the user.
     user_data: TUserData,
 }
 
-impl<TUserData> RelayProxyRequest<TUserData> {
+impl<TUserData> OutgoingRelayRequest<TUserData> {
     /// Builds a request for the target to act as a relay to a third party.
     ///
     /// The `user_data` is passed back in the result.
@@ -71,14 +71,14 @@ impl<TUserData> RelayProxyRequest<TUserData> {
             .encode(&mut encoded)
             .expect("all the mandatory fields are always filled; QED");
 
-        RelayProxyRequest {
+        OutgoingRelayRequest {
             message: encoded,
             user_data,
         }
     }
 }
 
-impl<TUserData> upgrade::UpgradeInfo for RelayProxyRequest<TUserData> {
+impl<TUserData> upgrade::UpgradeInfo for OutgoingRelayRequest<TUserData> {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -87,7 +87,7 @@ impl<TUserData> upgrade::UpgradeInfo for RelayProxyRequest<TUserData> {
     }
 }
 
-impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for RelayProxyRequest<TUserData>
+impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayRequest<TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     TUserData: Send + 'static,
@@ -98,7 +98,7 @@ where
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         // TODO: Needed?
-        let RelayProxyRequest { message, user_data } = self;
+        let OutgoingRelayRequest { message, user_data } = self;
 
         let codec = UviBytes::default();
         // TODO: Do we need this?

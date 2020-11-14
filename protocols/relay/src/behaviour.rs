@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerHopRequest, RelayHandlerIn};
+use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerIncomingRelayRequest, RelayHandlerIn};
 use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
 use futures::channel::{mpsc, oneshot};
@@ -35,32 +35,33 @@ use libp2p_swarm::{
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
-/// Network behaviour that allows reaching nodes through relaying.
+/// Network behaviour that allows the local node to act as a source, a relay and as a destination.
 pub struct Relay {
-    // TODO: Document
+    /// Channel sender to [`crate::RelayTransportWrapper`].
     to_transport: mpsc::Sender<BehaviourToTransportMsg>,
+    /// Channel receiver from [`crate::RelayTransportWrapper`].
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
+    /// Events that need to be send to the [`Crate::RelayTransportWrapper`] via
+    /// [`Self::to_transport`].
     outbox_to_transport: Vec<BehaviourToTransportMsg>,
-
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
+    outbox_to_swarm: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
 
     /// List of peers the network is connected to.
     connected_peers: FnvHashSet<PeerId>,
 
-    /// Requests for us to act as a relay, that are in the process of being fulfilled.
-    /// Contains the request and the source of the request.
-    pending_incoming_hop_requests: Vec<(PeerId, RelayHandlerHopRequest)>,
+    /// Requests for the local node to act as a relay from a source to a destination.
+    incoming_relay_requests: Vec<(PeerId, RelayHandlerIncomingRelayRequest)>,
+    /// Requests by the local node to a relay to relay a connection for the local node to a
+    /// destination.
+    outgoing_relay_requests: HashMap<PeerId, OutgoingRelayRequest>,
 
-    /// Us requesting a relay to relay for us.
-    pending_outgoing_hop_requests: HashMap<PeerId, OutgoingHopRequest>,
-
-    /// List of relay nodes that act as a listener for us.
+    /// List of relay nodes that act as a listener for the local node acting as a destination.
     relay_listeners: HashMap<PeerId, RelayListener>,
 }
 
-enum OutgoingHopRequest {
+enum OutgoingRelayRequest {
     Dialing {
         relay_addr: Multiaddr,
         // relay_peer_id: PeerId,
@@ -87,10 +88,10 @@ impl Relay {
             to_transport,
             from_transport,
             outbox_to_transport: Default::default(),
-            events: Default::default(),
+            outbox_to_swarm: Default::default(),
             connected_peers: Default::default(),
-            pending_incoming_hop_requests: Default::default(),
-            pending_outgoing_hop_requests: Default::default(),
+            incoming_relay_requests: Default::default(),
+            outgoing_relay_requests: Default::default(),
             relay_listeners: Default::default(),
         }
     }
@@ -114,10 +115,10 @@ impl NetworkBehaviour for Relay {
             None
         });
         let outgoing_hop_request_addresses =
-            self.pending_outgoing_hop_requests
+            self.outgoing_relay_requests
                 .iter()
                 .filter_map(|(peer_id, r)| {
-                    if let OutgoingHopRequest::Dialing { relay_addr, .. } = r {
+                    if let OutgoingRelayRequest::Dialing { relay_addr, .. } = r {
                         if peer_id == remote_peer_id {
                             return Some(relay_addr.clone());
                         }
@@ -151,45 +152,45 @@ impl NetworkBehaviour for Relay {
                 .insert(id.clone(), RelayListener::Connected(addr.clone()));
         }
 
-        if let Some(OutgoingHopRequest::Dialing {
+        if let Some(OutgoingRelayRequest::Dialing {
             relay_addr: _,
             // relay_peer_id: _,
             destination_addr,
             destination_peer_id,
             send_back,
-        }) = self.pending_outgoing_hop_requests.remove(id)
+        }) = self.outgoing_relay_requests.remove(id)
         {
-            self.events
+            self.outbox_to_swarm
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: id.clone(),
                     handler: NotifyHandler::Any,
-                    event: RelayHandlerIn::RelayRequest {
+                    event: RelayHandlerIn::OutgoingRelayRequest {
                         target: destination_peer_id.clone(),
                         addresses: vec![destination_addr.clone()],
                     },
                 });
 
-            self.pending_outgoing_hop_requests.insert(
+            self.outgoing_relay_requests.insert(
                 destination_peer_id,
-                OutgoingHopRequest::Upgrading { send_back },
+                OutgoingRelayRequest::Upgrading { send_back },
             );
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
         while let Some(pos) = self
-            .pending_incoming_hop_requests
+            .incoming_relay_requests
             .iter()
             .position(|p| p.1.destination_id() == id)
         {
-            let (source, hop_request) = self.pending_incoming_hop_requests.remove(pos);
+            let (source, hop_request) = self.incoming_relay_requests.remove(pos);
 
-            let send_back = RelayHandlerIn::DestinationRequest {
+            let send_back = RelayHandlerIn::OutgoingDestinationRequest {
                 source,
                 source_addresses: Vec::new(), // TODO: wrong
                 substream: hop_request,
             };
 
-            self.events
+            self.outbox_to_swarm
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: id.clone(),
                     handler: NotifyHandler::Any,
@@ -225,7 +226,7 @@ impl NetworkBehaviour for Relay {
         self.connected_peers.remove(id);
 
         // TODO: send back proper refusal message to the source
-        self.pending_incoming_hop_requests
+        self.incoming_relay_requests
             .retain(|rq| rq.1.destination_id() != id);
     }
 
@@ -237,15 +238,15 @@ impl NetworkBehaviour for Relay {
     ) {
         match event {
             // Remote wants us to become a relay.
-            RelayHandlerEvent::HopRequest(hop_request) => {
+            RelayHandlerEvent::IncomingRelayRequest(hop_request) => {
                 if self.connected_peers.contains(hop_request.destination_id()) {
                     let dest_id = hop_request.destination_id().clone();
-                    let send_back = RelayHandlerIn::DestinationRequest {
+                    let send_back = RelayHandlerIn::OutgoingDestinationRequest {
                         source: event_source,
                         source_addresses: Vec::new(), // TODO: wrong
                         substream: hop_request,
                     };
-                    self.events
+                    self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id: dest_id,
                             // TODO: Any correct here?
@@ -254,9 +255,9 @@ impl NetworkBehaviour for Relay {
                         });
                 } else {
                     let dest_id = hop_request.destination_id().clone();
-                    self.pending_incoming_hop_requests
+                    self.incoming_relay_requests
                         .push((event_source, hop_request));
-                    self.events.push_back(NetworkBehaviourAction::DialPeer {
+                    self.outbox_to_swarm.push_back(NetworkBehaviourAction::DialPeer {
                         peer_id: dest_id,
                         condition: DialPeerCondition::NotDialing,
                     });
@@ -264,9 +265,10 @@ impl NetworkBehaviour for Relay {
             }
 
             // Remote wants us to become a destination.
-            RelayHandlerEvent::DestinationRequest(dest_request) => {
+            RelayHandlerEvent::IncomingDestinationRequest(dest_request) => {
+                // TODO: What if we are not yet connected to that node?
                 let send_back = RelayHandlerIn::AcceptDestinationRequest(dest_request);
-                self.events
+                self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
                         // TODO: Any correct here?
@@ -275,16 +277,16 @@ impl NetworkBehaviour for Relay {
                     });
             }
 
-            RelayHandlerEvent::RelayRequestDenied(_) => {}
+            RelayHandlerEvent::OutgoingRelayRequestDenied(_) => unimplemented!(),
             RelayHandlerEvent::OutgoingRelayRequestSuccess(destination, stream) => {
                 // TODO: Instead of this unnecessary check, one could as well not safe dialing and
                 // upgrading outbound relay requests in the same HashMap.
                 let send_back = match self
-                    .pending_outgoing_hop_requests
+                    .outgoing_relay_requests
                     .remove(&destination)
                     .unwrap()
                 {
-                    OutgoingHopRequest::Upgrading { send_back } => send_back,
+                    OutgoingRelayRequest::Upgrading { send_back } => send_back,
                     _ => todo!("Handle"),
                 };
                 send_back.send(stream).unwrap();
@@ -317,7 +319,7 @@ impl NetworkBehaviour for Relay {
             }
         }
 
-        if let Some(event) = self.events.pop_front() {
+        if let Some(event) = self.outbox_to_swarm.pop_front() {
             return Poll::Ready(event);
         }
 
@@ -333,9 +335,9 @@ impl NetworkBehaviour for Relay {
                     if self.connected_peers.contains(&relay_peer_id) {
                         unimplemented!();
                     } else {
-                        self.pending_outgoing_hop_requests.insert(
+                        self.outgoing_relay_requests.insert(
                             relay_peer_id.clone(),
-                            OutgoingHopRequest::Dialing {
+                            OutgoingRelayRequest::Dialing {
                                 relay_addr,
                                 // relay_peer_id: relay_peer_id.clone(),
                                 destination_addr,
