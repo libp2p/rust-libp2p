@@ -66,7 +66,7 @@ fn build_swarm() -> Swarm<CombinedBehaviour> {
     let transport = relay_wrapped_transport
         .upgrade(upgrade::Version::V1)
         .authenticate(plaintext)
-        .multiplex(libp2p_yamux::Config::default())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
     let combined_behaviour = CombinedBehaviour {

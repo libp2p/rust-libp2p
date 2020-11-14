@@ -101,7 +101,6 @@ use libp2p_core::{
     connection::{
         ConnectionError,
         ConnectionId,
-        ConnectionInfo,
         ConnectionLimit,
         ConnectedPoint,
         EstablishedConnection,
@@ -123,18 +122,17 @@ use libp2p_core::{
 };
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
-use std::{error, fmt, hash::Hash, io, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
+use std::{error, fmt, io, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
 use std::num::{NonZeroU32, NonZeroUsize};
 use upgrade::UpgradeInfoSend as _;
 
 /// Contains the state of the network, plus the way it should behave.
-pub type Swarm<TBehaviour, TConnInfo = PeerId> = ExpandedSwarm<
+pub type Swarm<TBehaviour> = ExpandedSwarm<
     TBehaviour,
     <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
     <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
-    TConnInfo,
 >;
 
 /// Substream for which a protocol has been chosen.
@@ -255,18 +253,15 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
 }
 
 /// Contains the state of the network, plus the way it should behave.
-pub struct ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo = PeerId>
+pub struct ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
-    TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     network: Network<
-        transport::Boxed<(TConnInfo, StreamMuxerBox)>,
+        transport::Boxed<(PeerId, StreamMuxerBox)>,
         TInEvent,
         TOutEvent,
         NodeHandlerWrapperBuilder<THandler>,
-        TConnInfo,
-        PeerId,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
@@ -292,11 +287,10 @@ where
     pending_event: Option<(PeerId, PendingNotifyHandler, TInEvent)>
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> Deref for
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+impl<TBehaviour, TInEvent, TOutEvent, THandler> Deref for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
-    TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     type Target = TBehaviour;
 
@@ -305,38 +299,35 @@ where
     }
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> DerefMut for
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+impl<TBehaviour, TInEvent, TOutEvent, THandler> DerefMut for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
-    TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.behaviour
     }
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> Unpin for
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+impl<TBehaviour, TInEvent, TOutEvent, THandler> Unpin for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
-    TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo, THandleErr>
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr>
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       TInEvent: Clone + Send + 'static,
       TOutEvent: Send + 'static,
-      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
       THandler: IntoProtocolsHandler + Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
       THandleErr: error::Error + Send + 'static,
 {
     /// Builds a new `Swarm`.
     pub fn new(
-        transport: transport::Boxed<(TConnInfo, StreamMuxerBox)>,
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId
     ) -> Self {
@@ -428,7 +419,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Returns the connection info for an arbitrary connection with the peer, or `None`
     /// if there is no connection to that peer.
     // TODO: should take &self instead of &mut self, but the API in network requires &mut
-    pub fn connection_info(me: &mut Self, peer_id: &PeerId) -> Option<TConnInfo> {
+    pub fn connection_info(me: &mut Self, peer_id: &PeerId) -> Option<PeerId> {
         if let Some(mut n) = me.network.peer(peer_id.clone()).into_connected() {
             Some(n.some_connection().info().clone())
         } else {
@@ -529,14 +520,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     } else {
                         log::debug!("Connection {:?} closed (active close).", connected);
                     }
-                    let info = connected.info;
+                    let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
-                    this.behaviour.inject_connection_closed(info.peer_id(), &id, &endpoint);
+                    this.behaviour.inject_connection_closed(&peer_id, &id, &endpoint);
                     if num_established == 0 {
-                        this.behaviour.inject_disconnected(info.peer_id());
+                        this.behaviour.inject_disconnected(&peer_id);
                     }
                     return Poll::Ready(SwarmEvent::ConnectionClosed {
-                        peer_id: info.peer_id().clone(),
+                        peer_id,
                         endpoint,
                         cause: error,
                         num_established,
@@ -774,13 +765,11 @@ enum PendingNotifyHandler {
 ///
 /// Returns `None` if the connection is closing or the event has been
 /// successfully sent, in either case the event is consumed.
-fn notify_one<'a, TInEvent, TConnInfo>(
-    conn: &mut EstablishedConnection<'a, TInEvent, TConnInfo>,
+fn notify_one<'a, TInEvent>(
+    conn: &mut EstablishedConnection<'a, TInEvent>,
     event: TInEvent,
     cx: &mut Context<'_>,
 ) -> Option<TInEvent>
-where
-    TConnInfo: ConnectionInfo
 {
     match conn.poll_ready_notify_handler(cx) {
         Poll::Pending => Some(event),
@@ -803,17 +792,15 @@ where
 ///
 /// Returns `None` if either all connections are closing or the event
 /// was successfully sent to a handler, in either case the event is consumed.
-fn notify_any<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
+fn notify_any<'a, TTrans, TInEvent, TOutEvent, THandler>(
     ids: SmallVec<[ConnectionId; 10]>,
-    peer: &mut ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
+    peer: &mut ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler>,
     event: TInEvent,
     cx: &mut Context<'_>,
 ) -> Option<(TInEvent, SmallVec<[ConnectionId; 10]>)>
 where
     TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
-    TPeerId: Eq + Hash + Clone,
-    TConnInfo: ConnectionInfo<PeerId = TPeerId>
+    THandler: IntoConnectionHandler,
 {
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
@@ -852,18 +839,16 @@ where
 /// Returns `None` if all connections are either closing or the event
 /// was successfully sent to all handlers whose connections are not closing,
 /// in either case the event is consumed.
-fn notify_all<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
+fn notify_all<'a, TTrans, TInEvent, TOutEvent, THandler>(
     ids: SmallVec<[ConnectionId; 10]>,
-    peer: &mut ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
+    peer: &mut ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler>,
     event: TInEvent,
     cx: &mut Context<'_>,
 ) -> Option<(TInEvent, SmallVec<[ConnectionId; 10]>)>
 where
     TTrans: Transport,
     TInEvent: Clone,
-    THandler: IntoConnectionHandler<TConnInfo>,
-    TPeerId: Eq + Hash + Clone,
-    TConnInfo: ConnectionInfo<PeerId = TPeerId>
+    THandler: IntoConnectionHandler,
 {
     if ids.len() == 1 {
         if let Some(mut conn) = peer.connection(ids[0]) {
@@ -893,14 +878,13 @@ where
     None
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> Stream for
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+impl<TBehaviour, TInEvent, TOutEvent, THandler> Stream for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
       TInEvent: Clone + Send + 'static,
       TOutEvent: Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
-      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     type Item = TBehaviour::OutEvent;
 
@@ -915,14 +899,13 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 }
 
 /// the stream of behaviour events never terminates, so we can implement fused for it
-impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> FusedStream for
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+impl<TBehaviour, TInEvent, TOutEvent, THandler> FusedStream for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
       TInEvent: Clone + Send + 'static,
       TOutEvent: Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
-      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     fn is_terminated(&self) -> bool {
         false
@@ -962,22 +945,21 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
 /// A `SwarmBuilder` provides an API for configuring and constructing a `Swarm`,
 /// including the underlying [`Network`].
-pub struct SwarmBuilder<TBehaviour, TConnInfo> {
+pub struct SwarmBuilder<TBehaviour> {
     local_peer_id: PeerId,
-    transport: transport::Boxed<(TConnInfo, StreamMuxerBox)>,
+    transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
     network_config: NetworkConfig,
 }
 
-impl<TBehaviour, TConnInfo> SwarmBuilder<TBehaviour, TConnInfo>
+impl<TBehaviour> SwarmBuilder<TBehaviour>
 where TBehaviour: NetworkBehaviour,
-      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
     /// via [`SwarmBuilder::build`].
     pub fn new(
-        transport: transport::Boxed<(TConnInfo, StreamMuxerBox)>,
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId
     ) -> Self {
@@ -1062,7 +1044,7 @@ where TBehaviour: NetworkBehaviour,
     }
 
     /// Builds a `Swarm` with the current configuration.
-    pub fn build(mut self) -> Swarm<TBehaviour, TConnInfo> {
+    pub fn build(mut self) -> Swarm<TBehaviour> {
         let supported_protocols = self.behaviour
             .new_handler()
             .inbound_protocol()

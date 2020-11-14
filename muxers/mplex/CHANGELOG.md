@@ -1,3 +1,29 @@
+# 0.24.0 [2020-11-09]
+
+- Change the default configuration to use `MaxBufferBehaviour::Block`
+  and yield from waiting for the next substream or reading from a
+  particular substream whenever the current read loop may have
+  already filled a substream buffer, to give the current task a
+  chance to read from the buffer(s) before the `MaxBufferBehaviour`
+  takes effect. This is primarily relevant for
+  `MaxBufferBehaviour::ResetStream`.
+  [PR 1825](https://github.com/libp2p/rust-libp2p/pull/1825/).
+
+- Tweak the naming in the `MplexConfig` API for better
+  consistency with `libp2p-yamux`.
+  [PR 1822](https://github.com/libp2p/rust-libp2p/pull/1822).
+
+- Update dependencies.
+
+# 0.23.1 [2020-10-28]
+
+- Be lenient with duplicate `Close` frames received. Version
+  `0.23.0` started treating duplicate `Close` frames for a
+  substream as a protocol violation. As some libp2p implementations
+  seem to occasionally send such frames and it is a harmless
+  redundancy, this releases reverts back to the pre-0.23 behaviour
+  of ignoring duplicate `Close` frames.
+
 # 0.23.0 [2020-10-16]
 
 - More granular execution of pending flushes, better logging and

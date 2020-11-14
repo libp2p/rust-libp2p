@@ -22,7 +22,7 @@ use crate::PlainText2Config;
 use crate::error::PlainTextError;
 use crate::structs_proto::Exchange;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{PublicKey, PeerId};
@@ -111,7 +111,7 @@ impl HandshakeContext<Local> {
 }
 
 pub async fn handshake<S>(socket: S, config: PlainText2Config)
-    -> Result<(S, Remote), PlainTextError>
+    -> Result<(S, Remote, Bytes), PlainTextError>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {
@@ -134,6 +134,12 @@ where
         }
     };
 
+    // The `Framed` wrapper may have buffered additional data that
+    // was already received but is no longer part of the plaintext
+    // handshake. We need to capture that data before dropping
+    // the `Framed` wrapper via `Framed::into_inner()`.
+    let read_buffer = framed_socket.read_buffer().clone().freeze();
+
     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-    Ok((framed_socket.into_inner(), context.state))
+    Ok((framed_socket.into_inner(), context.state, read_buffer))
 }

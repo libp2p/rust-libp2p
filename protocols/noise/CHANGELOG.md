@@ -1,3 +1,7 @@
+# 0.26.0 [2020-11-09]
+
+- Update dependencies.
+
 # 0.25.0 [2020-10-16]
 
 - Update dependencies.

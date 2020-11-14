@@ -26,7 +26,7 @@ use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
 
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{convert::TryFrom as _, io, iter::FromIterator, mem, pin::Pin, task::{Context, Poll}};
+use std::{convert::TryFrom as _, iter::FromIterator, mem, pin::Pin, task::{Context, Poll}};
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
 /// for a peer acting as the _listener_ (or _responder_).
@@ -118,10 +118,10 @@ where
                             return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
                         },
                         Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                ProtocolError::IoError(
-                                    io::ErrorKind::UnexpectedEof.into())))),
+                        // Treat EOF error as [`NegotiationError::Failed`], not as
+                        // [`NegotiationError::ProtocolError`], allowing dropping or closing an I/O
+                        // stream as a permissible way to "gracefully" fail a negotiation.
+                        Poll::Ready(None) => return Poll::Ready(Err(NegotiationError::Failed)),
                         Poll::Pending => {
                             *this.state = State::RecvHeader { io };
                             return Poll::Pending
@@ -152,10 +152,16 @@ where
                 State::RecvMessage { mut io } => {
                     let msg = match Pin::new(&mut io).poll_next(cx) {
                         Poll::Ready(Some(Ok(msg))) => msg,
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                ProtocolError::IoError(
-                                    io::ErrorKind::UnexpectedEof.into())))),
+                        // Treat EOF error as [`NegotiationError::Failed`], not as
+                        // [`NegotiationError::ProtocolError`], allowing dropping or closing an I/O
+                        // stream as a permissible way to "gracefully" fail a negotiation.
+                        //
+                        // This is e.g. important when a listener rejects a protocol with
+                        // [`Message::NotAvailable`] and the dialer does not have alternative
+                        // protocols to propose. Then the dialer will stop the negotiation and drop
+                        // the corresponding stream. As a listener this EOF should be interpreted as
+                        // a failed negotiation.
+                        Poll::Ready(None) => return Poll::Ready(Err(NegotiationError::Failed)),
                         Poll::Pending => {
                             *this.state = State::RecvMessage { io };
                             return Poll::Pending;

@@ -1,3 +1,11 @@
+# 0.27.0 [2020-11-09]
+
+- Tweak the naming in the `MplexConfig` API for better
+  consistency with `libp2p-mplex`.
+  [PR 1822](https://github.com/libp2p/rust-libp2p/pull/1822).
+
+- Update dependencies.
+
 # 0.26.0 [2020-10-16]
 
 - Update `libp2p-core`.
