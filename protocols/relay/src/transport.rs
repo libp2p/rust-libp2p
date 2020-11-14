@@ -1,25 +1,18 @@
 use crate::behaviour::BehaviourToTransportMsg;
-
-
-
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
-
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
-
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
-use libp2p_core::{
-    either::{EitherError, EitherFuture, EitherOutput},
-    multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerEvent, TransportError},
-    PeerId, Transport,
-};
+use libp2p_core::either::{EitherError, EitherFuture, EitherOutput};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::transport::{ListenerEvent, TransportError};
+use libp2p_core::{PeerId, Transport};
 use libp2p_swarm::NegotiatedSubstream;
 use pin_project::pin_project;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
 pub enum TransportToBehaviourMsg {
     DialRequest {

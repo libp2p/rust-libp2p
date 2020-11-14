@@ -18,6 +18,35 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implementation of the [libp2p circuit relay
+//! specification](https://github.com/libp2p/specs/tree/master/relay).
+//!
+//! ## Terminology
+//!
+//! ### Entities
+//!
+//! - **Source**: The node initiating a connection via a *relay* to a *destination*.
+//!
+//! - **Relay**: The node being asked by a *source* to relay to a *destination*.
+//!
+//! - **Destination**: The node contacted by the *source* via the *relay*.
+//!
+//! ### Messages
+//!
+//! - **Outgoing relay request**: The request send by a *source* to a *relay*.
+//!
+//! - **Incoming relay request**: The request received by a *relay* from a *source*.
+//!
+//! - **Outgoing destination request**: The request send by a *relay* to a *destination*.
+//!
+//! - **Incoming destination request**: The request received by a *destination* from a *relay*.
+//!
+//! - **Outgoing listen request**: The request send by a *destination* to a *relay* asking the
+//!   *relay* to listen for incoming connections on the behalf of the *destination*.
+//!
+//! - **Incoming listen request**: The request received by a *relay* from a *destination* asking the
+//!   *relay* to listen for incoming connections on the behalf of the *destination*.
+
 mod behaviour;
 mod error;
 

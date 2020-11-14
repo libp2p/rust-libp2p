@@ -128,54 +128,6 @@ where
             res1.unwrap();
             res2.unwrap();
         }.boxed()
-
-        // TODO:
-                         /*RelayHopAcceptFuture {
-                             inner: Some(self.stream),
-                             message: Some(message),
-                         }
-
-                         let source_stream = self.stream;
-                         let stop = stop_message(&Peer::from_message(CircuitRelay_Peer::new()).unwrap(), &self.dest);
-                         upgrade::apply(dest_stream, TrivialUpgrade, Endpoint::Dialer)
-                             .and_then(|dest_stream| {
-                                 // send STOP message to destination and expect back a SUCCESS message
-                                 Io::new(dest_stream).send(stop)
-                                     .and_then(Io::recv)
-                                     .and_then(|(response, io)| {
-                                         let rsp = match response {
-                                             Some(m) => m,
-                                             None => return Err(io_err("no message from destination"))
-                                         };
-
-                                         if is_success(&rsp) {
-                                             Ok(io.into())
-                                         } else {
-                                             Err(io_err("no success response from relay"))
-                                         }
-                                     })
-                             })
-                             // signal success or failure to source
-                             .then(move |result| {
-                                 match result {
-                                     Ok(c) => {
-                                         let msg = status(CircuitRelay_Status::SUCCESS);
-                                         A(source_stream.send(msg).map(|io| (io.into(), c)))
-                                     }
-                                     Err(e) => {
-                                         let msg = status(CircuitRelay_Status::HOP_CANT_DIAL_DST);
-                                         B(source_stream.send(msg).and_then(|_| Err(e)))
-                                     }
-                                 }
-                             })
-                             // return future for bidirectional data transfer
-                             .and_then(move |(src, dst)| {
-                                 let (src_r, src_w) = src.split();
-                                 let (dst_r, dst_w) = dst.split();
-                                 let a = copy::flushing_copy(src_r, dst_w).map(|_| ());
-                                 let b = copy::flushing_copy(dst_r, src_w).map(|_| ());
-                                 a.select(b).map(|_| ()).map_err(|(e, _)| e)
-                             })*/
     }
 
     /// Refuses the request.
@@ -193,8 +145,5 @@ where
         msg.encode(&mut encoded_msg)
             .expect("all the mandatory fields are always filled; QED");
         unimplemented!();
-        // Box::pin(async {
-        //     upgrade::write_one(&mut self.stream, encoded_msg).await
-        // })
     }
 }
