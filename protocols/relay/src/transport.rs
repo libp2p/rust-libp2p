@@ -113,7 +113,6 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                         peer_id,
                     })
                     .await
-                    .unwrap();
             }
             .boxed(),
         );
@@ -220,7 +219,7 @@ pub struct RelayListener<T: Transport> {
     inner_listener: Option<<T as Transport>::Listener>,
     from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
 
-    msg_to_behaviour: Option<BoxFuture<'static, ()>>,
+    msg_to_behaviour: Option<BoxFuture<'static, Result<(), mpsc::SendError>>>,
 }
 
 impl<T: Transport> Stream for RelayListener<T> {
@@ -234,7 +233,8 @@ impl<T: Transport> Stream for RelayListener<T> {
 
         if let Some(msg) = this.msg_to_behaviour {
             match Future::poll(msg.as_mut(), cx) {
-                Poll::Ready(()) => *this.msg_to_behaviour = None,
+                Poll::Ready(Ok(())) => *this.msg_to_behaviour = None,
+                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(EitherError::B(e.into())))),
                 Poll::Pending => {}
             }
         }
@@ -322,11 +322,18 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 pub enum RelayError {
     MissingPeerId,
     InvalidHash,
+    FailedSendingMessageToBehaviour(mpsc::SendError),
 }
 
 impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
     fn from(error: RelayError) -> Self {
         TransportError::Other(EitherError::B(error))
+    }
+}
+
+impl From<mpsc::SendError> for RelayError {
+    fn from(error: mpsc::SendError) -> Self {
+        RelayError::FailedSendingMessageToBehaviour(error)
     }
 }
 
