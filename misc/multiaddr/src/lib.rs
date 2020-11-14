@@ -346,7 +346,7 @@ impl<'de> Deserialize<'de> for Multiaddr {
                 formatter.write_str("multiaddress")
             }
             fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> StdResult<Self::Value, A::Error> {
-                let mut buf: Vec<u8> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                let mut buf: Vec<u8> = Vec::with_capacity(std::cmp::min(seq.size_hint().unwrap_or(0), 4096));
                 while let Some(e) = seq.next_element()? { buf.push(e); }
                 if self.is_human_readable {
                     let s = String::from_utf8(buf).map_err(DeserializerError::custom)?;
