@@ -153,9 +153,8 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                         destination_peer_id,
                         send_back: tx,
                     })
-                    .await
-                    .unwrap();
-                let stream = rx.await.unwrap();
+                    .await?;
+                let stream = rx.await?;
                 Ok(stream)
             }
             .boxed(),
@@ -323,6 +322,7 @@ pub enum RelayError {
     MissingPeerId,
     InvalidHash,
     FailedSendingMessageToBehaviour(mpsc::SendError),
+    ResponseFromBehaviourCanceled,
 }
 
 impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
@@ -334,6 +334,12 @@ impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
 impl From<mpsc::SendError> for RelayError {
     fn from(error: mpsc::SendError) -> Self {
         RelayError::FailedSendingMessageToBehaviour(error)
+    }
+}
+
+impl From<oneshot::Canceled> for RelayError {
+    fn from(error: oneshot::Canceled) -> Self {
+        RelayError::ResponseFromBehaviourCanceled
     }
 }
 
