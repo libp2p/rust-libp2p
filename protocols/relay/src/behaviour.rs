@@ -226,8 +226,28 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
-        unimplemented!();
+    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+        match self.outgoing_relay_requests.remove(peer_id) {
+            Some(OutgoingRelayRequest::Dialing { send_back, .. }) => {
+                // TODO: Introduce better error handling, sending back an actual addr reach failure
+                // error to the transport wrapper.
+                drop(send_back);
+            }
+            Some(OutgoingRelayRequest::Upgrading { .. }) => {
+                unreachable!("We never directly dial the destination.")
+            }
+            None => {}
+        }
+
+        while let Some(pos) = self
+            .incoming_relay_requests
+            .iter()
+            .position(|p| p.1.destination_id() == peer_id)
+        {
+            // TODO: Do better error handling, instead of just dropping the channels.
+            self.outgoing_destination_requests.remove(peer_id).unwrap();
+            let _ = self.incoming_relay_requests.remove(pos);
+        }
     }
 
     fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
@@ -238,7 +258,7 @@ impl NetworkBehaviour for Relay {
         _addr: &Multiaddr,
         _error: &dyn std::error::Error,
     ) {
-        unimplemented!();
+        // Handled in `inject_dial_failure`.
     }
 
     fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
@@ -313,7 +333,9 @@ impl NetworkBehaviour for Relay {
                     });
             }
 
-            RelayHandlerEvent::OutgoingRelayRequestDenied(_) => unimplemented!(),
+            RelayHandlerEvent::OutgoingRelayRequestError(destination) => {
+                self.outgoing_relay_requests.remove(&destination).unwrap();
+            },
             RelayHandlerEvent::OutgoingRelayRequestSuccess(destination, stream) => {
                 // TODO: Instead of this unnecessary check, one could as well not safe dialing and
                 // upgrading outbound relay requests in the same HashMap.

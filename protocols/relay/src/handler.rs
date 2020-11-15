@@ -22,7 +22,8 @@ use crate::protocol;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
-use libp2p_core::{either, upgrade, Multiaddr, PeerId};
+use libp2p_core::either::{EitherError, EitherOutput};
+use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -67,7 +68,8 @@ pub struct RelayHandler {
     outgoing_relay_requests: SmallVec<[(PeerId, Vec<Multiaddr>); 4]>,
 
     /// Requests asking the remote to become a destination.
-    outgoing_destination_requests: SmallVec<[(PeerId, Vec<Multiaddr>, RelayHandlerIncomingRelayRequest); 4]>,
+    outgoing_destination_requests:
+        SmallVec<[(PeerId, Vec<Multiaddr>, RelayHandlerIncomingRelayRequest); 4]>,
 
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
@@ -100,14 +102,13 @@ pub enum RelayHandlerEvent {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    IncomingRelayRequestSuccess{
+    IncomingRelayRequestSuccess {
         stream: NegotiatedSubstream,
         source: PeerId,
     },
 
-    /// A `RelayRequest` that has previously been sent by the local node has been denied by the
-    /// remote.
-    OutgoingRelayRequestDenied(PeerId),
+    /// A `RelayRequest` that has previously been sent by the local node has failed.
+    OutgoingRelayRequestError(PeerId),
 }
 
 /// Event that can be sent to the relay handler.
@@ -186,7 +187,8 @@ impl RelayHandlerIncomingDestinationRequest {
     // TODO: change error type
     pub fn accept(
         self,
-    ) -> impl Future<Output = Result<(PeerId, NegotiatedSubstream), Box<dyn error::Error + 'static>>> {
+    ) -> impl Future<Output = Result<(PeerId, NegotiatedSubstream), Box<dyn error::Error + 'static>>>
+    {
         self.inner.accept()
     }
 }
@@ -217,10 +219,10 @@ impl ProtocolsHandler for RelayHandler {
     type Error = io::Error;
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol = upgrade::EitherUpgrade<
-        protocol::OutgoingRelayRequest<PeerId>,
+        protocol::OutgoingRelayRequest,
         protocol::OutgoingDestinationRequest<RelayHandlerIncomingRelayRequest>,
     >;
-    type OutboundOpenInfo = ();
+    type OutboundOpenInfo = PeerId;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -245,9 +247,9 @@ impl ProtocolsHandler for RelayHandler {
             // We have been asked to act as a relay.
             protocol::RelayRemoteRequest::HopRequest(hop_request) => {
                 self.queued_events
-                    .push(RelayHandlerEvent::IncomingRelayRequest(RelayHandlerIncomingRelayRequest {
-                        inner: hop_request,
-                    }));
+                    .push(RelayHandlerEvent::IncomingRelayRequest(
+                        RelayHandlerIncomingRelayRequest { inner: hop_request },
+                    ));
             }
         }
     }
@@ -255,11 +257,11 @@ impl ProtocolsHandler for RelayHandler {
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
+        dest_id: Self::OutboundOpenInfo,
     ) {
         match protocol {
             // We have successfully negotiated a substream towards a destination.
-            either::EitherOutput::First((substream_to_dest, dest_id)) => {
+            EitherOutput::First(substream_to_dest) => {
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayRequestSuccess(
                         dest_id,
@@ -267,8 +269,9 @@ impl ProtocolsHandler for RelayHandler {
                     ));
             }
             // We have successfully asked the node to be a destination.
-            either::EitherOutput::Second((to_dest_substream, hop_request)) => {
-                self.copy_futures.push(hop_request.inner.fulfill(to_dest_substream));
+            EitherOutput::Second((to_dest_substream, hop_request)) => {
+                self.copy_futures
+                    .push(hop_request.inner.fulfill(to_dest_substream));
             }
         }
     }
@@ -308,14 +311,21 @@ impl ProtocolsHandler for RelayHandler {
 
     fn inject_dial_upgrade_error(
         &mut self,
-        _: Self::OutboundOpenInfo,
+        peer_id: Self::OutboundOpenInfo,
         // TODO: Fix
-        _: ProtocolsHandlerUpgrErr<
-            either::EitherError<protocol::SendReadError, protocol::SendReadError>,
+        error: ProtocolsHandlerUpgrErr<
+            EitherError<protocol::OutgoingRelayRequestError, protocol::SendReadError>,
         >,
     ) {
-        // TODO:
-        unimplemented!()
+        match error {
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::A(
+                protocol::OutgoingRelayRequestError::Io(_),
+            ))) => {
+                self.queued_events
+                    .push(RelayHandlerEvent::OutgoingRelayRequestError(peer_id));
+            }
+            _ => todo!(),
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -347,9 +357,8 @@ impl ProtocolsHandler for RelayHandler {
                     upgrade::EitherUpgrade::A(protocol::OutgoingRelayRequest::new(
                         peer_id.clone(),
                         addrs,
-                        peer_id,
                     )),
-                    (),
+                    peer_id,
                 ),
             });
         }
@@ -361,18 +370,19 @@ impl ProtocolsHandler for RelayHandler {
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::B(protocol::OutgoingDestinationRequest::new(
-                        source,
+                        source.clone(),
                         source_addrs,
                         substream,
                     )),
-                    (),
+                    // TODO: Does one need this PeerId?
+                    source,
                 ),
             });
         }
 
         match self.accept_destination_futures.poll_next_unpin(cx) {
             Poll::Ready(Some(Ok((source, substream)))) => {
-                let event = RelayHandlerEvent::IncomingRelayRequestSuccess{
+                let event = RelayHandlerEvent::IncomingRelayRequestSuccess {
                     stream: substream,
                     source,
                 };
@@ -385,8 +395,8 @@ impl ProtocolsHandler for RelayHandler {
 
         match self.copy_futures.poll_next_unpin(cx) {
             Poll::Ready(Some(())) => panic!("a copy future finished"),
-            Poll::Ready(None) => {},
-            Poll::Pending => {},
+            Poll::Ready(None) => {}
+            Poll::Pending => {}
         }
 
         // Report the queued events.

@@ -31,7 +31,7 @@ const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
 // Source -> Relay
 mod outgoing_relay_request;
 mod incoming_relay_request;
-pub use self::outgoing_relay_request::OutgoingRelayRequest;
+pub use self::outgoing_relay_request::{OutgoingRelayRequest, OutgoingRelayRequestError};
 pub use self::incoming_relay_request::IncomingRelayRequest;
 
 // Relay -> Destination

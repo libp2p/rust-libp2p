@@ -19,12 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::SendReadError;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
+use std::io::{Error, ErrorKind};
 use std::iter;
 use unsigned_varint::codec::UviBytes;
 
@@ -39,22 +39,18 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If the upgrade succeeds, the substream is returned and is now a brand new connection pointing
 /// to the *destination*.
-// TODO: debug
-pub struct OutgoingRelayRequest<TUserData> {
+pub struct OutgoingRelayRequest {
     /// The message to send to the relay. Pre-computed.
     message: Vec<u8>,
-    /// User data that is passed back to the user.
-    user_data: TUserData,
 }
 
-impl<TUserData> OutgoingRelayRequest<TUserData> {
+impl OutgoingRelayRequest {
     /// Builds a request for the target to act as a relay to a third party.
     ///
     /// The `user_data` is passed back in the result.
     pub fn new(
         dest_id: PeerId,
         dest_addresses: impl IntoIterator<Item = Multiaddr>,
-        user_data: TUserData,
     ) -> Self {
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Hop.into()),
@@ -73,12 +69,11 @@ impl<TUserData> OutgoingRelayRequest<TUserData> {
 
         OutgoingRelayRequest {
             message: encoded,
-            user_data,
         }
     }
 }
 
-impl<TUserData> upgrade::UpgradeInfo for OutgoingRelayRequest<TUserData> {
+impl upgrade::UpgradeInfo for OutgoingRelayRequest {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -87,18 +82,17 @@ impl<TUserData> upgrade::UpgradeInfo for OutgoingRelayRequest<TUserData> {
     }
 }
 
-impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayRequest<TUserData>
+impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayRequest
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    TUserData: Send + 'static,
 {
-    type Output = (TSubstream, TUserData);
-    type Error = SendReadError;
-    type Future = BoxFuture<'static, Result<(TSubstream, TUserData), SendReadError>>;
+    type Output = TSubstream;
+    type Error = OutgoingRelayRequestError;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         // TODO: Needed?
-        let OutgoingRelayRequest { message, user_data } = self;
+        let OutgoingRelayRequest { message } = self;
 
         let codec = UviBytes::default();
         // TODO: Do we need this?
@@ -108,7 +102,13 @@ where
 
         async move {
             substream.send(std::io::Cursor::new(message)).await.unwrap();
-            let msg = substream.next().await.unwrap().unwrap();
+            let msg = substream
+                .next()
+                .await
+                .ok_or(OutgoingRelayRequestError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "",
+                )))??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
@@ -132,8 +132,18 @@ where
                 panic!("expected success");
             }
 
-            Ok((substream.into_inner(), user_data))
+            Ok(substream.into_inner())
         }
         .boxed()
+    }
+}
+
+pub enum OutgoingRelayRequestError {
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for OutgoingRelayRequestError {
+    fn from(e: std::io::Error) -> Self {
+        OutgoingRelayRequestError::Io(e)
     }
 }
