@@ -1,4 +1,4 @@
-# 0.9.5 [unreleased]
+# 0.9.5 [2020-11-14]
 
 - Limit initial memory allocation in `visit_seq`.
   [PR 1833](https://github.com/libp2p/rust-libp2p/pull/1833).
