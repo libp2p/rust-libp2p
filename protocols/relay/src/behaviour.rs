@@ -34,10 +34,7 @@ use libp2p_swarm::{
     DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters, ProtocolsHandler,
 };
-use std::collections::{
-    hash_map::{Entry, OccupiedEntry},
-    HashMap, VecDeque,
-};
+use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
 /// Network behaviour that allows the local node to act as a source, a relay and as a destination.
@@ -61,6 +58,8 @@ pub struct Relay {
     /// Requests by the local node to a relay to relay a connection for the local node to a
     /// destination.
     outgoing_relay_requests: HashMap<PeerId, OutgoingRelayRequest>,
+    /// Requests by the local node to a destination to relay a connection from a source.
+    outgoing_destination_requests: HashMap<PeerId, OutgoingDestinationRequest>,
 
     /// List of relay nodes that act as a listener for the local node acting as a destination.
     relay_listeners: HashMap<PeerId, RelayListener>,
@@ -76,6 +75,12 @@ enum OutgoingRelayRequest {
     },
     Upgrading {
         send_back: oneshot::Sender<NegotiatedSubstream>,
+    },
+}
+
+enum OutgoingDestinationRequest {
+    Dialing {
+        destination_addresses: Vec<Multiaddr>,
     },
 }
 
@@ -97,6 +102,7 @@ impl Relay {
             connected_peers: Default::default(),
             incoming_relay_requests: Default::default(),
             outgoing_relay_requests: Default::default(),
+            outgoing_destination_requests: Default::default(),
             relay_listeners: Default::default(),
         }
     }
@@ -111,15 +117,18 @@ impl NetworkBehaviour for Relay {
     }
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
-        let relay_listener_addresses = self.relay_listeners.iter().filter_map(|(peer_id, r)| {
+        let mut addresses = Vec::new();
+
+        addresses.extend(self.relay_listeners.iter().filter_map(|(peer_id, r)| {
             if let RelayListener::Connecting(address) = r {
                 if peer_id == remote_peer_id {
                     return Some(address.clone());
                 }
             }
             None
-        });
-        let outgoing_hop_request_addresses =
+        }));
+
+        addresses.extend(
             self.outgoing_relay_requests
                 .iter()
                 .filter_map(|(peer_id, r)| {
@@ -129,22 +138,29 @@ impl NetworkBehaviour for Relay {
                         }
                     }
                     None
-                });
+                }),
+        );
 
-        relay_listener_addresses
-            .chain(outgoing_hop_request_addresses)
-            .collect()
+        addresses.extend(
+            self.outgoing_destination_requests
+                .iter()
+                .filter_map(
+                    |(
+                        peer_id,
+                        OutgoingDestinationRequest::Dialing {
+                            destination_addresses,
+                        },
+                    )| {
+                        if peer_id == remote_peer_id {
+                            return Some(destination_addresses.clone());
+                        }
+                        None
+                    },
+                )
+                .flatten(),
+        );
 
-        // We return the addresses that potential relaying sources have given us for potential
-        // destination.
-        // For example, if node A connects to us and says "I want to connect to node B whose
-        // address is M", and then `addresses_of_peer(B)` is called, then we return `M`.
-        // self.pending_hop_requests
-        //     .iter()
-        //     .filter(|rq| rq.1.destination_id() == remote_peer_id)
-        //     .flat_map(|rq| rq.1.destination_addresses())
-        //     .cloned()
-        //     .collect()
+        addresses
     }
 
     fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
@@ -192,6 +208,7 @@ impl NetworkBehaviour for Relay {
             .iter()
             .position(|p| p.1.destination_id() == id)
         {
+            self.outgoing_destination_requests.remove(id).unwrap();
             let (source, hop_request) = self.incoming_relay_requests.remove(pos);
 
             let send_back = RelayHandlerIn::OutgoingDestinationRequest {
@@ -248,13 +265,13 @@ impl NetworkBehaviour for Relay {
     ) {
         match event {
             // Remote wants us to become a relay.
-            RelayHandlerEvent::IncomingRelayRequest(hop_request) => {
-                if self.connected_peers.contains(hop_request.destination_id()) {
-                    let dest_id = hop_request.destination_id().clone();
+            RelayHandlerEvent::IncomingRelayRequest(request) => {
+                if self.connected_peers.contains(request.destination_id()) {
+                    let dest_id = request.destination_id().clone();
                     let send_back = RelayHandlerIn::OutgoingDestinationRequest {
                         source: event_source,
                         source_addresses: Vec::new(), // TODO: wrong
-                        substream: hop_request,
+                        substream: request,
                     };
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -264,9 +281,17 @@ impl NetworkBehaviour for Relay {
                             event: send_back,
                         });
                 } else {
-                    let dest_id = hop_request.destination_id().clone();
-                    self.incoming_relay_requests
-                        .push((event_source, hop_request));
+                    let dest_id = request.destination_id().clone();
+                    self.outgoing_destination_requests.insert(
+                        dest_id.clone(),
+                        OutgoingDestinationRequest::Dialing {
+                            destination_addresses: request
+                                .destination_addresses()
+                                .cloned()
+                                .collect(),
+                        },
+                    );
+                    self.incoming_relay_requests.push((event_source, request));
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::DialPeer {
                             peer_id: dest_id,
