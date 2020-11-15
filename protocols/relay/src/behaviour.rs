@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerIncomingRelayRequest, RelayHandlerIn};
+use crate::handler::{
+    RelayHandler, RelayHandlerEvent, RelayHandlerIn, RelayHandlerIncomingRelayRequest,
+};
 use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
 use futures::channel::{mpsc, oneshot};
@@ -32,7 +34,10 @@ use libp2p_swarm::{
     DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters, ProtocolsHandler,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{
+    hash_map::{Entry, OccupiedEntry},
+    HashMap, VecDeque,
+};
 use std::task::{Context, Poll};
 
 /// Network behaviour that allows the local node to act as a source, a relay and as a destination.
@@ -152,28 +157,33 @@ impl NetworkBehaviour for Relay {
                 .insert(id.clone(), RelayListener::Connected(addr.clone()));
         }
 
-        if let Some(OutgoingRelayRequest::Dialing {
-            relay_addr: _,
-            // relay_peer_id: _,
-            destination_addr,
-            destination_peer_id,
-            send_back,
-        }) = self.outgoing_relay_requests.remove(id)
-        {
-            self.outbox_to_swarm
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: id.clone(),
-                    handler: NotifyHandler::Any,
-                    event: RelayHandlerIn::OutgoingRelayRequest {
-                        target: destination_peer_id.clone(),
-                        addresses: vec![destination_addr.clone()],
-                    },
-                });
-
-            self.outgoing_relay_requests.insert(
+        match self.outgoing_relay_requests.remove(id) {
+            Some(OutgoingRelayRequest::Dialing {
+                relay_addr: _,
+                // relay_peer_id: _,
+                destination_addr,
                 destination_peer_id,
-                OutgoingRelayRequest::Upgrading { send_back },
-            );
+                send_back,
+            }) => {
+                self.outbox_to_swarm
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: id.clone(),
+                        handler: NotifyHandler::Any,
+                        event: RelayHandlerIn::OutgoingRelayRequest {
+                            target: destination_peer_id.clone(),
+                            addresses: vec![destination_addr.clone()],
+                        },
+                    });
+
+                self.outgoing_relay_requests.insert(
+                    destination_peer_id,
+                    OutgoingRelayRequest::Upgrading { send_back },
+                );
+            }
+            Some(entry @ OutgoingRelayRequest::Upgrading { .. }) => {
+                self.outgoing_relay_requests.insert(id.clone(), entry);
+            }
+            None => {}
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
@@ -257,10 +267,11 @@ impl NetworkBehaviour for Relay {
                     let dest_id = hop_request.destination_id().clone();
                     self.incoming_relay_requests
                         .push((event_source, hop_request));
-                    self.outbox_to_swarm.push_back(NetworkBehaviourAction::DialPeer {
-                        peer_id: dest_id,
-                        condition: DialPeerCondition::NotDialing,
-                    });
+                    self.outbox_to_swarm
+                        .push_back(NetworkBehaviourAction::DialPeer {
+                            peer_id: dest_id,
+                            condition: DialPeerCondition::NotDialing,
+                        });
                 }
             }
 
@@ -281,11 +292,7 @@ impl NetworkBehaviour for Relay {
             RelayHandlerEvent::OutgoingRelayRequestSuccess(destination, stream) => {
                 // TODO: Instead of this unnecessary check, one could as well not safe dialing and
                 // upgrading outbound relay requests in the same HashMap.
-                let send_back = match self
-                    .outgoing_relay_requests
-                    .remove(&destination)
-                    .unwrap()
-                {
+                let send_back = match self.outgoing_relay_requests.remove(&destination).unwrap() {
                     OutgoingRelayRequest::Upgrading { send_back } => send_back,
                     _ => todo!("Handle"),
                 };

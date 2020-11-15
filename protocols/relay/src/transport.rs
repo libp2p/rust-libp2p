@@ -338,7 +338,7 @@ impl From<mpsc::SendError> for RelayError {
 }
 
 impl From<oneshot::Canceled> for RelayError {
-    fn from(error: oneshot::Canceled) -> Self {
+    fn from(_: oneshot::Canceled) -> Self {
         RelayError::ResponseFromBehaviourCanceled
     }
 }
