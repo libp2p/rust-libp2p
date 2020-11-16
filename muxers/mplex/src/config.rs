@@ -119,7 +119,7 @@ impl Default for MplexConfig {
             max_substreams: 128,
             max_buffer_len: 32,
             max_buffer_behaviour: MaxBufferBehaviour::Block,
-            split_send_size: 1024,
+            split_send_size: 8 * 1024,
         }
     }
 }

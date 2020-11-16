@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "0.5"
 futures = "0.3.1"
-futures_codec = "0.4"
+futures_codec = "0.4.1"
 libp2p-core = { version = "0.24.0", path = "../../core" }
 log = "0.4"
 nohash-hasher = "0.2"
@@ -22,9 +22,15 @@ smallvec = "1.4"
 unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 
 [dev-dependencies]
-async-std = "1.6.2"
+async-std = "1.7.0"
+criterion = "0.3"
 env_logger = "0.8"
 futures = "0.3"
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-plaintext = { path = "../../protocols/plaintext" }
 quickcheck = "0.9"
 rand = "0.7"
+
+[[bench]]
+name = "split_send_size"
+harness = false
