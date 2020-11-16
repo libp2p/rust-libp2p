@@ -378,13 +378,25 @@ impl fmt::Debug for GossipsubRpc {
     }
 }
 
+impl PeerKind {
+    pub fn as_static_ref(&self) -> &'static str {
+        match self {
+            Self::NotSupported => "Not Supported",
+            Self::Floodsub => "Floodsub",
+            Self::Gossipsub => "Gossipsub v1.0",
+            Self::Gossipsubv1_1 => "Gossipsub v1.1",
+        }
+    }
+}
+
+impl AsRef<str> for PeerKind {
+    fn as_ref(&self) -> &str {
+        self.as_static_ref()
+    }
+}
+
 impl fmt::Display for PeerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotSupported => write!(f, "Not Supported"),
-            Self::Floodsub => write!(f, "Floodsub"),
-            Self::Gossipsub => write!(f, "Gossipsub v1.0"),
-            Self::Gossipsubv1_1 => write!(f, "Gossipsub v1.1"),
-        }
+        f.write_str(self.as_ref())
     }
 }
