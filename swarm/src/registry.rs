@@ -62,10 +62,10 @@ pub struct Addresses {
 
 /// An record in a prioritised list of addresses.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AddressRecord {
     pub addr: Multiaddr,
     pub score: AddressScore,
-    _priv: (),
 }
 
 /// A report tracked for a finitely scored address.
