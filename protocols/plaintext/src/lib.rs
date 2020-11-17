@@ -20,6 +20,7 @@
 
 use crate::error::PlainTextError;
 
+use bytes::Bytes;
 use futures::future::{self, Ready};
 use futures::prelude::*;
 use futures::future::BoxFuture;
@@ -148,7 +149,7 @@ impl PlainText2Config {
         T: AsyncRead + AsyncWrite + Send + Unpin + 'static
     {
         debug!("Starting plaintext handshake.");
-        let (socket, remote) = handshake::handshake(socket, self).await?;
+        let (socket, remote, read_buffer) = handshake::handshake(socket, self).await?;
         debug!("Finished plaintext handshake.");
 
         Ok((
@@ -156,6 +157,7 @@ impl PlainText2Config {
             PlainTextOutput {
                 socket,
                 remote_key: remote.public_key,
+                read_buffer,
             }
         ))
     }
@@ -170,12 +172,22 @@ where
     pub socket: S,
     /// The public key of the remote.
     pub remote_key: PublicKey,
+    /// Remaining bytes that have been already buffered
+    /// during the handshake but are not part of the
+    /// handshake. These must be consumed first by `poll_read`.
+    read_buffer: Bytes,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PlainTextOutput<S> {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
+        if !self.read_buffer.is_empty() {
+            let n = std::cmp::min(buf.len(), self.read_buffer.len());
+            let b = self.read_buffer.split_to(n);
+            buf[..n].copy_from_slice(&b[..]);
+            return Poll::Ready(Ok(n))
+        }
         AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }

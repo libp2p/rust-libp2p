@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.30.0"
+version = "0.30.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -71,7 +71,7 @@ libp2p-kad = { version = "0.25.0", path = "protocols/kad", optional = true }
 libp2p-mplex = { version = "0.24.0", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.26.0", path = "protocols/noise", optional = true }
 libp2p-ping = { version = "0.24.0", path = "protocols/ping", optional = true }
-libp2p-plaintext = { version = "0.24.0", path = "protocols/plaintext", optional = true }
+libp2p-plaintext = { version = "0.24.1", path = "protocols/plaintext", optional = true }
 libp2p-pnet = { version = "0.19.2", path = "protocols/pnet", optional = true }
 libp2p-request-response = { version = "0.5.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.24.0", path = "swarm" }
