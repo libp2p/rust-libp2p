@@ -1,3 +1,7 @@
+# 0.25.0 [unreleased]
+
+- Update `multihash`.
+
 # 0.24.0 [2020-11-09]
 
 - Remove `ConnectionInfo` trait and replace it with `PeerId`

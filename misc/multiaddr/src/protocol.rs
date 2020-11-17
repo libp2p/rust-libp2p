@@ -156,7 +156,7 @@ impl<'a> Protocol<'a> {
             "p2p" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 let decoded = bs58::decode(s).into_vec()?;
-                Ok(Protocol::P2p(Multihash::from_bytes(decoded)?))
+                Ok(Protocol::P2p(Multihash::from_bytes(&decoded)?))
             }
             "http" => Ok(Protocol::Http),
             "https" => Ok(Protocol::Https),
@@ -280,7 +280,7 @@ impl<'a> Protocol<'a> {
             P2P => {
                 let (n, input) = decode::usize(input)?;
                 let (data, rest) = split_at(n, input)?;
-                Ok((Protocol::P2p(Multihash::from_bytes(data.to_owned())?), rest))
+                Ok((Protocol::P2p(Multihash::from_bytes(data)?), rest))
             }
             P2P_CIRCUIT => Ok((Protocol::P2pCircuit, input)),
             QUIC => Ok((Protocol::Quic, input)),
@@ -388,7 +388,7 @@ impl<'a> Protocol<'a> {
             }
             Protocol::P2p(multihash) => {
                 w.write_all(encode::u32(P2P, &mut buf))?;
-                let bytes = multihash.as_bytes();
+                let bytes = multihash.to_bytes();
                 w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 w.write_all(&bytes)?
             }
@@ -492,7 +492,7 @@ impl<'a> fmt::Display for Protocol<'a> {
                 let s = BASE32.encode(addr.hash());
                 write!(f, "/onion3/{}:{}", s.to_lowercase(), addr.port())
             }
-            P2p(c) => write!(f, "/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
+            P2p(c) => write!(f, "/p2p/{}", bs58::encode(c.to_bytes()).into_string()),
             P2pCircuit => f.write_str("/p2p-circuit"),
             Quic => f.write_str("/quic"),
             Sctp(port) => write!(f, "/sctp/{}", port),

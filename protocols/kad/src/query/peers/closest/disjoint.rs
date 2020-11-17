@@ -432,6 +432,7 @@ mod tests {
     use super::*;
 
     use crate::K_VALUE;
+    use libp2p_core::multihash::{Code, Multihash};
     use quickcheck::*;
     use rand::{Rng, seq::SliceRandom};
     use std::collections::HashSet;
@@ -526,7 +527,7 @@ mod tests {
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0 .. n).map(|_| PeerId::from_multihash(
-            multihash::wrap(multihash::Code::Sha2_256, &g.gen::<[u8; 32]>())
+            Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap()
         ).unwrap()).collect()
     }
 

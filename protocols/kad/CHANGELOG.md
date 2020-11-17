@@ -1,3 +1,7 @@
+# 0.26.0 [unreleased]
+
+- Update `libp2p-core` and `libp2p-swarm`.
+
 # 0.25.0 [2020-11-09]
 
 - Upon newly established connections, delay routing table

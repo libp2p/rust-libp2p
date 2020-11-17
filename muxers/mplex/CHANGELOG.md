@@ -1,3 +1,10 @@
+# 0.25.0 [unreleased]
+
+- Update `libp2p-core`.
+
+- Change the default `split_send_size` from 1KiB to 8KiB.
+  [PR 1834](https://github.com/libp2p/rust-libp2p/pull/1834).
+
 # 0.24.0 [2020-11-09]
 
 - Change the default configuration to use `MaxBufferBehaviour::Block`
