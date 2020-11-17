@@ -5,6 +5,8 @@ pub use multihash;
 mod protocol;
 mod onion_addr;
 mod errors;
+
+#[cfg(feature = "url")]
 mod from_url;
 
 use serde::{
@@ -25,9 +27,11 @@ use std::{
     sync::Arc
 };
 pub use self::errors::{Result, Error};
-pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 pub use self::protocol::Protocol;
 pub use self::onion_addr::Onion3Addr;
+
+#[cfg(feature = "url")]
+pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 
 static_assertions::const_assert! {
     // This check is most certainly overkill right now, but done here
