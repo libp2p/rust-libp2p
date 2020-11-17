@@ -1,4 +1,6 @@
-# 0.24.1 [unreleased]
+# 0.25.0 [unreleased]
+
+- Update `libp2p-core`.
 
 - Change the default `split_send_size` from 1KiB to 8KiB.
   [PR 1834](https://github.com/libp2p/rust-libp2p/pull/1834).
