@@ -19,8 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use uint::*;
-use libp2p_core::PeerId;
-use multihash::Multihash;
+use libp2p_core::{PeerId, multihash::Multihash};
 use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::{GenericArray, typenum::U32};
 use std::borrow::Borrow;
@@ -93,9 +92,13 @@ impl<T> Into<KeyBytes> for Key<T> {
 }
 
 impl From<Multihash> for Key<Multihash> {
-    fn from(m: Multihash) -> Self {
-        Key::new(m)
-    }
+   fn from(m: Multihash) -> Self {
+       let bytes = KeyBytes(Sha256::digest(&m.to_bytes()));
+       Key {
+           preimage: m,
+           bytes
+       }
+   }
 }
 
 impl From<PeerId> for Key<PeerId> {
@@ -182,7 +185,7 @@ impl Distance {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use multihash::{wrap, Code};
+    use libp2p_core::multihash::Code;
     use rand::Rng;
 
     impl Arbitrary for Key<PeerId> {
@@ -194,7 +197,7 @@ mod tests {
     impl Arbitrary for Key<Multihash> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<Multihash> {
             let hash = rand::thread_rng().gen::<[u8; 32]>();
-            Key::from(wrap(Code::Sha2_256, &hash))
+            Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
         }
     }
 

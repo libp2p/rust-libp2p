@@ -162,7 +162,7 @@ pub use futures;
 #[doc(inline)]
 pub use multiaddr;
 #[doc(inline)]
-pub use multihash;
+pub use libp2p_core::multihash;
 
 #[doc(inline)]
 pub use libp2p_core as core;

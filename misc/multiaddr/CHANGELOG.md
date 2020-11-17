@@ -1,3 +1,14 @@
+# 0.9.6 [2020-11-17]
+
+- Move the `from_url` module and functionality behind the `url` feature,
+  enabled by default.
+  [PR 1843](https://github.com/libp2p/rust-libp2p/pull/1843).
+
+# 0.9.5 [2020-11-14]
+
+- Limit initial memory allocation in `visit_seq`.
+  [PR 1833](https://github.com/libp2p/rust-libp2p/pull/1833).
+
 # 0.9.4 [2020-11-09]
 
 - Update dependencies.

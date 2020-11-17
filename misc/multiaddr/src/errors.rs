@@ -51,8 +51,8 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<multihash::DecodeOwnedError> for Error {
-    fn from(err: multihash::DecodeOwnedError) -> Error {
+impl From<multihash::Error> for Error {
+    fn from(err: multihash::Error) -> Error {
         Error::ParsingError(err.into())
     }
 }

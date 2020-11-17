@@ -38,7 +38,8 @@ use libp2p_core::{
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
-    upgrade
+    upgrade,
+    multihash::{Code, Multihash, MultihashDigest},
 };
 use libp2p_noise as noise;
 use libp2p_swarm::Swarm;
@@ -46,7 +47,6 @@ use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
 use std::{collections::{HashSet, HashMap}, time::Duration, num::NonZeroUsize, u64};
-use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
@@ -129,7 +129,7 @@ fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
 }
 
 fn random_multihash() -> Multihash {
-    wrap(Code::Sha2_256, &thread_rng().gen::<[u8; 32]>())
+    Multihash::wrap(Code::Sha2_256.into(), &thread_rng().gen::<[u8; 32]>()).unwrap()
 }
 
 #[derive(Clone, Debug)]
@@ -934,7 +934,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
 
-    let key = Key::new(&multihash::Sha2_256::digest(&thread_rng().gen::<[u8; 32]>()));
+    let key = Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
     let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
 
