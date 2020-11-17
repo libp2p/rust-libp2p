@@ -214,8 +214,18 @@ where
         }
 
         debug_assert!(self.open_buffer.is_empty());
+        let mut num_buffered = 0;
 
         loop {
+            // Whenever we may have completely filled a substream
+            // buffer while waiting for the next inbound stream,
+            // yield to give the current task a chance to read
+            // from the respective substreams.
+            if num_buffered == self.config.max_buffer_len {
+                cx.waker().clone().wake();
+                return Poll::Pending
+            }
+
             // Wait for the next inbound `Open` frame.
             match ready!(self.poll_read_frame(cx, None))? {
                 Frame::Open { stream_id } => {
@@ -225,6 +235,7 @@ where
                 }
                 Frame::Data { stream_id, data } => {
                     self.buffer(stream_id.into_local(), data)?;
+                    num_buffered += 1;
                 }
                 Frame::Close { stream_id } => {
                     self.on_close(stream_id.into_local())?;
@@ -406,7 +417,18 @@ where
             buf.shrink_to_fit();
         }
 
+        let mut num_buffered = 0;
+
         loop {
+            // Whenever we may have completely filled a substream
+            // buffer of another substream while waiting for the
+            // next frame for `id`, yield to give the current task
+            // a chance to read from the other substream(s).
+            if num_buffered == self.config.max_buffer_len {
+                cx.waker().clone().wake();
+                return Poll::Pending
+            }
+
             // Check if the targeted substream (if any) reached EOF.
             if !self.can_read(&id) {
                 // Note: Contrary to what is recommended by the spec, we must
@@ -427,6 +449,7 @@ where
                     // currently being polled, so it needs to be buffered and
                     // the interested tasks notified.
                     self.buffer(stream_id.into_local(), data)?;
+                    num_buffered += 1;
                 }
                 frame @ Frame::Open { .. } => {
                     if let Some(id) = self.on_open(frame.remote_id())? {
@@ -1106,14 +1129,29 @@ mod tests {
                 let id = LocalStreamId::listener(0);
                 match m.poll_next_stream(cx) {
                     Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
-                    Poll::Pending => {}
+                    Poll::Pending => {
+                        // We expect the implementation to yield when the buffer
+                        // is full but before it is exceeded and the max buffer
+                        // behaviour takes effect, giving the current task a
+                        // chance to read from the buffer. Here we just read
+                        // again to provoke the max buffer behaviour.
+                        assert_eq!(
+                            m.substreams.get_mut(&id).unwrap().recv_buf().len(),
+                            cfg.max_buffer_len
+                        );
+                        match m.poll_next_stream(cx) {
+                            Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                            Poll::Pending => {
+                                // Expect the buffer for stream 0 to be exceeded, triggering
+                                // the max. buffer behaviour.
+                                assert_eq!(
+                                    m.substreams.get_mut(&id).unwrap().recv_buf().len(),
+                                    cfg.max_buffer_len + 1
+                                );
+                            }
+                        }
+                    }
                 }
-
-                // Expect the buffer for stream 0 to be just 1 over the limit.
-                assert_eq!(
-                    m.substreams.get_mut(&id).unwrap().recv_buf().len(),
-                    cfg.max_buffer_len + 1
-                );
 
                 // Expect either a `Reset` to be sent or all reads to be
                 // blocked `Pending`, depending on the `MaxBufferBehaviour`.

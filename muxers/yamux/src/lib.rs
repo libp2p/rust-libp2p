@@ -22,18 +22,13 @@
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
 use futures::{future, prelude::*, ready, stream::{BoxStream, LocalBoxStream}};
-use libp2p_core::muxing::StreamMuxerEvent;
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
-use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
+use std::{fmt, io, iter, pin::Pin, task::{Context, Poll}};
 use thiserror::Error;
 
-pub use yamux::{Mode, WindowUpdateMode};
-
 /// A Yamux connection.
-///
-/// This implementation isn't capable of detecting when the underlying socket changes its address,
-/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Yamux<S>(Mutex<Inner<S>>);
 
 impl<S> fmt::Debug for Yamux<S> {
@@ -58,8 +53,7 @@ where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     /// Create a new Yamux connection.
-    pub fn new(io: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        cfg.set_read_after_close(false);
+    fn new(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
         let inner = Inner {
@@ -78,8 +72,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin + 'static
 {
     /// Create a new Yamux connection (which is ![`Send`]).
-    pub fn local(io: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        cfg.set_read_after_close(false);
+    fn local(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
         let inner = Inner {
@@ -93,9 +86,10 @@ where
     }
 }
 
-type Poll<T> = std::task::Poll<Result<T, YamuxError>>;
+pub type YamuxResult<T> = Result<T, YamuxError>;
 
-impl<S> libp2p_core::StreamMuxer for Yamux<S>
+/// > **Note**: This implementation never emits [`StreamMuxerEvent::AddressChange`] events.
+impl<S> StreamMuxer for Yamux<S>
 where
     S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin
 {
@@ -103,7 +97,9 @@ where
     type OutboundSubstream = OpenSubstreamToken;
     type Error = YamuxError;
 
-    fn poll_event(&self, c: &mut Context<'_>) -> Poll<StreamMuxerEvent<Self::Substream>> {
+    fn poll_event(&self, c: &mut Context<'_>)
+        -> Poll<YamuxResult<StreamMuxerEvent<Self::Substream>>>
+    {
         let mut inner = self.0.lock();
         match ready!(inner.incoming.poll_next_unpin(c)) {
             Some(Ok(s)) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
@@ -116,7 +112,9 @@ where
         OpenSubstreamToken(())
     }
 
-    fn poll_outbound(&self, c: &mut Context<'_>, _: &mut OpenSubstreamToken) -> Poll<Self::Substream> {
+    fn poll_outbound(&self, c: &mut Context<'_>, _: &mut OpenSubstreamToken)
+        -> Poll<YamuxResult<Self::Substream>>
+    {
         let mut inner = self.0.lock();
         Pin::new(&mut inner.control).poll_open_stream(c).map_err(YamuxError)
     }
@@ -125,25 +123,33 @@ where
         self.0.lock().control.abort_open_stream()
     }
 
-    fn read_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream, b: &mut [u8]) -> Poll<usize> {
+    fn read_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream, b: &mut [u8])
+        -> Poll<YamuxResult<usize>>
+    {
         Pin::new(s).poll_read(c, b).map_err(|e| YamuxError(e.into()))
     }
 
-    fn write_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream, b: &[u8]) -> Poll<usize> {
+    fn write_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream, b: &[u8])
+        -> Poll<YamuxResult<usize>>
+    {
         Pin::new(s).poll_write(c, b).map_err(|e| YamuxError(e.into()))
     }
 
-    fn flush_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream) -> Poll<()> {
+    fn flush_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream)
+        -> Poll<YamuxResult<()>>
+    {
         Pin::new(s).poll_flush(c).map_err(|e| YamuxError(e.into()))
     }
 
-    fn shutdown_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream) -> Poll<()> {
+    fn shutdown_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream)
+        -> Poll<YamuxResult<()>>
+    {
         Pin::new(s).poll_close(c).map_err(|e| YamuxError(e.into()))
     }
 
     fn destroy_substream(&self, _: Self::Substream) { }
 
-    fn close(&self, c: &mut Context<'_>) -> Poll<()> {
+    fn close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
         let mut inner = self.0.lock();
         if let std::task::Poll::Ready(x) = Pin::new(&mut inner.control).poll_close(c) {
             return Poll::Ready(x.map_err(YamuxError))
@@ -158,62 +164,122 @@ where
         Poll::Pending
     }
 
-    fn flush_all(&self, _: &mut Context<'_>) -> Poll<()> {
+    fn flush_all(&self, _: &mut Context<'_>) -> Poll<YamuxResult<()>> {
         Poll::Ready(Ok(()))
     }
 }
 
 /// The yamux configuration.
 #[derive(Clone)]
-pub struct Config {
-    config: yamux::Config,
+pub struct YamuxConfig {
+    inner: yamux::Config,
     mode: Option<yamux::Mode>
+}
+
+/// The window update mode determines when window updates are
+/// sent to the remote, giving it new credit to send more data.
+pub struct WindowUpdateMode(yamux::WindowUpdateMode);
+
+impl WindowUpdateMode {
+    /// The window update mode whereby the remote is given
+    /// new credit via a window update whenever the current
+    /// receive window is exhausted when data is received,
+    /// i.e. this mode cannot exert back-pressure from application
+    /// code that is slow to read from a substream.
+    ///
+    /// > **Note**: The receive buffer may overflow with this
+    /// > strategy if the receiver is too slow in reading the
+    /// > data from the buffer. The maximum receive buffer
+    /// > size must be tuned appropriately for the desired
+    /// > throughput and level of tolerance for (temporarily)
+    /// > slow receivers.
+    pub fn on_receive() -> Self {
+        WindowUpdateMode(yamux::WindowUpdateMode::OnReceive)
+    }
+
+    /// The window update mode whereby the remote is given new
+    /// credit only when the current receive window is exhausted
+    /// when data is read from the substream's receive buffer,
+    /// i.e. application code that is slow to read from a substream
+    /// exerts back-pressure on the remote.
+    ///
+    /// > **Note**: If the receive window of a substream on
+    /// > both peers is exhausted and both peers are blocked on
+    /// > sending data before reading from the stream, a deadlock
+    /// > occurs. To avoid this situation, reading from a substream
+    /// > should never be blocked on writing to the same substream.
+    ///
+    /// > **Note**: With this strategy, there is usually no point in the
+    /// > receive buffer being larger than the window size.
+    pub fn on_read() -> Self {
+        WindowUpdateMode(yamux::WindowUpdateMode::OnRead)
+    }
 }
 
 /// The yamux configuration for upgrading I/O resources which are ![`Send`].
 #[derive(Clone)]
-pub struct LocalConfig(Config);
+pub struct YamuxLocalConfig(YamuxConfig);
 
-impl Config {
-    pub fn new(cfg: yamux::Config) -> Self {
-        Config { config: cfg, mode: None }
+impl YamuxConfig {
+    /// Creates a new `YamuxConfig` in client mode, regardless of whether
+    /// it will be used for an inbound or outbound upgrade.
+    pub fn client() -> Self {
+        let mut cfg = Self::default();
+        cfg.mode = Some(yamux::Mode::Client);
+        cfg
     }
 
-    /// Override the connection mode.
-    ///
-    /// This will always use the provided mode during the connection upgrade,
-    /// irrespective of whether an inbound or outbound upgrade happens.
-    pub fn override_mode(&mut self, mode: yamux::Mode) {
-        self.mode = Some(mode)
+    /// Creates a new `YamuxConfig` in server mode, regardless of whether
+    /// it will be used for an inbound or outbound upgrade.
+    pub fn server() -> Self {
+        let mut cfg = Self::default();
+        cfg.mode = Some(yamux::Mode::Server);
+        cfg
     }
 
-    /// Turn this into a [`LocalConfig`] for use with upgrades of ![`Send`] resources.
-    pub fn local(self) -> LocalConfig {
-        LocalConfig(self)
+    /// Sets the size (in bytes) of the receive window per substream.
+    pub fn set_receive_window_size(&mut self, num_bytes: u32) -> &mut Self {
+        self.inner.set_receive_window(num_bytes);
+        self
+    }
+
+    /// Sets the maximum size (in bytes) of the receive buffer per substream.
+    pub fn set_max_buffer_size(&mut self, num_bytes: usize) -> &mut Self {
+        self.inner.set_max_buffer_size(num_bytes);
+        self
+    }
+
+    /// Sets the maximum number of concurrent substreams.
+    pub fn set_max_num_streams(&mut self, num_streams: usize) -> &mut Self {
+        self.inner.set_max_num_streams(num_streams);
+        self
+    }
+
+    /// Sets the window update mode that determines when the remote
+    /// is given new credit for sending more data.
+    pub fn set_window_update_mode(&mut self, mode: WindowUpdateMode) -> &mut Self {
+        self.inner.set_window_update_mode(mode.0);
+        self
+    }
+
+    /// Converts the config into a [`YamuxLocalConfig`] for use with upgrades
+    /// of I/O streams that are ![`Send`].
+    pub fn into_local(self) -> YamuxLocalConfig {
+        YamuxLocalConfig(self)
     }
 }
 
-impl Default for Config {
+impl Default for YamuxConfig {
     fn default() -> Self {
-        Config::new(yamux::Config::default())
+        let mut inner = yamux::Config::default();
+        // For conformity with mplex, read-after-close on a multiplexed
+        // connection is never permitted and not configurable.
+        inner.set_read_after_close(false);
+        YamuxConfig { inner, mode: None }
     }
 }
 
-impl Deref for Config {
-    type Target = yamux::Config;
-
-    fn deref(&self) -> &Self::Target {
-        &self.config
-    }
-}
-
-impl DerefMut for Config {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.config
-    }
-}
-
-impl UpgradeInfo for Config {
+impl UpgradeInfo for YamuxConfig {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -222,7 +288,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl UpgradeInfo for LocalConfig {
+impl UpgradeInfo for YamuxLocalConfig {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -231,7 +297,7 @@ impl UpgradeInfo for LocalConfig {
     }
 }
 
-impl<C> InboundUpgrade<C> for Config
+impl<C> InboundUpgrade<C> for YamuxConfig
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
@@ -240,11 +306,12 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::new(io, self.config, self.mode.unwrap_or(yamux::Mode::Server))))
+        let mode = self.mode.unwrap_or(yamux::Mode::Server);
+        future::ready(Ok(Yamux::new(io, self.inner, mode)))
     }
 }
 
-impl<C> InboundUpgrade<C> for LocalConfig
+impl<C> InboundUpgrade<C> for YamuxLocalConfig
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static
 {
@@ -254,11 +321,12 @@ where
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
         let cfg = self.0;
-        future::ready(Ok(Yamux::local(io, cfg.config, cfg.mode.unwrap_or(yamux::Mode::Server))))
+        let mode = cfg.mode.unwrap_or(yamux::Mode::Server);
+        future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
     }
 }
 
-impl<C> OutboundUpgrade<C> for Config
+impl<C> OutboundUpgrade<C> for YamuxConfig
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
@@ -267,11 +335,12 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::new(io, self.config, self.mode.unwrap_or(yamux::Mode::Client))))
+        let mode = self.mode.unwrap_or(yamux::Mode::Client);
+        future::ready(Ok(Yamux::new(io, self.inner, mode)))
     }
 }
 
-impl<C> OutboundUpgrade<C> for LocalConfig
+impl<C> OutboundUpgrade<C> for YamuxLocalConfig
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static
 {
@@ -281,18 +350,22 @@ where
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
         let cfg = self.0;
-        future::ready(Ok(Yamux::local(io, cfg.config, cfg.mode.unwrap_or(yamux::Mode::Client))))
+        let mode = cfg.mode.unwrap_or(yamux::Mode::Client);
+        future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
     }
 }
 
-/// The Yamux [`libp2p_core::StreamMuxer`] error type.
+/// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error("yamux error: {0}")]
-pub struct YamuxError(#[from] pub yamux::ConnectionError);
+pub struct YamuxError(#[from] yamux::ConnectionError);
 
 impl Into<io::Error> for YamuxError {
     fn into(self: YamuxError) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, self.to_string())
+        match self.0 {
+            yamux::ConnectionError::Io(e) => e,
+            e => io::Error::new(io::ErrorKind::Other, e)
+        }
     }
 }
 

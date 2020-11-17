@@ -44,7 +44,7 @@ use libp2p::{
     noise,
     swarm::NetworkBehaviourEventProcess,
     tcp::TcpConfig,
-    yamux::Config as YamuxConfig,
+    yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
 use std::{
