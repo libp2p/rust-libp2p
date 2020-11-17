@@ -23,9 +23,10 @@ use async_io::Async;
 use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
+use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
 use log::warn;
-use std::{convert::TryFrom, fmt, io, net::Ipv4Addr, net::{UdpSocket, SocketAddr}, str, time::{Duration, Instant}};
+use std::{convert::TryFrom, fmt, io, net::{IpAddr, Ipv4Addr}, net::{UdpSocket, SocketAddr}, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -128,7 +129,7 @@ pub struct MdnsService {
     /// Buffers pending to send on the query socket.
     query_send_buffers: Vec<Vec<u8>>,
     /// Iface watch.
-    if_watch: if_watch::IfWatcher,
+    if_watch: IfWatcher,
 }
 
 impl MdnsService {
@@ -206,14 +207,30 @@ impl MdnsService {
     pub async fn next(mut self) -> (Self, MdnsPacket) {
         loop {
             while let Some(event) = self.if_watch.next().now_or_never() {
-                // errors are non fatal.
-                if let Ok(if_watch::IfEvent::Up(inet)) = event {
-                    if inet.addr().is_ipv4() && !inet.addr().is_loopback() {
-                        self.socket
-                            .get_ref()
-                            .join_multicast_v4(&From::from([224, 0, 0, 251]), &Ipv4Addr::UNSPECIFIED)
-                            .ok();
+                let multicast = From::from([224, 0, 0, 251]);
+                let socket = self.socket.get_ref();
+                match event {
+                    Ok(IfEvent::Up(inet)) => {
+                        if inet.prefix_len() != inet.max_prefix_len() || inet.addr().is_loopback() {
+                            continue;
+                        }
+                        if let IpAddr::V4(addr) = inet.addr() {
+                            if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
+                                log::error!("join multicast failed: {}", err);
+                            }
+                        }
                     }
+                    Ok(IfEvent::Down(inet)) => {
+                        if inet.prefix_len() != inet.max_prefix_len() || inet.addr().is_loopback() {
+                            continue;
+                        }
+                        if let IpAddr::V4(addr) = inet.addr() {
+                            if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
+                                log::error!("leave multicast failed: {}", err);
+                            }
+                        }
+                    }
+                    Err(err) => log::error!("if watch returned an error: {}", err),
                 }
             }
 
