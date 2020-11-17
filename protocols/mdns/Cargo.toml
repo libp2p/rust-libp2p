@@ -10,10 +10,10 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = { version = "1.6.2", optional = true }
+async-io = "1.2.0"
+either = "1.5.3"
 data-encoding = "2.0"
 dns-parser = "0.8"
-either = "1.5.3"
 futures = "0.3.1"
 if-watch = "0.1.2"
 lazy_static = "1.2"
@@ -23,10 +23,10 @@ log = "0.4"
 net2 = "0.2"
 rand = "0.7"
 smallvec = "1.0"
-tokio = { version = "0.3", default-features = false, features = ["net"], optional = true }
 void = "1.0"
 wasm-timer = "0.2.4"
 
 [dev-dependencies]
+async-std = "1.7.0"
 if-addrs = "0.6.4"
 tokio = { version = "0.3", default-features = false, features = ["rt", "rt-multi-thread"] }

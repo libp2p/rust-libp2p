@@ -17,7 +17,7 @@ default = [
     "identify",
     "kad",
     "gossipsub",
-    "mdns-async-std",
+    "mdns",
     "mplex",
     "noise",
     "ping",
@@ -37,8 +37,7 @@ floodsub = ["libp2p-floodsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
 gossipsub = ["libp2p-gossipsub"]
-mdns-async-std = ["libp2p-mdns", "libp2p-mdns/async-std"]
-mdns-tokio = ["libp2p-mdns", "libp2p-mdns/tokio"]
+mdns = ["libp2p-mdns"]
 mplex = ["libp2p-mplex"]
 noise = ["libp2p-noise"]
 ping = ["libp2p-ping"]
@@ -125,4 +124,4 @@ members = [
 
 [[example]]
 name = "chat-tokio"
-required-features = ["tcp-tokio", "mdns-tokio"]
+required-features = ["tcp-tokio", "mdns"]
