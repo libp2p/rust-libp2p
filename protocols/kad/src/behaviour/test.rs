@@ -38,7 +38,8 @@ use libp2p_core::{
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
-    upgrade
+    upgrade,
+    multihash::{Code, Multihash, MultihashDigest},
 };
 use libp2p_noise as noise;
 use libp2p_swarm::Swarm;
@@ -46,7 +47,6 @@ use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
 use std::{collections::{HashSet, HashMap}, time::Duration, num::NonZeroUsize, u64};
-use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
@@ -61,7 +61,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(yamux::Config::default())
+        .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
     let local_id = local_public_key.clone().into_peer_id();
@@ -129,7 +129,7 @@ fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
 }
 
 fn random_multihash() -> Multihash {
-    wrap(Code::Sha2_256, &thread_rng().gen::<[u8; 32]>())
+    Multihash::wrap(Code::Sha2_256.into(), &thread_rng().gen::<[u8; 32]>()).unwrap()
 }
 
 #[derive(Clone, Debug)]
@@ -934,7 +934,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
 
-    let key = Key::new(&multihash::Sha2_256::digest(&thread_rng().gen::<[u8; 32]>()));
+    let key = Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
     let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
 
@@ -1113,10 +1113,27 @@ fn network_behaviour_inject_address_change() {
         MemoryStore::new(local_peer_id),
     );
 
+    let endpoint = ConnectedPoint::Dialer { address:  old_address.clone() };
+
+    // Mimick a connection being established.
     kademlia.inject_connection_established(
         &remote_peer_id,
         &connection_id,
-        &ConnectedPoint::Dialer { address:  old_address.clone() },
+        &endpoint,
+    );
+    kademlia.inject_connected(&remote_peer_id);
+
+    // At this point the remote is not yet known to support the
+    // configured protocol name, so the peer is not yet in the
+    // local routing table and hence no addresses are known.
+    assert!(kademlia.addresses_of_peer(&remote_peer_id).is_empty());
+
+    // Mimick the connection handler confirming the protocol for
+    // the test connection, so that the peer is added to the routing table.
+    kademlia.inject_event(
+        remote_peer_id.clone(),
+        connection_id.clone(),
+        KademliaHandlerEvent::ProtocolConfirmed { endpoint }
     );
 
     assert_eq!(

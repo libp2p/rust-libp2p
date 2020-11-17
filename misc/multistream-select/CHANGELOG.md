@@ -4,6 +4,11 @@
   be spec-compliant and interoperable with other implementations.
   For a clean upgrade, `0.8.4` must already be deployed.
 
+# 0.8.5 [2020-11-09]
+
+- During negotiation do not interpret EOF error as an IO error, but instead as a
+  negotiation error. See https://github.com/libp2p/rust-libp2p/pull/1823.
+
 # 0.8.4 [2020-10-20]
 
 - Temporarily disable the internal selection of "parallel" protocol

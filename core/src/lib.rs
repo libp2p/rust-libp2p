@@ -55,13 +55,14 @@ pub mod transport;
 pub mod upgrade;
 
 pub use multiaddr::Multiaddr;
+pub use multihash;
 pub use muxing::StreamMuxer;
 pub use peer_id::PeerId;
 pub use identity::PublicKey;
 pub use transport::Transport;
 pub use translation::address_translation;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
-pub use connection::{Connected, Endpoint, ConnectedPoint, ConnectionInfo};
+pub use connection::{Connected, Endpoint, ConnectedPoint};
 pub use network::Network;
 
 use std::{future::Future, pin::Pin};

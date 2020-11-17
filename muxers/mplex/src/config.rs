@@ -55,7 +55,7 @@ impl MplexConfig {
     /// accumulates too quickly (judged by internal bounds), the
     /// connection is closed with an error due to the misbehaved
     /// remote.
-    pub fn max_substreams(&mut self, max: usize) -> &mut Self {
+    pub fn set_max_num_streams(&mut self, max: usize) -> &mut Self {
         self.max_substreams = max;
         self
     }
@@ -63,7 +63,7 @@ impl MplexConfig {
     /// Sets the maximum number of frames buffered per substream.
     ///
     /// A limit is necessary in order to avoid DoS attacks.
-    pub fn max_buffer_len(&mut self, max: usize) -> &mut Self {
+    pub fn set_max_buffer_size(&mut self, max: usize) -> &mut Self {
         self.max_buffer_len = max;
         self
     }
@@ -72,14 +72,14 @@ impl MplexConfig {
     /// for a substream.
     ///
     /// See the documentation of [`MaxBufferBehaviour`].
-    pub fn max_buffer_len_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
+    pub fn set_max_buffer_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
         self.max_buffer_behaviour = behaviour;
         self
     }
 
     /// Sets the frame size used when sending data. Capped at 1Mbyte as per the
     /// Mplex spec.
-    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+    pub fn set_split_send_size(&mut self, size: usize) -> &mut Self {
         let size = cmp::min(size, MAX_FRAME_SIZE);
         self.split_send_size = size;
         self
@@ -90,14 +90,26 @@ impl MplexConfig {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MaxBufferBehaviour {
     /// Reset the substream whose frame buffer overflowed.
-    ResetStream,
-    /// No new message can be read from any substream as long as the buffer
-    /// for a single substream is full.
     ///
-    /// This can potentially introduce a deadlock if you are waiting for a
-    /// message from a substream before processing the messages received
-    /// on another substream, i.e. if there are data dependencies across
-    /// substreams.
+    /// > **Note**: If more than [`MplexConfig::set_max_buffer_size()`] frames
+    /// > are received in succession for a substream in the context of
+    /// > trying to read data from a different substream, the former substream
+    /// > may be reset before application code had a chance to read from the
+    /// > buffer. The max. buffer size needs to be sized appropriately when
+    /// > using this option to balance maximum resource usage and the
+    /// > probability of premature termination of a substream.
+    ResetStream,
+    /// No new message can be read from the underlying connection from any
+    /// substream as long as the buffer for a single substream is full,
+    /// i.e. application code is expected to read from the full buffer.
+    ///
+    /// > **Note**: To avoid blocking without making progress, application
+    /// > tasks should ensure that, when woken, always try to read (i.e.
+    /// > make progress) from every substream on which data is expected.
+    /// > This is imperative in general, as a woken task never knows for
+    /// > which substream it has been woken, but failure to do so with
+    /// > [`MaxBufferBehaviour::Block`] in particular may lead to stalled
+    /// > execution or spinning of a task without progress.
     Block,
 }
 
@@ -106,9 +118,8 @@ impl Default for MplexConfig {
         MplexConfig {
             max_substreams: 128,
             max_buffer_len: 32,
-            max_buffer_behaviour: MaxBufferBehaviour::ResetStream,
-            split_send_size: 1024,
+            max_buffer_behaviour: MaxBufferBehaviour::Block,
+            split_send_size: 8 * 1024,
         }
     }
 }
-

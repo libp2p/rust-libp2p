@@ -1,6 +1,14 @@
-# 0.24.0 [unreleased]
+# 0.25.0 [unreleased]
+
+- Update `multihash`.
 
 - Update `multistream-select`.
+
+# 0.24.0 [2020-11-09]
+
+- Remove `ConnectionInfo` trait and replace it with `PeerId`
+  everywhere. This was already effectively the case because
+  `ConnectionInfo` was implemented on `PeerId`.
 
 # 0.23.1 [2020-10-20]
 

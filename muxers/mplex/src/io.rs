@@ -214,8 +214,18 @@ where
         }
 
         debug_assert!(self.open_buffer.is_empty());
+        let mut num_buffered = 0;
 
         loop {
+            // Whenever we may have completely filled a substream
+            // buffer while waiting for the next inbound stream,
+            // yield to give the current task a chance to read
+            // from the respective substreams.
+            if num_buffered == self.config.max_buffer_len {
+                cx.waker().clone().wake();
+                return Poll::Pending
+            }
+
             // Wait for the next inbound `Open` frame.
             match ready!(self.poll_read_frame(cx, None))? {
                 Frame::Open { stream_id } => {
@@ -225,6 +235,7 @@ where
                 }
                 Frame::Data { stream_id, data } => {
                     self.buffer(stream_id.into_local(), data)?;
+                    num_buffered += 1;
                 }
                 Frame::Close { stream_id } => {
                     self.on_close(stream_id.into_local())?;
@@ -406,7 +417,18 @@ where
             buf.shrink_to_fit();
         }
 
+        let mut num_buffered = 0;
+
         loop {
+            // Whenever we may have completely filled a substream
+            // buffer of another substream while waiting for the
+            // next frame for `id`, yield to give the current task
+            // a chance to read from the other substream(s).
+            if num_buffered == self.config.max_buffer_len {
+                cx.waker().clone().wake();
+                return Poll::Pending
+            }
+
             // Check if the targeted substream (if any) reached EOF.
             if !self.can_read(&id) {
                 // Note: Contrary to what is recommended by the spec, we must
@@ -427,6 +449,7 @@ where
                     // currently being polled, so it needs to be buffered and
                     // the interested tasks notified.
                     self.buffer(stream_id.into_local(), data)?;
+                    num_buffered += 1;
                 }
                 frame @ Frame::Open { .. } => {
                     if let Some(id) = self.on_open(frame.remote_id())? {
@@ -666,11 +689,9 @@ where
         if let Some(state) = self.substreams.remove(&id) {
             match state {
                 SubstreamState::RecvClosed { .. } | SubstreamState::Closed { .. } => {
-                    debug!("{}: Received unexpected `Close` frame for closed substream {}",
+                    debug!("{}: Ignoring `Close` frame for closed substream {}",
                         self.id, id);
-                    return self.on_error(
-                        io::Error::new(io::ErrorKind::Other,
-                        "Protocol error: Received `Close` frame for closed substream."))
+                    self.substreams.insert(id, state);
                 },
                 SubstreamState::Reset { buf } => {
                     debug!("{}: Ignoring `Close` frame for already reset substream {}",
@@ -988,6 +1009,7 @@ mod tests {
     use futures_codec::{Decoder, Encoder};
     use quickcheck::*;
     use rand::prelude::*;
+    use std::collections::HashSet;
     use std::num::NonZeroU8;
     use std::ops::DerefMut;
     use std::pin::Pin;
@@ -1016,6 +1038,8 @@ mod tests {
         r_buf: BytesMut,
         /// The buffer that the `Multiplexed` stream writes to.
         w_buf: BytesMut,
+        /// Whether the connection should return EOF on the next read.
+        eof: bool,
     }
 
     impl AsyncRead for Connection {
@@ -1024,6 +1048,9 @@ mod tests {
             _: &mut Context<'_>,
             buf: &mut [u8]
         ) -> Poll<io::Result<usize>> {
+            if self.eof {
+                return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
+            }
             let n = std::cmp::min(buf.len(), self.r_buf.len());
             let data = self.r_buf.split_to(n);
             buf[..n].copy_from_slice(&data[..]);
@@ -1082,7 +1109,7 @@ mod tests {
             }
 
             // Setup the multiplexed connection.
-            let conn = Connection { r_buf, w_buf: BytesMut::new() };
+            let conn = Connection { r_buf, w_buf: BytesMut::new(), eof: false };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
             task::block_on(future::poll_fn(move |cx| {
@@ -1102,14 +1129,29 @@ mod tests {
                 let id = LocalStreamId::listener(0);
                 match m.poll_next_stream(cx) {
                     Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
-                    Poll::Pending => {}
+                    Poll::Pending => {
+                        // We expect the implementation to yield when the buffer
+                        // is full but before it is exceeded and the max buffer
+                        // behaviour takes effect, giving the current task a
+                        // chance to read from the buffer. Here we just read
+                        // again to provoke the max buffer behaviour.
+                        assert_eq!(
+                            m.substreams.get_mut(&id).unwrap().recv_buf().len(),
+                            cfg.max_buffer_len
+                        );
+                        match m.poll_next_stream(cx) {
+                            Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                            Poll::Pending => {
+                                // Expect the buffer for stream 0 to be exceeded, triggering
+                                // the max. buffer behaviour.
+                                assert_eq!(
+                                    m.substreams.get_mut(&id).unwrap().recv_buf().len(),
+                                    cfg.max_buffer_len + 1
+                                );
+                            }
+                        }
+                    }
                 }
-
-                // Expect the buffer for stream 0 to be just 1 over the limit.
-                assert_eq!(
-                    m.substreams.get_mut(&id).unwrap().recv_buf().len(),
-                    cfg.max_buffer_len + 1
-                );
 
                 // Expect either a `Reset` to be sent or all reads to be
                 // blocked `Pending`, depending on the `MaxBufferBehaviour`.
@@ -1163,6 +1205,50 @@ mod tests {
 
                 Poll::Ready(())
             }));
+        }
+
+        quickcheck(prop as fn(_,_))
+    }
+
+    #[test]
+    fn close_on_error() {
+        let _ = env_logger::try_init();
+
+        fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
+            let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);
+
+            // Setup the multiplexed connection.
+            let conn = Connection {
+                r_buf: BytesMut::new(),
+                w_buf: BytesMut::new(),
+                eof: false
+            };
+            let mut m = Multiplexed::new(conn, cfg.clone());
+
+            // Run the test.
+            let mut opened = HashSet::new();
+            task::block_on(future::poll_fn(move |cx| {
+                // Open a number of streams.
+                for _ in 0 .. num_streams {
+                    let id = ready!(m.poll_open_stream(cx)).unwrap();
+                    assert!(opened.insert(id));
+                    assert!(m.poll_read_stream(cx, id).is_pending());
+                }
+
+                // Abruptly "close" the connection.
+                m.io.get_mut().deref_mut().eof = true;
+
+                // Reading from any stream should yield an error and all streams
+                // should be closed due to the failed connection.
+                assert!(opened.iter().all(|id| match m.poll_read_stream(cx, *id) {
+                    Poll::Ready(Err(e)) => e.kind() == io::ErrorKind::UnexpectedEof,
+                    _ => false
+                }));
+
+                assert!(m.substreams.is_empty());
+
+                Poll::Ready(())
+            }))
         }
 
         quickcheck(prop as fn(_,_))

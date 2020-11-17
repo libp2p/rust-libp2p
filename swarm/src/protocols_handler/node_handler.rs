@@ -31,8 +31,6 @@ use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use libp2p_core::{
     Multiaddr,
-    PeerId,
-    ConnectionInfo,
     Connected,
     connection::{
         ConnectionHandler,
@@ -65,18 +63,17 @@ where
     }
 }
 
-impl<TIntoProtoHandler, TProtoHandler, TConnInfo> IntoConnectionHandler<TConnInfo>
+impl<TIntoProtoHandler, TProtoHandler> IntoConnectionHandler
     for NodeHandlerWrapperBuilder<TIntoProtoHandler>
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
     TProtoHandler: ProtocolsHandler,
-    TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
 
-    fn into_handler(self, connected: &Connected<TConnInfo>) -> Self::Handler {
+    fn into_handler(self, connected: &Connected) -> Self::Handler {
         NodeHandlerWrapper {
-            handler: self.handler.into_handler(connected.peer_id(), &connected.endpoint),
+            handler: self.handler.into_handler(&connected.peer_id, &connected.endpoint),
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
             queued_dial_upgrades: Vec::new(),
