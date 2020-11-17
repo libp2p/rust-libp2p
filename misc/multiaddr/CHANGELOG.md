@@ -1,4 +1,4 @@
-# 0.9.6 [unreleased]
+# 0.9.6 [2020-11-17]
 
 - Move the `from_url` module and functionality behind the `url` feature,
   enabled by default.
