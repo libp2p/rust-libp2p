@@ -11,24 +11,29 @@ jobs:
     name: Build and test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Cache cargo registry
-      uses: actions/cache@v1
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.1
       with:
-        path: ~/.cargo/registry
-        key: cargo-registry-${{ hashFiles('Cargo.toml') }}
-    - name: Cache cargo index
-      uses: actions/cache@v1
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2
+
+    - name: Cache CARGO_HOME
+      uses: actions/cache@v2
       with:
-        path: ~/.cargo/git
-        key: cargo-index-${{ hashFiles('Cargo.toml') }}
+        path: ~/.cargo
+        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+
     - name: Cache cargo build
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+
     - name: Run tests, with no feature
       run: cargo test --workspace --no-default-features
+
     - name: Run tests, with all features
       run: cargo test --workspace --all-features
 
@@ -40,36 +45,43 @@ jobs:
       env:
         CC: clang-10
     steps:
-    - uses: actions/checkout@v1
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.1
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2
+
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         target: wasm32-unknown-unknown
         override: true
+
     - name: Install a recent version of clang
       run: |
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
         echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" >> /etc/apt/sources.list
         apt-get update
         apt-get install -y clang-10
+
     - name: Install CMake
       run: apt-get install -y cmake
-    - name: Cache cargo registry
-      uses: actions/cache@v1
+
+    - name: Cache CARGO_HOME
+      uses: actions/cache@v2
       with:
-        path: ~/.cargo/registry
-        key: wasm-cargo-registry-${{ hashFiles('Cargo.toml') }}
-    - name: Cache cargo index
-      uses: actions/cache@v1
-      with:
-        path: ~/.cargo/git
-        key: wasm-cargo-index-${{ hashFiles('Cargo.toml') }}
+        path: ~/.cargo
+        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+
     - name: Cache cargo build
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
+
     - name: Build on WASM
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
@@ -81,11 +93,19 @@ jobs:
     container:
       image: rust
     steps:
-    - uses: actions/checkout@v1
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.1
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2
+
     - name: Install nightly Rust
       # TODO: intra-doc links are available on nightly only
       # see https://doc.rust-lang.org/nightly/rustdoc/lints.html#intra_doc_link_resolution_failure
       run: rustup default nightly-2020-09-17
+
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
 
@@ -95,21 +115,25 @@ jobs:
     container:
       image: rust
     steps:
-    - uses: actions/checkout@v1
-    - name: Cache cargo registry
-      uses: actions/cache@v1
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.1
       with:
-        path: ~/.cargo/registry
-        key: cargo-registry-${{ hashFiles('Cargo.toml') }}
-    - name: Cache cargo index
-      uses: actions/cache@v1
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2
+
+    - name: Cache CARGO_HOME
+      uses: actions/cache@v2
       with:
-        path: ~/.cargo/git
-        key: cargo-index-${{ hashFiles('Cargo.toml') }}
+        path: ~/.cargo
+        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+
     - name: Cache cargo build
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
