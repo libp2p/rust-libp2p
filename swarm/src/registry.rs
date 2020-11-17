@@ -78,7 +78,7 @@ struct Report {
 impl AddressRecord {
     fn new(addr: Multiaddr, score: AddressScore) -> Self {
         AddressRecord {
-            addr, score, _priv: (),
+            addr, score,
         }
     }
 }
