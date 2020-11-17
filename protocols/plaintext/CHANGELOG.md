@@ -1,3 +1,7 @@
+# 0.25.0 [unreleased]
+
+- Update `libp2p-core`.
+
 # 0.24.1 [2020-11-11]
 
 - Ensure that no follow-up protocol data is dropped at the end of the

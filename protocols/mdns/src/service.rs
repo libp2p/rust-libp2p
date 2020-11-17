@@ -589,7 +589,7 @@ mod tests {
     macro_rules! testgen {
         ($runtime_name:ident, $service_name:ty, $block_on_fn:tt) => {
     mod $runtime_name {
-        use libp2p_core::{PeerId, multiaddr::multihash};
+        use libp2p_core::{PeerId, multihash::{Code, MultihashDigest}};
         use std::time::Duration;
         use crate::service::MdnsPacket;
 
@@ -683,7 +683,7 @@ mod tests {
         #[test]
         fn discover_long_peer_id() {
             let max_value = String::from_utf8(vec![b'f'; 42]).unwrap();
-            let hash = multihash::Identity::digest(max_value.as_ref());
+            let hash = Code::Identity.digest(max_value.as_ref());
             discover(PeerId::from_multihash(hash).unwrap())
         }
     }
