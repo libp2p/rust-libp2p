@@ -7,6 +7,9 @@ use std::{error, fmt, iter, net::IpAddr};
 /// generated multiaddress. This includes a username, password, path (if not supported by the
 /// multiaddr), and query string.
 ///
+/// This function is only present if the `url` feature is enabled, and it is
+/// enabled by default.
+///
 /// The supported URL schemes are:
 ///
 /// - `ws://example.com/`
@@ -30,6 +33,9 @@ pub fn from_url(url: &str) -> std::result::Result<Multiaddr, FromUrlErr> {
 ///
 /// This function is similar to [`from_url`], except that we don't return an error if some
 /// information in the URL cannot be retain in the generated multiaddres.
+///
+/// This function is only present if the `url` feature is enabled, and it is
+/// enabled by default.
 ///
 /// # Example
 ///
