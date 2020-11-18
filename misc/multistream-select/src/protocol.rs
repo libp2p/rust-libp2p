@@ -35,18 +35,6 @@ use unsigned_varint as uvi;
 /// The maximum number of supported protocols that can be processed.
 const MAX_PROTOCOLS: usize = 1000;
 
-/// The maximum length (in bytes) of a protocol name.
-///
-/// This limit is necessary in order to be able to unambiguously parse
-/// response messages without knowledge of the corresponding request.
-/// 140 comes about from 3 * 47 = 141, where 47 is the ascii/utf8
-/// encoding of the `/` character and an encoded protocol name is
-/// at least 3 bytes long (uvi-length followed by `/` and `\n`).
-/// Hence a protocol list response message with 47 protocols is at least
-/// 141 bytes long and thus such a response cannot be mistaken for a
-/// single protocol response. See `Message::decode`.
-const MAX_PROTOCOL_LEN: usize = 140;
-
 /// The encoded form of a multistream-select 1.0.0 header message.
 const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
 /// The encoded form of a multistream-select 1.0.0 header message.
@@ -131,7 +119,7 @@ impl TryFrom<Bytes> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-        if !value.as_ref().starts_with(b"/") || value.len() > MAX_PROTOCOL_LEN {
+        if !value.as_ref().starts_with(b"/") {
             return Err(ProtocolError::InvalidProtocol)
         }
         Ok(Protocol(value))
@@ -190,7 +178,7 @@ impl Message {
                 let len = p.0.as_ref().len() + 1; // + 1 for \n
                 dest.reserve(len);
                 dest.put(p.0.as_ref());
-                dest.put(&b"\n"[..]);
+                dest.put_u8(b'\n');
                 Ok(())
             }
             Message::ListProtocols => {
@@ -200,14 +188,15 @@ impl Message {
             }
             Message::Protocols(ps) => {
                 let mut buf = uvi::encode::usize_buffer();
-                let mut out_msg = Vec::from(uvi::encode::usize(ps.len(), &mut buf));
+                let mut encoded = Vec::with_capacity(ps.len());
                 for p in ps {
-                    out_msg.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
-                    out_msg.extend_from_slice(p.0.as_ref());
-                    out_msg.push(b'\n')
+                    encoded.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
+                    encoded.extend_from_slice(p.0.as_ref());
+                    encoded.push(b'\n')
                 }
-                dest.reserve(out_msg.len());
-                dest.put(out_msg.as_ref());
+                encoded.push(b'\n');
+                dest.reserve(encoded.len());
+                dest.put(encoded.as_ref());
                 Ok(())
             }
             Message::NotAvailable => {
@@ -228,11 +217,6 @@ impl Message {
             return Ok(Message::Header(Version::V1))
         }
 
-        if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') && msg.len() <= MAX_PROTOCOL_LEN {
-            let p = Protocol::try_from(msg.split_to(msg.len() - 1))?;
-            return Ok(Message::Protocol(p));
-        }
-
         if msg == MSG_PROTOCOL_NA {
             return Ok(Message::NotAvailable);
         }
@@ -241,21 +225,40 @@ impl Message {
             return Ok(Message::ListProtocols)
         }
 
-        // At this point, it must be a varint number of protocols, i.e.
-        // a `Protocols` message.
-        let (num_protocols, mut remaining) = uvi::decode::usize(&msg)?;
-        if num_protocols > MAX_PROTOCOLS {
-            return Err(ProtocolError::TooManyProtocols)
+        // If it starts with a `/`, ends with a line feed without any
+        // other line feeds in-between, it must be a protocol name.
+        if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') &&
+            !msg[.. msg.len() - 1].contains(&b'\n')
+        {
+            let p = Protocol::try_from(msg.split_to(msg.len() - 1))?;
+            return Ok(Message::Protocol(p));
         }
-        let mut protocols = Vec::with_capacity(num_protocols);
-        for _ in 0 .. num_protocols {
-            let (len, rem) = uvi::decode::usize(remaining)?;
-            if len == 0 || len > rem.len() || rem[len - 1] != b'\n' {
+
+        // At this point, it must be an `ls` response, i.e. one or more
+        // length-prefixed, newline-delimited protocol names.
+        let mut protocols = Vec::new();
+        let mut remaining: &[u8] = &msg;
+        loop {
+            // A well-formed message must be terminated with a newline.
+            if remaining == &[b'\n'] {
+                break
+            } else if protocols.len() == MAX_PROTOCOLS {
+                return Err(ProtocolError::TooManyProtocols)
+            }
+
+            // Decode the length of the next protocol name and check that
+            // it ends with a line feed.
+            let (len, tail) = uvi::decode::usize(remaining)?;
+            if len == 0 || len > tail.len() || tail[len - 1] != b'\n' {
                 return Err(ProtocolError::InvalidMessage)
             }
-            let p = Protocol::try_from(Bytes::copy_from_slice(&rem[.. len - 1]))?;
+
+            // Parse the protocol name.
+            let p = Protocol::try_from(Bytes::copy_from_slice(&tail[.. len - 1]))?;
             protocols.push(p);
-            remaining = &rem[len ..]
+
+            // Skip ahead to the next protocol.
+            remaining = &tail[len ..];
         }
 
         return Ok(Message::Protocols(protocols));
