@@ -1,5 +1,8 @@
 # 0.25.0 [unreleased]
 
+- New configurable connection limits for established connections and
+  dedicated connection counters.
+
 - Update `multihash`.
 
 - Update `multistream-select`.

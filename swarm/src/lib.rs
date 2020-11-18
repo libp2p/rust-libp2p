@@ -113,6 +113,7 @@ use libp2p_core::{
     transport::{self, TransportError},
     muxing::StreamMuxerBox,
     network::{
+        ConnectionLimits,
         Network,
         NetworkInfo,
         NetworkEvent,
@@ -1033,24 +1034,9 @@ where TBehaviour: NetworkBehaviour,
         self
     }
 
-    /// Configures a limit for the number of simultaneous incoming
-    /// connection attempts.
-    pub fn incoming_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_incoming_limit(n);
-        self
-    }
-
-    /// Configures a limit for the number of simultaneous outgoing
-    /// connection attempts.
-    pub fn outgoing_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_outgoing_limit(n);
-        self
-    }
-
-    /// Configures a limit for the number of simultaneous
-    /// established connections per peer.
-    pub fn peer_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_established_per_peer_limit(n);
+    /// Configures the connection limits.
+    pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
+        self.network_config.set_connection_limits(limits);
         self
     }
 
