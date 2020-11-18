@@ -211,20 +211,22 @@ impl MdnsService {
                 let socket = self.socket.get_ref();
                 match event {
                     Ok(IfEvent::Up(inet)) => {
-                        if inet.prefix_len() != inet.max_prefix_len() || inet.addr().is_loopback() {
+                        if inet.addr().is_loopback() {
                             continue;
                         }
                         if let IpAddr::V4(addr) = inet.addr() {
+                            log::trace!("joining multicast on iface {}", addr);
                             if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
                                 log::error!("join multicast failed: {}", err);
                             }
                         }
                     }
                     Ok(IfEvent::Down(inet)) => {
-                        if inet.prefix_len() != inet.max_prefix_len() || inet.addr().is_loopback() {
+                        if inet.addr().is_loopback() {
                             continue;
                         }
                         if let IpAddr::V4(addr) = inet.addr() {
+                            log::trace!("leaving multicast on iface {}", addr);
                             if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
                                 log::error!("leave multicast failed: {}", err);
                             }
