@@ -1046,7 +1046,7 @@ where
                 phase: AddProviderPhase::GetClosestPeers
             } => {
                 let provider_id = params.local_peer_id().clone();
-                let external_addresses = params.external_addresses().collect();
+                let external_addresses = params.external_addresses().map(|r| r.addr).collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
                     key,

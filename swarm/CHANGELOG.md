@@ -2,6 +2,11 @@
 
 - Update `libp2p-core`.
 
+- Expose configurable scores for external addresses, as well as
+  the ability to remove them and to add addresses that are
+  retained "forever" (or until explicitly removed).
+  [PR 1842](https://github.com/libp2p/rust-libp2p/pull/1842).
+
 # 0.24.0 [2020-11-09]
 
 - Update dependencies.

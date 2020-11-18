@@ -82,6 +82,7 @@ pub use protocols_handler::{
     OneShotHandlerConfig,
     SubstreamProtocol
 };
+pub use registry::{AddressScore, AddressRecord, AddAddressResult};
 
 use protocols_handler::{
     NodeHandlerWrapperBuilder,
@@ -397,34 +398,44 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         me.network.listen_addrs()
     }
 
-    /// Returns an iterator that produces the list of addresses that other nodes can use to reach
-    /// us.
-    pub fn external_addresses(me: &Self) -> impl Iterator<Item = &Multiaddr> {
-        me.external_addrs.iter()
-    }
-
     /// Returns the peer ID of the swarm passed as parameter.
     pub fn local_peer_id(me: &Self) -> &PeerId {
         &me.network.local_peer_id()
     }
 
-    /// Adds an external address.
-    ///
-    /// An external address is an address we are listening on but that accounts for things such as
-    /// NAT traversal.
-    pub fn add_external_address(me: &mut Self, addr: Multiaddr) {
-        me.external_addrs.add(addr)
+    /// Returns an iterator for [`AddressRecord`]s of external addresses
+    /// of the local node, in decreasing order of their current
+    /// [score](AddressScore).
+    pub fn external_addresses(me: &Self) -> impl Iterator<Item = &AddressRecord> {
+        me.external_addrs.iter()
     }
 
-    /// Returns the connection info for an arbitrary connection with the peer, or `None`
-    /// if there is no connection to that peer.
-    // TODO: should take &self instead of &mut self, but the API in network requires &mut
-    pub fn connection_info(me: &mut Self, peer_id: &PeerId) -> Option<PeerId> {
-        if let Some(mut n) = me.network.peer(peer_id.clone()).into_connected() {
-            Some(n.some_connection().info().clone())
-        } else {
-            None
-        }
+    /// Adds an external address record for the local node.
+    ///
+    /// An external address is an address of the local node known to
+    /// be (likely) reachable for other nodes, possibly taking into
+    /// account NAT. The external addresses of the local node may be
+    /// shared with other nodes by the `NetworkBehaviour`.
+    ///
+    /// The associated score determines both the position of the address
+    /// in the list of external addresses (which can determine the
+    /// order in which addresses are used to connect to) as well as
+    /// how long the address is retained in the list, depending on
+    /// how frequently it is reported by the `NetworkBehaviour` via
+    /// [`NetworkBehaviourAction::ReportObservedAddr`] or explicitly
+    /// through this method.
+    pub fn add_external_address(me: &mut Self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
+        me.external_addrs.add(a, s)
+    }
+
+    /// Removes an external address of the local node, regardless of
+    /// its current score. See [`ExpandedSwarm::add_external_address`]
+    /// for details.
+    ///
+    /// Returns `true` if the address existed and was removed, `false`
+    /// otherwise.
+    pub fn remove_external_address(me: &mut Self, addr: &Multiaddr) -> bool {
+        me.external_addrs.remove(addr)
     }
 
     /// Bans a peer by its peer ID.
@@ -732,12 +743,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         }
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
+                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address, score }) => {
                     for addr in this.network.address_translation(&address) {
-                        if this.external_addrs.iter().all(|a| *a != addr) {
+                        if this.external_addrs.iter().all(|a| &a.addr != &addr) {
                             this.behaviour.inject_new_external_addr(&addr);
                         }
-                        this.external_addrs.add(addr);
+                        this.external_addrs.add(addr, score);
                     }
                 },
             }

@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{AddressScore, AddressRecord};
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::{ConnectionId, ListenerId}};
 use std::{error, task::Context, task::Poll};
@@ -182,7 +183,7 @@ pub trait PollParameters {
     /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
     type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
     /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
-    type ExternalAddressesIter: ExactSizeIterator<Item = Multiaddr>;
+    type ExternalAddressesIter: ExactSizeIterator<Item = AddressRecord>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
@@ -269,8 +270,9 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         event: TInEvent,
     },
 
-    /// Informs the `Swarm` about a multi-address observed by a remote for
-    /// the local node.
+    /// Informs the `Swarm` about an address observed by a remote for
+    /// the local node by which the local node is supposedly publicly
+    /// reachable.
     ///
     /// It is advisable to issue `ReportObservedAddr` actions at a fixed frequency
     /// per node. This way address information will be more accurate over time
@@ -278,6 +280,10 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     ReportObservedAddr {
         /// The observed address of the local node.
         address: Multiaddr,
+        /// The score to associate with this observation, i.e.
+        /// an indicator for the trusworthiness of this address
+        /// relative to other observed addresses.
+        score: AddressScore,
     },
 }
 
@@ -297,8 +303,8 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                     handler,
                     event: f(event)
                 },
-            NetworkBehaviourAction::ReportObservedAddr { address } =>
-                NetworkBehaviourAction::ReportObservedAddr { address }
+            NetworkBehaviourAction::ReportObservedAddr { address, score } =>
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
         }
     }
 
@@ -313,8 +319,8 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                 NetworkBehaviourAction::DialPeer { peer_id, condition },
             NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
                 NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
-            NetworkBehaviourAction::ReportObservedAddr { address } =>
-                NetworkBehaviourAction::ReportObservedAddr { address }
+            NetworkBehaviourAction::ReportObservedAddr { address, score } =>
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
         }
     }
 }

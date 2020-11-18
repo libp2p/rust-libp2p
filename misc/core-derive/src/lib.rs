@@ -450,8 +450,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             event: #wrapped_event,
                         });
                     }
-                    std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address });
+                    std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
                     }
                     std::task::Poll::Pending => break,
                 }
