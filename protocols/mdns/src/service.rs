@@ -21,8 +21,7 @@
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
 use async_io::Async;
 use dns_parser::{Packet, RData};
-use either::Either::{Left, Right};
-use futures::{future, prelude::*};
+use futures::{prelude::*, select};
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
 use log::warn;
@@ -206,36 +205,6 @@ impl MdnsService {
     // resolves, not forcing self-referential structures on the caller.
     pub async fn next(mut self) -> (Self, MdnsPacket) {
         loop {
-            while let Some(event) = self.if_watch.next().now_or_never() {
-                let multicast = From::from([224, 0, 0, 251]);
-                let socket = self.socket.get_ref();
-                match event {
-                    Ok(IfEvent::Up(inet)) => {
-                        if inet.addr().is_loopback() {
-                            continue;
-                        }
-                        if let IpAddr::V4(addr) = inet.addr() {
-                            log::trace!("joining multicast on iface {}", addr);
-                            if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
-                                log::error!("join multicast failed: {}", err);
-                            }
-                        }
-                    }
-                    Ok(IfEvent::Down(inet)) => {
-                        if inet.addr().is_loopback() {
-                            continue;
-                        }
-                        if let IpAddr::V4(addr) = inet.addr() {
-                            log::trace!("leaving multicast on iface {}", addr);
-                            if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
-                                log::error!("leave multicast failed: {}", err);
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("if watch returned an error: {}", err),
-                }
-            }
-
             // Flush the send buffer of the main socket.
             while !self.send_buffers.is_empty() {
                 let to_send = self.send_buffers.remove(0);
@@ -270,18 +239,8 @@ impl MdnsService {
                 }
             }
 
-            // Either (left) listen for incoming packets or (right) send query packets whenever the
-            // query interval fires.
-            let selected_output = match futures::future::select(
-                Box::pin(self.socket.recv_from(&mut self.recv_buffer)),
-                Box::pin(self.query_interval.next()),
-            ).await {
-                future::Either::Left((recved, _)) => Left(recved),
-                future::Either::Right(_) => Right(()),
-            };
-
-            match selected_output {
-                Left(left) => match left {
+            select! {
+                res = self.socket.recv_from(&mut self.recv_buffer).fuse() => match res {
                     Ok((len, from)) => {
                         match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
                             Some(packet) => return (self, packet),
@@ -293,13 +252,42 @@ impl MdnsService {
                         // The query interval will wake up the task at some point so that we can try again.
                     },
                 },
-                Right(_) => {
+                _ = self.query_interval.next().fuse() => {
                     // Ensure underlying task is woken up on the next interval tick.
                     while let Some(_) = self.query_interval.next().now_or_never() {};
 
                     if !self.silent {
                         let query = dns::build_query();
                         self.query_send_buffers.push(query.to_vec());
+                    }
+                },
+                event = self.if_watch.next().fuse() => {
+                    let multicast = From::from([224, 0, 0, 251]);
+                    let socket = self.socket.get_ref();
+                    match event {
+                        Ok(IfEvent::Up(inet)) => {
+                            if inet.addr().is_loopback() {
+                                continue;
+                            }
+                            if let IpAddr::V4(addr) = inet.addr() {
+                                log::trace!("joining multicast on iface {}", addr);
+                                if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
+                                    log::error!("join multicast failed: {}", err);
+                                }
+                            }
+                        }
+                        Ok(IfEvent::Down(inet)) => {
+                            if inet.addr().is_loopback() {
+                                continue;
+                            }
+                            if let IpAddr::V4(addr) = inet.addr() {
+                                log::trace!("leaving multicast on iface {}", addr);
+                                if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
+                                    log::error!("leave multicast failed: {}", err);
+                                }
+                            }
+                        }
+                        Err(err) => log::error!("if watch returned an error: {}", err),
                     }
                 }
             };
