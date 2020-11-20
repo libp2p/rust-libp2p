@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::service::{MdnsPacket, MdnsService, build_query_response, build_service_discovery_response};
+use async_io::Timer;
 use futures::prelude::*;
 use libp2p_core::{
     Multiaddr,
@@ -34,10 +35,8 @@ use libp2p_swarm::{
     ProtocolsHandler,
     protocols_handler::DummyProtocolsHandler
 };
-use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, mem, pin::Pin, time::Duration, task::Context, task::Poll};
-use wasm_timer::{Delay, Instant};
+use std::{cmp, fmt, io, iter, mem, pin::Pin, time::{Duration, Instant}, task::Context, task::Poll};
 
 const MDNS_RESPONSE_TTL: std::time::Duration = Duration::from_secs(5 * 60);
 
@@ -56,7 +55,7 @@ pub struct Mdns {
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    closest_expiration: Option<Delay>,
+    closest_expiration: Option<Timer>,
 }
 
 /// `MdnsService::next` takes ownership of `self`, returning a future that resolves with both itself
@@ -135,9 +134,9 @@ impl NetworkBehaviour for Mdns {
         &mut self,
         _: PeerId,
         _: ConnectionId,
-        _ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
-        void::unreachable(_ev)
+        void::unreachable(ev)
     }
 
     fn poll(
@@ -152,9 +151,8 @@ impl NetworkBehaviour for Mdns {
     > {
         // Remove expired peers.
         if let Some(ref mut closest_expiration) = self.closest_expiration {
-            match Future::poll(Pin::new(closest_expiration), cx) {
-                Poll::Ready(Ok(())) => {
-                    let now = Instant::now();
+            match Pin::new(closest_expiration).poll(cx) {
+                Poll::Ready(now) => {
                     let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
                     while let Some(pos) = self.discovered_nodes.iter().position(|(_, _, exp)| *exp < now) {
                         let (peer_id, addr, _) = self.discovered_nodes.remove(pos);
@@ -170,7 +168,6 @@ impl NetworkBehaviour for Mdns {
                     }
                 },
                 Poll::Pending => (),
-                Poll::Ready(Err(err)) => warn!("timer has errored: {:?}", err),
             }
         }
 
@@ -270,7 +267,7 @@ impl NetworkBehaviour for Mdns {
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
-            .map(Delay::new_at);
+            .map(Timer::at);
 
         Poll::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
             inner: discovered.into_iter(),

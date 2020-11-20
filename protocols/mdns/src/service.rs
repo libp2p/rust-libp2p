@@ -19,15 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
-use async_io::Async;
+use async_io::{Async, Timer};
 use dns_parser::{Packet, RData};
 use futures::{prelude::*, select};
 use if_watch::{IfEvent, IfWatcher};
+use lazy_static::lazy_static;
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
 use log::warn;
-use std::{convert::TryFrom, fmt, io, net::{IpAddr, Ipv4Addr}, net::{UdpSocket, SocketAddr}, str, time::{Duration, Instant}};
-use wasm_timer::Interval;
-use lazy_static::lazy_static;
+use socket2::{Socket, Domain, Type};
+use std::{convert::TryFrom, fmt, io, net::{IpAddr, Ipv4Addr, UdpSocket, SocketAddr}, str, time::{Duration, Instant}};
 
 pub use dns::{MdnsResponseError, build_query_response, build_service_discovery_response};
 
@@ -111,10 +111,10 @@ pub struct MdnsService {
     query_socket: Async<UdpSocket>,
 
     /// Interval for sending queries.
-    query_interval: Interval,
+    query_interval: Timer,
     /// Whether we send queries on the network at all.
     /// Note that we still need to have an interval for querying, as we need to wake up the socket
-    /// regularly to recover from errors. Otherwise we could simply use an `Option<Interval>`.
+    /// regularly to recover from errors. Otherwise we could simply use an `Option<Timer>`.
     silent: bool,
     /// Buffer used for receiving data from the main socket.
     /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
@@ -145,11 +145,12 @@ impl MdnsService {
     /// Starts a new mDNS service.
     async fn new_inner(silent: bool) -> io::Result<Self> {
         let socket = {
-            let builder = net2::UdpBuilder::new_v4()?;
-            builder.reuse_address(true)?;
+            let socket = Socket::new(Domain::ipv4(), Type::dgram(), Some(socket2::Protocol::udp()))?;
+            socket.set_reuse_address(true)?;
             #[cfg(unix)]
-            net2::unix::UnixUdpBuilderExt::reuse_port(&builder, true)?;
-            let socket = builder.bind((Ipv4Addr::UNSPECIFIED, 5353))?;
+            socket.set_reuse_port(true)?;
+            socket.bind(&SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 5353).into())?;
+            let socket = socket.into_udp_socket();
             socket.set_multicast_loop_v4(true)?;
             socket.set_multicast_ttl_v4(255)?;
             Async::new(socket)?
@@ -168,7 +169,7 @@ impl MdnsService {
         Ok(Self {
             socket,
             query_socket,
-            query_interval: Interval::new_at(Instant::now(), Duration::from_secs(20)),
+            query_interval: Timer::interval_at(Instant::now(), Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 4096],
             send_buffers: Vec::new(),
