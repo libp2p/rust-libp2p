@@ -1,7 +1,9 @@
 # 0.25.0 [unreleased]
 
 - New configurable connection limits for established connections and
-  dedicated connection counters.
+  dedicated connection counters. Removed the connection limit dedicated
+  to outgoing pending connection _per peer_. Connection limits are now
+  represented by `u32` intead of `usize` types.
 
 - Update `multihash`.
 

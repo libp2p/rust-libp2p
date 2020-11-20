@@ -61,7 +61,6 @@ impl ConnectionHandler for TestHandler {
     fn poll(&mut self, _: &mut Context<'_>)
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
     {
-        // Poll::Ready(Ok(ConnectionHandlerEvent::Custom(())))
         Poll::Pending
     }
 }
