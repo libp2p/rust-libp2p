@@ -40,6 +40,7 @@ static_assertions::const_assert! {
 }
 
 /// Representation of a Multiaddr.
+#[allow(clippy::rc_buffer)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Multiaddr { bytes: Arc<Vec<u8>> }
 

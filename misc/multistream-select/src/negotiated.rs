@@ -104,9 +104,8 @@ impl<TInner> Negotiated<TInner> {
 
         let mut this = self.project();
 
-        match this.state.as_mut().project() {
-            StateProj::Completed { .. } => return Poll::Ready(Ok(())),
-            _ => {}
+        if let StateProj::Completed { .. } = this.state.as_mut().project() {
+             return Poll::Ready(Ok(()));
         }
 
         // Read outstanding protocol negotiation messages.
@@ -217,12 +216,9 @@ where
         -> Poll<Result<usize, io::Error>>
     {
         loop {
-            match self.as_mut().project().state.project() {
-                StateProj::Completed { io } => {
-                    // If protocol negotiation is complete, commence with reading.
-                    return io.poll_read_vectored(cx, bufs)
-                },
-                _ => {}
+            if let StateProj::Completed { io } = self.as_mut().project().state.project() {
+                // If protocol negotiation is complete, commence with reading.
+                return io.poll_read_vectored(cx, bufs)
             }
 
             // Poll the `Negotiated`, driving protocol negotiation to completion,
