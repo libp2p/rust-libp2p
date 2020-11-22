@@ -103,7 +103,7 @@ impl Record {
 
 /// A record stored in the DHT whose value is the ID of a peer
 /// who can provide the value on-demand.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct ProviderRecord {
     /// The key whose value is provided by the provider.
     pub key: Key,
@@ -121,6 +121,21 @@ impl Hash for ProviderRecord {
         self.provider.hash(state);
     }
 }
+
+impl PartialEq for ProviderRecord {
+    fn eq(&self, other: &Self) -> bool {
+        // In the [`Hash`] implementation of [`ProviderRecord`] all but the
+        // `key` and `provider` fields are ignored. The following property has
+        // to hold for all inputs: `k1 == k2 ⇒ hash(k1) == hash(k2)`. Thereby
+        // the [`PartialEq`] implementation has to ignore `key` and `provider`
+        // as well.
+        //
+        // See clippy lint `derive_hash_xor_eq` for details.
+        self.key == other.key && self.provider == other.provider
+    }
+}
+
+impl Eq for ProviderRecord {}
 
 impl ProviderRecord {
     /// Creates a new provider record for insertion into a `RecordStore`.
@@ -187,4 +202,3 @@ mod tests {
         }
     }
 }
-
