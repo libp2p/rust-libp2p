@@ -300,8 +300,8 @@ where
     }
 
     /// Obtains an established connection to the peer by ID.
-    pub fn connection<'b>(&'b mut self, id: ConnectionId)
-        -> Option<EstablishedConnection<'b, TInEvent>>
+    pub fn connection(&mut self, id: ConnectionId)
+        -> Option<EstablishedConnection<TInEvent>>
     {
         self.network.pool.get_established(id)
     }
@@ -331,8 +331,8 @@ where
     }
 
     /// Gets an iterator over all established connections to the peer.
-    pub fn connections<'b>(&'b mut self) ->
-        EstablishedConnectionIter<'b,
+    pub fn connections(&mut self) ->
+        EstablishedConnectionIter<
             impl Iterator<Item = ConnectionId>,
             TInEvent,
             TOutEvent,
@@ -344,8 +344,8 @@ where
     }
 
     /// Obtains some established connection to the peer.
-    pub fn some_connection<'b>(&'b mut self)
-        -> EstablishedConnection<'b, TInEvent>
+    pub fn some_connection(&mut self)
+        -> EstablishedConnection<TInEvent>
     {
         self.connections()
             .into_first()
