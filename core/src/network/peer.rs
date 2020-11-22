@@ -197,10 +197,7 @@ where
     ///
     /// Returns `true` iff [`Peer::into_disconnected`] returns `Some`.
     pub fn is_disconnected(&self) -> bool {
-        match self {
-            Peer::Disconnected(..) => true,
-            _ => false
-        }
+        matches!(self, Peer::Disconnected(..))
     }
 
     /// Initiates a new dialing attempt to this peer using the given addresses.

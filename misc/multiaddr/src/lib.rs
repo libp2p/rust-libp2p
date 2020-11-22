@@ -59,6 +59,11 @@ impl Multiaddr {
         self.bytes.len()
     }
 
+    /// Returns true if the length of this multiaddress is 0.
+    pub fn is_empty(&self) -> bool {
+        self.bytes.len() == 0
+    }
+
     /// Return a copy of this [`Multiaddr`]'s byte representation.
     pub fn to_vec(&self) -> Vec<u8> {
         Vec::from(&self.bytes[..])

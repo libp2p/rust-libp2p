@@ -61,12 +61,12 @@ where
         match Negotiated::poll(Pin::new(&mut io), cx) {
             Poll::Pending => {
                 self.inner = Some(io);
-                return Poll::Pending
+                Poll::Pending
             },
             Poll::Ready(Ok(())) => Poll::Ready(Ok(io)),
             Poll::Ready(Err(err)) => {
                 self.inner = Some(io);
-                return Poll::Ready(Err(err));
+                Poll::Ready(Err(err))
             }
         }
     }
@@ -189,12 +189,9 @@ where
         -> Poll<Result<usize, io::Error>>
     {
         loop {
-            match self.as_mut().project().state.project() {
-                StateProj::Completed { io } => {
-                    // If protocol negotiation is complete, commence with reading.
-                    return io.poll_read(cx, buf)
-                },
-                _ => {}
+            if let StateProj::Completed { io } = self.as_mut().project().state.project() {
+                // If protocol negotiation is complete, commence with reading.
+                return io.poll_read(cx, buf);
             }
 
             // Poll the `Negotiated`, driving protocol negotiation to completion,

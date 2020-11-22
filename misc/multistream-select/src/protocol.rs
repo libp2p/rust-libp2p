@@ -240,7 +240,7 @@ impl Message {
         let mut remaining: &[u8] = &msg;
         loop {
             // A well-formed message must be terminated with a newline.
-            if remaining == &[b'\n'] {
+            if remaining == [b'\n'] {
                 break
             } else if protocols.len() == MAX_PROTOCOLS {
                 return Err(ProtocolError::TooManyProtocols)
@@ -261,7 +261,7 @@ impl Message {
             remaining = &tail[len ..];
         }
 
-        return Ok(Message::Protocols(protocols));
+        Ok(Message::Protocols(protocols))
     }
 }
 
@@ -342,7 +342,7 @@ where
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Ready(Some(Ok(m))) => Poll::Ready(Some(Ok(m))),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(From::from(err)))),
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
         }
     }
 }
@@ -450,7 +450,7 @@ impl Into<io::Error> for ProtocolError {
         if let ProtocolError::IoError(e) = self {
             return e
         }
-        return io::ErrorKind::InvalidData.into()
+        io::ErrorKind::InvalidData.into()
     }
 }
 
@@ -529,4 +529,3 @@ mod tests {
         quickcheck(prop as fn(_))
     }
 }
-
