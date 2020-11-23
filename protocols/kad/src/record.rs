@@ -130,7 +130,7 @@ impl PartialEq for ProviderRecord {
     fn eq(&self, other: &Self) -> bool {
         // In the [`Hash`] implementation of [`ProviderRecord`] all but the
         // `key` and `provider` fields are ignored. The following property has
-        // to hold for all inputs: `k1 == k2 ⇒ hash(k1) == hash(k2)`. Thereby
+        // to hold for all inputs: `k1 == k2 <=> hash(k1) == hash(k2)`. Thereby
         // the [`PartialEq`] implementation has to ignore `key` and `provider`
         // as well.
         //
