@@ -125,8 +125,7 @@ jobs:
         profile: minimal
         toolchain: stable
         override: true
-
-    - run: rustup component add clippy
+        components: clippy
 
     - name: Cache CARGO_HOME
       uses: actions/cache@v2
@@ -140,7 +139,8 @@ jobs:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
-    - uses: actions-rs/cargo@v1
+    - name: Run cargo clippy
+      uses: actions-rs/cargo@v1
       with:
         command: clippy
         args: -- -A clippy::mutable_key_type -A clippy::type_complexity
