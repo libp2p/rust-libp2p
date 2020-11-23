@@ -137,9 +137,9 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             };
         }
 
-        let (relay, destination) = split_relay_and_destination(addr).unwrap();
-        let (relay_addr, relay_peer_id) = split_off_peer_id(relay).unwrap();
-        let (destination_addr, destination_peer_id) = split_off_peer_id(destination).unwrap();
+        let (relay, destination) = split_relay_and_destination(addr);
+        let (relay_addr, relay_peer_id) = split_off_peer_id(relay)?;
+        let (destination_addr, destination_peer_id) = split_off_peer_id(destination)?;
 
         let mut to_behaviour = self.to_behaviour.clone();
         Ok(EitherFuture::Second(
@@ -177,7 +177,7 @@ fn is_relay_listen_address(addr: Multiaddr) -> (bool, Multiaddr) {
     (new_addr.len() != original_len, new_addr)
 }
 
-fn split_relay_and_destination(addr: Multiaddr) -> Option<(Multiaddr, Multiaddr)> {
+fn split_relay_and_destination(addr: Multiaddr) -> (Multiaddr, Multiaddr) {
     let mut relay = Vec::new();
     let mut destination = Vec::new();
     let mut passed_circuit = false;
@@ -195,10 +195,10 @@ fn split_relay_and_destination(addr: Multiaddr) -> Option<(Multiaddr, Multiaddr)
         }
     }
 
-    Some((
+    (
         relay.into_iter().collect(),
         destination.into_iter().collect(),
-    ))
+    )
 }
 
 fn split_off_peer_id(mut addr: Multiaddr) -> Result<(Multiaddr, PeerId), RelayError> {
