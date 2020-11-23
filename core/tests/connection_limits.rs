@@ -35,10 +35,8 @@ use util::{TestHandler, test_network};
 fn max_outgoing() {
     let outgoing_limit = rand::thread_rng().gen_range(1, 10);
 
-    let mut limits = ConnectionLimits::default();
-    limits.max_outgoing = Some(outgoing_limit);
-    let mut cfg = NetworkConfig::default();
-    cfg.set_connection_limits(limits);
+    let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
+    let cfg = NetworkConfig::default().with_connection_limits(limits);
     let mut network = test_network(cfg);
 
     let target = PeerId::random();
@@ -58,7 +56,7 @@ fn max_outgoing() {
 
     let info = network.info();
     assert_eq!(info.num_peers(), 0);
-    assert_eq!(info.connection_counters().num_outgoing(), outgoing_limit);
+    assert_eq!(info.connection_counters().num_pending_outgoing(), outgoing_limit);
 
     // Abort all dialing attempts.
     let mut peer = network.peer(target.clone())
@@ -70,7 +68,7 @@ fn max_outgoing() {
         attempt.abort();
     }
 
-    assert_eq!(network.info().connection_counters().num_outgoing(), 0);
+    assert_eq!(network.info().connection_counters().num_pending_outgoing(), 0);
 }
 
 #[test]
@@ -78,11 +76,8 @@ fn max_established_incoming() {
     let limit = rand::thread_rng().gen_range(1, 10);
 
     fn config(limit: u32) -> NetworkConfig {
-        let mut limits = ConnectionLimits::default();
-        limits.max_established_incoming = Some(limit);
-        let mut cfg = NetworkConfig::default();
-        cfg.set_connection_limits(limits);
-        cfg
+        let limits = ConnectionLimits::default().with_max_established_incoming(Some(limit));
+        NetworkConfig::default().with_connection_limits(limits)
     }
 
     let mut network1 = test_network(config(limit));

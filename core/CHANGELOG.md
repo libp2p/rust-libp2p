@@ -1,5 +1,7 @@
 # 0.25.0 [unreleased]
 
+- The `NetworkConfig` API is now a builder that moves `self`.
+
 - New configurable connection limits for established connections and
   dedicated connection counters. Removed the connection limit dedicated
   to outgoing pending connection _per peer_. Connection limits are now

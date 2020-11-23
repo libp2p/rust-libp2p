@@ -251,7 +251,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
-        self.counters.check_max_incoming()?;
+        self.counters.check_max_pending_incoming()?;
         let endpoint = info.to_connected_point();
         Ok(self.add_pending(future, handler, endpoint, None))
     }
@@ -286,7 +286,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
-        self.counters.check_max_outgoing()?;
+        self.counters.check_max_pending_outgoing()?;
         let endpoint = info.to_connected_point();
         Ok(self.add_pending(future, handler, endpoint, info.peer_id.cloned()))
     }
@@ -893,9 +893,9 @@ pub struct ConnectionCounters {
     /// The effective connection limits.
     limits: ConnectionLimits,
     /// The current number of incoming connections.
-    incoming: u32,
+    pending_incoming: u32,
     /// The current number of outgoing connections.
-    outgoing: u32,
+    pending_outgoing: u32,
     /// The current number of established inbound connections.
     established_incoming: u32,
     /// The current number of established outbound connections.
@@ -906,8 +906,8 @@ impl ConnectionCounters {
     fn new(limits: ConnectionLimits) -> Self {
         Self {
             limits,
-            incoming: 0,
-            outgoing: 0,
+            pending_incoming: 0,
+            pending_outgoing: 0,
             established_incoming: 0,
             established_outgoing: 0,
         }
@@ -925,17 +925,17 @@ impl ConnectionCounters {
 
     /// The total number of pending connections, both incoming and outgoing.
     pub fn num_pending(&self) -> u32 {
-        self.incoming + self.outgoing
+        self.pending_incoming + self.pending_outgoing
     }
 
     /// The number of incoming connections being established.
-    pub fn num_incoming(&self) -> u32 {
-        self.incoming
+    pub fn num_pending_incoming(&self) -> u32 {
+        self.pending_incoming
     }
 
     /// The number of outgoing connections being established.
-    pub fn num_outgoing(&self) -> u32 {
-        self.outgoing
+    pub fn num_pending_outgoing(&self) -> u32 {
+        self.pending_outgoing
     }
 
     /// The number of established incoming connections.
@@ -955,15 +955,15 @@ impl ConnectionCounters {
 
     fn inc_pending(&mut self, endpoint: &ConnectedPoint) {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => { self.outgoing += 1; }
-            ConnectedPoint::Listener { .. } => { self.incoming += 1; }
+            ConnectedPoint::Dialer { .. } => { self.pending_outgoing += 1; }
+            ConnectedPoint::Listener { .. } => { self.pending_incoming += 1; }
         }
     }
 
     fn dec_pending(&mut self, endpoint: &ConnectedPoint) {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => { self.outgoing -= 1; }
-            ConnectedPoint::Listener { .. } => { self.incoming -= 1; }
+            ConnectedPoint::Dialer { .. } => { self.pending_outgoing -= 1; }
+            ConnectedPoint::Listener { .. } => { self.pending_incoming -= 1; }
         }
     }
 
@@ -981,12 +981,12 @@ impl ConnectionCounters {
         }
     }
 
-    fn check_max_outgoing(&self) -> Result<(), ConnectionLimit> {
-        Self::check(self.outgoing, self.limits.max_outgoing)
+    fn check_max_pending_outgoing(&self) -> Result<(), ConnectionLimit> {
+        Self::check(self.pending_outgoing, self.limits.max_pending_outgoing)
     }
 
-    fn check_max_incoming(&self) -> Result<(), ConnectionLimit> {
-        Self::check(self.incoming, self.limits.max_incoming)
+    fn check_max_pending_incoming(&self) -> Result<(), ConnectionLimit> {
+        Self::check(self.pending_incoming, self.limits.max_pending_incoming)
     }
 
     fn check_max_established(&self, endpoint: &ConnectedPoint)
@@ -1031,17 +1031,44 @@ fn num_peer_established(
 /// By default no connection limits apply.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionLimits {
-    /// The maximum number of concurrently incoming connections being established.
-    pub max_incoming: Option<u32>,
-    /// The maximum number of concurrently outgoing connections being established.
-    pub max_outgoing: Option<u32>,
-    /// The maximum number of concurrent established inbound connections.
-    pub max_established_incoming: Option<u32>,
-    /// The maximum number of concurrent established outbound connections.
-    pub max_established_outgoing: Option<u32>,
-    /// The maximum number of concurrent established connections per peer,
-    /// regardless of direction.
-    pub max_established_per_peer: Option<u32>,
+    max_pending_incoming: Option<u32>,
+    max_pending_outgoing: Option<u32>,
+    max_established_incoming: Option<u32>,
+    max_established_outgoing: Option<u32>,
+    max_established_per_peer: Option<u32>,
+}
+
+impl ConnectionLimits {
+    /// Configures the maximum number of concurrently incoming connections being established.
+    pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
+        self.max_pending_incoming = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrently outgoing connections being established.
+    pub fn with_max_pending_outgoing(mut self, limit: Option<u32>) -> Self {
+        self.max_pending_outgoing = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established inbound connections.
+    pub fn with_max_established_incoming(mut self, limit: Option<u32>) -> Self {
+        self.max_established_incoming = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established outbound connections.
+    pub fn with_max_established_outgoing(mut self, limit: Option<u32>) -> Self {
+        self.max_established_outgoing = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established connections per peer,
+    /// regardless of direction (incoming or outgoing).
+    pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
+        self.max_established_per_peer = limit;
+        self
+    }
 }
 
 /// Information about a former established connection to a peer

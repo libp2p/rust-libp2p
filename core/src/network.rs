@@ -630,15 +630,20 @@ pub struct NetworkConfig {
 }
 
 impl NetworkConfig {
-    /// Sets the executor to use for spawning connection background tasks.
-    pub fn set_executor(&mut self, e: Box<dyn Executor + Send>) -> &mut Self {
+    /// Configures the executor to use for spawning connection background tasks.
+    pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
         self.manager_config.executor = Some(e);
         self
     }
 
-    /// Gets the currently configured executor for connection background tasks.
-    pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
-        self.manager_config.executor.as_ref()
+    /// Configures the executor to use for spawning connection background tasks,
+    /// only if no executor has already been configured.
+    pub fn or_else_with_executor<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce() -> Option<Box<dyn Executor + Send>>
+    {
+        self.manager_config.executor = self.manager_config.executor.or_else(f);
+        self
     }
 
     /// Sets the maximum number of events sent to a connection's background task
@@ -648,7 +653,7 @@ impl NetworkConfig {
     /// When the buffer for a particular connection is full, `notify_handler` will no
     /// longer be able to deliver events to the associated `ConnectionHandler`,
     /// thus exerting back-pressure on the connection and peer API.
-    pub fn set_notify_handler_buffer_size(&mut self, n: NonZeroUsize) -> &mut Self {
+    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.manager_config.task_command_buffer_size = n.get() - 1;
         self
     }
@@ -659,13 +664,13 @@ impl NetworkConfig {
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
-    pub fn set_connection_event_buffer_size(&mut self, n: usize) -> &mut Self {
+    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
         self.manager_config.task_event_buffer_size = n;
         self
     }
 
     /// Sets the connection limits to enforce.
-    pub fn set_connection_limits(&mut self, limits: ConnectionLimits) -> &mut Self {
+    pub fn with_connection_limits(mut self, limits: ConnectionLimits) -> Self {
         self.limits = limits;
         self
     }
@@ -684,10 +689,9 @@ mod tests {
     #[test]
     fn set_executor() {
         NetworkConfig::default()
-            .set_executor(Box::new(Dummy))
-            .set_executor(Box::new(|f| {
+            .with_executor(Box::new(Dummy))
+            .with_executor(Box::new(|f| {
                 async_std::task::spawn(f);
             }));
     }
-
 }
