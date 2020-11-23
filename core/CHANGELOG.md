@@ -6,6 +6,7 @@
   dedicated connection counters. Removed the connection limit dedicated
   to outgoing pending connection _per peer_. Connection limits are now
   represented by `u32` intead of `usize` types.
+  [PR 1848](https://github.com/libp2p/rust-libp2p/pull/1848/).
 
 - Update `multihash`.
 
