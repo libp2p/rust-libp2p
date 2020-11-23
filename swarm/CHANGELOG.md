@@ -1,5 +1,8 @@
 # 0.25.0 [unreleased]
 
+- Changed parameters for connection limits from `usize` to `u32`.
+  Connection limits are now configured via `SwarmBuilder::connection_limits()`.
+
 - Update `libp2p-core`.
 
 - Expose configurable scores for external addresses, as well as

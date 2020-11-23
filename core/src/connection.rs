@@ -32,6 +32,7 @@ pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
 pub use manager::ConnectionId;
 pub use substream::{Substream, SubstreamEndpoint, Close};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
+pub use pool::{ConnectionLimits, ConnectionCounters};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
@@ -326,9 +327,9 @@ impl<'a> OutgoingInfo<'a> {
 #[derive(Debug, Clone)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
-    pub limit: usize,
+    pub limit: u32,
     /// The current number of connections.
-    pub current: usize,
+    pub current: u32,
 }
 
 impl fmt::Display for ConnectionLimit {
