@@ -21,6 +21,7 @@
 mod event;
 pub mod peer;
 
+pub use crate::connection::{ConnectionLimits, ConnectionCounters};
 pub use event::{NetworkEvent, IncomingConnection};
 pub use peer::Peer;
 
@@ -43,7 +44,7 @@ use crate::{
         PendingConnectionError,
         Substream,
         manager::ManagerConfig,
-        pool::{Pool, PoolEvent, PoolLimits},
+        pool::{Pool, PoolEvent},
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
@@ -134,9 +135,9 @@ where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
     THandler: IntoConnectionHandler + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-    <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send,
+    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
+    <THandler::Handler as ConnectionHandler>::Error: error::Error + Send,
 {
     /// Creates a new node events stream.
     pub fn new(
@@ -148,7 +149,7 @@ where
         Network {
             local_peer_id,
             listeners: ListenersStream::new(transport),
-            pool: Pool::new(pool_local_id, config.manager_config, config.pool_limits),
+            pool: Pool::new(pool_local_id, config.manager_config, config.limits),
             dialing: Default::default(),
         }
     }
@@ -244,15 +245,11 @@ where
 
     /// Returns information about the state of the `Network`.
     pub fn info(&self) -> NetworkInfo {
-        let num_connections_established = self.pool.num_established();
-        let num_connections_pending = self.pool.num_pending();
-        let num_connections = num_connections_established + num_connections_pending;
-        let num_peers = self.pool.num_connected();
+        let num_peers = self.pool.num_peers();
+        let connection_counters = self.pool.counters().clone();
         NetworkInfo {
             num_peers,
-            num_connections,
-            num_connections_established,
-            num_connections_pending,
+            connection_counters,
         }
     }
 
@@ -299,22 +296,6 @@ where
     /// is currently being established.
     pub fn dialing_peers(&self) -> impl Iterator<Item = &PeerId> {
         self.dialing.keys()
-    }
-
-    /// Gets the configured limit on pending incoming connections,
-    /// i.e. concurrent incoming connection attempts.
-    pub fn incoming_limit(&self) -> Option<usize> {
-        self.pool.limits().max_incoming
-    }
-
-    /// The total number of established connections in the `Network`.
-    pub fn num_connections_established(&self) -> usize {
-        self.pool.num_established()
-    }
-
-    /// The total number of pending connections in the `Network`.
-    pub fn num_connections_pending(&self) -> usize {
-        self.pool.num_pending()
     }
 
     /// Obtains a view of a [`Peer`] with the given ID in the network.
@@ -615,13 +596,22 @@ where
 #[derive(Clone, Debug)]
 pub struct NetworkInfo {
     /// The total number of connected peers.
-    pub num_peers: usize,
-    /// The total number of connections, both established and pending.
-    pub num_connections: usize,
-    /// The total number of pending connections, both incoming and outgoing.
-    pub num_connections_pending: usize,
-    /// The total number of established connections.
-    pub num_connections_established: usize,
+    num_peers: usize,
+    /// Counters of ongoing network connections.
+    connection_counters: ConnectionCounters,
+}
+
+impl NetworkInfo {
+    /// The number of connected peers, i.e. peers with whom at least
+    /// one established connection exists.
+    pub fn num_peers(&self) -> usize {
+        self.num_peers
+    }
+
+    /// Gets counters for ongoing network connections.
+    pub fn connection_counters(&self) -> &ConnectionCounters {
+        &self.connection_counters
+    }
 }
 
 /// The (optional) configuration for a [`Network`].
@@ -635,17 +625,25 @@ pub struct NetworkConfig {
     /// one "free" slot per task. Thus the given total `notify_handler_buffer_size`
     /// exposed for configuration on the `Network` is reduced by one.
     manager_config: ManagerConfig,
-    pool_limits: PoolLimits,
+    /// The effective connection limits.
+    limits: ConnectionLimits,
 }
 
 impl NetworkConfig {
-    pub fn set_executor(&mut self, e: Box<dyn Executor + Send>) -> &mut Self {
+    /// Configures the executor to use for spawning connection background tasks.
+    pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
         self.manager_config.executor = Some(e);
         self
     }
 
-    pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
-        self.manager_config.executor.as_ref()
+    /// Configures the executor to use for spawning connection background tasks,
+    /// only if no executor has already been configured.
+    pub fn or_else_with_executor<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce() -> Option<Box<dyn Executor + Send>>
+    {
+        self.manager_config.executor = self.manager_config.executor.or_else(f);
+        self
     }
 
     /// Sets the maximum number of events sent to a connection's background task
@@ -655,7 +653,7 @@ impl NetworkConfig {
     /// When the buffer for a particular connection is full, `notify_handler` will no
     /// longer be able to deliver events to the associated `ConnectionHandler`,
     /// thus exerting back-pressure on the connection and peer API.
-    pub fn set_notify_handler_buffer_size(&mut self, n: NonZeroUsize) -> &mut Self {
+    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.manager_config.task_command_buffer_size = n.get() - 1;
         self
     }
@@ -666,28 +664,14 @@ impl NetworkConfig {
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
-    pub fn set_connection_event_buffer_size(&mut self, n: usize) -> &mut Self {
+    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
         self.manager_config.task_event_buffer_size = n;
         self
     }
 
-    pub fn set_incoming_limit(&mut self, n: usize) -> &mut Self {
-        self.pool_limits.max_incoming = Some(n);
-        self
-    }
-
-    pub fn set_outgoing_limit(&mut self, n: usize) -> &mut Self {
-        self.pool_limits.max_outgoing = Some(n);
-        self
-    }
-
-    pub fn set_established_per_peer_limit(&mut self, n: usize) -> &mut Self {
-        self.pool_limits.max_established_per_peer = Some(n);
-        self
-    }
-
-    pub fn set_outgoing_per_peer_limit(&mut self, n: usize) -> &mut Self {
-        self.pool_limits.max_outgoing_per_peer = Some(n);
+    /// Sets the connection limits to enforce.
+    pub fn with_connection_limits(mut self, limits: ConnectionLimits) -> Self {
+        self.limits = limits;
         self
     }
 }
@@ -705,10 +689,9 @@ mod tests {
     #[test]
     fn set_executor() {
         NetworkConfig::default()
-            .set_executor(Box::new(Dummy))
-            .set_executor(Box::new(|f| {
+            .with_executor(Box::new(Dummy))
+            .with_executor(Box::new(|f| {
                 async_std::task::spawn(f);
             }));
     }
-
 }

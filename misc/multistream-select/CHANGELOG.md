@@ -1,3 +1,9 @@
+# 0.9.0 [unreleased]
+
+- Fix the encoding and decoding of `ls` responses to
+  be spec-compliant and interoperable with other implementations.
+  For a clean upgrade, `0.8.4` must already be deployed.
+
 # 0.8.5 [2020-11-09]
 
 - During negotiation do not interpret EOF error as an IO error, but instead as a

@@ -82,6 +82,7 @@ pub use protocols_handler::{
     OneShotHandlerConfig,
     SubstreamProtocol
 };
+pub use registry::{AddressScore, AddressRecord, AddAddressResult};
 
 use protocols_handler::{
     NodeHandlerWrapperBuilder,
@@ -112,6 +113,7 @@ use libp2p_core::{
     transport::{self, TransportError},
     muxing::StreamMuxerBox,
     network::{
+        ConnectionLimits,
         Network,
         NetworkInfo,
         NetworkEvent,
@@ -397,34 +399,44 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         me.network.listen_addrs()
     }
 
-    /// Returns an iterator that produces the list of addresses that other nodes can use to reach
-    /// us.
-    pub fn external_addresses(me: &Self) -> impl Iterator<Item = &Multiaddr> {
-        me.external_addrs.iter()
-    }
-
     /// Returns the peer ID of the swarm passed as parameter.
     pub fn local_peer_id(me: &Self) -> &PeerId {
         &me.network.local_peer_id()
     }
 
-    /// Adds an external address.
-    ///
-    /// An external address is an address we are listening on but that accounts for things such as
-    /// NAT traversal.
-    pub fn add_external_address(me: &mut Self, addr: Multiaddr) {
-        me.external_addrs.add(addr)
+    /// Returns an iterator for [`AddressRecord`]s of external addresses
+    /// of the local node, in decreasing order of their current
+    /// [score](AddressScore).
+    pub fn external_addresses(me: &Self) -> impl Iterator<Item = &AddressRecord> {
+        me.external_addrs.iter()
     }
 
-    /// Returns the connection info for an arbitrary connection with the peer, or `None`
-    /// if there is no connection to that peer.
-    // TODO: should take &self instead of &mut self, but the API in network requires &mut
-    pub fn connection_info(me: &mut Self, peer_id: &PeerId) -> Option<PeerId> {
-        if let Some(mut n) = me.network.peer(peer_id.clone()).into_connected() {
-            Some(n.some_connection().info().clone())
-        } else {
-            None
-        }
+    /// Adds an external address record for the local node.
+    ///
+    /// An external address is an address of the local node known to
+    /// be (likely) reachable for other nodes, possibly taking into
+    /// account NAT. The external addresses of the local node may be
+    /// shared with other nodes by the `NetworkBehaviour`.
+    ///
+    /// The associated score determines both the position of the address
+    /// in the list of external addresses (which can determine the
+    /// order in which addresses are used to connect to) as well as
+    /// how long the address is retained in the list, depending on
+    /// how frequently it is reported by the `NetworkBehaviour` via
+    /// [`NetworkBehaviourAction::ReportObservedAddr`] or explicitly
+    /// through this method.
+    pub fn add_external_address(me: &mut Self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
+        me.external_addrs.add(a, s)
+    }
+
+    /// Removes an external address of the local node, regardless of
+    /// its current score. See [`ExpandedSwarm::add_external_address`]
+    /// for details.
+    ///
+    /// Returns `true` if the address existed and was removed, `false`
+    /// otherwise.
+    pub fn remove_external_address(me: &mut Self, addr: &Multiaddr) -> bool {
+        me.external_addrs.remove(addr)
     }
 
     /// Bans a peer by its peer ID.
@@ -732,12 +744,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         }
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
+                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address, score }) => {
                     for addr in this.network.address_translation(&address) {
-                        if this.external_addrs.iter().all(|a| *a != addr) {
+                        if this.external_addrs.iter().all(|a| &a.addr != &addr) {
                             this.behaviour.inject_new_external_addr(&addr);
                         }
-                        this.external_addrs.add(addr);
+                        this.external_addrs.add(addr, score);
                     }
                 },
             }
@@ -976,7 +988,7 @@ where TBehaviour: NetworkBehaviour,
     /// By default, unless another executor has been configured,
     /// [`SwarmBuilder::build`] will try to set up a `ThreadPool`.
     pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.network_config.set_executor(e);
+        self.network_config = self.network_config.with_executor(e);
         self
     }
 
@@ -990,7 +1002,7 @@ where TBehaviour: NetworkBehaviour,
     /// be sleeping more often than necessary. Increasing this value increases
     /// the overall memory usage.
     pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
-        self.network_config.set_notify_handler_buffer_size(n);
+        self.network_config = self.network_config.with_notify_handler_buffer_size(n);
         self
     }
 
@@ -1018,28 +1030,13 @@ where TBehaviour: NetworkBehaviour,
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
     pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.network_config.set_connection_event_buffer_size(n);
+        self.network_config = self.network_config.with_connection_event_buffer_size(n);
         self
     }
 
-    /// Configures a limit for the number of simultaneous incoming
-    /// connection attempts.
-    pub fn incoming_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_incoming_limit(n);
-        self
-    }
-
-    /// Configures a limit for the number of simultaneous outgoing
-    /// connection attempts.
-    pub fn outgoing_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_outgoing_limit(n);
-        self
-    }
-
-    /// Configures a limit for the number of simultaneous
-    /// established connections per peer.
-    pub fn peer_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_established_per_peer_limit(n);
+    /// Configures the connection limits.
+    pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
+        self.network_config = self.network_config.with_connection_limits(limits);
         self
     }
 
@@ -1053,20 +1050,21 @@ where TBehaviour: NetworkBehaviour,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        let mut network_cfg = self.network_config;
-
         // If no executor has been explicitly configured, try to set up a thread pool.
-        if network_cfg.executor().is_none() {
+        let network_cfg = self.network_config.or_else_with_executor(|| {
             match ThreadPoolBuilder::new()
                 .name_prefix("libp2p-swarm-task-")
                 .create()
             {
                 Ok(tp) => {
-                    network_cfg.set_executor(Box::new(move |f| tp.spawn_ok(f)));
+                    Some(Box::new(move |f| tp.spawn_ok(f)))
                 },
-                Err(err) => log::warn!("Failed to create executor thread pool: {:?}", err)
+                Err(err) => {
+                    log::warn!("Failed to create executor thread pool: {:?}", err);
+                    None
+                }
             }
-        }
+        });
 
         let network = Network::new(self.transport, self.local_peer_id, network_cfg);
 

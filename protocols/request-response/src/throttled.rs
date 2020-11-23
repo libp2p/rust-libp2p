@@ -553,8 +553,8 @@ where
                     NetworkBehaviourAction::DialPeer { peer_id, condition },
                 | NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
                     NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
-                | NetworkBehaviourAction::ReportObservedAddr { address } =>
-                    NetworkBehaviourAction::ReportObservedAddr { address }
+                | NetworkBehaviourAction::ReportObservedAddr { address, score } =>
+                    NetworkBehaviourAction::ReportObservedAddr { address, score }
             };
 
             return Poll::Ready(event)
