@@ -53,13 +53,12 @@ pub struct Relay {
     /// List of peers the network is connected to.
     connected_peers: FnvHashSet<PeerId>,
 
-    /// Requests for the local node to act as a relay from a source to a destination.
-    incoming_relay_requests: Vec<(PeerId, RelayHandlerIncomingRelayRequest)>,
     /// Requests by the local node to a relay to relay a connection for the local node to a
     /// destination.
     outgoing_relay_requests: HashMap<PeerId, OutgoingRelayRequest>,
-    /// Requests by the local node to a destination to relay a connection from a source.
-    outgoing_destination_requests: HashMap<PeerId, OutgoingDestinationRequest>,
+    /// Requests for the local node to act as a relay from a source to a destination indexed by
+    /// destination [`PeerId`].
+    incoming_relay_requests: HashMap<PeerId, IncomingRelayRequest>,
 
     /// List of relay nodes that act as a listener for the local node acting as a destination.
     relay_listeners: HashMap<PeerId, RelayListener>,
@@ -78,9 +77,10 @@ enum OutgoingRelayRequest {
     },
 }
 
-enum OutgoingDestinationRequest {
-    Dialing {
-        destination_addresses: Vec<Multiaddr>,
+enum IncomingRelayRequest {
+    DialingDestination {
+        source_id: PeerId,
+        request: RelayHandlerIncomingRelayRequest,
     },
 }
 
@@ -102,7 +102,6 @@ impl Relay {
             connected_peers: Default::default(),
             incoming_relay_requests: Default::default(),
             outgoing_relay_requests: Default::default(),
-            outgoing_destination_requests: Default::default(),
             relay_listeners: Default::default(),
         }
     }
@@ -142,17 +141,14 @@ impl NetworkBehaviour for Relay {
         );
 
         addresses.extend(
-            self.outgoing_destination_requests
+            self.incoming_relay_requests
                 .iter()
                 .filter_map(
-                    |(
-                        peer_id,
-                        OutgoingDestinationRequest::Dialing {
-                            destination_addresses,
-                        },
-                    )| {
+                    |(peer_id, IncomingRelayRequest::DialingDestination { request, .. })| {
                         if peer_id == remote_peer_id {
-                            return Some(destination_addresses.clone());
+                            return Some(
+                                request.destination_addresses().cloned().collect::<Vec<_>>(),
+                            );
                         }
                         None
                     },
@@ -203,25 +199,23 @@ impl NetworkBehaviour for Relay {
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
-        while let Some(pos) = self
-            .incoming_relay_requests
-            .iter()
-            .position(|p| p.1.destination_id() == id)
+        //
+        // TODO: What if two outgoing destination requests are in progress? The latter will
+        // not find anything here.
+        if let Some(IncomingRelayRequest::DialingDestination { request, source_id }) =
+            self.incoming_relay_requests.remove(id)
         {
-            self.outgoing_destination_requests.remove(id).unwrap();
-            let (source, hop_request) = self.incoming_relay_requests.remove(pos);
-
-            let send_back = RelayHandlerIn::OutgoingDestinationRequest {
-                source,
+            let event = RelayHandlerIn::OutgoingDestinationRequest {
+                source: source_id,
                 source_addresses: Vec::new(), // TODO: wrong
-                substream: hop_request,
+                substream: request,
             };
 
             self.outbox_to_swarm
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: id.clone(),
                     handler: NotifyHandler::Any,
-                    event: send_back,
+                    event: event,
                 });
         }
     }
@@ -239,15 +233,7 @@ impl NetworkBehaviour for Relay {
             None => {}
         }
 
-        while let Some(pos) = self
-            .incoming_relay_requests
-            .iter()
-            .position(|p| p.1.destination_id() == peer_id)
-        {
-            // TODO: Do better error handling, instead of just dropping the channels.
-            self.outgoing_destination_requests.remove(peer_id).unwrap();
-            let _ = self.incoming_relay_requests.remove(pos);
-        }
+        self.incoming_relay_requests.remove(peer_id);
     }
 
     fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
@@ -273,8 +259,7 @@ impl NetworkBehaviour for Relay {
         self.connected_peers.remove(id);
 
         // TODO: send back proper refusal message to the source
-        self.incoming_relay_requests
-            .retain(|rq| rq.1.destination_id() != id);
+        self.incoming_relay_requests.remove(id);
     }
 
     fn inject_event(
@@ -302,16 +287,13 @@ impl NetworkBehaviour for Relay {
                         });
                 } else {
                     let dest_id = request.destination_id().clone();
-                    self.outgoing_destination_requests.insert(
+                    self.incoming_relay_requests.insert(
                         dest_id.clone(),
-                        OutgoingDestinationRequest::Dialing {
-                            destination_addresses: request
-                                .destination_addresses()
-                                .cloned()
-                                .collect(),
+                        IncomingRelayRequest::DialingDestination {
+                            request,
+                            source_id: event_source,
                         },
                     );
-                    self.incoming_relay_requests.push((event_source, request));
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::DialPeer {
                             peer_id: dest_id,
@@ -335,7 +317,7 @@ impl NetworkBehaviour for Relay {
 
             RelayHandlerEvent::OutgoingRelayRequestError(destination) => {
                 self.outgoing_relay_requests.remove(&destination).unwrap();
-            },
+            }
             RelayHandlerEvent::OutgoingRelayRequestSuccess(destination, stream) => {
                 // TODO: Instead of this unnecessary check, one could as well not safe dialing and
                 // upgrading outbound relay requests in the same HashMap.
