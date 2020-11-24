@@ -103,7 +103,11 @@ impl Record {
 
 /// A record stored in the DHT whose value is the ID of a peer
 /// who can provide the value on-demand.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Note: Two [`ProviderRecord`]s as well as their corresponding hashes are
+/// equal iff their `key` and `provider` fields are equal. See the [`Hash`] and
+/// [`PartialEq`] implementations.
+#[derive(Clone, Debug)]
 pub struct ProviderRecord {
     /// The key whose value is provided by the provider.
     pub key: Key,
@@ -121,6 +125,14 @@ impl Hash for ProviderRecord {
         self.provider.hash(state);
     }
 }
+
+impl PartialEq for ProviderRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key && self.provider == other.provider
+    }
+}
+
+impl Eq for ProviderRecord {}
 
 impl ProviderRecord {
     /// Creates a new provider record for insertion into a `RecordStore`.
@@ -187,4 +199,3 @@ mod tests {
         }
     }
 }
-

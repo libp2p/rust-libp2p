@@ -101,7 +101,7 @@ pub struct DialFuture {
 
 impl DialFuture {
     fn new(port: NonZeroU64) -> Option<Self> {
-        let sender = HUB.get(&port)?.clone();
+        let sender = HUB.get(&port)?;
 
         let (_dial_port_channel, dial_port) = HUB.register_port(0)
             .expect("there to be some random unoccupied port.");

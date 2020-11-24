@@ -63,20 +63,12 @@ impl std::ops::Not for Endpoint {
 impl Endpoint {
     /// Is this endpoint a dialer?
     pub fn is_dialer(self) -> bool {
-        if let Endpoint::Dialer = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Endpoint::Dialer)
     }
 
     /// Is this endpoint a listener?
     pub fn is_listener(self) -> bool {
-        if let Endpoint::Listener = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Endpoint::Listener)
     }
 }
 

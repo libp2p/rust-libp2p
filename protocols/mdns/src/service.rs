@@ -551,7 +551,7 @@ impl MdnsPeer {
 
         MdnsPeer {
             addrs,
-            peer_id: my_peer_id.clone(),
+            peer_id: my_peer_id,
             ttl,
         }
     }

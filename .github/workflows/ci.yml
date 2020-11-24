@@ -109,6 +109,42 @@ jobs:
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
 
+  check-clippy:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.6.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: clippy
+
+    - name: Cache CARGO_HOME
+      uses: actions/cache@v2
+      with:
+        path: ~/.cargo
+        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+
+    - name: Run cargo clippy
+      uses: actions-rs/cargo@v1
+      with:
+        command: clippy
+        args: -- -A clippy::mutable_key_type -A clippy::type_complexity
+
   integration-test:
     name: Integration tests
     runs-on: ubuntu-latest

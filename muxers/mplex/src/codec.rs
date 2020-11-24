@@ -61,6 +61,7 @@ impl fmt::Display for LocalStreamId {
 }
 
 impl Hash for LocalStreamId {
+    #![allow(clippy::derive_hash_xor_eq)]
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u32(self.num);
     }

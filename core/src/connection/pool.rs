@@ -457,15 +457,12 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
             // Count upwards because we push to / pop from the end. See also `Pool::poll`.
             let mut num_established = 0;
             for (&id, endpoint) in conns.iter() {
-                match self.manager.entry(id) {
-                    Some(manager::Entry::Established(e)) => {
-                        let connected = e.remove();
-                        self.disconnected.push(Disconnected {
-                            id, connected, num_established
-                        });
-                        num_established += 1;
-                    },
-                    _ => {}
+                if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
+                    let connected = e.remove();
+                    self.disconnected.push(Disconnected {
+                        id, connected, num_established
+                    });
+                    num_established += 1;
                 }
                 self.counters.dec_established(endpoint);
             }
@@ -475,12 +472,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         let mut aborted = Vec::new();
         for (&id, (_endpoint, peer2)) in &self.pending {
             if Some(peer) == peer2.as_ref() {
-                match self.manager.entry(id) {
-                    Some(manager::Entry::Pending(e)) => {
-                        e.abort();
-                        aborted.push(id);
-                    },
-                    _ => {}
+                if let Some(manager::Entry::Pending(e)) = self.manager.entry(id) {
+                    e.abort();
+                    aborted.push(id);
                 }
             }
         }
@@ -578,7 +572,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         // connections. Thus we `pop()` them off from the end to emit the
         // events in an order that properly counts down `num_established`.
         // See also `Pool::disconnect`.
-        while let Some(Disconnected {
+        if let Some(Disconnected {
             id, connected, num_established
         }) = self.disconnected.pop() {
             return Poll::Ready(PoolEvent::ConnectionClosed {

@@ -74,7 +74,7 @@ impl PreSharedKey {
         cipher.apply_keystream(&mut enc);
         let mut hasher = Shake128::default();
         hasher.write_all(&enc).expect("shake128 failed");
-        hasher.finalize_xof().read(&mut out).expect("shake128 failed");
+        hasher.finalize_xof().read_exact(&mut out).expect("shake128 failed");
         Fingerprint(out)
     }
 }
@@ -109,7 +109,7 @@ impl FromStr for PreSharedKey {
     type Err = KeyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let &[keytype, encoding, key] = s.lines().take(3).collect::<Vec<_>>().as_slice() {
+        if let [keytype, encoding, key] = *s.lines().take(3).collect::<Vec<_>>().as_slice() {
             if keytype != "/key/swarm/psk/1.0.0/" {
                 return Err(KeyParseError::InvalidKeyType);
             }
