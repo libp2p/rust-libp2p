@@ -2,6 +2,9 @@
 
 - Update `libp2p-core` and `libp2p-swarm`.
 
+- Have two `ProviderRecord`s be equal iff their `key` and `provider` fields are
+  equal. [PR 1850](https://github.com/libp2p/rust-libp2p/pull/1850/).
+
 # 0.25.0 [2020-11-09]
 
 - Upon newly established connections, delay routing table

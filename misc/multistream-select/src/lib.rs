@@ -71,7 +71,6 @@
 //! For a dialer:
 //!
 //! ```no_run
-//! # fn main() {
 //! use async_std::net::TcpStream;
 //! use multistream_select::{dialer_select_proto, Version};
 //! use futures::prelude::*;
@@ -85,7 +84,6 @@
 //!     println!("Negotiated protocol: {:?}", protocol);
 //!     // You can now use `_io` to communicate with the remote.
 //! });
-//! # }
 //! ```
 //!
 

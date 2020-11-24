@@ -40,6 +40,7 @@ static_assertions::const_assert! {
 }
 
 /// Representation of a Multiaddr.
+#[allow(clippy::rc_buffer)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Multiaddr { bytes: Arc<Vec<u8>> }
 
@@ -57,6 +58,11 @@ impl Multiaddr {
     /// Return the length in bytes of this multiaddress.
     pub fn len(&self) -> usize {
         self.bytes.len()
+    }
+
+    /// Returns true if the length of this multiaddress is 0.
+    pub fn is_empty(&self) -> bool {
+        self.bytes.len() == 0
     }
 
     /// Return a copy of this [`Multiaddr`]'s byte representation.

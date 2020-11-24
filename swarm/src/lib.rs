@@ -113,6 +113,7 @@ use libp2p_core::{
     transport::{self, TransportError},
     muxing::StreamMuxerBox,
     network::{
+        ConnectionLimits,
         Network,
         NetworkInfo,
         NetworkEvent,
@@ -987,7 +988,7 @@ where TBehaviour: NetworkBehaviour,
     /// By default, unless another executor has been configured,
     /// [`SwarmBuilder::build`] will try to set up a `ThreadPool`.
     pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.network_config.set_executor(e);
+        self.network_config = self.network_config.with_executor(e);
         self
     }
 
@@ -1001,7 +1002,7 @@ where TBehaviour: NetworkBehaviour,
     /// be sleeping more often than necessary. Increasing this value increases
     /// the overall memory usage.
     pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
-        self.network_config.set_notify_handler_buffer_size(n);
+        self.network_config = self.network_config.with_notify_handler_buffer_size(n);
         self
     }
 
@@ -1029,28 +1030,13 @@ where TBehaviour: NetworkBehaviour,
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
     pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.network_config.set_connection_event_buffer_size(n);
+        self.network_config = self.network_config.with_connection_event_buffer_size(n);
         self
     }
 
-    /// Configures a limit for the number of simultaneous incoming
-    /// connection attempts.
-    pub fn incoming_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_incoming_limit(n);
-        self
-    }
-
-    /// Configures a limit for the number of simultaneous outgoing
-    /// connection attempts.
-    pub fn outgoing_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_outgoing_limit(n);
-        self
-    }
-
-    /// Configures a limit for the number of simultaneous
-    /// established connections per peer.
-    pub fn peer_connection_limit(mut self, n: usize) -> Self {
-        self.network_config.set_established_per_peer_limit(n);
+    /// Configures the connection limits.
+    pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
+        self.network_config = self.network_config.with_connection_limits(limits);
         self
     }
 
@@ -1064,20 +1050,21 @@ where TBehaviour: NetworkBehaviour,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        let mut network_cfg = self.network_config;
-
         // If no executor has been explicitly configured, try to set up a thread pool.
-        if network_cfg.executor().is_none() {
+        let network_cfg = self.network_config.or_else_with_executor(|| {
             match ThreadPoolBuilder::new()
                 .name_prefix("libp2p-swarm-task-")
                 .create()
             {
                 Ok(tp) => {
-                    network_cfg.set_executor(Box::new(move |f| tp.spawn_ok(f)));
+                    Some(Box::new(move |f| tp.spawn_ok(f)))
                 },
-                Err(err) => log::warn!("Failed to create executor thread pool: {:?}", err)
+                Err(err) => {
+                    log::warn!("Failed to create executor thread pool: {:?}", err);
+                    None
+                }
             }
-        }
+        });
 
         let network = Network::new(self.transport, self.local_peer_id, network_cfg);
 

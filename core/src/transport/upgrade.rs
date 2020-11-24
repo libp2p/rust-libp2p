@@ -367,7 +367,7 @@ where
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.inner.dial(addr.clone())
+        let future = self.inner.dial(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),

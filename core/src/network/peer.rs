@@ -197,10 +197,7 @@ where
     ///
     /// Returns `true` iff [`Peer::into_disconnected`] returns `Some`.
     pub fn is_disconnected(&self) -> bool {
-        match self {
-            Peer::Disconnected(..) => true,
-            _ => false
-        }
+        matches!(self, Peer::Disconnected(..))
     }
 
     /// Initiates a new dialing attempt to this peer using the given addresses.
@@ -303,14 +300,14 @@ where
     }
 
     /// Obtains an established connection to the peer by ID.
-    pub fn connection<'b>(&'b mut self, id: ConnectionId)
-        -> Option<EstablishedConnection<'b, TInEvent>>
+    pub fn connection(&mut self, id: ConnectionId)
+        -> Option<EstablishedConnection<TInEvent>>
     {
         self.network.pool.get_established(id)
     }
 
     /// The number of established connections to the peer.
-    pub fn num_connections(&self) -> usize {
+    pub fn num_connections(&self) -> u32 {
         self.network.pool.num_peer_established(&self.peer_id)
     }
 
@@ -334,8 +331,8 @@ where
     }
 
     /// Gets an iterator over all established connections to the peer.
-    pub fn connections<'b>(&'b mut self) ->
-        EstablishedConnectionIter<'b,
+    pub fn connections(&mut self) ->
+        EstablishedConnectionIter<
             impl Iterator<Item = ConnectionId>,
             TInEvent,
             TOutEvent,
@@ -347,8 +344,8 @@ where
     }
 
     /// Obtains some established connection to the peer.
-    pub fn some_connection<'b>(&'b mut self)
-        -> EstablishedConnection<'b, TInEvent>
+    pub fn some_connection(&mut self)
+        -> EstablishedConnection<TInEvent>
     {
         self.connections()
             .into_first()
@@ -446,12 +443,6 @@ where
             }
         }
         None
-    }
-
-    /// The number of ongoing dialing attempts, i.e. pending outgoing connections
-    /// to this peer.
-    pub fn num_attempts(&self) -> usize {
-        self.network.pool.num_peer_outgoing(&self.peer_id)
     }
 
     /// Gets an iterator over all dialing (i.e. pending outgoing) connections to the peer.
@@ -672,6 +663,15 @@ impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 
     /// Obtains the next dialing connection, if any.
     pub fn next<'b>(&'b mut self) -> Option<DialingAttempt<'b, TInEvent>> {
+        // If the number of elements reduced, the current `DialingAttempt` has been
+        // aborted and iteration needs to continue from the previous position to
+        // account for the removed element.
+        let end = self.dialing.get(self.peer_id).map_or(0, |conns| conns.len());
+        if self.end > end {
+            self.end = end;
+            self.pos -= 1;
+        }
+
         if self.pos == self.end {
             return None
         }
