@@ -1,5 +1,7 @@
 # 0.9.0 [unreleased]
 
+- Make the `V1Lazy` upgrade strategy more interoperable with `V1`.
+
 - Fix the encoding and decoding of `ls` responses to
   be spec-compliant and interoperable with other implementations.
   For a clean upgrade, `0.8.4` must already be deployed.
