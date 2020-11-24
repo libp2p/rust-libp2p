@@ -37,8 +37,6 @@ const MAX_PROTOCOLS: usize = 1000;
 
 /// The encoded form of a multistream-select 1.0.0 header message.
 const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
-/// The encoded form of a multistream-select 1.0.0 header message.
-const MSG_MULTISTREAM_1_0_LAZY: &[u8] = b"/multistream-lazy/1\n";
 /// The encoded form of a multistream-select 'na' message.
 const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
@@ -52,45 +50,32 @@ pub enum Version {
     /// [1]: https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
     /// [2]: https://github.com/multiformats/multistream-select
     V1,
-    /// A lazy variant of version 1 that is identical on the wire but delays
-    /// sending of protocol negotiation data as much as possible.
+    /// A "lazy" variant of version 1 that is identical on the wire but whereby
+    /// the dialer delays flushing protocol negotiation data in order to combine
+    /// it with initial application data, thus performing 0-RTT negotiation.
     ///
-    /// Delaying the sending of protocol negotiation data can result in
-    /// significantly fewer network roundtrips used for the negotiation,
-    /// up to 0-RTT negotiation.
-    ///
-    /// 0-RTT negotiation is achieved if the dialer supports only a single
-    /// application protocol. In that case the dialer immedidately settles
+    /// This strategy is only applicable for the node with the role of "dialer"
+    /// in the negotiation and only if the dialer supports just a single
+    /// application protocol. In that case the dialer immedidately "settles"
     /// on that protocol, buffering the negotiation messages to be sent
     /// with the first round of application protocol data (or an attempt
     /// is made to read from the `Negotiated` I/O stream).
     ///
-    /// A listener receiving a `V1Lazy` header will similarly delay sending
-    /// of the protocol confirmation.  Though typically the listener will need
-    /// to read the request data before sending its response, thus triggering
-    /// sending of the protocol confirmation, which, in absence of additional
-    /// buffering on lower layers will result in at least two response frames
-    /// to be sent.
+    /// A listener will behave identically to `V1`. This ensures interoperability with `V1`.
+    /// Notably, it will immediately send the multistream header as well as the protocol
+    /// confirmation, resulting in multiple frames being sent on the underlying transport.
+    /// Nevertheless, if the listener supports the protocol that the dialer optimistically
+    /// settled on, it can be a 0-RTT negotiation.
     ///
-    /// `V1Lazy` is specific to `rust-libp2p`: While the wire protocol
-    /// is identical to `V1`, delayed sending of protocol negotiation frames
-    /// is only safe under the following assumptions:
-    ///
-    ///   1. The dialer is assumed to always send the first multistream-select
-    ///      protocol message immediately after the multistream header, without
-    ///      first waiting for confirmation of that header. Since the listener
-    ///      delays sending the protocol confirmation, a deadlock situation may
-    ///      otherwise occurs that is only resolved by a timeout. This assumption
-    ///      is trivially satisfied if both peers support and use `V1Lazy`.
-    ///
-    ///   2. When nesting multiple protocol negotiations, the listener is either
-    ///      known to support all of the dialer's optimistically chosen protocols
-    ///      or there is no intermediate protocol without a payload and none of
-    ///      the protocol payloads has the potential for being mistaken for a
-    ///      multistream-select protocol message. This avoids rare edge-cases whereby
-    ///      the listener may not recognize upgrade boundaries and erroneously
-    ///      process a request despite not supporting one of the intermediate
-    ///      protocols that the dialer committed to. See [1] and [2].
+    /// > **Note**: `V1Lazy` is specific to `rust-libp2p`. The wire protocol is identical to `V1`
+    /// > and generally interoperable with peers only supporting `V1`. Nevertheless, there is a
+    /// > pitfall that is rarely encountered: When nesting multiple protocol negotiations, the
+    /// > listener should either be known to support all of the dialer's optimistically chosen
+    /// > protocols or there is must be no intermediate protocol without a payload and none of
+    /// > the protocol payloads must have the potential for being mistaken for a multistream-select
+    /// > protocol message. This avoids rare edge-cases whereby the listener may not recognize
+    /// > upgrade boundaries and erroneously process a request despite not supporting one of
+    /// > the intermediate protocols that the dialer committed to. See [1] and [2].
     ///
     /// [1]: https://github.com/multiformats/go-multistream/issues/20
     /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
@@ -170,8 +155,11 @@ impl Message {
                 Ok(())
             }
             Message::Header(Version::V1Lazy) => {
-                dest.reserve(MSG_MULTISTREAM_1_0_LAZY.len());
-                dest.put(MSG_MULTISTREAM_1_0_LAZY);
+                // Note: Encoded identically to `V1`. `V1Lazy` only
+                // has a local effect for the dialer, determining when
+                // it flushes negotiation data.
+                dest.reserve(MSG_MULTISTREAM_1_0.len());
+                dest.put(MSG_MULTISTREAM_1_0);
                 Ok(())
             }
             Message::Protocol(p) => {
@@ -209,10 +197,6 @@ impl Message {
 
     /// Decodes a `Message` from its byte representation.
     pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
-        if msg == MSG_MULTISTREAM_1_0_LAZY {
-            return Ok(Message::Header(Version::V1Lazy))
-        }
-
         if msg == MSG_MULTISTREAM_1_0 {
             return Ok(Message::Header(Version::V1))
         }

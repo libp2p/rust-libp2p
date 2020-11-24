@@ -80,7 +80,11 @@ impl<TInner> Negotiated<TInner> {
 
     /// Creates a `Negotiated` in state [`State::Expecting`] that is still
     /// expecting confirmation of the given `protocol`.
-    pub(crate) fn expecting(io: MessageReader<TInner>, protocol: Protocol, version: Version) -> Self {
+    pub(crate) fn expecting(
+        io: MessageReader<TInner>,
+        protocol: Protocol,
+        version: Option<Version>
+    ) -> Self {
         Negotiated { state: State::Expecting { io, protocol, version } }
     }
 
@@ -125,11 +129,12 @@ impl<TInner> Negotiated<TInner> {
                         }
                     };
 
-                    if let Message::Header(v) = &msg {
-                        if *v == version {
-                            *this.state = State::Expecting { io, protocol, version };
+                    match (&msg, version) {
+                        (Message::Header(Version::V1), Some(Version::V1)) => {
+                            *this.state = State::Expecting { io, protocol, version: None };
                             continue
                         }
+                        _ => {}
                     }
 
                     if let Message::Protocol(p) = &msg {
@@ -168,8 +173,9 @@ enum State<R> {
         io: MessageReader<R>,
         /// The expected protocol (i.e. name and version).
         protocol: Protocol,
-        /// The expected multistream-select protocol version.
-        version: Version
+        /// The expected protocol negotiation (i.e. multistream-select) header,
+        /// if one is still expected to be received.
+        version: Option<Version>,
     },
 
     /// In this state, a protocol has been agreed upon and I/O

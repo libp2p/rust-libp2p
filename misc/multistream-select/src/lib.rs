@@ -48,28 +48,23 @@
 //!
 //! ## [`Negotiated`](self::Negotiated)
 //!
-//! When a dialer or listener participating in a negotiation settles
-//! on a protocol to use, the [`DialerSelectFuture`] respectively
-//! [`ListenerSelectFuture`] yields a [`Negotiated`](self::Negotiated)
-//! I/O stream.
-//!
-//! Notably, when a `DialerSelectFuture` resolves to a `Negotiated`, it may not yet
-//! have written the last negotiation message to the underlying I/O stream and may
-//! still be expecting confirmation for that protocol, despite having settled on
-//! a protocol to use.
-//!
-//! Similarly, when a `ListenerSelectFuture` resolves to a `Negotiated`, it may not
-//! yet have sent the last negotiation message despite having settled on a protocol
-//! proposed by the dialer that it supports.
-//!
-//! This behaviour allows both the dialer and the listener to send data
-//! relating to the negotiated protocol together with the last negotiation
-//! message(s), which, in the case of the dialer only supporting a single
-//! protocol, results in 0-RTT negotiation. Note, however, that a dialer
-//! that performs multiple 0-RTT negotiations in sequence for different
-//! protocols layered on top of each other may trigger undesirable behaviour
-//! for a listener not supporting one of the intermediate protocols.
-//! See [`dialer_select_proto`](self::dialer_select_proto).
+//! A `Negotiated` represents an I/O stream that has settled on a protocol
+//! to use. By default, with [`Version::V1`], protocol negotiation is always
+//! at least one dedicated round-trip message exchange, before application
+//! data for the negotiated protocol can be sent by the dialer. There is
+//! a variant [`Version::V1Lazy`] that permits 0-RTT negotiation if the
+//! dialer only supports a single protocol. In that case, when a dialer
+//! settles on a protocol to use, the [`DialerSelectFuture`] yields a
+//! [`Negotiated`](self::Negotiated) I/O stream before the negotiation
+//! data has been flushed. It is then expecting confirmation for that protocol
+//! as the first messages read from the stream. This behaviour allows the dialer
+//! to immediately send data relating to the negotiated protocol together with the
+//! remaining negotiation message(s). Note, however, that a dialer that performs
+//! multiple 0-RTT negotiations in sequence for different protocols layered on
+//! top of each other may trigger undesirable behaviour for a listener not
+//! supporting one of the intermediate protocols. See
+//! [`dialer_select_proto`](self::dialer_select_proto) and the documentation
+//! of [`Version::V1Lazy`] for further details.
 //!
 //! ## Examples
 //!

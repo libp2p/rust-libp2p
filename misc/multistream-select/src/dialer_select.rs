@@ -186,6 +186,9 @@ where
                     }
 
                     let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
+
+                    // The dialer always sends the header and the first protocol
+                    // proposal in one go for efficiency.
                     *this.state = SeqState::SendProtocol { io, protocol };
                 }
 
@@ -209,9 +212,13 @@ where
                     } else {
                         match this.version {
                             Version::V1 => *this.state = SeqState::FlushProtocol { io, protocol },
+                            // This is the only effect that `V1Lazy` has compared to `V1`:
+                            // Optimistically settling on the only protocol that
+                            // the dialer supports for this negotiation. Notably,
+                            // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
                                 log::debug!("Dialer: Expecting proposed protocol: {}", p);
-                                let io = Negotiated::expecting(io.into_reader(), p, *this.version);
+                                let io = Negotiated::expecting(io.into_reader(), p, Some(Version::V1));
                                 return Poll::Ready(Ok((protocol, io)))
                             }
                         }
@@ -242,7 +249,7 @@ where
                     };
 
                     match msg {
-                        Message::Header(v) if v == *this.version => {
+                        Message::Header(Version::V1) => {
                             *this.state = SeqState::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
@@ -366,7 +373,7 @@ where
                     };
 
                     match &msg {
-                        Message::Header(v) if v == this.version => {
+                        Message::Header(Version::V1) => {
                             *this.state = ParState::RecvProtocols { io }
                         }
                         Message::Protocols(supported) => {
@@ -395,9 +402,10 @@ where
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
-                    log::debug!("Dialer: Expecting proposed protocol: {}", p);
 
-                    let io = Negotiated::expecting(io.into_reader(), p, *this.version);
+                    log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                    let io = Negotiated::expecting(io.into_reader(), p, None);
+
                     return Poll::Ready(Ok((protocol, io)))
                 }
 
