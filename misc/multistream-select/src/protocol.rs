@@ -25,6 +25,7 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
+use crate::Version;
 use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
 
 use bytes::{Bytes, BytesMut, BufMut};
@@ -42,51 +43,20 @@ const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
 
-/// Supported multistream-select protocol versions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Version {
-    /// Version 1 of the multistream-select protocol. See [1] and [2].
-    ///
-    /// [1]: https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
-    /// [2]: https://github.com/multiformats/multistream-select
+/// The multistream-select header lines preceeding negotiation.
+///
+/// Every [`Version`] has a corresponding header line.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum HeaderLine {
+    /// The `/multistream/1.0.0` header line.
     V1,
-    /// A "lazy" variant of version 1 that is identical on the wire but whereby
-    /// the dialer delays flushing protocol negotiation data in order to combine
-    /// it with initial application data, thus performing 0-RTT negotiation.
-    ///
-    /// This strategy is only applicable for the node with the role of "dialer"
-    /// in the negotiation and only if the dialer supports just a single
-    /// application protocol. In that case the dialer immedidately "settles"
-    /// on that protocol, buffering the negotiation messages to be sent
-    /// with the first round of application protocol data (or an attempt
-    /// is made to read from the `Negotiated` I/O stream).
-    ///
-    /// A listener will behave identically to `V1`. This ensures interoperability with `V1`.
-    /// Notably, it will immediately send the multistream header as well as the protocol
-    /// confirmation, resulting in multiple frames being sent on the underlying transport.
-    /// Nevertheless, if the listener supports the protocol that the dialer optimistically
-    /// settled on, it can be a 0-RTT negotiation.
-    ///
-    /// > **Note**: `V1Lazy` is specific to `rust-libp2p`. The wire protocol is identical to `V1`
-    /// > and generally interoperable with peers only supporting `V1`. Nevertheless, there is a
-    /// > pitfall that is rarely encountered: When nesting multiple protocol negotiations, the
-    /// > listener should either be known to support all of the dialer's optimistically chosen
-    /// > protocols or there is must be no intermediate protocol without a payload and none of
-    /// > the protocol payloads must have the potential for being mistaken for a multistream-select
-    /// > protocol message. This avoids rare edge-cases whereby the listener may not recognize
-    /// > upgrade boundaries and erroneously process a request despite not supporting one of
-    /// > the intermediate protocols that the dialer committed to. See [1] and [2].
-    ///
-    /// [1]: https://github.com/multiformats/go-multistream/issues/20
-    /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
-    V1Lazy,
-    // Draft: https://github.com/libp2p/specs/pull/95
-    // V2,
 }
 
-impl Default for Version {
-    fn default() -> Self {
-        Version::V1
+impl From<Version> for HeaderLine {
+    fn from(v: Version) -> HeaderLine {
+        match v {
+            Version::V1 | Version::V1Lazy => HeaderLine::V1,
+        }
     }
 }
 
@@ -133,7 +103,7 @@ impl fmt::Display for Protocol {
 pub enum Message {
     /// A header message identifies the multistream-select protocol
     /// that the sender wishes to speak.
-    Header(Version),
+    Header(HeaderLine),
     /// A protocol message identifies a protocol request or acknowledgement.
     Protocol(Protocol),
     /// A message through which a peer requests the complete list of
@@ -149,15 +119,7 @@ impl Message {
     /// Encodes a `Message` into its byte representation.
     pub fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
         match self {
-            Message::Header(Version::V1) => {
-                dest.reserve(MSG_MULTISTREAM_1_0.len());
-                dest.put(MSG_MULTISTREAM_1_0);
-                Ok(())
-            }
-            Message::Header(Version::V1Lazy) => {
-                // Note: Encoded identically to `V1`. `V1Lazy` only
-                // has a local effect for the dialer, determining when
-                // it flushes negotiation data.
+            Message::Header(HeaderLine::V1) => {
                 dest.reserve(MSG_MULTISTREAM_1_0.len());
                 dest.put(MSG_MULTISTREAM_1_0);
                 Ok(())
@@ -198,7 +160,7 @@ impl Message {
     /// Decodes a `Message` from its byte representation.
     pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
         if msg == MSG_MULTISTREAM_1_0 {
-            return Ok(Message::Header(Version::V1))
+            return Ok(Message::Header(HeaderLine::V1))
         }
 
         if msg == MSG_PROTOCOL_NA {
@@ -490,7 +452,7 @@ mod tests {
     impl Arbitrary for Message {
         fn arbitrary<G: Gen>(g: &mut G) -> Message {
             match g.gen_range(0, 5) {
-                0 => Message::Header(Version::V1),
+                0 => Message::Header(HeaderLine::V1),
                 1 => Message::NotAvailable,
                 2 => Message::ListProtocols,
                 3 => Message::Protocol(Protocol::arbitrary(g)),

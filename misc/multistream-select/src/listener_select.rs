@@ -22,7 +22,7 @@
 //! in a multistream-select protocol negotiation.
 
 use crate::{Negotiated, NegotiationError};
-use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
+use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, HeaderLine};
 
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -111,8 +111,10 @@ where
             match mem::replace(this.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(Message::Header(Version::V1)))) => {
-                            *this.state = State::SendHeader { io }
+                        Poll::Ready(Some(Ok(Message::Header(h)))) => {
+                            match h {
+                                HeaderLine::V1 => *this.state = State::SendHeader { io }
+                            }
                         }
                         Poll::Ready(Some(Ok(_))) => {
                             return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
@@ -139,7 +141,8 @@ where
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(Version::V1)) {
+                    let msg = Message::Header(HeaderLine::V1);
+                    if let Err(err) = Pin::new(&mut io).start_send(msg) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
