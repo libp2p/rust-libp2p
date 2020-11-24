@@ -219,7 +219,7 @@ where
                             // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
                                 log::debug!("Dialer: Expecting proposed protocol: {}", p);
-                                let hl = HeaderLine::V1;
+                                let hl = HeaderLine::from(Version::V1Lazy);
                                 let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
                                 return Poll::Ready(Ok((protocol, io)))
                             }
