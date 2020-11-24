@@ -20,7 +20,6 @@
 
 use crate::PublicKey;
 use bytes::Bytes;
-use bs58;
 use thiserror::Error;
 use multihash::{Code, Multihash, MultihashDigest};
 use rand::Rng;

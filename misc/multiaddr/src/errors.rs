@@ -1,12 +1,11 @@
 use std::{net, fmt, error, io, num, str, string};
-use bs58;
-use multihash;
 use unsigned_varint::decode;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 /// Error types
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     DataLessThanLen,
     InvalidMultiaddr,
@@ -15,8 +14,6 @@ pub enum Error {
     ParsingError(Box<dyn error::Error + Send + Sync>),
     UnknownProtocolId(u32),
     UnknownProtocolString(String),
-    #[doc(hidden)]
-    __Nonexhaustive
 }
 
 impl fmt::Display for Error {
@@ -29,7 +26,6 @@ impl fmt::Display for Error {
             Error::ParsingError(e) => write!(f, "failed to parse: {}", e),
             Error::UnknownProtocolId(id) => write!(f, "unknown protocol id: {}", id),
             Error::UnknownProtocolString(string) => write!(f, "unknown protocol string: {}", string),
-            Error::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }
 }
@@ -92,4 +88,3 @@ impl From<decode::Error> for Error {
         Error::InvalidUvar(e)
     }
 }
-
