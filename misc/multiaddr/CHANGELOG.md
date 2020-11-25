@@ -1,3 +1,7 @@
+# 0.10.0 [2020-11-25]
+
+- Upgrade multihash to `0.13`.
+
 # 0.9.6 [2020-11-17]
 
 - Move the `from_url` module and functionality behind the `url` feature,
