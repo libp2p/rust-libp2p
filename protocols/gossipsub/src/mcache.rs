@@ -96,16 +96,20 @@ impl<T> MessageCache<T> {
         peer: &PeerId,
     ) -> Option<(&GossipsubMessageWithId<T>, u32)> {
         let iwant_counts = &mut self.iwant_counts;
-        self.msgs.get(message_id).map(|message| {
-            (message, {
-                let count = iwant_counts
-                    .entry(message_id.clone())
-                    .or_default()
-                    .entry(peer.clone())
-                    .or_default();
-                *count += 1;
-                *count
-            })
+        self.msgs.get(message_id).and_then(|message| {
+            if !message.validated {
+                None
+            } else {
+                Some((message, {
+                    let count = iwant_counts
+                        .entry(message_id.clone())
+                        .or_default()
+                        .entry(peer.clone())
+                        .or_default();
+                    *count += 1;
+                    *count
+                }))
+            }
         })
     }
 
