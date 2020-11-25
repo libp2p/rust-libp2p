@@ -62,7 +62,7 @@ atomic = "0.5.0"
 bytes = "0.5"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.25.0", path = "core" }
+libp2p-core = { version = "0.25.1", path = "core" }
 libp2p-core-derive = { version = "0.21.0", path = "misc/core-derive" }
 libp2p-floodsub = { version = "0.25.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.25.0", path = "./protocols/gossipsub", optional = true }
