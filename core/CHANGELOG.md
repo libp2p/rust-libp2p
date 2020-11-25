@@ -1,4 +1,4 @@
-# 0.25.0 [unreleased]
+# 0.25.0 [2020-11-25]
 
 - The `NetworkConfig` API is now a builder that moves `self`.
   [PR 1848](https://github.com/libp2p/rust-libp2p/pull/1848/).

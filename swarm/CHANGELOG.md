@@ -1,4 +1,4 @@
-# 0.25.0 [unreleased]
+# 0.25.0 [2020-11-25]
 
 - Changed parameters for connection limits from `usize` to `u32`.
   Connection limits are now configured via `SwarmBuilder::connection_limits()`.

@@ -1,4 +1,4 @@
-# 0.9.0 [unreleased]
+# 0.9.0 [2020-11-25]
 
 - Make the `V1Lazy` upgrade strategy more interoperable with `V1`. Specifically,
   the listener now behaves identically with `V1` and `V1Lazy`. Furthermore, the
