@@ -48,28 +48,23 @@
 //!
 //! ## [`Negotiated`](self::Negotiated)
 //!
-//! When a dialer or listener participating in a negotiation settles
-//! on a protocol to use, the [`DialerSelectFuture`] respectively
-//! [`ListenerSelectFuture`] yields a [`Negotiated`](self::Negotiated)
-//! I/O stream.
-//!
-//! Notably, when a `DialerSelectFuture` resolves to a `Negotiated`, it may not yet
-//! have written the last negotiation message to the underlying I/O stream and may
-//! still be expecting confirmation for that protocol, despite having settled on
-//! a protocol to use.
-//!
-//! Similarly, when a `ListenerSelectFuture` resolves to a `Negotiated`, it may not
-//! yet have sent the last negotiation message despite having settled on a protocol
-//! proposed by the dialer that it supports.
-//!
-//! This behaviour allows both the dialer and the listener to send data
-//! relating to the negotiated protocol together with the last negotiation
-//! message(s), which, in the case of the dialer only supporting a single
-//! protocol, results in 0-RTT negotiation. Note, however, that a dialer
-//! that performs multiple 0-RTT negotiations in sequence for different
-//! protocols layered on top of each other may trigger undesirable behaviour
-//! for a listener not supporting one of the intermediate protocols.
-//! See [`dialer_select_proto`](self::dialer_select_proto).
+//! A `Negotiated` represents an I/O stream that has settled on a protocol
+//! to use. By default, with [`Version::V1`], protocol negotiation is always
+//! at least one dedicated round-trip message exchange, before application
+//! data for the negotiated protocol can be sent by the dialer. There is
+//! a variant [`Version::V1Lazy`] that permits 0-RTT negotiation if the
+//! dialer only supports a single protocol. In that case, when a dialer
+//! settles on a protocol to use, the [`DialerSelectFuture`] yields a
+//! [`Negotiated`](self::Negotiated) I/O stream before the negotiation
+//! data has been flushed. It is then expecting confirmation for that protocol
+//! as the first messages read from the stream. This behaviour allows the dialer
+//! to immediately send data relating to the negotiated protocol together with the
+//! remaining negotiation message(s). Note, however, that a dialer that performs
+//! multiple 0-RTT negotiations in sequence for different protocols layered on
+//! top of each other may trigger undesirable behaviour for a listener not
+//! supporting one of the intermediate protocols. See
+//! [`dialer_select_proto`](self::dialer_select_proto) and the documentation
+//! of [`Version::V1Lazy`] for further details.
 //!
 //! ## Examples
 //!
@@ -100,6 +95,54 @@ mod protocol;
 mod tests;
 
 pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
-pub use self::protocol::{ProtocolError, Version};
+pub use self::protocol::ProtocolError;
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
+
+/// Supported multistream-select versions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Version {
+    /// Version 1 of the multistream-select protocol. See [1] and [2].
+    ///
+    /// [1]: https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
+    /// [2]: https://github.com/multiformats/multistream-select
+    V1,
+    /// A "lazy" variant of version 1 that is identical on the wire but whereby
+    /// the dialer delays flushing protocol negotiation data in order to combine
+    /// it with initial application data, thus performing 0-RTT negotiation.
+    ///
+    /// This strategy is only applicable for the node with the role of "dialer"
+    /// in the negotiation and only if the dialer supports just a single
+    /// application protocol. In that case the dialer immedidately "settles"
+    /// on that protocol, buffering the negotiation messages to be sent
+    /// with the first round of application protocol data (or an attempt
+    /// is made to read from the `Negotiated` I/O stream).
+    ///
+    /// A listener will behave identically to `V1`. This ensures interoperability with `V1`.
+    /// Notably, it will immediately send the multistream header as well as the protocol
+    /// confirmation, resulting in multiple frames being sent on the underlying transport.
+    /// Nevertheless, if the listener supports the protocol that the dialer optimistically
+    /// settled on, it can be a 0-RTT negotiation.
+    ///
+    /// > **Note**: `V1Lazy` is specific to `rust-libp2p`. The wire protocol is identical to `V1`
+    /// > and generally interoperable with peers only supporting `V1`. Nevertheless, there is a
+    /// > pitfall that is rarely encountered: When nesting multiple protocol negotiations, the
+    /// > listener should either be known to support all of the dialer's optimistically chosen
+    /// > protocols or there is must be no intermediate protocol without a payload and none of
+    /// > the protocol payloads must have the potential for being mistaken for a multistream-select
+    /// > protocol message. This avoids rare edge-cases whereby the listener may not recognize
+    /// > upgrade boundaries and erroneously process a request despite not supporting one of
+    /// > the intermediate protocols that the dialer committed to. See [1] and [2].
+    ///
+    /// [1]: https://github.com/multiformats/go-multistream/issues/20
+    /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
+    V1Lazy,
+    // Draft: https://github.com/libp2p/specs/pull/95
+    // V2,
+}
+
+impl Default for Version {
+    fn default() -> Self {
+        Version::V1
+    }
+}

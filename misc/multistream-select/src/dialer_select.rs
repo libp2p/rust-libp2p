@@ -20,8 +20,8 @@
 
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
-use crate::{Negotiated, NegotiationError};
-use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
+use crate::{Negotiated, NegotiationError, Version};
+use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, HeaderLine};
 
 use futures::{future::Either, prelude::*};
 use std::{convert::TryFrom as _, iter, mem, pin::Pin, task::{Context, Poll}};
@@ -41,7 +41,7 @@ use std::{convert::TryFrom as _, iter, mem, pin::Pin, task::{Context, Poll}};
 /// thus an inaccurate size estimate may result in a suboptimal choice.
 ///
 /// Within the scope of this library, a dialer always commits to a specific
-/// multistream-select protocol [`Version`], whereas a listener always supports
+/// multistream-select [`Version`], whereas a listener always supports
 /// all versions supported by this library. Frictionless multistream-select
 /// protocol upgrades may thus proceed by deployments with updated listeners,
 /// eventually followed by deployments of dialers choosing the newer protocol.
@@ -181,11 +181,15 @@ where
                         },
                     }
 
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(*this.version)) {
+                    let h = HeaderLine::from(*this.version);
+                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(h)) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
                     let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
+
+                    // The dialer always sends the header and the first protocol
+                    // proposal in one go for efficiency.
                     *this.state = SeqState::SendProtocol { io, protocol };
                 }
 
@@ -209,9 +213,14 @@ where
                     } else {
                         match this.version {
                             Version::V1 => *this.state = SeqState::FlushProtocol { io, protocol },
+                            // This is the only effect that `V1Lazy` has compared to `V1`:
+                            // Optimistically settling on the only protocol that
+                            // the dialer supports for this negotiation. Notably,
+                            // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
                                 log::debug!("Dialer: Expecting proposed protocol: {}", p);
-                                let io = Negotiated::expecting(io.into_reader(), p, *this.version);
+                                let hl = HeaderLine::from(Version::V1Lazy);
+                                let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
                                 return Poll::Ready(Ok((protocol, io)))
                             }
                         }
@@ -242,7 +251,7 @@ where
                     };
 
                     match msg {
-                        Message::Header(v) if v == *this.version => {
+                        Message::Header(v) if v == HeaderLine::from(*this.version) => {
                             *this.state = SeqState::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
@@ -318,7 +327,8 @@ where
                         },
                     }
 
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(*this.version)) {
+                    let msg = Message::Header(HeaderLine::from(*this.version));
+                    if let Err(err) = Pin::new(&mut io).start_send(msg) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
@@ -366,7 +376,7 @@ where
                     };
 
                     match &msg {
-                        Message::Header(v) if v == this.version => {
+                        Message::Header(h) if h == &HeaderLine::from(*this.version) => {
                             *this.state = ParState::RecvProtocols { io }
                         }
                         Message::Protocols(supported) => {
@@ -395,9 +405,10 @@ where
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
-                    log::debug!("Dialer: Expecting proposed protocol: {}", p);
 
-                    let io = Negotiated::expecting(io.into_reader(), p, *this.version);
+                    log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                    let io = Negotiated::expecting(io.into_reader(), p, None);
+
                     return Poll::Ready(Ok((protocol, io)))
                 }
 

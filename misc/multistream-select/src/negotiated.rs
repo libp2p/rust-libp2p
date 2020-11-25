@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Protocol, MessageReader, Message, Version, ProtocolError};
+use crate::protocol::{Protocol, MessageReader, Message, ProtocolError, HeaderLine};
 
 use futures::{prelude::*, io::{IoSlice, IoSliceMut}, ready};
 use pin_project::pin_project;
@@ -80,8 +80,12 @@ impl<TInner> Negotiated<TInner> {
 
     /// Creates a `Negotiated` in state [`State::Expecting`] that is still
     /// expecting confirmation of the given `protocol`.
-    pub(crate) fn expecting(io: MessageReader<TInner>, protocol: Protocol, version: Version) -> Self {
-        Negotiated { state: State::Expecting { io, protocol, version } }
+    pub(crate) fn expecting(
+        io: MessageReader<TInner>,
+        protocol: Protocol,
+        header: Option<HeaderLine>
+    ) -> Self {
+        Negotiated { state: State::Expecting { io, protocol, header } }
     }
 
     /// Polls the `Negotiated` for completion.
@@ -111,11 +115,11 @@ impl<TInner> Negotiated<TInner> {
         // Read outstanding protocol negotiation messages.
         loop {
             match mem::replace(&mut *this.state, State::Invalid) {
-                State::Expecting { mut io, protocol, version } => {
+                State::Expecting { mut io, header, protocol } => {
                     let msg = match Pin::new(&mut io).poll_next(cx)? {
                         Poll::Ready(Some(msg)) => msg,
                         Poll::Pending => {
-                            *this.state = State::Expecting { io, protocol, version };
+                            *this.state = State::Expecting { io, header, protocol };
                             return Poll::Pending
                         },
                         Poll::Ready(None) => {
@@ -124,9 +128,9 @@ impl<TInner> Negotiated<TInner> {
                         }
                     };
 
-                    if let Message::Header(v) = &msg {
-                        if *v == version {
-                            *this.state = State::Expecting { io, protocol, version };
+                    if let Message::Header(h) = &msg {
+                        if Some(h) == header.as_ref() {
+                            *this.state = State::Expecting { io, protocol, header: None };
                             continue
                         }
                     }
@@ -165,10 +169,11 @@ enum State<R> {
         /// The underlying I/O stream.
         #[pin]
         io: MessageReader<R>,
-        /// The expected protocol (i.e. name and version).
+        /// The expected negotiation header/preamble (i.e. multistream-select version),
+        /// if one is still expected to be received.
+        header: Option<HeaderLine>,
+        /// The expected application protocol (i.e. name and version).
         protocol: Protocol,
-        /// The expected multistream-select protocol version.
-        version: Version
     },
 
     /// In this state, a protocol has been agreed upon and I/O

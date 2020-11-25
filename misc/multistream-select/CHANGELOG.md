@@ -1,5 +1,15 @@
 # 0.9.0 [unreleased]
 
+- Make the `V1Lazy` upgrade strategy more interoperable with `V1`. Specifically,
+  the listener now behaves identically with `V1` and `V1Lazy`. Furthermore, the
+  multistream-select protocol header is now also identical, making `V1` and `V1Lazy`
+  indistinguishable on the wire. The remaining central effect of `V1Lazy` is that the dialer,
+  if it only supports a single protocol in a negotiation, optimistically settles on that
+  protocol without immediately flushing the negotiation data (i.e. protocol proposal)
+  and without waiting for the corresponding confirmation before it is able to start
+  sending application data, expecting the used protocol to be confirmed with
+  the response.
+
 - Fix the encoding and decoding of `ls` responses to
   be spec-compliant and interoperable with other implementations.
   For a clean upgrade, `0.8.4` must already be deployed.

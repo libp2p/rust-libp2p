@@ -22,7 +22,7 @@
 //! in a multistream-select protocol negotiation.
 
 use crate::{Negotiated, NegotiationError};
-use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
+use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, HeaderLine};
 
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -81,7 +81,7 @@ where
     N: AsRef<[u8]>
 {
     RecvHeader { io: MessageIO<R> },
-    SendHeader { io: MessageIO<R>, version: Version },
+    SendHeader { io: MessageIO<R> },
     RecvMessage { io: MessageIO<R> },
     SendMessage {
         io: MessageIO<R>,
@@ -111,8 +111,10 @@ where
             match mem::replace(this.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(Message::Header(version)))) => {
-                            *this.state = State::SendHeader { io, version }
+                        Poll::Ready(Some(Ok(Message::Header(h)))) => {
+                            match h {
+                                HeaderLine::V1 => *this.state = State::SendHeader { io }
+                            }
                         }
                         Poll::Ready(Some(Ok(_))) => {
                             return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
@@ -129,24 +131,22 @@ where
                     }
                 }
 
-                State::SendHeader { mut io, version } => {
+                State::SendHeader { mut io } => {
                     match Pin::new(&mut io).poll_ready(cx) {
                         Poll::Pending => {
-                            *this.state = State::SendHeader { io, version };
+                            *this.state = State::SendHeader { io };
                             return Poll::Pending
                         },
                         Poll::Ready(Ok(())) => {},
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(version)) {
+                    let msg = Message::Header(HeaderLine::V1);
+                    if let Err(err) = Pin::new(&mut io).start_send(msg) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
-                    *this.state = match version {
-                        Version::V1 => State::Flush { io, protocol: None },
-                        Version::V1Lazy => State::RecvMessage { io },
-                    }
+                    *this.state = State::Flush { io, protocol: None };
                 }
 
                 State::RecvMessage { mut io } => {
