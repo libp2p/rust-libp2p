@@ -990,8 +990,7 @@ where TBehaviour: NetworkBehaviour,
             transport: transport,
             behaviour,
             network_config: Default::default(),
-            // substream_protocol_override: None,
-            substream_upgrade_protocol_override: Some(libp2p_core::upgrade::Version::V1Lazy),
+            substream_protocol_override: None,
         }
     }
 
