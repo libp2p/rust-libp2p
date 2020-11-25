@@ -990,7 +990,7 @@ where TBehaviour: NetworkBehaviour,
             transport: transport,
             behaviour,
             network_config: Default::default(),
-            substream_protocol_override: None,
+            substream_upgrade_protocol_override: None,
         }
     }
 
