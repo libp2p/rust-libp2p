@@ -49,6 +49,8 @@ use wasm_timer::{Delay, Instant};
 pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
     /// The underlying handler.
     handler: TIntoProtoHandler,
+    /// The substream upgrade protocol override, if any.
+    substream_upgrade_protocol_override: Option<upgrade::Version>,
 }
 
 impl<TIntoProtoHandler> NodeHandlerWrapperBuilder<TIntoProtoHandler>
@@ -59,7 +61,16 @@ where
     pub(crate) fn new(handler: TIntoProtoHandler) -> Self {
         NodeHandlerWrapperBuilder {
             handler,
+            substream_upgrade_protocol_override: None,
         }
+    }
+
+    pub(crate) fn with_substream_upgrade_protocol_override(
+        mut self,
+        version: Option<upgrade::Version>
+    ) -> Self {
+        self.substream_upgrade_protocol_override = version;
+        self
     }
 }
 
@@ -79,6 +90,7 @@ where
             queued_dial_upgrades: Vec::new(),
             unique_dial_upgrade_id: 0,
             shutdown: Shutdown::None,
+            substream_upgrade_protocol_override: self.substream_upgrade_protocol_override,
         }
     }
 }
@@ -109,6 +121,8 @@ where
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
     shutdown: Shutdown,
+    /// The substream upgrade protocol override, if any.
+    substream_upgrade_protocol_override: Option<upgrade::Version>,
 }
 
 struct SubstreamUpgrade<UserData, Upgrade> {
@@ -254,7 +268,13 @@ where
                     }
                 };
 
-                let (_, (version, upgrade)) = self.queued_dial_upgrades.remove(pos);
+                let (_, (mut version, upgrade)) = self.queued_dial_upgrades.remove(pos);
+                if let Some(v) = self.substream_upgrade_protocol_override {
+                    if v != version {
+                        log::debug!("Substream upgrade protocol override: {:?} -> {:?}", version, v);
+                        version = v;
+                    }
+                }
                 let upgrade = upgrade::apply_outbound(substream, upgrade, version);
                 let timeout = Delay::new(timeout);
                 self.negotiating_out.push(SubstreamUpgrade {

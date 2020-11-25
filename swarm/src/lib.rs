@@ -120,7 +120,7 @@ use libp2p_core::{
         NetworkConfig,
         peer::ConnectedPeer,
     },
-    upgrade::ProtocolName,
+    upgrade::{ProtocolName},
 };
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
@@ -286,7 +286,10 @@ where
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
-    pending_event: Option<(PeerId, PendingNotifyHandler, TInEvent)>
+    pending_event: Option<(PeerId, PendingNotifyHandler, TInEvent)>,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler> Deref for
@@ -357,8 +360,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
     /// Initiates a new dialing attempt to the given address.
     pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), ConnectionLimit> {
-        let handler = me.behaviour.new_handler();
-        me.network.dial(&addr, handler.into_node_handler_builder()).map(|_id| ())
+        let handler = me.behaviour.new_handler()
+            .into_node_handler_builder()
+            .with_substream_upgrade_protocol_override(me.substream_upgrade_protocol_override);
+        me.network.dial(&addr, handler).map(|_id| ())
     }
 
     /// Initiates a new dialing attempt to the given peer.
@@ -375,7 +380,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
         let result =
             if let Some(first) = addrs.next() {
-                let handler = me.behaviour.new_handler().into_node_handler_builder();
+                let handler = me.behaviour.new_handler()
+                    .into_node_handler_builder()
+                    .with_substream_upgrade_protocol_override(me.substream_upgrade_protocol_override);
                 me.network.peer(peer_id.clone())
                     .dial(first, addrs, handler)
                     .map(|_| ())
@@ -546,10 +553,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     });
                 },
                 Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
-                    let handler = this.behaviour.new_handler();
+                    let handler = this.behaviour.new_handler()
+                        .into_node_handler_builder()
+                        .with_substream_upgrade_protocol_override(this.substream_upgrade_protocol_override);
                     let local_addr = connection.local_addr.clone();
                     let send_back_addr = connection.send_back_addr.clone();
-                    if let Err(e) = this.network.accept(connection, handler.into_node_handler_builder()) {
+                    if let Err(e) = this.network.accept(connection, handler) {
                         log::warn!("Incoming connection rejected: {:?}", e);
                     }
                     return Poll::Ready(SwarmEvent::IncomingConnection {
@@ -962,6 +971,7 @@ pub struct SwarmBuilder<TBehaviour> {
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
     network_config: NetworkConfig,
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
@@ -980,6 +990,7 @@ where TBehaviour: NetworkBehaviour,
             transport: transport,
             behaviour,
             network_config: Default::default(),
+            substream_upgrade_protocol_override: None,
         }
     }
 
@@ -1040,6 +1051,21 @@ where TBehaviour: NetworkBehaviour,
         self
     }
 
+    /// Configures an override for the substream upgrade protocol to use.
+    ///
+    /// The subtream upgrade protocol is the multistream-select protocol
+    /// used for protocol negotiation on substreams. Since a listener
+    /// supports all existing versions, the choice of upgrade protocol
+    /// only effects the "dialer", i.e. the peer opening a substream.
+    ///
+    /// > **Note**: If configured, specific upgrade protocols for
+    /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
+    /// > are ignored.
+    pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
+        self.substream_upgrade_protocol_override = Some(v);
+        self
+    }
+
     /// Builds a `Swarm` with the current configuration.
     pub fn build(mut self) -> Swarm<TBehaviour> {
         let supported_protocols = self.behaviour
@@ -1075,7 +1101,8 @@ where TBehaviour: NetworkBehaviour,
             listened_addrs: SmallVec::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
-            pending_event: None
+            pending_event: None,
+            substream_upgrade_protocol_override: self.substream_upgrade_protocol_override,
         }
     }
 }

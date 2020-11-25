@@ -1,5 +1,9 @@
 # 0.25.0 [unreleased]
 
+- Permit a configuration override for the substream upgrade protocol
+  to use for all (outbound) substreams.
+  [PR 1858](https://github.com/libp2p/rust-libp2p/pull/1858).
+
 - Changed parameters for connection limits from `usize` to `u32`.
   Connection limits are now configured via `SwarmBuilder::connection_limits()`.
 
