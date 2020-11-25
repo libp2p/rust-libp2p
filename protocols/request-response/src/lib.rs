@@ -150,14 +150,14 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
         /// The error that occurred.
         error: OutboundFailure,
     },
-    /// An inbound request failed.
-    InboundFailure {
+    /// An inbound request finished.
+    InboundFinished {
         /// The peer from whom the request was received.
         peer: PeerId,
         /// The ID of the failed inbound request.
         request_id: RequestId,
-        /// The error that occurred.
-        error: InboundFailure,
+        /// The result of handling the inbound request.
+        result: Result<(), InboundFailure>,
     },
 }
 
@@ -379,16 +379,19 @@ where
 
     /// Initiates sending a response to an inbound request.
     ///
-    /// If the `ResponseChannel` is already closed due to a timeout,
-    /// the response is discarded and eventually [`RequestResponseEvent::InboundFailure`]
-    /// is emitted by `RequestResponse::poll`.
+    /// If the `ResponseChannel` is already closed due to a timeout, the
+    /// response is discarded and eventually
+    /// [`RequestResponseEvent::InboundFinished`] with the field `result` being
+    /// an `Err` is emitted by `RequestResponse::poll`.
     ///
     /// The provided `ResponseChannel` is obtained from a
     /// [`RequestResponseMessage::Request`].
     pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response) {
         // Fails only if the inbound upgrade timed out waiting for the response,
-        // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
-        // which in turn results in `RequestResponseEvent::InboundFailure`.
+        // in which case the handler emits
+        // `RequestResponseHandlerEvent::InboundTimeout` which in turn results
+        // in `RequestResponseEvent::InboundFinished` with field `result` set to
+        // `Err`.
         let _ = ch.sender.send(rs);
     }
 
@@ -588,13 +591,22 @@ where
                             }));
                 }
             }
+            RequestResponseHandlerEvent::InboundSuccess(request_id) => {
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::InboundFinished {
+                            peer,
+                            request_id,
+                            result: Ok(()),
+                        }));
+            }
             RequestResponseHandlerEvent::InboundTimeout(request_id) => {
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::InboundFailure {
+                        RequestResponseEvent::InboundFinished {
                             peer,
                             request_id,
-                            error: InboundFailure::Timeout,
+                            result: Err(InboundFailure::Timeout),
                         }));
             }
             RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
@@ -609,10 +621,10 @@ where
             RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => {
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::InboundFailure {
+                        RequestResponseEvent::InboundFinished {
                             peer,
                             request_id,
-                            error: InboundFailure::UnsupportedProtocols,
+                            result: Err(InboundFailure::UnsupportedProtocols),
                         }));
             }
         }

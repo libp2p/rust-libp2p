@@ -539,12 +539,12 @@ where
                     let event = RequestResponseEvent::OutboundFailure { peer, request_id, error };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFailure {
+                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFinished {
                     peer,
                     request_id,
-                    error
+                    result
                 }) => {
-                    let event = RequestResponseEvent::InboundFailure { peer, request_id, error };
+                    let event = RequestResponseEvent::InboundFinished { peer, request_id, result };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
                 | NetworkBehaviourAction::DialAddress { address } =>

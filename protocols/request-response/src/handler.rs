@@ -134,6 +134,8 @@ where
     OutboundTimeout(RequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
     OutboundUnsupportedProtocols(RequestId),
+    /// An inbound request was successfully answered.
+    InboundSuccess(RequestId),
     /// An inbound request timed out.
     InboundTimeout(RequestId),
     /// An inbound request failed to negotiate a mutually supported protocol.
@@ -188,8 +190,11 @@ where
     fn inject_fully_negotiated_inbound(
         &mut self,
         (): (),
-        _: RequestId
+        request_id: RequestId
     ) {
+        self.pending_events.push_back(
+            RequestResponseHandlerEvent::InboundSuccess(request_id)
+        );
     }
 
     fn inject_fully_negotiated_outbound(
@@ -331,4 +336,3 @@ where
         Poll::Pending
     }
 }
-
