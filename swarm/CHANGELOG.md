@@ -1,4 +1,4 @@
-# 0.25.0 [unreleased]
+# 0.25.0 [2020-11-25]
 
 - Permit a configuration override for the substream upgrade protocol
   to use for all (outbound) substreams.
