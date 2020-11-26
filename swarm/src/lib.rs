@@ -463,6 +463,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         me.banned_peers.remove(&peer_id);
     }
 
+    /// Checks whether the [`Network`] has an established connection to a peer.
+    pub fn is_connected(me: &Self, peer_id: &PeerId) -> bool {
+        me.network.is_connected(peer_id)
+    }
+
     /// Returns the next event that happens in the `Swarm`.
     ///
     /// Includes events from the `NetworkBehaviour` but also events about the connections status.
