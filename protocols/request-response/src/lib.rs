@@ -192,8 +192,6 @@ pub enum InboundFailure {
     Timeout,
     /// The local peer supports none of the requested protocols.
     UnsupportedProtocols,
-    /// The connection closed before a response was delivered.
-    ConnectionClosed,
 }
 
 /// A channel for sending a response to an inbound request.
