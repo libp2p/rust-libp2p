@@ -165,14 +165,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
             // Node B waiting for Ping from Node A via Relay.
             loop {
                 match node_b_swarm.next_event().await {
-                    SwarmEvent::Behaviour(PingEvent {
-                        peer,
-                        result: Ok(_),
-                    }) => {
-                        if peer == node_a_peer_id {
-                            break;
-                        }
-                    }
+                    SwarmEvent::Behaviour(PingEvent { .. }) => {}
                     SwarmEvent::ConnectionClosed { peer_id, .. } => {
                         assert_eq!(peer_id, node_a_peer_id);
                         break;

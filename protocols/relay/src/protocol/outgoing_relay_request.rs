@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::MAX_ACCEPTED_MESSAGE_LEN;
+use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -78,7 +78,7 @@ impl upgrade::UpgradeInfo for OutgoingRelayRequest {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/libp2p/relay/circuit/0.1.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::MAX_ACCEPTED_MESSAGE_LEN;
+use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -86,7 +86,7 @@ impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationRequest<TUserData> {
 
     fn protocol_info(&self) -> Self::InfoIter {
         // TODO: Move to constant.
-        iter::once(b"/libp2p/relay/circuit/0.1.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 

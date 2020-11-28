@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{
-    incoming_destination_request::IncomingDestinationRequest, incoming_relay_request::IncomingRelayRequest, Peer, PeerParseError,
-};
+use crate::protocol::incoming_destination_request::IncomingDestinationRequest;
+use crate::protocol::incoming_relay_request::IncomingRelayRequest;
+use crate::protocol::{Peer, PeerParseError, PROTOCOL_NAME};
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
 use libp2p_core::upgrade;
@@ -56,7 +56,7 @@ impl upgrade::UpgradeInfo for RelayListen {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/libp2p/relay/circuit/0.1.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
