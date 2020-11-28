@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use crate::message_proto::{circuit_relay, CircuitRelay};
+use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -41,34 +41,18 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and is now a brand new connection pointing
 /// to the *destination*.
 pub struct OutgoingRelayRequest {
-    /// The message to send to the relay. Pre-computed.
-    message: Vec<u8>,
+    dest_id: PeerId,
+    dest_addresses: Vec<Multiaddr>,
 }
 
 impl OutgoingRelayRequest {
     /// Builds a request for the target to act as a relay to a third party.
     ///
     /// The `user_data` is passed back in the result.
-    pub fn new(
-        dest_id: PeerId,
-        dest_addresses: impl IntoIterator<Item = Multiaddr>,
-    ) -> Self {
-        let message = CircuitRelay {
-            r#type: Some(circuit_relay::Type::Hop.into()),
-            src_peer: None,
-            dst_peer: Some(circuit_relay::Peer {
-                id: dest_id.as_bytes().to_vec(),
-                addrs: dest_addresses.into_iter().map(|a| a.to_vec()).collect(),
-            }),
-            code: None,
-        };
-        let mut encoded = Vec::new();
-        message
-            .encode(&mut encoded)
-            .expect("all the mandatory fields are always filled; QED");
-
+    pub fn new(dest_id: PeerId, dest_addresses: impl IntoIterator<Item = Multiaddr>) -> Self {
         OutgoingRelayRequest {
-            message: encoded,
+            dest_id,
+            dest_addresses: dest_addresses.into_iter().collect(),
         }
     }
 }
@@ -91,8 +75,24 @@ where
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
-        // TODO: Needed?
-        let OutgoingRelayRequest { message } = self;
+        let OutgoingRelayRequest {
+            dest_id,
+            dest_addresses,
+        } = self;
+
+        let message = CircuitRelay {
+            r#type: Some(circuit_relay::Type::Hop.into()),
+            src_peer: None,
+            dst_peer: Some(circuit_relay::Peer {
+                id: dest_id.as_bytes().to_vec(),
+                addrs: dest_addresses.into_iter().map(|a| a.to_vec()).collect(),
+            }),
+            code: None,
+        };
+        let mut encoded = Vec::new();
+        message
+            .encode(&mut encoded)
+            .expect("all the mandatory fields are always filled; QED");
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
@@ -100,7 +100,7 @@ where
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(message)).await.unwrap();
+            substream.send(std::io::Cursor::new(encoded)).await.unwrap();
             let msg = substream
                 .next()
                 .await
@@ -112,23 +112,30 @@ where
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
+                // TODO: check that this is the local id.
                 src_peer: _,
+                // TODO: check that this is the destination id.
                 dst_peer: _,
                 code,
             } = CircuitRelay::decode(msg).unwrap();
 
             if !matches!(
-                circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(),
+                r#type
+                    .map(circuit_relay::Type::from_i32)
+                    .flatten()
+                    .ok_or(OutgoingRelayRequestError::ParseTypeField)?,
                 circuit_relay::Type::Status
             ) {
-                panic!("expected status");
+                return Err(OutgoingRelayRequestError::ExpectedStatusType);
             }
 
             if !matches!(
-                circuit_relay::Status::from_i32(code.unwrap()).unwrap(),
+                code.map(circuit_relay::Status::from_i32)
+                    .flatten()
+                    .ok_or(OutgoingRelayRequestError::ParseStatusField)?,
                 circuit_relay::Status::Success
             ) {
-                panic!("expected success");
+                return Err(OutgoingRelayRequestError::ExpectedSuccessStatus);
             }
 
             Ok(substream.into_inner())
@@ -139,6 +146,10 @@ where
 
 pub enum OutgoingRelayRequestError {
     Io(std::io::Error),
+    ParseTypeField,
+    ParseStatusField,
+    ExpectedStatusType,
+    ExpectedSuccessStatus,
 }
 
 impl From<std::io::Error> for OutgoingRelayRequestError {
