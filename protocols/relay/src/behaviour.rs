@@ -303,9 +303,9 @@ impl NetworkBehaviour for Relay {
             }
 
             // Remote wants us to become a destination.
-            RelayHandlerEvent::IncomingDestinationRequest(dest_request) => {
+            RelayHandlerEvent::IncomingDestinationRequest(source) => {
                 // TODO: What if we are not yet connected to that node?
-                let send_back = RelayHandlerIn::AcceptDestinationRequest(dest_request);
+                let send_back = RelayHandlerIn::AcceptDestinationRequest(source);
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,

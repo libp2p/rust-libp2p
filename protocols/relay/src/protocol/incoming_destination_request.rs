@@ -25,7 +25,6 @@ use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
-use std::sync::{Arc, Mutex};
 use std::{error, io};
 use unsigned_varint::codec::UviBytes;
 
@@ -41,19 +40,9 @@ use unsigned_varint::codec::UviBytes;
 #[must_use = "A destination request should be either accepted or denied"]
 pub struct IncomingDestinationRequest<TSubstream> {
     /// The stream to the source.
-    // TODO: Cleanup arc mutex.
-    stream: Arc<Mutex<Option<TSubstream>>>,
+    stream: TSubstream,
     /// Source of the request.
     from: Peer,
-}
-
-impl<TSubstream> Clone for IncomingDestinationRequest<TSubstream> {
-    fn clone(&self) -> Self {
-        IncomingDestinationRequest {
-            stream: self.stream.clone(),
-            from: self.from.clone(),
-        }
-    }
 }
 
 impl<TSubstream> IncomingDestinationRequest<TSubstream>
@@ -63,7 +52,7 @@ where
     /// Creates a `IncomingDestinationRequest`.
     pub(crate) fn new(stream: TSubstream, from: Peer) -> Self {
         IncomingDestinationRequest {
-            stream: Arc::new(Mutex::new(Some(stream))),
+            stream: stream,
             from,
         }
     }
@@ -83,6 +72,7 @@ where
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
     pub fn accept(self) -> impl Future<Output = Result<(PeerId, TSubstream), Box<dyn error::Error + 'static>>> {
+        let IncomingDestinationRequest { stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
@@ -97,11 +87,11 @@ where
         let codec = UviBytes::default();
         // TODO: Do we need this?
         // codec.set_max_len(self.max_packet_size);
-        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
+        let mut substream = Framed::new(stream, codec);
 
         async move {
             substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
-            Ok((self.source_id().clone(), substream.into_inner()))
+            Ok((from.peer_id, substream.into_inner()))
         }.boxed()
     }
 
