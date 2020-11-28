@@ -369,7 +369,20 @@ impl NetworkBehaviour for Relay {
                     send_back,
                 })) => {
                     if self.connected_peers.contains(&relay_peer_id) {
-                        unimplemented!();
+                        self.outbox_to_swarm
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id: relay_peer_id,
+                                handler: NotifyHandler::Any,
+                                event: RelayHandlerIn::OutgoingRelayRequest {
+                                    target: destination_peer_id.clone(),
+                                    addresses: vec![destination_addr.clone()],
+                                },
+                            });
+
+                        self.outgoing_relay_requests.insert(
+                            destination_peer_id,
+                            OutgoingRelayRequest::Upgrading { send_back },
+                        );
                     } else {
                         self.outgoing_relay_requests.insert(
                             relay_peer_id.clone(),
