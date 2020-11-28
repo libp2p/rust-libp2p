@@ -173,6 +173,10 @@ fn node_a_connect_to_node_b_listening_via_relay() {
                             break;
                         }
                     }
+                    SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                        assert_eq!(peer_id, node_a_peer_id);
+                        break;
+                    }
                     e => panic!("{:?}", e),
                 }
             }
@@ -393,7 +397,7 @@ fn node_a_try_connect_to_offline_node_b() {
         loop {
             match node_a_swarm.next_event().await {
                 SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
-                if address == node_b_address_via_relay =>
+                    if address == node_b_address_via_relay =>
                 {
                     break;
                 }

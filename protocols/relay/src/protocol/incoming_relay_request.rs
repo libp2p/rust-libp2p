@@ -21,7 +21,9 @@
 use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::Peer;
 
-use futures::{future::BoxFuture, prelude::*};
+use futures::future::{BoxFuture, Either, select};
+use futures::io::{Error, ErrorKind};
+use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 
@@ -103,7 +105,6 @@ where
             code: Some(circuit_relay::Status::Success.into()),
         };
         let mut msg_bytes = Vec::new();
-        // TODO: Handl2
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
@@ -124,9 +125,13 @@ where
             let source_to_destination = futures::io::copy(from_source, &mut to_destination);
             let destination_to_source = futures::io::copy(from_destination, &mut to_source);
 
-            let (res1, res2) = futures::future::join(source_to_destination, destination_to_source).await;
-            res1.unwrap();
-            res2.unwrap();
+            match select(source_to_destination, destination_to_source).await {
+                // Destination substream closed.
+                Either::Left((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
+                // Source substream closed.
+                Either::Right((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
+                _ => {},
+            }
         }.boxed()
     }
 
@@ -141,7 +146,6 @@ where
             dst_peer: None,
         };
         let mut encoded_msg = Vec::new();
-        // TODO: Rework.
         msg.encode(&mut encoded_msg)
             .expect("all the mandatory fields are always filled; QED");
         unimplemented!();

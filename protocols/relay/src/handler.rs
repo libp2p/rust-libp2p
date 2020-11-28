@@ -393,11 +393,7 @@ impl ProtocolsHandler for RelayHandler {
             Poll::Pending => {}
         }
 
-        match self.copy_futures.poll_next_unpin(cx) {
-            Poll::Ready(Some(())) => panic!("a copy future finished"),
-            Poll::Ready(None) => {}
-            Poll::Pending => {}
-        }
+        while let Poll::Ready(Some(())) = self.copy_futures.poll_next_unpin(cx) {};
 
         // Report the queued events.
         if !self.queued_events.is_empty() {
