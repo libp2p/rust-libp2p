@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::Peer;
+use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, Peer};
 
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
@@ -84,9 +84,8 @@ where
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
-        let codec = UviBytes::default();
-        // TODO: Do we need this?
-        // codec.set_max_len(self.max_packet_size);
+        let mut codec = UviBytes::default();
+        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
         let mut substream = Framed::new(stream, codec);
 
         async move {

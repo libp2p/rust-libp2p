@@ -288,7 +288,7 @@ impl ProtocolsHandler for RelayHandler {
         peer_id: Self::OutboundOpenInfo,
         // TODO: Fix
         error: ProtocolsHandlerUpgrErr<
-            EitherError<protocol::OutgoingRelayRequestError, protocol::SendReadError>,
+            EitherError<protocol::OutgoingRelayRequestError, ()>,
         >,
     ) {
         match error {

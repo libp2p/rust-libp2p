@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{SendReadError};
+use crate::protocol::MAX_ACCEPTED_MESSAGE_LEN;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -90,19 +90,19 @@ impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationRequest<TUserData> {
     }
 }
 
-impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream> for OutgoingDestinationRequest<TUserData>
+impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream>
+    for OutgoingDestinationRequest<TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     TUserData: Send + 'static,
 {
     type Output = (TSubstream, TUserData);
-    type Error = SendReadError;
-    type Future = BoxFuture<'static, Result<Self::Output, SendReadError>>;
+    type Error = ();
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
-        let codec = UviBytes::default();
-        // TODO: Do we need this?
-        // codec.set_max_len(self.max_packet_size);
+        let mut codec = UviBytes::default();
+        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
 
         let mut substream = Framed::new(substream, codec);
 
@@ -113,7 +113,7 @@ where
                 .unwrap();
             let msg = substream.next().await.unwrap().unwrap();
 
-            let msg =std::io::Cursor::new(msg);
+            let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
                 src_peer: _,
@@ -121,11 +121,17 @@ where
                 code,
             } = CircuitRelay::decode(msg).unwrap();
 
-            if !matches!(circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(), circuit_relay::Type::Status) {
+            if !matches!(
+                circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(),
+                circuit_relay::Type::Status
+            ) {
                 panic!("expected status");
             }
 
-            if !matches!(circuit_relay::Status::from_i32(code.unwrap()).unwrap(), circuit_relay::Status::Success) {
+            if !matches!(
+                circuit_relay::Status::from_i32(code.unwrap()).unwrap(),
+                circuit_relay::Status::Success
+            ) {
                 panic!("expected success");
             }
 

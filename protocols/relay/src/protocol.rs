@@ -99,17 +99,3 @@ impl error::Error for PeerParseError {
         }
     }
 }
-
-pub enum SendReadError {}
-
-impl From<io::Error> for SendReadError {
-    fn from(_err: io::Error) -> SendReadError {
-        unimplemented!()
-    }
-}
-
-impl From<upgrade::ReadOneError> for SendReadError {
-    fn from(_err: upgrade::ReadOneError) -> SendReadError {
-        unimplemented!()
-    }
-}
