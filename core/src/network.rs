@@ -384,14 +384,11 @@ where
         let event = match self.pool.poll(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(PoolEvent::ConnectionEstablished { connection, num_established }) => {
-                match self.dialing.entry(connection.peer_id().clone()) {
-                    hash_map::Entry::Occupied(mut e) => {
-                        e.get_mut().retain(|s| s.current.0 != connection.id());
-                        if e.get().is_empty() {
-                            e.remove();
-                        }
-                    },
-                    _ => {}
+                if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id().clone()) {
+                    e.get_mut().retain(|s| s.current.0 != connection.id());
+                    if e.get().is_empty() {
+                        e.remove();
+                    }
                 }
 
                 NetworkEvent::ConnectionEstablished {

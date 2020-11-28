@@ -41,7 +41,6 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// # Example
 ///
 /// ```no_run
-/// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::connection::{ListenersEvent, ListenersStream};
 ///
@@ -75,7 +74,6 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///         }
 ///     }
 /// })
-/// # }
 /// ```
 pub struct ListenersStream<TTrans>
 where

@@ -702,8 +702,8 @@ fn get_record_many() {
                             ..
                         })) => {
                             assert_eq!(id, qid);
-                            assert_eq!(records.len(), num_results);
-                            assert_eq!(records.first().unwrap().record, record);
+                            assert!(records.len() >= num_results);
+                            assert!(records.into_iter().all(|r| r.record == record));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.

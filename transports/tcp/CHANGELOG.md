@@ -1,4 +1,9 @@
-# 0.25.0 [unreleased]
+# 0.25.1 [2020-11-26]
+
+- Lower `async-std` version to `1.6`, for compatibility
+  with other libp2p crates.
+
+# 0.25.0 [2020-11-25]
 
 - Update `libp2p-core`.
 
