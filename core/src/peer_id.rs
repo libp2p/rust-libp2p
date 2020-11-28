@@ -19,11 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::PublicKey;
-use bytes::Bytes;
 use thiserror::Error;
 use multihash::{Code, Multihash, MultihashDigest};
 use rand::Rng;
 use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr, cmp};
+use std::sync::Arc;
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -35,7 +35,7 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 // TODO: maybe keep things in decoded version?
 #[derive(Clone, Eq)]
 pub struct PeerId {
-    multihash: Bytes,
+    multihash: Arc<Vec<u8>>,
 }
 
 impl fmt::Debug for PeerId {
@@ -78,9 +78,9 @@ impl PeerId {
             Code::Sha2_256
         };
 
-        let multihash = hash_algorithm.digest(&key_enc).to_bytes().into();
+        let multihash = hash_algorithm.digest(&key_enc).to_bytes();
 
-        PeerId { multihash }
+        PeerId { multihash: Arc::new(multihash) }
     }
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
@@ -99,9 +99,9 @@ impl PeerId {
     /// peer ID, it is returned as an `Err`.
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
         match Code::try_from(multihash.code()) {
-            Ok(Code::Sha2_256) => Ok(PeerId { multihash: multihash.to_bytes().into() }),
+            Ok(Code::Sha2_256) => Ok(PeerId { multihash: Arc::new(multihash.to_bytes()) }),
             Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH
-                => Ok(PeerId { multihash: multihash.to_bytes().into() }),
+                => Ok(PeerId { multihash: Arc::new(multihash.to_bytes()) }),
             _ => Err(multihash)
         }
     }
@@ -112,8 +112,8 @@ impl PeerId {
     pub fn random() -> PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
-            multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
-                .expect("The digest size is never too large").to_bytes().into()
+            multihash: Arc::new(Multihash::wrap(Code::Identity.into(), &peer_id)
+                .expect("The digest size is never too large").to_bytes())
         }
     }
 
@@ -123,7 +123,7 @@ impl PeerId {
     /// equality of peer IDs. That is, two peer IDs may be considered equal
     /// while having a different byte representation as per `into_bytes`.
     pub fn into_bytes(self) -> Vec<u8> {
-        self.multihash.to_vec()
+        self.multihash.as_ref().clone()
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
