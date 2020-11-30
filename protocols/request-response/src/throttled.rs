@@ -140,7 +140,9 @@ struct PeerInfo {
     /// Remaining number of inbound requests that can be received.
     recv_budget: u16,
     /// The ID of the credit message that granted the current `send_budget`.
-    send_budget_id: Option<u64>
+    send_budget_id: Option<u64>,
+    /// The inbound request ID of the credit message that granted the current `send_budget`.
+    send_budget_request_id: Option<RequestId>,
 }
 
 impl PeerInfo {
@@ -149,7 +151,8 @@ impl PeerInfo {
             limit,
             send_budget: 1,
             recv_budget: 1,
-            send_budget_id: None
+            send_budget_id: None,
+            send_budget_request_id: None,
         }
     }
 }
@@ -254,7 +257,9 @@ where
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response) {
+    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response)
+        -> Result<(), C::Response>
+    {
         log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
         if let Some(info) = self.peer_info.get_mut(&ch.peer) {
             if info.recv_budget == 0 { // need to send more credit to the remote peer
@@ -263,7 +268,10 @@ where
                 self.send_credit(&ch.peer, crd)
             }
         }
-        self.behaviour.send_response(ch, Message::response(res))
+        match self.behaviour.send_response(ch, Message::response(res)) {
+            Ok(()) => Ok(()),
+            Err(m) => Err(m.into_parts().1.expect("Missing response data.")),
+        }
     }
 
     /// Add a known peer address.
@@ -470,9 +478,15 @@ where
                                                 self.events.push_back(Event::ResumeSending(peer.clone()))
                                             }
                                             info.send_budget += credit;
-                                            info.send_budget_id = Some(id)
+                                            info.send_budget_id = Some(id);
+                                            info.send_budget_request_id = Some(request_id);
                                         }
-                                        self.behaviour.send_response(channel, Message::ack(id))
+                                        if let Err(_) = self.behaviour.send_response(channel, Message::ack(id)) {
+                                            log::debug! {
+                                                "{:08x}: Failed to send ack for credit grant {}.",
+                                                self.id, id
+                                            };
+                                        }
                                     }
                                     continue
                                 }
@@ -524,16 +538,20 @@ where
                     request_id,
                     error
                 }) => {
+                    // If the outbound failure was for a credit message, don't report it on
+                    // the public API and retry the sending.
                     if let Some(credit) = self.credit_messages.get_mut(&peer) {
                         if credit.request == request_id {
-                            log::debug! { "{:08x}: failed to send {} as credit {} to {}; retrying...",
+                            log::debug! {
+                                "{:08x}: failed to send {} as credit {} to {}; retrying...",
                                 self.id,
                                 credit.amount,
                                 credit.id,
                                 peer
                             };
                             let msg = Message::credit(credit.amount, credit.id);
-                            credit.request = self.behaviour.send_request(&peer, msg)
+                            credit.request = self.behaviour.send_request(&peer, msg);
+                            continue
                         }
                     }
                     let event = RequestResponseEvent::OutboundFailure { peer, request_id, error };
@@ -544,8 +562,38 @@ where
                     request_id,
                     error
                 }) => {
+                    // If the inbound failure occurred in the context of responding to a
+                    // credit grant, don't report it on the public API.
+                    if let Some(info) = self.peer_info.get_mut(&peer) {
+                        if info.send_budget_request_id == Some(request_id) {
+                            log::debug! {
+                                "{:08}: failed to respond to credit grant from {}: {:?}",
+                                self.id, peer, error
+                            };
+                            continue
+                        }
+                    }
                     let event = RequestResponseEvent::InboundFailure { peer, request_id, error };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
+                }
+                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::ResponseSent {
+                    peer,
+                    request_id
+                }) => {
+                    // If this event is for an ACK response that was sent for
+                    // the last received credit grant, skip it.
+                    if let Some(info) = self.peer_info.get_mut(&peer) {
+                        if info.send_budget_request_id == Some(request_id) {
+                            log::trace! {
+                                "{:08}: successfully sent ACK for credit grant {:?}.",
+                                self.id,
+                                info.send_budget_id,
+                            }
+                            continue
+                        }
+                    }
+                    NetworkBehaviourAction::GenerateEvent(Event::Event(
+                        RequestResponseEvent::ResponseSent { peer, request_id }))
                 }
                 | NetworkBehaviourAction::DialAddress { address } =>
                     NetworkBehaviourAction::DialAddress { address },
