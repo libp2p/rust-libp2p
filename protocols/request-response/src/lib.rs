@@ -392,7 +392,7 @@ where
     ///
     /// If the `ResponseChannel` is already closed due to a timeout or
     /// the connection being closed, the response is returned as an `Err`
-    /// for further handling. When the response has been successfully sent
+    /// for further handling. Once the response has been successfully sent
     /// on the corresponding connection, [`RequestResponseEvent::ResponseSent`]
     /// is emitted.
     ///
