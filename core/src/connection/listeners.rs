@@ -41,10 +41,12 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// # Example
 ///
 /// ```no_run
+/// # #[async_std::main]
+/// # async fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::connection::{ListenersEvent, ListenersStream};
 ///
-/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
+/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new().await.unwrap());
 ///
 /// // Ask the `listeners` to start listening on the given multiaddress.
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
@@ -74,6 +76,7 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///         }
 ///     }
 /// })
+/// # }
 /// ```
 pub struct ListenersStream<TTrans>
 where
@@ -428,6 +431,8 @@ mod tests {
             fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
+
+            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> { None }
         }
 
         async_std::task::block_on(async move {
@@ -466,6 +471,8 @@ mod tests {
             fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
+
+            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> { None }
         }
 
         async_std::task::block_on(async move {

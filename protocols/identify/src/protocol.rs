@@ -225,7 +225,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         let bg_task = async_std::task::spawn(async move {
-            let transport = TcpConfig::new();
+            let transport = TcpConfig::new().await.unwrap();
 
             let mut listener = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -256,7 +256,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let transport = TcpConfig::new();
+            let transport = TcpConfig::new().await.unwrap();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
             let RemoteInfo { info, observed_addr, .. } =

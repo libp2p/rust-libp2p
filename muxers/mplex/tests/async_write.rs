@@ -32,7 +32,7 @@ fn async_write() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new().and_then(move |c, e|
+        let transport = TcpConfig::new().await.unwrap().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -62,7 +62,7 @@ fn async_write() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new().and_then(move |c, e|
+        let transport = TcpConfig::new().await.unwrap().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());

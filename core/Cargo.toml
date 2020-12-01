@@ -40,7 +40,7 @@ zeroize = "1"
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false }
 
 [dev-dependencies]
-async-std = "1.6.2"
+async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../protocols/noise" }
 libp2p-tcp = { path = "../transports/tcp" }

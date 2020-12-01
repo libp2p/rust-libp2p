@@ -293,6 +293,10 @@ mod tests {
                 };
                 Ok(Box::pin(future::ready(Ok(()))))
             }
+
+            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
+                None
+            }
         }
 
         futures::executor::block_on(async move {

@@ -293,7 +293,8 @@ mod tests {
         let id_keys = identity::Keypair::generate_ed25519();
         let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
         let pubkey = id_keys.public();
-        let transport = TcpConfig::new()
+        let transport = async_std::task::block_on(TcpConfig::new())
+            .unwrap()
             .nodelay(true)
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())

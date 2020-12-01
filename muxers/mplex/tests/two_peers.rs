@@ -32,7 +32,7 @@ fn client_to_server_outbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new().and_then(move |c, e|
+        let transport = TcpConfig::new().await.unwrap().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -62,7 +62,7 @@ fn client_to_server_outbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new().and_then(move |c, e|
+        let transport = TcpConfig::new().await.unwrap().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
@@ -88,7 +88,7 @@ fn client_to_server_inbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new().and_then(move |c, e|
+        let transport = TcpConfig::new().await.unwrap().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -123,7 +123,7 @@ fn client_to_server_inbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new().and_then(move |c, e|
+        let transport = TcpConfig::new().await.unwrap().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();

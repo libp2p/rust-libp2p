@@ -90,7 +90,7 @@ libp2p-tcp = { version = "0.25.1", path = "transports/tcp", optional = true }
 libp2p-websocket = { version = "0.26.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
-async-std = "1.6.2"
+async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.8.1"
 tokio = { version = "0.3", features = ["io-util", "io-std", "stream", "macros", "rt", "rt-multi-thread"] }
 

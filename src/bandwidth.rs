@@ -74,6 +74,10 @@ where
             .dial(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
+    }
 }
 
 /// Wraps around a `Stream` that produces connections. Wraps each connection around a bandwidth

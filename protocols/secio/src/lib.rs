@@ -28,7 +28,7 @@
 //! See [`authenticate`](libp2p_core::transport::upgrade::Builder::authenticate).
 //!
 //! ```no_run
-//! # fn main() {
+//! # fn main() { futures::executor::block_on(async {
 //! use futures::prelude::*;
 //! use libp2p_secio::{SecioConfig, SecioOutput};
 //! use libp2p_core::{PeerId, Multiaddr, identity, upgrade};
@@ -40,7 +40,7 @@
 //! let local_keys = identity::Keypair::generate_ed25519();
 //!
 //! // Create a `Transport`.
-//! let transport = TcpConfig::new()
+//! let transport = TcpConfig::new().await.unwrap()
 //!     .upgrade(upgrade::Version::V1)
 //!     .authenticate(SecioConfig::new(local_keys.clone()))
 //!     .multiplex(MplexConfig::default());
@@ -51,7 +51,7 @@
 //!
 //! // let network = Network::new(transport, local_keys.public().into_peer_id());
 //! // let swarm = Swarm::new(transport, behaviour, local_keys.public().into_peer_id());
-//! # }
+//! # }); }
 //! ```
 //!
 

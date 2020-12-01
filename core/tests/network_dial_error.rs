@@ -41,10 +41,12 @@ fn deny_incoming_connec() {
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
     let address = async_std::task::block_on(future::poll_fn(|cx| {
-        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
-            Poll::Ready(listen_addr)
-        } else {
-            panic!("Was expecting the listen address to be reported")
+        match swarm1.poll(cx) {
+            Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
+                Poll::Ready(listen_addr)
+            }
+            Poll::Pending => Poll::Pending,
+            _ => panic!("Was expecting the listen address to be reported"),
         }
     }));
 
@@ -95,15 +97,15 @@ fn dial_self() {
     let mut swarm = test_network(NetworkConfig::default());
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let (local_address, mut swarm) = async_std::task::block_on(
-        future::lazy(move |cx| {
-            if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll(cx) {
-                Ok::<_, void::Void>((listen_addr, swarm))
-            } else {
-                panic!("Was expecting the listen address to be reported")
+    let local_address = async_std::task::block_on(future::poll_fn(|cx| {
+        match swarm.poll(cx) {
+            Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
+                Poll::Ready(listen_addr)
             }
-        }))
-        .unwrap();
+            Poll::Pending => Poll::Pending,
+            _ => panic!("Was expecting the listen address to be reported"),
+        }
+    }));
 
     swarm.dial(&local_address, TestHandler()).unwrap();
 

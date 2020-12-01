@@ -206,7 +206,7 @@ mod tests {
     }
 
     async fn connect(listen_addr: Multiaddr) {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+        let ws_config = WsConfig::new(tcp::TcpConfig::new().await.unwrap());
 
         let mut listener = ws_config.clone()
             .listen_on(listen_addr)
