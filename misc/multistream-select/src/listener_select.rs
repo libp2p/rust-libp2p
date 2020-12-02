@@ -58,7 +58,7 @@ where
         state: State::RecvHeader {
             io: MessageIO::new(inner)
         },
-        rejected_protocol: false,
+        last_sent_na: false,
     }
 }
 
@@ -74,13 +74,13 @@ where
     // few more implications on the API.
     protocols: SmallVec<[(N, Protocol); 8]>,
     state: State<R, N>,
-    /// Whether the listener rejected a proposed protocol.
+    /// Whether the last message sent was a protocol rejection (i.e. `n/a`).
     ///
-    /// If the listener reads garbage or EOF after having rejected
-    /// a protocol, the dialer is likely using `V1Lazy` and
-    /// negotiation must be considered failed, but not with a
-    /// protocol violation or I/O error.
-    rejected_protocol: bool,
+    /// If the listener reads garbage or EOF after such a rejection,
+    /// the dialer is likely using `V1Lazy` and negotiation must be
+    /// considered failed, but not with a protocol violation or I/O
+    /// error.
+    last_sent_na: bool,
 }
 
 enum State<R, N>
@@ -175,7 +175,7 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Some(Err(err))) => {
-                            if *this.rejected_protocol {
+                            if *this.last_sent_na {
                                 // When we read garbage or EOF after having already rejected a
                                 // protocol, the dialer is most likely using `V1Lazy` and has
                                 // optimistically settled on this protocol, so this is really a
@@ -221,7 +221,6 @@ where
                             } else {
                                 log::debug!("Listener: rejecting protocol: {}",
                                     String::from_utf8_lossy(p.as_ref()));
-                                *this.rejected_protocol = true;
                                 Message::NotAvailable
                             };
 
@@ -239,6 +238,12 @@ where
                         },
                         Poll::Ready(Ok(())) => {},
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
+                    }
+
+                    if let Message::NotAvailable = &message  {
+                        *this.last_sent_na = true;
+                    } else {
+                        *this.last_sent_na = false;
                     }
 
                     if let Err(err) = Pin::new(&mut io).start_send(message) {
