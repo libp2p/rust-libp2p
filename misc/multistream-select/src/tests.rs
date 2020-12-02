@@ -151,7 +151,7 @@ fn negotiation_failed() {
         // No payload, in which case all versions should behave identically
         // in any case, i.e. the baseline test.
         vec![],
-        // With this payload and `V1Lazy`, the listener interpets the first
+        // With this payload and `V1Lazy`, the listener interprets the first
         // `1` as a message length and encounters an invalid message (the
         // second `1`). The listener is nevertheless expected to fail
         // negotiation normally, just like with `V1`.
