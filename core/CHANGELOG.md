@@ -1,3 +1,7 @@
+# 0.25.2 [2020-12-02]
+
+- Require `multistream-select-0.9.1`.
+
 # 0.25.1 [2020-11-25]
 
 - Add missing multiaddr upgrade.
