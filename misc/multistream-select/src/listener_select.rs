@@ -74,7 +74,7 @@ where
     // few more implications on the API.
     protocols: SmallVec<[(N, Protocol); 8]>,
     state: State<R, N>,
-    /// Whether the last message sent was a protocol rejection (i.e. `n/a`).
+    /// Whether the last message sent was a protocol rejection (i.e. `na\n`).
     ///
     /// If the listener reads garbage or EOF after such a rejection,
     /// the dialer is likely using `V1Lazy` and negotiation must be
