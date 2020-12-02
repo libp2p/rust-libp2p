@@ -57,7 +57,8 @@ where
         protocols: SmallVec::from_iter(protocols),
         state: State::RecvHeader {
             io: MessageIO::new(inner)
-        }
+        },
+        rejected_protocol: false,
     }
 }
 
@@ -72,7 +73,14 @@ where
     // TODO: It would be nice if eventually N = Protocol, which has a
     // few more implications on the API.
     protocols: SmallVec<[(N, Protocol); 8]>,
-    state: State<R, N>
+    state: State<R, N>,
+    /// Whether the listener rejected a proposed protocol.
+    ///
+    /// If the listener reads garbage or EOF after having rejected
+    /// a protocol, the dialer is likely using `V1Lazy` and
+    /// negotiation must be considered failed, but not with a
+    /// protocol violation or I/O error.
+    rejected_protocol: bool,
 }
 
 enum State<R, N>
@@ -166,7 +174,30 @@ where
                             *this.state = State::RecvMessage { io };
                             return Poll::Pending;
                         }
-                        Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
+                        Poll::Ready(Some(Err(err))) => {
+                            if *this.rejected_protocol {
+                                // When we read garbage or EOF after having already rejected a
+                                // protocol, the dialer is most likely using `V1Lazy` and has
+                                // optimistically settled on this protocol, so this is really a
+                                // failed negotiation, not a protocol violation. In this case
+                                // the dialer also raises `NegotiationError::Failed` when finally
+                                // reading the `N/A` response.
+                                if let ProtocolError::InvalidMessage = &err {
+                                    log::trace!("Listener: Negotiation failed with invalid \
+                                        message after protocol rejection.");
+                                    return Poll::Ready(Err(NegotiationError::Failed))
+                                }
+                                if let ProtocolError::IoError(e) = &err {
+                                    if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                                        log::trace!("Listener: Negotiation failed with EOF \
+                                            after protocol rejection.");
+                                        return Poll::Ready(Err(NegotiationError::Failed))
+                                    }
+                                }
+                            }
+
+                            return Poll::Ready(Err(From::from(err)))
+                        }
                     };
 
                     match msg {
@@ -190,6 +221,7 @@ where
                             } else {
                                 log::debug!("Listener: rejecting protocol: {}",
                                     String::from_utf8_lossy(p.as_ref()));
+                                *this.rejected_protocol = true;
                                 Message::NotAvailable
                             };
 
