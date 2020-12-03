@@ -229,7 +229,6 @@ where
             default_limit: Limit::new(NonZeroU16::new(1).expect("1 > 0")),
             limit_overrides: HashMap::new(),
             events: VecDeque::new(),
-            // credit_messages: HashMap::new(),
             credit_id: 0
         }
     }
