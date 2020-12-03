@@ -23,6 +23,10 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
+# Version 0.32.0 [unreleased]
+
+- Update to `libp2p-mdns-0.26`.
+
 # Version 0.31.2 [2020-12-02]
 
 - Bump minimum `libp2p-core` patch version.

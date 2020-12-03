@@ -1,3 +1,11 @@
+# 0.26.0 [unreleased]
+
+- Replace the use of macros for abstracting over `tokio`
+  and `async-std` with the use of `async-io`. As a result
+  there may now be an additional reactor thread running
+  called `async-io` when using `tokio`, with the futures
+  still being polled by the `tokio` runtime.
+
 # 0.25.0 [2020-11-25]
 
 - Update `libp2p-swarm` and `libp2p-core`.
