@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::service::{MdnsPacket, build_query_response, build_service_discovery_response};
+use crate::service::{MdnsPacket, MdnsService, build_query_response, build_service_discovery_response};
+use async_io::Timer;
 use futures::prelude::*;
 use libp2p_core::{
     Multiaddr,
@@ -34,21 +35,16 @@ use libp2p_swarm::{
     ProtocolsHandler,
     protocols_handler::DummyProtocolsHandler
 };
-use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, mem, pin::Pin, time::Duration, task::Context, task::Poll};
-use wasm_timer::{Delay, Instant};
+use std::{cmp, fmt, io, iter, mem, pin::Pin, time::{Duration, Instant}, task::Context, task::Poll};
 
 const MDNS_RESPONSE_TTL: std::time::Duration = Duration::from_secs(5 * 60);
 
-macro_rules! codegen {
-    ($feature_name:expr, $behaviour_name:ident, $maybe_busy_wrapper:ident, $service_name:ty) => {
-
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
-pub struct $behaviour_name {
+pub struct Mdns {
     /// The inner service.
-    service: $maybe_busy_wrapper,
+    service: MdnsBusyWrapper,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -59,44 +55,44 @@ pub struct $behaviour_name {
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    closest_expiration: Option<Delay>,
+    closest_expiration: Option<Timer>,
 }
 
 /// `MdnsService::next` takes ownership of `self`, returning a future that resolves with both itself
 /// and a `MdnsPacket` (similar to the old Tokio socket send style). The two states are thus `Free`
 /// with an `MdnsService` or `Busy` with a future returning the original `MdnsService` and an
 /// `MdnsPacket`.
-enum $maybe_busy_wrapper {
-    Free($service_name),
-    Busy(Pin<Box<dyn Future<Output = ($service_name, MdnsPacket)> + Send>>),
+enum MdnsBusyWrapper {
+    Free(MdnsService),
+    Busy(Pin<Box<dyn Future<Output = (MdnsService, MdnsPacket)> + Send>>),
     Poisoned,
 }
 
-impl fmt::Debug for $maybe_busy_wrapper {
+impl fmt::Debug for MdnsBusyWrapper {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            $maybe_busy_wrapper::Free(service) => {
-                fmt.debug_struct("$maybe_busy_wrapper::Free")
+            Self::Free(service) => {
+                fmt.debug_struct("MdnsBusyWrapper::Free")
                     .field("service", service)
                     .finish()
             },
-            $maybe_busy_wrapper::Busy(_) => {
-                fmt.debug_struct("$maybe_busy_wrapper::Busy")
+            Self::Busy(_) => {
+                fmt.debug_struct("MdnsBusyWrapper::Busy")
                     .finish()
             }
-            $maybe_busy_wrapper::Poisoned => {
-                fmt.debug_struct("$maybe_busy_wrapper::Poisoned")
+            Self::Poisoned => {
+                fmt.debug_struct("MdnsBusyWrapper::Poisoned")
                     .finish()
             }
         }
     }
 }
 
-impl $behaviour_name {
+impl Mdns {
     /// Builds a new `Mdns` behaviour.
-    pub fn new() -> io::Result<$behaviour_name> {
-        Ok($behaviour_name {
-            service: $maybe_busy_wrapper::Free(<$service_name>::new()?),
+    pub async fn new() -> io::Result<Self> {
+        Ok(Self {
+            service: MdnsBusyWrapper::Free(MdnsService::new().await?),
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
         })
@@ -113,7 +109,7 @@ impl $behaviour_name {
     }
 }
 
-impl NetworkBehaviour for $behaviour_name {
+impl NetworkBehaviour for Mdns {
     type ProtocolsHandler = DummyProtocolsHandler;
     type OutEvent = MdnsEvent;
 
@@ -138,9 +134,9 @@ impl NetworkBehaviour for $behaviour_name {
         &mut self,
         _: PeerId,
         _: ConnectionId,
-        _ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
-        void::unreachable(_ev)
+        void::unreachable(ev)
     }
 
     fn poll(
@@ -155,9 +151,8 @@ impl NetworkBehaviour for $behaviour_name {
     > {
         // Remove expired peers.
         if let Some(ref mut closest_expiration) = self.closest_expiration {
-            match Future::poll(Pin::new(closest_expiration), cx) {
-                Poll::Ready(Ok(())) => {
-                    let now = Instant::now();
+            match Pin::new(closest_expiration).poll(cx) {
+                Poll::Ready(now) => {
                     let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
                     while let Some(pos) = self.discovered_nodes.iter().position(|(_, _, exp)| *exp < now) {
                         let (peer_id, addr, _) = self.discovered_nodes.remove(pos);
@@ -173,38 +168,37 @@ impl NetworkBehaviour for $behaviour_name {
                     }
                 },
                 Poll::Pending => (),
-                Poll::Ready(Err(err)) => warn!("timer has errored: {:?}", err),
             }
         }
 
         // Polling the mDNS service, and obtain the list of nodes discovered this round.
         let discovered = loop {
-            let service = mem::replace(&mut self.service, $maybe_busy_wrapper::Poisoned);
+            let service = mem::replace(&mut self.service, MdnsBusyWrapper::Poisoned);
 
             let packet = match service {
-                $maybe_busy_wrapper::Free(service) => {
-                    self.service = $maybe_busy_wrapper::Busy(Box::pin(service.next()));
+                MdnsBusyWrapper::Free(service) => {
+                    self.service = MdnsBusyWrapper::Busy(Box::pin(service.next()));
                     continue;
                 },
-                $maybe_busy_wrapper::Busy(mut fut) => {
+                MdnsBusyWrapper::Busy(mut fut) => {
                     match fut.as_mut().poll(cx) {
                         Poll::Ready((service, packet)) => {
-                            self.service = $maybe_busy_wrapper::Free(service);
+                            self.service = MdnsBusyWrapper::Free(service);
                             packet
                         },
                         Poll::Pending => {
-                            self.service = $maybe_busy_wrapper::Busy(fut);
+                            self.service = MdnsBusyWrapper::Busy(fut);
                             return Poll::Pending;
                         }
                     }
                 },
-                $maybe_busy_wrapper::Poisoned => panic!("Mdns poisoned"),
+                MdnsBusyWrapper::Poisoned => panic!("Mdns poisoned"),
             };
 
             match packet {
                 MdnsPacket::Query(query) => {
                     // MaybeBusyMdnsService should always be Free.
-                    if let $maybe_busy_wrapper::Free(ref mut service) = self.service {
+                    if let MdnsBusyWrapper::Free(ref mut service) = self.service {
                         let resp = build_query_response(
                             query.query_id(),
                             params.local_peer_id().clone(),
@@ -256,7 +250,7 @@ impl NetworkBehaviour for $behaviour_name {
                 },
                 MdnsPacket::ServiceDiscovery(disc) => {
                     // MaybeBusyMdnsService should always be Free.
-                    if let $maybe_busy_wrapper::Free(ref mut service) = self.service {
+                    if let MdnsBusyWrapper::Free(ref mut service) = self.service {
                         let resp = build_service_discovery_response(
                             disc.query_id(),
                             MDNS_RESPONSE_TTL,
@@ -273,7 +267,7 @@ impl NetworkBehaviour for $behaviour_name {
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
-            .map(Delay::new_at);
+            .map(Timer::at);
 
         Poll::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
             inner: discovered.into_iter(),
@@ -281,22 +275,13 @@ impl NetworkBehaviour for $behaviour_name {
     }
 }
 
-impl fmt::Debug for $behaviour_name {
+impl fmt::Debug for Mdns {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Mdns")
             .field("service", &self.service)
             .finish()
     }
 }
-
-};
-}
-
-#[cfg(feature = "async-std")]
-codegen!("async-std", Mdns, MaybeBusyMdnsService, crate::service::MdnsService);
-
-#[cfg(feature = "tokio")]
-codegen!("tokio", TokioMdns, MaybeBusyTokioMdnsService, crate::service::TokioMdnsService);
 
 /// Event that can be produced by the `Mdns` behaviour.
 #[derive(Debug)]
