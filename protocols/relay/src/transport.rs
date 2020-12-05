@@ -43,7 +43,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
     ///
     ///```
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_relay::Relay;
+    /// # use libp2p_relay::behaviour::Relay;
     /// # use libp2p_relay::transport::RelayTransportWrapper;
     ///
     /// let inner_transport = DummyTransport::<()>::new();
@@ -354,6 +354,14 @@ impl std::error::Error for RelayError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_split_relay_and_destination() {
+        let addr: Multiaddr = "/ip6/::1/tcp/40425/p2p/12D3KooWSy38eUdLNqhmVQZYFy2tzpi9u5Zt3bYuqdh9vKzAvg42/p2p-circuit/p2p/12D3KooWSSCJLCSaSaxTzyajn2yDoybUKsPXdoc47LjjB9196Zbv".parse().unwrap();
+        let (relay, destination) = split_relay_and_destination(addr);
+
+        assert!(!destination.is_empty());
+    }
 
     #[test]
     fn test_split_off_peer_id() {

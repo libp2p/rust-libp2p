@@ -9,7 +9,7 @@ use libp2p_core::transport::Transport;
 use libp2p_core::{identity, upgrade, PeerId};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::{transport::RelayTransportWrapper, Relay};
+use libp2p_relay::{transport::RelayTransportWrapper, behaviour::Relay};
 use libp2p_swarm::{
     NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
 };

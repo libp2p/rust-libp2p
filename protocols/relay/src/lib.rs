@@ -47,7 +47,7 @@
 //! - **Incoming listen request**: The request received by a *relay* from a *destination* asking the
 //!   *relay* to listen for incoming connections on the behalf of the *destination*.
 
-mod behaviour;
+pub mod behaviour;
 mod error;
 
 mod message_proto {
@@ -57,5 +57,3 @@ mod message_proto {
 pub mod handler;
 pub mod protocol;
 pub mod transport;
-
-pub use behaviour::Relay;

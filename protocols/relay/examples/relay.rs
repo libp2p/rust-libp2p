@@ -27,7 +27,7 @@ use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId, Swarm};
 use libp2p::relay::transport::RelayTransportWrapper;
-use libp2p::relay::Relay;
+use libp2p::relay::behaviour::Relay;
 use std::error::Error;
 use std::task::{Context, Poll};
 
@@ -37,6 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
+    println!("Local peer id: {:?}", local_peer_id);
 
     let tcp_transport = TcpConfig::new();
     let (relay_wrapped_transport, (to_transport, from_transport)) =
