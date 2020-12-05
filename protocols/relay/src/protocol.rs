@@ -34,13 +34,13 @@ const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/relay/circuit/0.1.0";
 mod outgoing_relay_request;
 mod incoming_relay_request;
 pub use self::outgoing_relay_request::{OutgoingRelayRequest, OutgoingRelayRequestError};
-pub use self::incoming_relay_request::IncomingRelayRequest;
+pub use self::incoming_relay_request::{IncomingRelayRequest, IncomingRelayRequestError};
 
 // Relay -> Destination
 mod outgoing_destination_request;
 mod incoming_destination_request;
-pub use self::incoming_destination_request::IncomingDestinationRequest;
-pub use self::outgoing_destination_request::OutgoingDestinationRequest;
+pub use self::incoming_destination_request::{IncomingDestinationRequest, IncomingDestinationRequestError};
+pub use self::outgoing_destination_request::{OutgoingDestinationRequest, OutgoingDestinationRequestError};
 
 mod listen;
 pub use self::listen::{RelayListen, RelayListenError, RelayRemoteRequest};

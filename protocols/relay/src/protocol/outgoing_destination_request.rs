@@ -85,7 +85,6 @@ impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationRequest<TUserData> {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        // TODO: Move to constant.
         iter::once(PROTOCOL_NAME)
     }
 }
@@ -97,7 +96,7 @@ where
     TUserData: Send + 'static,
 {
     type Output = (TSubstream, TUserData);
-    type Error = ();
+    type Error = OutgoingDestinationRequestError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
@@ -107,11 +106,14 @@ where
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream
-                .send(std::io::Cursor::new(self.message))
+            substream.send(std::io::Cursor::new(self.message)).await?;
+            let msg = substream
+                .next()
                 .await
-                .unwrap();
-            let msg = substream.next().await.unwrap().unwrap();
+                .ok_or(OutgoingDestinationRequestError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "",
+                )))??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
@@ -119,24 +121,50 @@ where
                 src_peer: _,
                 dst_peer: _,
                 code,
-            } = CircuitRelay::decode(msg).unwrap();
+            } = CircuitRelay::decode(msg)?;
 
             if !matches!(
-                circuit_relay::Type::from_i32(r#type.unwrap()).unwrap(),
+                r#type
+                    .map(circuit_relay::Type::from_i32)
+                    .flatten()
+                    .ok_or(OutgoingDestinationRequestError::ParseTypeField)?,
                 circuit_relay::Type::Status
             ) {
-                panic!("expected status");
+                return Err(OutgoingDestinationRequestError::ExpectedStatusType);
             }
 
             if !matches!(
-                circuit_relay::Status::from_i32(code.unwrap()).unwrap(),
+                code.map(circuit_relay::Status::from_i32)
+                    .flatten()
+                    .ok_or(OutgoingDestinationRequestError::ParseStatusField)?,
                 circuit_relay::Status::Success
             ) {
-                panic!("expected success");
+                return Err(OutgoingDestinationRequestError::ExpectedSuccessStatus);
             }
 
             Ok((substream.into_inner(), self.user_data))
         }
         .boxed()
+    }
+}
+
+pub enum OutgoingDestinationRequestError {
+    DecodeError(prost::DecodeError),
+    Io(std::io::Error),
+    ParseTypeField,
+    ParseStatusField,
+    ExpectedStatusType,
+    ExpectedSuccessStatus,
+}
+
+impl From<std::io::Error> for OutgoingDestinationRequestError {
+    fn from(e: std::io::Error) -> Self {
+        OutgoingDestinationRequestError::Io(e)
+    }
+}
+
+impl From<prost::DecodeError> for OutgoingDestinationRequestError {
+    fn from(e: prost::DecodeError) -> Self {
+        OutgoingDestinationRequestError::DecodeError(e)
     }
 }

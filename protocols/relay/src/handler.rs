@@ -28,10 +28,11 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use log::warn;
 use smallvec::SmallVec;
+use std::collections::HashMap;
 use std::task::{Context, Poll};
 use std::{error, io};
-use std::collections::HashMap;
 
 /// Protocol handler that handles the relay protocol.
 ///
@@ -54,19 +55,23 @@ use std::collections::HashMap;
 ///
 pub struct RelayHandler {
     /// Futures that send back negative responses.
-    // TODO: Use FuturesUnordered here and below.
-    deny_futures: SmallVec<[BoxFuture<'static, Result<(), io::Error>>; 4]>,
+    deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
 
     // Indexed by source peer id.
-    incoming_destination_request_pending_approval: HashMap<PeerId, protocol::IncomingDestinationRequest<NegotiatedSubstream>>,
+    incoming_destination_request_pending_approval:
+        HashMap<PeerId, protocol::IncomingDestinationRequest<NegotiatedSubstream>>,
 
     /// Futures that send back an accept response to a relay.
     accept_destination_futures: FuturesUnordered<
-        BoxFuture<'static, Result<(PeerId, NegotiatedSubstream), Box<dyn error::Error + 'static>>>,
+        BoxFuture<
+            'static,
+            Result<(PeerId, NegotiatedSubstream), protocol::IncomingDestinationRequestError>,
+        >,
     >,
 
     /// Futures that copy from a source to a destination.
-    copy_futures: FuturesUnordered<BoxFuture<'static, ()>>,
+    copy_futures:
+        FuturesUnordered<BoxFuture<'static, Result<(), protocol::IncomingRelayRequestError>>>,
 
     /// Requests asking the remote to become a relay.
     outgoing_relay_requests: SmallVec<[(PeerId, Vec<Multiaddr>); 4]>,
@@ -212,7 +217,8 @@ impl ProtocolsHandler for RelayHandler {
             // We have been asked to become a destination.
             protocol::RelayRemoteRequest::DestinationRequest(dest_request) => {
                 let source = dest_request.source_id().clone();
-                self.incoming_destination_request_pending_approval.insert(source.clone(), dest_request);
+                self.incoming_destination_request_pending_approval
+                    .insert(source.clone(), dest_request);
                 self.queued_events
                     .push(RelayHandlerEvent::IncomingDestinationRequest(source));
             }
@@ -241,9 +247,9 @@ impl ProtocolsHandler for RelayHandler {
                     ));
             }
             // We have successfully asked the node to be a destination.
-            EitherOutput::Second((to_dest_substream, hop_request)) => {
+            EitherOutput::Second((to_dest_substream, request)) => {
                 self.copy_futures
-                    .push(hop_request.inner.fulfill(to_dest_substream));
+                    .push(request.inner.fulfill(to_dest_substream));
             }
         }
     }
@@ -256,13 +262,19 @@ impl ProtocolsHandler for RelayHandler {
                 self.deny_futures.push(fut);
             }
             RelayHandlerIn::AcceptDestinationRequest(source) => {
-                let rq = self.incoming_destination_request_pending_approval.remove(&source).unwrap();
+                let rq = self
+                    .incoming_destination_request_pending_approval
+                    .remove(&source)
+                    .unwrap();
                 let fut = rq.accept();
-                self.accept_destination_futures.push(fut.boxed());
+                self.accept_destination_futures.push(fut);
             }
             // Deny a destination request from the node we handle.
             RelayHandlerIn::DenyDestinationRequest(source) => {
-                let rq = self.incoming_destination_request_pending_approval.remove(&source).unwrap();
+                let rq = self
+                    .incoming_destination_request_pending_approval
+                    .remove(&source)
+                    .unwrap();
                 let fut = rq.deny();
                 self.deny_futures.push(fut);
             }
@@ -288,7 +300,10 @@ impl ProtocolsHandler for RelayHandler {
         peer_id: Self::OutboundOpenInfo,
         // TODO: Fix
         error: ProtocolsHandlerUpgrErr<
-            EitherError<protocol::OutgoingRelayRequestError, ()>,
+            EitherError<
+                protocol::OutgoingRelayRequestError,
+                protocol::OutgoingDestinationRequestError,
+            >,
         >,
     ) {
         match error {
@@ -298,6 +313,8 @@ impl ProtocolsHandler for RelayHandler {
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayRequestError(peer_id));
             }
+            // TODO: When the outbound destination request fails, send a status update back to the
+            // source.
             _ => todo!(),
         }
     }
@@ -367,7 +384,17 @@ impl ProtocolsHandler for RelayHandler {
             Poll::Pending => {}
         }
 
-        while let Poll::Ready(Some(())) = self.copy_futures.poll_next_unpin(cx) {};
+        while let Poll::Ready(Some(result)) = self.copy_futures.poll_next_unpin(cx) {
+            if let Err(e) = result {
+                warn!("Incoming relay request failed: {:?}", e);
+            }
+        }
+
+        while let Poll::Ready(Some(result)) = self.deny_futures.poll_next_unpin(cx) {
+            if let Err(e) = result {
+                warn!("Denying request failed: {:?}", e);
+            }
+        }
 
         // Report the queued events.
         if !self.queued_events.is_empty() {

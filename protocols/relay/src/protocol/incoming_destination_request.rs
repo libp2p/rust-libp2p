@@ -26,6 +26,7 @@ use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
 use std::{error, io};
+use std::io::Cursor;
 use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to become a destination.
@@ -71,7 +72,7 @@ where
     ///
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
-    pub fn accept(self) -> impl Future<Output = Result<(PeerId, TSubstream), Box<dyn error::Error + 'static>>> {
+    pub fn accept(self) -> BoxFuture<'static, Result<(PeerId, TSubstream), IncomingDestinationRequestError>> {
         let IncomingDestinationRequest { stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
@@ -80,7 +81,6 @@ where
             code: Some(circuit_relay::Status::Success.into()),
         };
         let mut msg_bytes = Vec::new();
-        // TODO: Handl2
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
@@ -89,7 +89,7 @@ where
         let mut substream = Framed::new(stream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
+            substream.send(Cursor::new(msg_bytes)).await?;
             Ok((from.peer_id, substream.into_inner()))
         }.boxed()
     }
@@ -105,14 +105,28 @@ where
             code: Some(circuit_relay::Status::StopRelayRefused.into()),
         };
         let mut msg_bytes = Vec::new();
-        // TODO: Handl2
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
-        // async {
-        //     upgrade::write_one(&mut self.stream, msg_bytes).await?;
-        // }.boxed()
+        let mut codec = UviBytes::default();
+        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
+        let mut substream = Framed::new(self.stream, codec);
 
-        unimplemented!();
+        async move {
+            substream.send(Cursor::new(msg_bytes)).await?;
+            Ok(())
+        }.boxed()
+    }
+}
+
+
+#[derive(Debug)]
+pub enum IncomingDestinationRequestError {
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for IncomingDestinationRequestError {
+    fn from(e: std::io::Error) -> Self {
+        IncomingDestinationRequestError::Io(e)
     }
 }

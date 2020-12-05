@@ -47,8 +47,6 @@ pub struct OutgoingRelayRequest {
 
 impl OutgoingRelayRequest {
     /// Builds a request for the target to act as a relay to a third party.
-    ///
-    /// The `user_data` is passed back in the result.
     pub fn new(dest_id: PeerId, dest_addresses: impl IntoIterator<Item = Multiaddr>) -> Self {
         OutgoingRelayRequest {
             dest_id,
@@ -100,7 +98,7 @@ where
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(encoded)).await.unwrap();
+            substream.send(std::io::Cursor::new(encoded)).await?;
             let msg = substream
                 .next()
                 .await
@@ -117,7 +115,7 @@ where
                 // TODO: check that this is the destination id.
                 dst_peer: _,
                 code,
-            } = CircuitRelay::decode(msg).unwrap();
+            } = CircuitRelay::decode(msg)?;
 
             if !matches!(
                 r#type
@@ -145,6 +143,7 @@ where
 }
 
 pub enum OutgoingRelayRequestError {
+    DecodeError(prost::DecodeError),
     Io(std::io::Error),
     ParseTypeField,
     ParseStatusField,
@@ -155,5 +154,11 @@ pub enum OutgoingRelayRequestError {
 impl From<std::io::Error> for OutgoingRelayRequestError {
     fn from(e: std::io::Error) -> Self {
         OutgoingRelayRequestError::Io(e)
+    }
+}
+
+impl From<prost::DecodeError> for OutgoingRelayRequestError {
+    fn from(e: prost::DecodeError) -> Self {
+        OutgoingRelayRequestError::DecodeError(e)
     }
 }

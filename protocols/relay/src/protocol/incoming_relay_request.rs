@@ -32,6 +32,7 @@ use prost::Message;
 use std::sync::{Arc, Mutex};
 
 use std::{io};
+use std::io::Cursor;
 use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to relay communications to another node.
@@ -43,7 +44,7 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it. This data must be transmitted to the destination.
 // TODO: debug
-#[must_use = "A HOP request should be either accepted or denied"]
+#[must_use = "An incoming relay request should be either accepted or denied."]
 pub struct IncomingRelayRequest<TSubstream> {
     /// The stream to the source.
     // TODO: Clean up mutex arc
@@ -84,17 +85,10 @@ where
     }
 
     /// Accepts the request by providing a stream to the destination.
-    ///
-    /// The `dest_stream` should be a brand new dialing substream. This method will negotiate the
-    /// `relay` protocol on it, send a relay message, and then relay to it the connection from the
-    /// source.
-    ///
-    /// The future that this method returns succeeds after the negotiation has succeeded. It
-    /// returns another future that will copy the data.
     pub fn fulfill<TDestSubstream>(
         self,
         dest_stream: TDestSubstream,
-    ) -> BoxFuture<'static, ()>
+    ) -> BoxFuture<'static, Result<(), IncomingRelayRequestError>>
     where
         TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -116,7 +110,7 @@ where
         );
 
         async move {
-            substream.send(std::io::Cursor::new(msg_bytes)).await.unwrap();
+            substream.send(Cursor::new(msg_bytes)).await?;
 
             let (from_source, mut to_source) = substream.into_inner().split();
             let (from_destination, mut to_destination) = dest_stream.split();
@@ -131,22 +125,47 @@ where
                 Either::Right((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
                 _ => {},
             }
+
+            Ok(())
         }.boxed()
     }
 
     /// Refuses the request.
     ///
     /// The returned `Future` gracefully shuts down the request.
-    pub fn deny(self) -> BoxFuture<'static, Result<(), io::Error>> {
+    pub fn deny(self) -> BoxFuture<'static, Result<(), std::io::Error>> {
         let msg = CircuitRelay {
             r#type: None,
             code: Some(Status::StopRelayRefused.into()),
             src_peer: None,
             dst_peer: None,
         };
-        let mut encoded_msg = Vec::new();
-        msg.encode(&mut encoded_msg)
+        let mut msg_bytes = Vec::new();
+        msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
-        unimplemented!();
+
+        let mut codec = UviBytes::default();
+        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
+        let mut substream = Framed::new(
+            self.stream.lock().unwrap().take().unwrap(),
+            codec,
+        );
+
+        async move {
+            substream.send(Cursor::new(msg_bytes)).await?;
+
+            Ok(())
+        }.boxed()
+    }
+}
+
+#[derive(Debug)]
+pub enum IncomingRelayRequestError {
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for IncomingRelayRequestError {
+    fn from(e: std::io::Error) -> Self {
+        IncomingRelayRequestError::Io(e)
     }
 }
