@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asn1_der = "0.6.1"
 bs58 = "0.4.0"
-bytes = "0.5"
 ed25519-dalek = "1.0.1"
 either = "1.5"
 fnv = "1.0"
