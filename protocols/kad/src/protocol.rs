@@ -126,7 +126,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
 impl Into<proto::message::Peer> for KadPeer {
     fn into(self) -> proto::message::Peer {
         proto::message::Peer {
-            id: self.node_id.into_bytes(),
+            id: self.node_id.to_bytes(),
             addrs: self.multiaddrs.into_iter().map(|a| a.to_vec()).collect(),
             connection: {
                 let ct: proto::message::ConnectionType = self.connection_ty.into();
@@ -554,7 +554,7 @@ fn record_to_proto(record: Record) -> proto::Record {
     proto::Record {
         key: record.key.to_vec(),
         value: record.value,
-        publisher: record.publisher.map(PeerId::into_bytes).unwrap_or_default(),
+        publisher: record.publisher.map(|id| id.to_bytes()).unwrap_or_default(),
         ttl: record.expires
             .map(|t| {
                 let now = Instant::now();

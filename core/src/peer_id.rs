@@ -106,15 +106,6 @@ impl PeerId {
         self.multihash.to_bytes()
     }
 
-    /// Returns a raw bytes representation of this `PeerId`.
-    ///
-    /// **NOTE:** This byte representation is not necessarily consistent with
-    /// equality of peer IDs. That is, two peer IDs may be considered equal
-    /// while having a different byte representation as per `into_bytes`.
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.to_bytes()
-    }
-
     /// Returns a base-58 encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
         bs58::encode(self.to_bytes()).into_string()

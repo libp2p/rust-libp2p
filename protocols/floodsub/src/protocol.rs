@@ -179,7 +179,7 @@ impl FloodsubRpc {
             publish: self.messages.into_iter()
                 .map(|msg| {
                     rpc_proto::Message {
-                        from: Some(msg.source.into_bytes()),
+                        from: Some(msg.source.to_bytes()),
                         data: Some(msg.data),
                         seqno: Some(msg.sequence_number),
                         topic_ids: msg.topics

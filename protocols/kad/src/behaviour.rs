@@ -2403,7 +2403,7 @@ impl QueryInfo {
     fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
-                key: peer.clone().into_bytes(),
+                key: peer.to_bytes(),
                 user_data: query_id,
             },
             QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {

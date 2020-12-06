@@ -200,7 +200,7 @@ impl Encoder for GossipsubCodec {
 
         for message in item.messages.into_iter() {
             let message = rpc_proto::Message {
-                from: message.source.map(|m| m.into_bytes()),
+                from: message.source.map(|m| m.to_bytes()),
                 data: Some(message.data),
                 seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
                 topic_ids: message.topics.into_iter().map(TopicHash::into).collect(),
