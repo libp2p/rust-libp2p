@@ -139,7 +139,7 @@ impl Default for GossipsubConfig {
                 let mut source_string = if let Some(peer_id) = message.source.as_ref() {
                     peer_id.to_base58()
                 } else {
-                    PeerId::from_bytes(vec![0, 1, 0])
+                    PeerId::from_bytes(&[0, 1, 0])
                         .expect("Valid peer id")
                         .to_base58()
                 };

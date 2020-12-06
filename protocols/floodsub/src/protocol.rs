@@ -61,7 +61,7 @@ where
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
                 messages.push(FloodsubMessage {
-                    source: PeerId::from_bytes(publish.from.unwrap_or_default()).map_err(|_| {
+                    source: PeerId::from_bytes(&publish.from.unwrap_or_default()).map_err(|_| {
                         FloodsubDecodeError::InvalidPeerId
                     })?,
                     data: publish.data.unwrap_or_default(),

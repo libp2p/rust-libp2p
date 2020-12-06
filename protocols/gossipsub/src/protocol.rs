@@ -137,7 +137,7 @@ impl GossipsubCodec {
             }
         };
 
-        let source = match PeerId::from_bytes(from.clone()) {
+        let source = match PeerId::from_bytes(&from) {
             Ok(v) => v,
             Err(_) => {
                 debug!("Signature verification failed: Invalid Peer Id");
@@ -161,7 +161,7 @@ impl GossipsubCodec {
             .map(|key| PublicKey::from_protobuf_encoding(&key))
         {
             Some(Ok(key)) => key,
-            _ => match PublicKey::from_protobuf_encoding(&source.as_bytes()[2..]) {
+            _ => match PublicKey::from_protobuf_encoding(&source.to_bytes()[2..]) {
                 Ok(v) => v,
                 Err(_) => {
                     warn!("Signature verification failed: No valid public key supplied");
@@ -372,7 +372,7 @@ impl Decoder for GossipsubCodec {
 
             let source = if verify_source {
                 Some(
-                    PeerId::from_bytes(message.from.unwrap_or_default()).map_err(|_| {
+                    PeerId::from_bytes(&message.from.unwrap_or_default()).map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id")
                     })?,
                 )

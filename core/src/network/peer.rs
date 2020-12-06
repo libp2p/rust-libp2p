@@ -555,7 +555,7 @@ where
         }
 
         self.network.pool.add(connection, connected)
-            .map(|_id| ConnectedPeer {
+            .map(move |_id| ConnectedPeer {
                 network: self.network,
                 peer_id: self.peer_id,
             })

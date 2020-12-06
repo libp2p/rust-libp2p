@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn peer_id_into_bytes_then_from_bytes() {
         let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
-        let second = PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap();
+        let second = PeerId::from_bytes(&peer_id.to_bytes()).unwrap();
         assert_eq!(peer_id, second);
     }
 
@@ -255,7 +255,7 @@ mod tests {
     fn random_peer_id_is_valid() {
         for _ in 0 .. 5000 {
             let peer_id = PeerId::random();
-            assert_eq!(peer_id, PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap());
+            assert_eq!(peer_id, PeerId::from_bytes(&peer_id.to_bytes()).unwrap());
         }
     }
 }

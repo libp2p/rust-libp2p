@@ -101,7 +101,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
     fn try_from(peer: proto::message::Peer) -> Result<KadPeer, Self::Error> {
         // TODO: this is in fact a CID; not sure if this should be handled in `from_bytes` or
         //       as a special case here
-        let node_id = PeerId::from_bytes(peer.id)
+        let node_id = PeerId::from_bytes(&peer.id)
             .map_err(|_| invalid_data("invalid peer id"))?;
 
         let mut addrs = Vec::with_capacity(peer.addrs.len());
@@ -533,7 +533,7 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
 
     let publisher =
         if !record.publisher.is_empty() {
-            PeerId::from_bytes(record.publisher)
+            PeerId::from_bytes(&record.publisher)
                 .map(Some)
                 .map_err(|_| invalid_data("Invalid publisher peer ID."))?
         } else {
