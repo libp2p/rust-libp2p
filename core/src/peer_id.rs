@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::PublicKey;
-use bytes::Bytes;
 use thiserror::Error;
 use multihash::{Code, Multihash, MultihashDigest};
 use rand::Rng;
@@ -32,10 +31,9 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
-// TODO: maybe keep things in decoded version?
-#[derive(Clone, Eq)]
+#[derive(Clone, Copy, Eq)]
 pub struct PeerId {
-    multihash: Bytes,
+    multihash: Multihash,
 }
 
 impl fmt::Debug for PeerId {
@@ -61,8 +59,8 @@ impl cmp::PartialOrd for PeerId {
 impl cmp::Ord for PeerId {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         // must use borrow, because as_bytes is not consistent with equality
-        let lhs: &[u8] = self.borrow();
-        let rhs: &[u8] = other.borrow();
+        let lhs: &Multihash = self.borrow();
+        let rhs: &Multihash = other.borrow();
         lhs.cmp(rhs)
     }
 }
@@ -78,18 +76,15 @@ impl PeerId {
             Code::Sha2_256
         };
 
-        let multihash = hash_algorithm.digest(&key_enc).to_bytes().into();
+        let multihash = hash_algorithm.digest(&key_enc);
 
         PeerId { multihash }
     }
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
     /// back the data as an error.
-    pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
-        match Multihash::from_bytes(&data) {
-            Ok(multihash) => PeerId::from_multihash(multihash).map_err(|_| data),
-            Err(_err) => Err(data),
-        }
+    pub fn from_bytes(data: &[u8]) -> Result<PeerId, ()> {
+        Ok(PeerId::from_multihash(Multihash::from_bytes(&data).map_err(|_| ())?).map_err(|_| ())?)
     }
 
     /// Tries to turn a `Multihash` into a `PeerId`.
@@ -99,9 +94,9 @@ impl PeerId {
     /// peer ID, it is returned as an `Err`.
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
         match Code::try_from(multihash.code()) {
-            Ok(Code::Sha2_256) => Ok(PeerId { multihash: multihash.to_bytes().into() }),
+            Ok(Code::Sha2_256) => Ok(PeerId { multihash: multihash }),
             Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH
-                => Ok(PeerId { multihash: multihash.to_bytes().into() }),
+                => Ok(PeerId { multihash }),
             _ => Err(multihash)
         }
     }
@@ -113,8 +108,17 @@ impl PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
             multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
-                .expect("The digest size is never too large").to_bytes().into()
+                .expect("The digest size is never too large")
         }
+    }
+
+    /// Returns a raw bytes representation of this `PeerId`.
+    ///
+    /// **NOTE:** This byte representation is not necessarily consistent with
+    /// equality of peer IDs. That is, two peer IDs may be considered equal
+    /// while having a different byte representation as per `as_bytes`.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.multihash.to_bytes()
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
@@ -123,21 +127,12 @@ impl PeerId {
     /// equality of peer IDs. That is, two peer IDs may be considered equal
     /// while having a different byte representation as per `into_bytes`.
     pub fn into_bytes(self) -> Vec<u8> {
-        self.multihash.to_vec()
-    }
-
-    /// Returns a raw bytes representation of this `PeerId`.
-    ///
-    /// **NOTE:** This byte representation is not necessarily consistent with
-    /// equality of peer IDs. That is, two peer IDs may be considered equal
-    /// while having a different byte representation as per `as_bytes`.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.multihash
+        self.to_bytes()
     }
 
     /// Returns a base-58 encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
-        bs58::encode(self.borrow() as &[u8]).into_string()
+        bs58::encode(self.to_bytes()).into_string()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
@@ -145,12 +140,10 @@ impl PeerId {
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
-        let multihash = Multihash::from_bytes(&self.multihash)
-           .expect("Internal multihash is always a valid");
-        let alg = Code::try_from(multihash.code())
+        let alg = Code::try_from(self.multihash.code())
             .expect("Internal multihash is always a valid `Code`");
         let enc = public_key.clone().into_protobuf_encoding();
-        Some(alg.digest(&enc) == multihash)
+        Some(alg.digest(&enc) == self.multihash)
     }
 }
 
@@ -159,7 +152,7 @@ impl hash::Hash for PeerId {
     where
         H: hash::Hasher
     {
-        let digest = self.borrow() as &[u8];
+        let digest: &Multihash = self.borrow();
         hash::Hash::hash(digest, state)
     }
 }
@@ -174,7 +167,7 @@ impl TryFrom<Vec<u8>> for PeerId {
     type Error = Vec<u8>;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        PeerId::from_bytes(value)
+        PeerId::from_bytes(&value).map_err(|_| value)
     }
 }
 
@@ -188,14 +181,14 @@ impl TryFrom<Multihash> for PeerId {
 
 impl PartialEq<PeerId> for PeerId {
     fn eq(&self, other: &PeerId) -> bool {
-        let self_digest = self.borrow() as &[u8];
-        let other_digest = other.borrow() as &[u8];
+        let self_digest = self.borrow() as &Multihash;
+        let other_digest = other.borrow() as &Multihash;
         self_digest == other_digest
     }
 }
 
-impl Borrow<[u8]> for PeerId {
-    fn borrow(&self) -> &[u8] {
+impl Borrow<Multihash> for PeerId {
+    fn borrow(&self) -> &Multihash {
         &self.multihash
     }
 }
@@ -203,16 +196,15 @@ impl Borrow<[u8]> for PeerId {
 /// **NOTE:** This byte representation is not necessarily consistent with
 /// equality of peer IDs. That is, two peer IDs may be considered equal
 /// while having a different byte representation as per `AsRef<[u8]>`.
-impl AsRef<[u8]> for PeerId {
-    fn as_ref(&self) -> &[u8] {
-        self.as_bytes()
+impl AsRef<Multihash> for PeerId {
+    fn as_ref(&self) -> &Multihash {
+        &self.multihash
     }
 }
 
 impl From<PeerId> for Multihash {
     fn from(peer_id: PeerId) -> Self {
-        Multihash::from_bytes(&peer_id.multihash)
-            .expect("PeerIds always contain valid Multihashes")
+        peer_id.multihash
     }
 }
 
@@ -230,7 +222,7 @@ impl FromStr for PeerId {
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let bytes = bs58::decode(s).into_vec()?;
-        PeerId::from_bytes(bytes).map_err(|_| ParseError::MultiHash)
+        PeerId::from_bytes(&bytes).map_err(|_| ParseError::MultiHash)
     }
 }
 
