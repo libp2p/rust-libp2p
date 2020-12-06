@@ -22,7 +22,7 @@ use crate::PublicKey;
 use thiserror::Error;
 use multihash::{Code, Multihash, MultihashDigest};
 use rand::Rng;
-use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr, cmp};
+use std::{convert::TryFrom, fmt, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -31,7 +31,7 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
-#[derive(Clone, Copy, Eq)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeerId {
     multihash: Multihash,
 }
@@ -47,21 +47,6 @@ impl fmt::Debug for PeerId {
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.to_base58().fmt(f)
-    }
-}
-
-impl cmp::PartialOrd for PeerId {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(Ord::cmp(self, other))
-    }
-}
-
-impl cmp::Ord for PeerId {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        // must use borrow, because as_bytes is not consistent with equality
-        let lhs: &Multihash = self.borrow();
-        let rhs: &Multihash = other.borrow();
-        lhs.cmp(rhs)
     }
 }
 
@@ -147,16 +132,6 @@ impl PeerId {
     }
 }
 
-impl hash::Hash for PeerId {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: hash::Hasher
-    {
-        let digest: &Multihash = self.borrow();
-        hash::Hash::hash(digest, state)
-    }
-}
-
 impl From<PublicKey> for PeerId {
     fn from(key: PublicKey) -> PeerId {
         PeerId::from_public_key(key)
@@ -179,23 +154,6 @@ impl TryFrom<Multihash> for PeerId {
     }
 }
 
-impl PartialEq<PeerId> for PeerId {
-    fn eq(&self, other: &PeerId) -> bool {
-        let self_digest = self.borrow() as &Multihash;
-        let other_digest = other.borrow() as &Multihash;
-        self_digest == other_digest
-    }
-}
-
-impl Borrow<Multihash> for PeerId {
-    fn borrow(&self) -> &Multihash {
-        &self.multihash
-    }
-}
-
-/// **NOTE:** This byte representation is not necessarily consistent with
-/// equality of peer IDs. That is, two peer IDs may be considered equal
-/// while having a different byte representation as per `AsRef<[u8]>`.
 impl AsRef<Multihash> for PeerId {
     fn as_ref(&self) -> &Multihash {
         &self.multihash
