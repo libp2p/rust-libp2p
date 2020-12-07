@@ -24,7 +24,7 @@ use log::info;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub trait TopicSubscriptionFilter {
-    /// returns true iff the topic is of interest and we can subscribe to it
+    /// Returns true iff the topic is of interest and we can subscribe to it.
     fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool;
 
     /// Filters a list of incoming subscriptions and returns a filtered set

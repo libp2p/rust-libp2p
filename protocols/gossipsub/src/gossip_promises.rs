@@ -32,14 +32,15 @@ use wasm_timer::Instant;
 /// for each `IWANT` message we track one random requested message id.
 #[derive(Default)]
 pub(crate) struct GossipPromises {
-    // Stores for each tracked message id and peer the instant when this promise expires.
-    // If the peer didn't respond until then we consider the promise as broken and penalize the
-    // peer.
+    /// Stores for each tracked message id and peer the instant when this promise expires.
+    ///
+    /// If the peer didn't respond until then we consider the promise as broken and penalize the
+    /// peer.
     promises: HashMap<MessageId, HashMap<PeerId, Instant>>,
 }
 
 impl GossipPromises {
-    /// Track a promise to deliver a message from a list of msgIDs we are requesting.
+    /// Track a promise to deliver a message from a list of [`MessageId`]s we are requesting.
     pub fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
         // Randomly select a message id
         let mut rng = thread_rng();

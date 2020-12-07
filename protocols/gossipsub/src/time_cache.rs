@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-///! This implements a time-based LRU cache for checking gossipsub message duplicates.
+//! This implements a time-based LRU cache for checking gossipsub message duplicates.
+
 use fnv::FnvHashMap;
 use std::collections::hash_map::{
     self,

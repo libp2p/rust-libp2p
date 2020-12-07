@@ -232,7 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let gossipsub_config = GossipsubConfigBuilder::new()
+        let gossipsub_config = GossipsubConfigBuilder::default()
             .max_transmit_size(262144)
             .build()
             .expect("valid config");

@@ -69,7 +69,7 @@ impl BackoffStorage {
         }
     }
 
-    /// Updates the backoff for a peer (if there is already a more restrictive backoff than this call
+    /// Updates the backoff for a peer (if there is already a more restrictive backoff then this call
     /// doesn't change anything).
     pub fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
         let instant = Instant::now() + time;

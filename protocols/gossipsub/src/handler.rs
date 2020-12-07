@@ -37,7 +37,12 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
+use wasm_timer::Instant;
+
+/// The initial time (in seconds) we set the keep alive for protocol negotiations to occur.
+const INITIAL_KEEP_ALIVE: u64 = 30;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -57,11 +62,11 @@ pub enum HandlerEvent {
     PeerKind(PeerKind),
 }
 
-// The maximum number of substreams we accept or create before disconnecting from the peer.
-//
-// Gossipsub is supposed to have a single long-lived inbound and outbound substream. On failure we
-// attempt to recreate these. This imposes an upper bound of new substreams before we consider the
-// connection faulty and disconnect. This also prevents against potential substream creation loops.
+/// The maximum number of substreams we accept or create before disconnecting from the peer.
+///
+/// Gossipsub is supposed to have a single long-lived inbound and outbound substream. On failure we
+/// attempt to recreate these. This imposes an upper bound of new substreams before we consider the
+/// connection faulty and disconnect. This also prevents against potential substream creation loops.
 const MAX_SUBSTREAM_CREATION: usize = 5;
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
@@ -92,12 +97,14 @@ pub struct GossipsubHandler {
     peer_kind: Option<PeerKind>,
 
     /// Keeps track on whether we have sent the peer kind to the behaviour.
+    //
     // NOTE: Use this flag rather than checking the substream count each poll.
     peer_kind_sent: bool,
 
     /// If the peer doesn't support the gossipsub protocol we do not immediately disconnect.
     /// Rather, we disable the handler and prevent any incoming or outgoing substreams from being
     /// established.
+    ///
     /// This value is set to true to indicate the peer doesn't support gossipsub.
     protocol_unsupported: bool,
 
@@ -136,7 +143,7 @@ enum OutboundSubstreamState {
 }
 
 impl GossipsubHandler {
-    /// Builds a new `GossipsubHandler`.
+    /// Builds a new [`GossipsubHandler`].
     pub fn new(
         protocol_id_prefix: std::borrow::Cow<'static, str>,
         max_transmit_size: usize,
@@ -163,7 +170,7 @@ impl GossipsubHandler {
             peer_kind_sent: false,
             protocol_unsupported: false,
             upgrade_errors: VecDeque::new(),
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
         }
     }
 }
@@ -174,8 +181,8 @@ impl ProtocolsHandler for GossipsubHandler {
     type Error = GossipsubHandlerError;
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
-    type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = Self::InEvent;
+    type OutboundProtocol = ProtocolConfig;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         self.listen_protocol.clone()

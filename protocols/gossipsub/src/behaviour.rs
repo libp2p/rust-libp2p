@@ -47,7 +47,7 @@ use libp2p_swarm::{
 };
 
 use crate::backoff::BackoffStorage;
-use crate::config::{GenericGossipsubConfig, ValidationMode};
+use crate::config::{Config, ValidationMode};
 use crate::error::{PublishError, SubscriptionError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, HandlerEvent};
@@ -75,7 +75,7 @@ mod tests;
 /// Without signing, a number of privacy preserving modes can be selected.
 ///
 /// NOTE: The default validation settings are to require signatures. The [`ValidationMode`]
-/// should be updated in the [`GenericGossipsubConfig`] to allow for unsigned messages.
+/// should be updated in the [`Config`] to allow for unsigned messages.
 #[derive(Clone)]
 pub enum MessageAuthenticity {
     /// Message signing is enabled. The author will be the owner of the key and the sequence number
@@ -96,7 +96,7 @@ pub enum MessageAuthenticity {
     /// The author of the message and the sequence numbers are excluded from the message.
     ///
     /// NOTE: Excluding these fields may make these messages invalid by other nodes who
-    /// enforce validation of these fields. See [`ValidationMode`] in the `GenericGossipsubConfig`
+    /// enforce validation of these fields. See [`ValidationMode`] in the `Config`
     /// for how to customise this for rust-libp2p gossipsub.  A custom `message_id`
     /// function will need to be set to prevent all messages from a peer being filtered
     /// as duplicates.
@@ -116,8 +116,8 @@ impl MessageAuthenticity {
 
 /// Event that can be emitted by the gossipsub behaviour.
 #[derive(Debug)]
-pub enum GenericGossipsubEvent<T: AsRef<[u8]>> {
-    /// A message has been received.    
+pub enum Event<T: AsRef<[u8]>> {
+    /// A message has been received.
     Message {
         /// The peer that forwarded us this message.
         propagation_source: PeerId,
@@ -142,8 +142,8 @@ pub enum GenericGossipsubEvent<T: AsRef<[u8]>> {
         topic: TopicHash,
     },
 }
-//for backwards compatibility
-pub type GossipsubEvent = GenericGossipsubEvent<Vec<u8>>;
+// For general use cases
+pub type GossipsubEvent = Event<Vec<u8>>;
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
@@ -196,17 +196,16 @@ impl From<MessageAuthenticity> for PublishConfig {
     }
 }
 
-type GossipsubNetworkBehaviourAction<T> =
-    NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GenericGossipsubEvent<T>>;
+type GossipsubNetworkBehaviourAction<T> = NetworkBehaviourAction<Arc<rpc_proto::Rpc>, Event<T>>;
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
-/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GenericGossipsubConfig`] instance. If message signing is
+/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`Config`] instance. If message signing is
 /// disabled, the [`ValidationMode`] in the config should be adjusted to an appropriate level to
 /// accept unsigned messages.
 pub struct GenericGossipsub<T: AsRef<[u8]>, Filter: TopicSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
-    config: GenericGossipsubConfig<T>,
+    config: Config<T>,
 
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<GossipsubNetworkBehaviourAction<T>>,
@@ -231,7 +230,8 @@ pub struct GenericGossipsub<T: AsRef<[u8]>, Filter: TopicSubscriptionFilter> {
     /// A map of all connected peers to their subscribed topics.
     peer_topics: HashMap<PeerId, BTreeSet<TopicHash>>,
 
-    /// A set of all explicit peers.
+    /// A set of all explicit peers. These are peers that remain connected and we unconditionally
+    /// forward messages to, outside of the scoring system.
     explicit_peers: HashSet<PeerId>,
 
     /// A list of peers that have been blacklisted by the user.
@@ -275,21 +275,23 @@ pub struct GenericGossipsub<T: AsRef<[u8]>, Filter: TopicSubscriptionFilter> {
     peer_score: Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
 
     /// Counts the number of `IHAVE` received from each peer since the last heartbeat.
-    count_peer_have: HashMap<PeerId, usize>,
+    count_received_ihave: HashMap<PeerId, usize>,
 
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
-    count_iasked: HashMap<PeerId, usize>,
+    count_sent_iwant: HashMap<PeerId, usize>,
 
-    /// short term cache for published messsage ids
+    /// Short term cache for published messsage ids. This is used for penalizing peers sending
+    /// our own messages back if the messages are anonymous or use a random author.
     published_message_ids: DuplicateCache<MessageId>,
 
-    /// short term cache for fast message ids mapping them to the real message ids
+    /// Short term cache for fast message ids mapping them to the real message ids
     fast_messsage_id_cache: TimeCache<FastMessageId, MessageId>,
 
+    /// The filter used to handle message subscriptions.
     subscription_filter: Filter,
 }
 
-// for backwards compatibility
+// For general use and convenience.
 pub type Gossipsub = GenericGossipsub<Vec<u8>, AllowAllSubscriptionFilter>;
 
 impl<T, F> GenericGossipsub<T, F>
@@ -298,10 +300,7 @@ where
     F: TopicSubscriptionFilter + Default,
 {
     /// Creates a `GenericGossipsub` struct given a set of parameters specified via a `GenericGossipsubConfig`.
-    pub fn new(
-        privacy: MessageAuthenticity,
-        config: GenericGossipsubConfig<T>,
-    ) -> Result<Self, &'static str> {
+    pub fn new(privacy: MessageAuthenticity, config: Config<T>) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter(privacy, config, F::default())
     }
 }
@@ -311,10 +310,10 @@ where
     T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a `GenericGossipsub` struct given a set of parameters specified via a `GenericGossipsubConfig`.
+    /// Creates a `GenericGossipsub` struct given a set of parameters specified via a `Config`.
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
-        config: GenericGossipsubConfig<T>,
+        config: Config<T>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
         // Set up the router given the configuration settings.
@@ -352,8 +351,8 @@ where
             px_peers: HashSet::new(),
             outbound_peers: HashSet::new(),
             peer_score: None,
-            count_peer_have: HashMap::new(),
-            count_iasked: HashMap::new(),
+            count_received_ihave: HashMap::new(),
+            count_sent_iwant: HashMap::new(),
             peer_protocols: HashMap::new(),
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
@@ -405,7 +404,8 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns true if the subscription worked. Returns false if we were already subscribed.
+    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
+    /// subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         debug!("Subscribing to topic: {}", topic);
         let topic_hash = topic.hash();
@@ -449,7 +449,7 @@ where
 
     /// Unsubscribes from a topic.
     ///
-    /// Returns true if we were subscribed to this topic.
+    /// Returns [`Ok(true)`] if we were subscribed to this topic.
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
         debug!("Unsubscribing from topic: {}", topic);
         let topic_hash = topic.hash();
@@ -631,21 +631,20 @@ where
         Ok(msg_id)
     }
 
-    /// This function should be called when `config.validate_messages()` is `true` after the
-    /// message got validated by the caller. Messages are stored in the
-    /// ['Memcache'] and validation is expected to be fast enough that the messages should still
-    /// exist in the cache. There are three possible validation outcomes and the outcome is given
-    /// in acceptance.
+    /// This function should be called when `config.validate_messages()` is `true` after the message
+    /// got validated by the caller. Messages are stored in the ['Memcache'] and validation is
+    /// expected to be fast enough that the messages should still exist in the cache. There are
+    /// three possible validation outcomes and the outcome is given in acceptance.
     ///
-    /// If acceptance = Accept the message will get propagated to the network. The
-    /// `propagation_source` parameter indicates who the message was received by and will not
-    ///  be forwarded back to that peer.
+    /// If acceptance = [`MessageAcceptance::Accept`] the message will get propagated to the
+    /// network. The `propagation_source` parameter indicates who the message was received by and
+    /// will not be forwarded back to that peer.
     ///
-    /// If acceptance = Reject the message will be deleted from the memcache and the P₄ penalty
-    /// will be applied to the `propagation_source`.
-    ///
-    /// If acceptance = Ignore the message will be deleted from the memcache but no P₄ penalty
-    /// will be applied.
+    /// If acceptance = [`MessageAcceptance::Reject`] the message will be deleted from the memcache
+    /// and the P₄ penalty will be applied to the `propagation_source`.
+    //
+    /// If acceptance = [`MessageAcceptance::Ignore`] the message will be deleted from the memcache
+    /// but no P₄ penalty will be applied.
     ///
     /// This function will return true if the message was found in the cache and false if was not
     /// in the cache anymore.
@@ -712,7 +711,7 @@ where
         }
     }
 
-    /// Removes a blacklisted peer if it has previously been blacklisted.
+    /// Removes a peer from the blacklist if it has previously been blacklisted.
     pub fn remove_blacklisted_peer(&mut self, peer_id: &PeerId) {
         if self.blacklisted_peers.remove(peer_id) {
             debug!("Peer has been removed from the blacklist: {}", peer_id);
@@ -991,7 +990,10 @@ where
         }
 
         // IHAVE flood protection
-        let peer_have = self.count_peer_have.entry(peer_id.clone()).or_insert(0);
+        let peer_have = self
+            .count_received_ihave
+            .entry(peer_id.clone())
+            .or_insert(0);
         *peer_have += 1;
         if *peer_have > self.config.max_ihave_messages() {
             debug!(
@@ -1002,7 +1004,7 @@ where
             return;
         }
 
-        if let Some(iasked) = self.count_iasked.get(peer_id) {
+        if let Some(iasked) = self.count_sent_iwant.get(peer_id) {
             if *iasked >= self.config.max_ihave_length() {
                 debug!(
                     "IHAVE: peer {} has already advertised too many messages ({}); ignoring",
@@ -1036,7 +1038,7 @@ where
         }
 
         if !iwant_ids.is_empty() {
-            let iasked = self.count_iasked.entry(peer_id.clone()).or_insert(0);
+            let iasked = self.count_sent_iwant.entry(peer_id.clone()).or_insert(0);
             let mut iask = iwant_ids.len();
             if *iasked + iask > self.config.max_ihave_length() {
                 iask = self.config.max_ihave_length().saturating_sub(*iasked);
@@ -1327,7 +1329,7 @@ where
                     if below_threshold {
                         debug!(
                             "PRUNE: ignoring PX from peer {:?} with insufficient score \
-                        [score ={} topic = {}]",
+                             [score ={} topic = {}]",
                             peer_id, score, topic_hash
                         );
                         continue;
@@ -1351,7 +1353,9 @@ where
     fn px_connect(&mut self, mut px: Vec<PeerInfo>) {
         let n = self.config.prune_peers();
         // Ignore peerInfo with no ID
-        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a signed peer record?
+        //
+        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
+        // signed peer record?
         px = px.into_iter().filter(|p| p.peer_id.is_some()).collect();
         if px.len() > n {
             // only use at most prune_peers many random peers
@@ -1361,8 +1365,8 @@ where
         }
 
         for p in px {
-            // TODO: Once signed records are spec'd: extract signed peer record if given and handle it, see
-            // https://github.com/libp2p/specs/pull/217
+            // TODO: Once signed records are spec'd: extract signed peer record if given and handle
+            // it, see https://github.com/libp2p/specs/pull/217
             if let Some(peer_id) = p.peer_id {
                 // mark as px peer
                 self.px_peers.insert(peer_id.clone());
@@ -1453,7 +1457,8 @@ where
         true
     }
 
-    /// Handles a newly received GossipsubMessage.
+    /// Handles a newly received [`RawGossipsubMessage`].
+    ///
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(&mut self, msg: RawGossipsubMessage, propagation_source: &PeerId) {
         let fast_message_id = self.config.fast_message_id(&msg);
@@ -1477,7 +1482,7 @@ where
 
         // Add the message to the duplicate caches and memcache.
         if let Some(fast_message_id) = fast_message_id {
-            //add id to cache
+            // add id to cache
             self.fast_messsage_id_cache
                 .entry(fast_message_id)
                 .or_insert_with(|| msg.message_id().clone());
@@ -1497,8 +1502,8 @@ where
             msg.message_id()
         );
 
-        // Tells score that message arrived (but is maybe not fully validated yet)
-        // Consider message as delivered for gossip promises
+        // Tells score that message arrived (but is maybe not fully validated yet).
+        // Consider message as delivered for gossip promises.
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             peer_score.validate_message(propagation_source, &msg);
             gossip_promises.message_delivered(msg.message_id());
@@ -1510,13 +1515,12 @@ where
         // Dispatch the message to the user if we are subscribed to any of the topics
         if self.mesh.contains_key(&msg.topic) {
             debug!("Sending received message to user");
-            self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                GenericGossipsubEvent::Message {
+            self.events
+                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Message {
                     propagation_source: propagation_source.clone(),
                     message_id: msg.message_id().clone(),
                     message: msg.clone(),
-                },
-            ));
+                }));
         } else {
             debug!(
                 "Received message on a topic we are not subscribed to: {:?}",
@@ -1645,7 +1649,7 @@ where
                     }
                     // generates a subscription event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        GenericGossipsubEvent::Subscribed {
+                        Event::Subscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
                         },
@@ -1665,7 +1669,7 @@ where
                         .push((propagation_source.clone(), subscription.topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        GenericGossipsubEvent::Unsubscribed {
+                        Event::Unsubscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
                         },
@@ -1731,8 +1735,8 @@ where
         self.backoffs.heartbeat();
 
         // clean up ihave counters
-        self.count_iasked.clear();
-        self.count_peer_have.clear();
+        self.count_sent_iwant.clear();
+        self.count_received_ihave.clear();
 
         // apply iwant penalties
         self.apply_iwant_penalties();
@@ -1770,7 +1774,7 @@ where
                     if score(p) < 0.0 {
                         debug!(
                             "HEARTBEAT: Prune peer {:?} with negative score [score = {}, topic = \
-                    {}]",
+                             {}]",
                             p,
                             score(p),
                             topic_hash
@@ -2092,7 +2096,7 @@ where
     fn emit_gossip(&mut self) {
         let mut rng = thread_rng();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
-            let mut message_ids = self.mcache.get_gossip_ids(&topic_hash);
+            let mut message_ids = self.mcache.get_gossip_message_ids(&topic_hash);
             if message_ids.is_empty() {
                 return;
             }
@@ -2240,6 +2244,7 @@ where
     }
 
     /// Helper function which forwards a message to mesh\[topic\] peers.
+    ///
     /// Returns true if at least one peer was messaged.
     fn forward_msg(
         &mut self,
@@ -2303,7 +2308,7 @@ where
         }
     }
 
-    /// Constructs a `GenericGossipsubMessage` performing message signing if required.
+    /// Constructs a [`GenericGossipsubMessage`] performing message signing if required.
     pub(crate) fn build_message(
         &self,
         topic: TopicHash,
@@ -2629,13 +2634,6 @@ where
     }
 }
 
-fn get_remote_addr(endpoint: &ConnectedPoint) -> &Multiaddr {
-    match endpoint {
-        ConnectedPoint::Dialer { address } => address,
-        ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
-    }
-}
-
 fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
     addr.iter().find_map(|p| match p {
         Ip4(addr) => Some(IpAddr::V4(addr)),
@@ -2650,7 +2648,7 @@ where
     F: Send + 'static + TopicSubscriptionFilter,
 {
     type ProtocolsHandler = GossipsubHandler;
-    type OutEvent = GenericGossipsubEvent<T>;
+    type OutEvent = Event<T>;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         GossipsubHandler::new(
@@ -2804,7 +2802,7 @@ where
 
         // Add the IP to the peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
-            if let Some(ip) = get_ip_addr(get_remote_addr(endpoint)) {
+            if let Some(ip) = get_ip_addr(endpoint.get_remote_address()) {
                 peer_score.add_ip(&peer_id, ip);
             } else {
                 trace!(
@@ -2824,7 +2822,7 @@ where
     ) {
         // Remove IP from peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
-            if let Some(ip) = get_ip_addr(get_remote_addr(endpoint)) {
+            if let Some(ip) = get_ip_addr(endpoint.get_remote_address()) {
                 peer_score.remove_ip(peer, &ip);
             } else {
                 trace!(
@@ -2845,7 +2843,7 @@ where
     ) {
         // Exchange IP in peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
-            if let Some(ip) = get_ip_addr(get_remote_addr(endpoint_old)) {
+            if let Some(ip) = get_ip_addr(endpoint_old.get_remote_address()) {
                 peer_score.remove_ip(peer, &ip);
             } else {
                 trace!(
@@ -2854,7 +2852,7 @@ where
                     endpoint_old
                 )
             }
-            if let Some(ip) = get_ip_addr(get_remote_addr(endpoint_new)) {
+            if let Some(ip) = get_ip_addr(endpoint_new.get_remote_address()) {
                 peer_score.add_ip(&peer, ip);
             } else {
                 trace!(
@@ -3170,7 +3168,7 @@ mod local_test {
     /// Tests RPC message fragmentation
     fn test_message_fragmentation_deterministic() {
         let max_transmit_size = 500;
-        let config = crate::GenericGossipsubConfigBuilder::new()
+        let config = crate::ConfigBuilder::default()
             .max_transmit_size(max_transmit_size)
             .validation_mode(ValidationMode::Permissive)
             .build()
@@ -3218,7 +3216,7 @@ mod local_test {
     fn test_message_fragmentation() {
         fn prop(rpc: GossipsubRpc) {
             let max_transmit_size = 500;
-            let config = crate::GenericGossipsubConfigBuilder::new()
+            let config = crate::ConfigBuilder::default()
                 .max_transmit_size(max_transmit_size)
                 .validation_mode(ValidationMode::Permissive)
                 .build()

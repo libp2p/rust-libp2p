@@ -30,8 +30,7 @@ use std::{
 
 use futures::StreamExt;
 use libp2p_core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade,
-    Multiaddr, Transport,
+    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
 use libp2p_gossipsub::{
     Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
@@ -158,7 +157,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let config = GossipsubConfigBuilder::new()
+    let config = GossipsubConfigBuilder::default()
         .heartbeat_initial_delay(Duration::from_millis(100))
         .heartbeat_interval(Duration::from_millis(200))
         .history_length(10)

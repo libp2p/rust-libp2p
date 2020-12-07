@@ -43,7 +43,7 @@ use unsigned_varint::codec;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
-/// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
+/// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
 #[derive(Clone)]
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
@@ -55,7 +55,8 @@ pub struct ProtocolConfig {
 }
 
 impl ProtocolConfig {
-    /// Builds a new `ProtocolConfig`.
+    /// Builds a new [`ProtocolConfig`].
+    ///
     /// Sets the maximum gossip transmission size.
     pub fn new(
         id_prefix: Cow<'static, str>,
