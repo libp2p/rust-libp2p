@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::PublicKey;
-use thiserror::Error;
-use multihash::{Code, Multihash, MultihashDigest};
+use multihash::{Code, Error, Multihash, MultihashDigest};
 use rand::Rng;
 use std::{convert::TryFrom, fmt, str::FromStr};
+use thiserror::Error;
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -66,10 +66,10 @@ impl PeerId {
         PeerId { multihash }
     }
 
-    /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
-    /// back the data as an error.
-    pub fn from_bytes(data: &[u8]) -> Result<PeerId, ()> {
-        Ok(PeerId::from_multihash(Multihash::from_bytes(&data).map_err(|_| ())?).map_err(|_| ())?)
+    /// Parses a `PeerId` from bytes.
+    pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
+        Ok(PeerId::from_multihash(Multihash::from_bytes(&data)?)
+            .map_err(|mh| Error::UnsupportedCode(mh.code()))?)
     }
 
     /// Tries to turn a `Multihash` into a `PeerId`.
@@ -79,7 +79,7 @@ impl PeerId {
     /// peer ID, it is returned as an `Err`.
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
         match Code::try_from(multihash.code()) {
-            Ok(Code::Sha2_256) => Ok(PeerId { multihash: multihash }),
+            Ok(Code::Sha2_256) => Ok(PeerId { multihash }),
             Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH
                 => Ok(PeerId { multihash }),
             _ => Err(multihash)
@@ -98,10 +98,6 @@ impl PeerId {
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
-    ///
-    /// **NOTE:** This byte representation is not necessarily consistent with
-    /// equality of peer IDs. That is, two peer IDs may be considered equal
-    /// while having a different byte representation as per `as_bytes`.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.multihash.to_bytes()
     }
