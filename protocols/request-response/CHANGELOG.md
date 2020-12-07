@@ -1,4 +1,4 @@
-# 0.7.0 [2020-12-07]
+# 0.7.0 [unreleased]
 
 - Refine emitted events for inbound requests, introducing
   the `ResponseSent` event and the `ResponseOmission`
