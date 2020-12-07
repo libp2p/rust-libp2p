@@ -240,7 +240,7 @@ fn query_iter() {
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
         let search_target_key = kbucket::Key::from(search_target);
-        let qid = swarms[0].get_closest_peers(search_target.to_bytes());
+        let qid = swarms[0].get_closest_peers(search_target);
 
         match swarms[0].query(&qid) {
             Some(q) => match q.info() {
@@ -310,7 +310,7 @@ fn unresponsive_not_returned_direct() {
 
     // Ask first to search a random value.
     let search_target = PeerId::random();
-    swarms[0].get_closest_peers(search_target.to_bytes());
+    swarms[0].get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -360,7 +360,7 @@ fn unresponsive_not_returned_indirect() {
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
-    swarms[1].get_closest_peers(search_target.to_bytes());
+    swarms[1].get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -885,7 +885,7 @@ fn exceed_jobs_max_queries() {
     let (_addr, mut swarm) = build_node();
     let num = JOBS_MAX_QUERIES + 1;
     for _ in 0 .. num {
-        swarm.get_closest_peers(PeerId::random().to_bytes());
+        swarm.get_closest_peers(PeerId::random());
     }
 
     assert_eq!(swarm.queries.size(), num);
@@ -1072,7 +1072,7 @@ fn manual_bucket_inserts() {
     // that none of them was inserted into a bucket.
     let mut routable = Vec::new();
     // Start an iterative query from the first peer.
-    swarms[0].1.get_closest_peers(PeerId::random().to_bytes());
+    swarms[0].1.get_closest_peers(PeerId::random());
     block_on(poll_fn(move |ctx| {
         for (_, swarm) in swarms.iter_mut() {
             loop {
@@ -1084,7 +1084,7 @@ fn manual_bucket_inserts() {
                         routable.push(peer);
                         if expected.is_empty() {
                             for peer in routable.iter() {
-                                let bucket = swarm.kbucket(peer.to_bytes()).unwrap();
+                                let bucket = swarm.kbucket(*peer).unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }
                             return Poll::Ready(())

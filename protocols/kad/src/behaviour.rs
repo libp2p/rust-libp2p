@@ -47,7 +47,7 @@ use libp2p_swarm::{
 };
 use log::{info, debug, warn};
 use smallvec::SmallVec;
-use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
+use std::{borrow::Cow, error, iter, time::Duration};
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -551,9 +551,9 @@ where
     pub fn kbucket<K>(&mut self, key: K)
         -> Option<kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Addresses>>
     where
-        K: Borrow<[u8]> + Clone
+        K: Into<kbucket::Key<K>> + Clone
     {
-        self.kbuckets.bucket(&kbucket::Key::new(key))
+        self.kbuckets.bucket(&key.into())
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -562,10 +562,10 @@ where
     /// [`KademliaEvent::QueryResult{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
-        K: Borrow<[u8]> + Clone
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone
     {
-        let info = QueryInfo::GetClosestPeers { key: key.borrow().to_vec() };
-        let target = kbucket::Key::new(key);
+        let info = QueryInfo::GetClosestPeers { key: key.clone().into() };
+        let target: kbucket::Key<K> = key.into();
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
