@@ -119,22 +119,29 @@ pub enum RequestResponseHandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec
 {
-    /// An inbound request.
+    /// A request has been received.
     Request {
         request_id: RequestId,
         request: TCodec::Request,
         sender: oneshot::Sender<TCodec::Response>
     },
-    /// An inbound response.
+    /// A response has been received.
     Response {
         request_id: RequestId,
         response: TCodec::Response
     },
-    /// An outbound upgrade (i.e. request) timed out.
+    /// A response to an inbound request has been sent.
+    ResponseSent(RequestId),
+    /// A response to an inbound request was omitted as a result
+    /// of dropping the response `sender` of an inbound `Request`.
+    ResponseOmission(RequestId),
+    /// An outbound request timed out while sending the request
+    /// or waiting for the response.
     OutboundTimeout(RequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
     OutboundUnsupportedProtocols(RequestId),
-    /// An inbound request timed out.
+    /// An inbound request timed out while waiting for the request
+    /// or sending the response.
     InboundTimeout(RequestId),
     /// An inbound request failed to negotiate a mutually supported protocol.
     InboundUnsupportedProtocols(RequestId),
@@ -187,9 +194,16 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        (): (),
-        _: RequestId
+        sent: bool,
+        request_id: RequestId
     ) {
+        if sent {
+            self.pending_events.push_back(
+                RequestResponseHandlerEvent::ResponseSent(request_id))
+        } else {
+            self.pending_events.push_back(
+                RequestResponseHandlerEvent::ResponseOmission(request_id))
+        }
     }
 
     fn inject_fully_negotiated_outbound(

@@ -93,7 +93,7 @@ impl<TCodec> InboundUpgrade<NegotiatedSubstream> for ResponseProtocol<TCodec>
 where
     TCodec: RequestResponseCodec + Send + 'static,
 {
-    type Output = ();
+    type Output = bool;
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -105,10 +105,12 @@ where
                 if let Ok(response) = self.response_receiver.await {
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
+                } else {
+                    return Ok(false)
                 }
             }
             io.close().await?;
-            Ok(())
+            Ok(true)
         }.boxed()
     }
 }

@@ -842,7 +842,7 @@ where
     I: Iterator<Item = ConnectionId>
 {
     /// Obtains the next connection, if any.
-    pub fn next<'b>(&'b mut self) -> Option<EstablishedConnection<'b, TInEvent>>
+    pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>>
     {
         while let Some(id) = self.ids.next() {
             if self.pool.manager.is_established(&id) { // (*)

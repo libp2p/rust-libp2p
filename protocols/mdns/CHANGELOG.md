@@ -1,3 +1,16 @@
+# 0.26.0 [unreleased]
+
+- Detect interface changes and join the MDNS multicast
+  group on all interfaces as they become available.
+  [PR 1830](https://github.com/libp2p/rust-libp2p/pull/1830).
+
+- Replace the use of macros for abstracting over `tokio`
+  and `async-std` with the use of `async-io`. As a result
+  there may now be an additional reactor thread running
+  called `async-io` when using `tokio`, with the futures
+  still being polled by the `tokio` runtime.
+  [PR 1830](https://github.com/libp2p/rust-libp2p/pull/1830).
+
 # 0.25.0 [2020-11-25]
 
 - Update `libp2p-swarm` and `libp2p-core`.
