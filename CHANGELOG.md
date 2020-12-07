@@ -27,6 +27,8 @@
 
 - Update to `libp2p-mdns-0.26`.
 
+- Update `libp2p-websocket`.
+
 # Version 0.31.2 [2020-12-02]
 
 - Bump minimum `libp2p-core` patch version.
