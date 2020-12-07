@@ -25,6 +25,7 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
+use crate::Version;
 use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
 
 use bytes::{Bytes, BytesMut, BufMut};
@@ -35,85 +36,27 @@ use unsigned_varint as uvi;
 /// The maximum number of supported protocols that can be processed.
 const MAX_PROTOCOLS: usize = 1000;
 
-/// The maximum length (in bytes) of a protocol name.
-///
-/// This limit is necessary in order to be able to unambiguously parse
-/// response messages without knowledge of the corresponding request.
-/// 140 comes about from 3 * 47 = 141, where 47 is the ascii/utf8
-/// encoding of the `/` character and an encoded protocol name is
-/// at least 3 bytes long (uvi-length followed by `/` and `\n`).
-/// Hence a protocol list response message with 47 protocols is at least
-/// 141 bytes long and thus such a response cannot be mistaken for a
-/// single protocol response. See `Message::decode`.
-const MAX_PROTOCOL_LEN: usize = 140;
-
 /// The encoded form of a multistream-select 1.0.0 header message.
 const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
-/// The encoded form of a multistream-select 1.0.0 header message.
-const MSG_MULTISTREAM_1_0_LAZY: &[u8] = b"/multistream-lazy/1\n";
 /// The encoded form of a multistream-select 'na' message.
 const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
 
-/// Supported multistream-select protocol versions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Version {
-    /// Version 1 of the multistream-select protocol. See [1] and [2].
-    ///
-    /// [1]: https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
-    /// [2]: https://github.com/multiformats/multistream-select
+/// The multistream-select header lines preceeding negotiation.
+///
+/// Every [`Version`] has a corresponding header line.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum HeaderLine {
+    /// The `/multistream/1.0.0` header line.
     V1,
-    /// A lazy variant of version 1 that is identical on the wire but delays
-    /// sending of protocol negotiation data as much as possible.
-    ///
-    /// Delaying the sending of protocol negotiation data can result in
-    /// significantly fewer network roundtrips used for the negotiation,
-    /// up to 0-RTT negotiation.
-    ///
-    /// 0-RTT negotiation is achieved if the dialer supports only a single
-    /// application protocol. In that case the dialer immedidately settles
-    /// on that protocol, buffering the negotiation messages to be sent
-    /// with the first round of application protocol data (or an attempt
-    /// is made to read from the `Negotiated` I/O stream).
-    ///
-    /// A listener receiving a `V1Lazy` header will similarly delay sending
-    /// of the protocol confirmation.  Though typically the listener will need
-    /// to read the request data before sending its response, thus triggering
-    /// sending of the protocol confirmation, which, in absence of additional
-    /// buffering on lower layers will result in at least two response frames
-    /// to be sent.
-    ///
-    /// `V1Lazy` is specific to `rust-libp2p`: While the wire protocol
-    /// is identical to `V1`, delayed sending of protocol negotiation frames
-    /// is only safe under the following assumptions:
-    ///
-    ///   1. The dialer is assumed to always send the first multistream-select
-    ///      protocol message immediately after the multistream header, without
-    ///      first waiting for confirmation of that header. Since the listener
-    ///      delays sending the protocol confirmation, a deadlock situation may
-    ///      otherwise occurs that is only resolved by a timeout. This assumption
-    ///      is trivially satisfied if both peers support and use `V1Lazy`.
-    ///
-    ///   2. When nesting multiple protocol negotiations, the listener is either
-    ///      known to support all of the dialer's optimistically chosen protocols
-    ///      or there is no intermediate protocol without a payload and none of
-    ///      the protocol payloads has the potential for being mistaken for a
-    ///      multistream-select protocol message. This avoids rare edge-cases whereby
-    ///      the listener may not recognize upgrade boundaries and erroneously
-    ///      process a request despite not supporting one of the intermediate
-    ///      protocols that the dialer committed to. See [1] and [2].
-    ///
-    /// [1]: https://github.com/multiformats/go-multistream/issues/20
-    /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
-    V1Lazy,
-    // Draft: https://github.com/libp2p/specs/pull/95
-    // V2,
 }
 
-impl Default for Version {
-    fn default() -> Self {
-        Version::V1
+impl From<Version> for HeaderLine {
+    fn from(v: Version) -> HeaderLine {
+        match v {
+            Version::V1 | Version::V1Lazy => HeaderLine::V1,
+        }
     }
 }
 
@@ -131,7 +74,7 @@ impl TryFrom<Bytes> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-        if !value.as_ref().starts_with(b"/") || value.len() > MAX_PROTOCOL_LEN {
+        if !value.as_ref().starts_with(b"/") {
             return Err(ProtocolError::InvalidProtocol)
         }
         Ok(Protocol(value))
@@ -160,7 +103,7 @@ impl fmt::Display for Protocol {
 pub enum Message {
     /// A header message identifies the multistream-select protocol
     /// that the sender wishes to speak.
-    Header(Version),
+    Header(HeaderLine),
     /// A protocol message identifies a protocol request or acknowledgement.
     Protocol(Protocol),
     /// A message through which a peer requests the complete list of
@@ -176,21 +119,16 @@ impl Message {
     /// Encodes a `Message` into its byte representation.
     pub fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
         match self {
-            Message::Header(Version::V1) => {
+            Message::Header(HeaderLine::V1) => {
                 dest.reserve(MSG_MULTISTREAM_1_0.len());
                 dest.put(MSG_MULTISTREAM_1_0);
-                Ok(())
-            }
-            Message::Header(Version::V1Lazy) => {
-                dest.reserve(MSG_MULTISTREAM_1_0_LAZY.len());
-                dest.put(MSG_MULTISTREAM_1_0_LAZY);
                 Ok(())
             }
             Message::Protocol(p) => {
                 let len = p.0.as_ref().len() + 1; // + 1 for \n
                 dest.reserve(len);
                 dest.put(p.0.as_ref());
-                dest.put(&b"\n"[..]);
+                dest.put_u8(b'\n');
                 Ok(())
             }
             Message::ListProtocols => {
@@ -200,14 +138,15 @@ impl Message {
             }
             Message::Protocols(ps) => {
                 let mut buf = uvi::encode::usize_buffer();
-                let mut out_msg = Vec::from(uvi::encode::usize(ps.len(), &mut buf));
+                let mut encoded = Vec::with_capacity(ps.len());
                 for p in ps {
-                    out_msg.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
-                    out_msg.extend_from_slice(p.0.as_ref());
-                    out_msg.push(b'\n')
+                    encoded.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
+                    encoded.extend_from_slice(p.0.as_ref());
+                    encoded.push(b'\n')
                 }
-                dest.reserve(out_msg.len());
-                dest.put(out_msg.as_ref());
+                encoded.push(b'\n');
+                dest.reserve(encoded.len());
+                dest.put(encoded.as_ref());
                 Ok(())
             }
             Message::NotAvailable => {
@@ -220,17 +159,8 @@ impl Message {
 
     /// Decodes a `Message` from its byte representation.
     pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
-        if msg == MSG_MULTISTREAM_1_0_LAZY {
-            return Ok(Message::Header(Version::V1Lazy))
-        }
-
         if msg == MSG_MULTISTREAM_1_0 {
-            return Ok(Message::Header(Version::V1))
-        }
-
-        if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') && msg.len() <= MAX_PROTOCOL_LEN {
-            let p = Protocol::try_from(msg.split_to(msg.len() - 1))?;
-            return Ok(Message::Protocol(p));
+            return Ok(Message::Header(HeaderLine::V1))
         }
 
         if msg == MSG_PROTOCOL_NA {
@@ -241,24 +171,43 @@ impl Message {
             return Ok(Message::ListProtocols)
         }
 
-        // At this point, it must be a varint number of protocols, i.e.
-        // a `Protocols` message.
-        let (num_protocols, mut remaining) = uvi::decode::usize(&msg)?;
-        if num_protocols > MAX_PROTOCOLS {
-            return Err(ProtocolError::TooManyProtocols)
-        }
-        let mut protocols = Vec::with_capacity(num_protocols);
-        for _ in 0 .. num_protocols {
-            let (len, rem) = uvi::decode::usize(remaining)?;
-            if len == 0 || len > rem.len() || rem[len - 1] != b'\n' {
-                return Err(ProtocolError::InvalidMessage)
-            }
-            let p = Protocol::try_from(Bytes::copy_from_slice(&rem[.. len - 1]))?;
-            protocols.push(p);
-            remaining = &rem[len ..]
+        // If it starts with a `/`, ends with a line feed without any
+        // other line feeds in-between, it must be a protocol name.
+        if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') &&
+            !msg[.. msg.len() - 1].contains(&b'\n')
+        {
+            let p = Protocol::try_from(msg.split_to(msg.len() - 1))?;
+            return Ok(Message::Protocol(p));
         }
 
-        return Ok(Message::Protocols(protocols));
+        // At this point, it must be an `ls` response, i.e. one or more
+        // length-prefixed, newline-delimited protocol names.
+        let mut protocols = Vec::new();
+        let mut remaining: &[u8] = &msg;
+        loop {
+            // A well-formed message must be terminated with a newline.
+            if remaining == [b'\n'] {
+                break
+            } else if protocols.len() == MAX_PROTOCOLS {
+                return Err(ProtocolError::TooManyProtocols)
+            }
+
+            // Decode the length of the next protocol name and check that
+            // it ends with a line feed.
+            let (len, tail) = uvi::decode::usize(remaining)?;
+            if len == 0 || len > tail.len() || tail[len - 1] != b'\n' {
+                return Err(ProtocolError::InvalidMessage)
+            }
+
+            // Parse the protocol name.
+            let p = Protocol::try_from(Bytes::copy_from_slice(&tail[.. len - 1]))?;
+            protocols.push(p);
+
+            // Skip ahead to the next protocol.
+            remaining = &tail[len ..];
+        }
+
+        Ok(Message::Protocols(protocols))
     }
 }
 
@@ -339,7 +288,7 @@ where
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Ready(Some(Ok(m))) => Poll::Ready(Some(Ok(m))),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(From::from(err)))),
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
         }
     }
 }
@@ -447,7 +396,7 @@ impl Into<io::Error> for ProtocolError {
         if let ProtocolError::IoError(e) = self {
             return e
         }
-        return io::ErrorKind::InvalidData.into()
+        io::ErrorKind::InvalidData.into()
     }
 }
 
@@ -503,7 +452,7 @@ mod tests {
     impl Arbitrary for Message {
         fn arbitrary<G: Gen>(g: &mut G) -> Message {
             match g.gen_range(0, 5) {
-                0 => Message::Header(Version::V1),
+                0 => Message::Header(HeaderLine::V1),
                 1 => Message::NotAvailable,
                 2 => Message::ListProtocols,
                 3 => Message::Protocol(Protocol::arbitrary(g)),
@@ -526,4 +475,3 @@ mod tests {
         quickcheck(prop as fn(_))
     }
 }
-

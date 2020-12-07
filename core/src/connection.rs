@@ -32,6 +32,7 @@ pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
 pub use manager::ConnectionId;
 pub use substream::{Substream, SubstreamEndpoint, Close};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
+pub use pool::{ConnectionLimits, ConnectionCounters};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
@@ -62,20 +63,12 @@ impl std::ops::Not for Endpoint {
 impl Endpoint {
     /// Is this endpoint a dialer?
     pub fn is_dialer(self) -> bool {
-        if let Endpoint::Dialer = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Endpoint::Dialer)
     }
 
     /// Is this endpoint a listener?
     pub fn is_listener(self) -> bool {
-        if let Endpoint::Listener = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Endpoint::Listener)
     }
 }
 
@@ -326,9 +319,9 @@ impl<'a> OutgoingInfo<'a> {
 #[derive(Debug, Clone)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
-    pub limit: usize,
+    pub limit: u32,
     /// The current number of connections.
-    pub current: usize,
+    pub current: u32,
 }
 
 impl fmt::Display for ConnectionLimit {

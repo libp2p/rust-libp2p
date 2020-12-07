@@ -22,7 +22,7 @@
 //! in a multistream-select protocol negotiation.
 
 use crate::{Negotiated, NegotiationError};
-use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
+use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, HeaderLine};
 
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -57,7 +57,8 @@ where
         protocols: SmallVec::from_iter(protocols),
         state: State::RecvHeader {
             io: MessageIO::new(inner)
-        }
+        },
+        last_sent_na: false,
     }
 }
 
@@ -72,7 +73,14 @@ where
     // TODO: It would be nice if eventually N = Protocol, which has a
     // few more implications on the API.
     protocols: SmallVec<[(N, Protocol); 8]>,
-    state: State<R, N>
+    state: State<R, N>,
+    /// Whether the last message sent was a protocol rejection (i.e. `na\n`).
+    ///
+    /// If the listener reads garbage or EOF after such a rejection,
+    /// the dialer is likely using `V1Lazy` and negotiation must be
+    /// considered failed, but not with a protocol violation or I/O
+    /// error.
+    last_sent_na: bool,
 }
 
 enum State<R, N>
@@ -81,7 +89,7 @@ where
     N: AsRef<[u8]>
 {
     RecvHeader { io: MessageIO<R> },
-    SendHeader { io: MessageIO<R>, version: Version },
+    SendHeader { io: MessageIO<R> },
     RecvMessage { io: MessageIO<R> },
     SendMessage {
         io: MessageIO<R>,
@@ -111,8 +119,10 @@ where
             match mem::replace(this.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(Message::Header(version)))) => {
-                            *this.state = State::SendHeader { io, version }
+                        Poll::Ready(Some(Ok(Message::Header(h)))) => {
+                            match h {
+                                HeaderLine::V1 => *this.state = State::SendHeader { io }
+                            }
                         }
                         Poll::Ready(Some(Ok(_))) => {
                             return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
@@ -129,24 +139,22 @@ where
                     }
                 }
 
-                State::SendHeader { mut io, version } => {
+                State::SendHeader { mut io } => {
                     match Pin::new(&mut io).poll_ready(cx) {
                         Poll::Pending => {
-                            *this.state = State::SendHeader { io, version };
+                            *this.state = State::SendHeader { io };
                             return Poll::Pending
                         },
                         Poll::Ready(Ok(())) => {},
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(version)) {
+                    let msg = Message::Header(HeaderLine::V1);
+                    if let Err(err) = Pin::new(&mut io).start_send(msg) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
-                    *this.state = match version {
-                        Version::V1 => State::Flush { io, protocol: None },
-                        Version::V1Lazy => State::RecvMessage { io },
-                    }
+                    *this.state = State::Flush { io, protocol: None };
                 }
 
                 State::RecvMessage { mut io } => {
@@ -166,7 +174,30 @@ where
                             *this.state = State::RecvMessage { io };
                             return Poll::Pending;
                         }
-                        Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
+                        Poll::Ready(Some(Err(err))) => {
+                            if *this.last_sent_na {
+                                // When we read garbage or EOF after having already rejected a
+                                // protocol, the dialer is most likely using `V1Lazy` and has
+                                // optimistically settled on this protocol, so this is really a
+                                // failed negotiation, not a protocol violation. In this case
+                                // the dialer also raises `NegotiationError::Failed` when finally
+                                // reading the `N/A` response.
+                                if let ProtocolError::InvalidMessage = &err {
+                                    log::trace!("Listener: Negotiation failed with invalid \
+                                        message after protocol rejection.");
+                                    return Poll::Ready(Err(NegotiationError::Failed))
+                                }
+                                if let ProtocolError::IoError(e) = &err {
+                                    if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                                        log::trace!("Listener: Negotiation failed with EOF \
+                                            after protocol rejection.");
+                                        return Poll::Ready(Err(NegotiationError::Failed))
+                                    }
+                                }
+                            }
+
+                            return Poll::Ready(Err(From::from(err)))
+                        }
                     };
 
                     match msg {
@@ -207,6 +238,12 @@ where
                         },
                         Poll::Ready(Ok(())) => {},
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
+                    }
+
+                    if let Message::NotAvailable = &message  {
+                        *this.last_sent_na = true;
+                    } else {
+                        *this.last_sent_na = false;
                     }
 
                     if let Err(err) = Pin::new(&mut io).start_send(message) {

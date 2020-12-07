@@ -336,10 +336,7 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
 
     /// Checks whether an established connection with the given ID is currently managed.
     pub fn is_established(&self, id: &ConnectionId) -> bool {
-        match self.tasks.get(&id.0) {
-            Some(TaskInfo { state: TaskState::Established(..), .. }) => true,
-            _ => false
-        }
+        matches!(self.tasks.get(&id.0), Some(TaskInfo { state: TaskState::Established(..), .. }))
     }
 
     /// Polls the manager for events relating to the managed connections.
@@ -528,4 +525,3 @@ impl<'a, I> PendingEntry<'a, I> {
         self.task.remove();
     }
 }
-

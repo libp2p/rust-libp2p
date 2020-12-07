@@ -30,6 +30,7 @@ use libp2p_core::{
     upgrade::{ReadOneError, UpgradeError}
 };
 use libp2p_swarm::{
+    AddressScore,
     NegotiatedSubstream,
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -47,6 +48,10 @@ use std::{
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
+///
+/// All external addresses of the local node supposedly observed by remotes
+/// are reported via [`NetworkBehaviourAction::ReportObservedAddr`] with a
+/// [score](AddressScore) of `1`.
 pub struct Identify {
     /// Protocol version to send back to remotes.
     protocol_version: String,
@@ -143,6 +148,7 @@ impl NetworkBehaviour for Identify {
                 self.events.push_back(
                     NetworkBehaviourAction::ReportObservedAddr {
                         address: remote.observed_addr,
+                        score: AddressScore::Finite(1),
                     });
             }
             IdentifyHandlerEvent::Identify(sender) => {
@@ -187,7 +193,7 @@ impl NetworkBehaviour for Identify {
                 .map(|p| String::from_utf8_lossy(&p).to_string())
                 .collect();
 
-            let mut listen_addrs: Vec<_> = params.external_addresses().collect();
+            let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
             listen_addrs.extend(params.listened_addresses());
 
             let mut sending = 0;

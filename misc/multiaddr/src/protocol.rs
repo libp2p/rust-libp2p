@@ -1,6 +1,5 @@
 
 use arrayref::array_ref;
-use bs58;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
 use crate::{Result, Error};
 use data_encoding::BASE32;

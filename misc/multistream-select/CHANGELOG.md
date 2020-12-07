@@ -1,3 +1,25 @@
+# 0.9.1 [2020-12-02]
+
+- Ensure uniform outcomes for failed negotiations with both
+  `V1` and `V1Lazy`.
+  [PR 1871](https://github.com/libp2p/rust-libp2p/pull/1871)
+
+# 0.9.0 [2020-11-25]
+
+- Make the `V1Lazy` upgrade strategy more interoperable with `V1`. Specifically,
+  the listener now behaves identically with `V1` and `V1Lazy`. Furthermore, the
+  multistream-select protocol header is now also identical, making `V1` and `V1Lazy`
+  indistinguishable on the wire. The remaining central effect of `V1Lazy` is that the dialer,
+  if it only supports a single protocol in a negotiation, optimistically settles on that
+  protocol without immediately flushing the negotiation data (i.e. protocol proposal)
+  and without waiting for the corresponding confirmation before it is able to start
+  sending application data, expecting the used protocol to be confirmed with
+  the response.
+
+- Fix the encoding and decoding of `ls` responses to
+  be spec-compliant and interoperable with other implementations.
+  For a clean upgrade, `0.8.4` must already be deployed.
+
 # 0.8.5 [2020-11-09]
 
 - During negotiation do not interpret EOF error as an IO error, but instead as a

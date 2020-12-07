@@ -21,7 +21,7 @@ rw-stream-sink = "0.2.0"
 soketto = { version = "0.4.1", features = ["deflate"] }
 url = "2.1"
 webpki = "0.21"
-webpki-roots = "0.20"
+webpki-roots = "0.21"
 
 [dev-dependencies]
 libp2p-tcp = { path = "../tcp", features = ["async-std"] }
