@@ -76,13 +76,13 @@ where
     /// Pending events to report in `Throttled::poll`.
     events: VecDeque<Event<C::Request, C::Response, Message<C::Response>>>,
     /// The current credit ID.
-    credit_id: u64
+    next_grant_id: u64
 }
 
 /// Information about a credit grant that is sent to remote peers.
 #[derive(Clone, Copy, Debug)]
 struct Grant {
-    /// A credit ID. Used to deduplicate retransmitted credit messages.
+    /// The grant ID. Used to deduplicate retransmitted credit grants.
     id: GrantId,
     /// The ID of the outbound credit grant message.
     request: RequestId,
@@ -199,6 +199,9 @@ impl PeerInfo {
         self.send_budget.remaining = 1;
         self.recv_budget.sent = HashSet::new();
         self.recv_budget.remaining = max(1, self.recv_budget.remaining);
+        // Since we potentially reset the remaining receive budget,
+        // we forget about the potentially still unacknowledged last grant.
+        self.recv_budget.grant = None;
         self
     }
 }
@@ -229,7 +232,7 @@ where
             default_limit: Limit::new(NonZeroU16::new(1).expect("1 > 0")),
             limit_overrides: HashMap::new(),
             events: VecDeque::new(),
-            credit_id: 0
+            next_grant_id: 0
         }
     }
 
@@ -349,8 +352,8 @@ where
     /// Send a credit grant to the given peer.
     fn send_credit(&mut self, p: &PeerId, credit: u16) {
         if let Some(info) = self.peer_info.get_mut(p) {
-            let cid = self.credit_id;
-            self.credit_id += 1;
+            let cid = self.next_grant_id;
+            self.next_grant_id += 1;
             let rid = self.behaviour.send_request(p, Message::credit(credit, cid));
             log::trace!("{:08x}: sending {} credit as grant {} to {}", self.id, credit, cid, p);
             let grant = Grant { id: cid, request: rid, credit };
