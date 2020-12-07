@@ -22,9 +22,7 @@
 //! `dns_parser` library.
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
-use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
-use rand;
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
 /// Maximum size of a DNS label as per RFC1035
@@ -226,7 +224,7 @@ fn segment_peer_id(peer_id: String) -> String {
 
 /// Combines and encodes a `PeerId` and service name for a DNS query.
 fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
-    // DNS-safe encoding for the Peer ID 
+    // DNS-safe encoding for the Peer ID
     let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.as_bytes());
     // ensure we don't have any labels over 63 bytes long
     let encoded_peer_id = segment_peer_id(raw_peer_id);
