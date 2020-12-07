@@ -25,9 +25,11 @@
 
 # Version 0.32.0 [unreleased]
 
+- Update `libp2p-request-response`.
+
 - Update to `libp2p-mdns-0.26`.
 
-- Update `libp2p-websocket`.
+- Update `libp2p-websocket` minimum patch version.
 
 # Version 0.31.2 [2020-12-02]
 
