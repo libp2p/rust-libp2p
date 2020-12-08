@@ -395,7 +395,7 @@ impl fmt::Display for MdnsResponseError {
                 write!(f, "TXT record invalid because it is too long")
             }
             MdnsResponseError::NonAsciiMultiaddr =>
-                write!( f, "A multiaddr contains non-ASCII characters when serialized"),
+                write!(f, "A multiaddr contains non-ASCII characters when serialized"),
         }
     }
 }
