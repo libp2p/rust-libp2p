@@ -119,38 +119,35 @@ pub fn build_query_response(
     let peer_id_bytes = encode_peer_id(&peer_id);
     debug_assert!(peer_id_bytes.len() <= 0xffff);
 
+    // The accumulated response packets.
     let mut packets = Vec::new();
 
-    'next_packet: loop {
-        let mut records = Vec::with_capacity(addresses.len() * MAX_TXT_RECORD_SIZE);
+    // The records accumulated per response packet.
+    let mut records = Vec::with_capacity(addresses.len() * MAX_TXT_RECORD_SIZE);
 
-        // Try to pack as many records into an MDNS response packet
-        // as are known to fit comfortably.
-        for _ in 0 .. MAX_RECORDS_PER_PACKET {
-            if let Some(addr) = addresses.next() {
-                let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
-                let mut txt_record = Vec::with_capacity(txt_to_send.len());
-                match append_txt_record(&mut txt_record, &peer_id_bytes, ttl, &txt_to_send) {
-                    Ok(()) => {
-                        records.push(txt_record);
-                        continue
-                    }
-                    Err(e) => {
-                        log::warn!("Excluding address {} from response: {:?}", addr, e);
-                    }
-                }
+    // Encode the addresses as TXT records, and multiple TXT records into a
+    // response packet.
+    while let Some(addr) = addresses.next() {
+        let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
+        let mut txt_record = Vec::with_capacity(txt_to_send.len());
+        match append_txt_record(&mut txt_record, &peer_id_bytes, ttl, &txt_to_send) {
+            Ok(()) => {
+                records.push(txt_record);
             }
-
-            // Push the final packet, if there are still unpacked records.
-            if !records.is_empty() {
-                packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+            Err(e) => {
+                log::warn!("Excluding address {} from response: {:?}", addr, e);
             }
-
-            break 'next_packet
         }
 
-        // Reached MAX_RECORDS_PER_PACKET. Finish up the current packet and
-        // begin a new one.
+        if records.len() == MAX_RECORDS_PER_PACKET {
+            packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+            records.clear();
+        }
+    }
+
+    // If there are still unpacked records, i.e. if the number of records is not
+    // a multiple of `MAX_RECORDS_PER_PACKET`, create a final packet.
+    if !records.is_empty() {
         packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
     }
 
