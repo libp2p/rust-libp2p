@@ -46,5 +46,23 @@ fn clone(c: &mut Criterion) {
     });
 }
 
-criterion_group!(peer_id, from_bytes, clone);
+fn sort_vec(c: &mut Criterion) {
+    let peer_ids: Vec<_> = (0..100)
+        .map(|_| {
+            identity::Keypair::generate_ed25519()
+                .public()
+                .into_peer_id()
+        })
+        .collect();
+
+    c.bench_function("sort_vec", |b| {
+        b.iter(|| {
+            let mut peer_ids = peer_ids.clone();
+            peer_ids.sort_unstable();
+            black_box(peer_ids);
+        })
+    });
+}
+
+criterion_group!(peer_id, from_bytes, clone, sort_vec);
 criterion_main!(peer_id);
