@@ -1,3 +1,7 @@
+# 0.26.1 [2020-12-07]
+
+- Update `rustls`.
+
 # 0.26.0 [2020-11-25]
 
 - Update dependencies.

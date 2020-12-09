@@ -73,8 +73,13 @@ fn ping_protocol() {
                 }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
-                    swarm1.send_response(channel, pong.clone());
+                    swarm1.send_response(channel, pong.clone()).unwrap();
                 },
+                SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent {
+                    peer, ..
+                }) => {
+                    assert_eq!(&peer, &peer2_id);
+                }
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
                 _ => {}
             }
@@ -153,8 +158,13 @@ fn ping_protocol_throttled() {
                 })) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
-                    swarm1.send_response(channel, pong.clone());
+                    swarm1.send_response(channel, pong.clone()).unwrap();
                 },
+                SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::ResponseSent {
+                    peer, ..
+                })) => {
+                    assert_eq!(&peer, &peer2_id);
+                }
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
                 _ => {}
             }

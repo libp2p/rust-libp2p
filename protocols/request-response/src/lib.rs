@@ -46,18 +46,6 @@
 //! For that purpose, [`RequestResponseCodec::Protocol`] is typically
 //! instantiated with a sum type.
 //!
-//! ## One-Way Protocols
-//!
-//! The implementation supports one-way protocols that do not
-//! have responses. In these cases the [`RequestResponseCodec::Response`] can
-//! be defined as `()` and [`RequestResponseCodec::read_response`] as well as
-//! [`RequestResponseCodec::write_response`] given the obvious implementations.
-//! Note that `RequestResponseMessage::Response` will still be emitted,
-//! immediately after the request has been sent, since `RequestResponseCodec::read_response`
-//! will not actually read anything from the given I/O stream.
-//! [`RequestResponse::send_response`] need not be called for one-way protocols,
-//! i.e. the [`ResponseChannel`] may just be dropped.
-//!
 //! ## Limited Protocol Support
 //!
 //! It is possible to only support inbound or outbound requests for
@@ -115,9 +103,11 @@ pub enum RequestResponseMessage<TRequest, TResponse, TChannelResponse = TRespons
         request_id: RequestId,
         /// The request message.
         request: TRequest,
-        /// The sender of the request who is awaiting a response.
+        /// The channel waiting for the response.
         ///
-        /// See [`RequestResponse::send_response`].
+        /// If this channel is dropped instead of being used to send a response
+        /// via [`RequestResponse::send_response`], a [`RequestResponseEvent::InboundFailure`]
+        /// with [`InboundFailure::ResponseOmission`] is emitted.
         channel: ResponseChannel<TChannelResponse>,
     },
     /// A response message.
@@ -151,6 +141,14 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
         error: OutboundFailure,
     },
     /// An inbound request failed.
+    ///
+    /// > **Note**: The case whereby a connection on which a response is sent
+    /// > closes after [`RequestResponse::send_response`] already succeeded
+    /// > but before the response could be sent on the connection is reflected
+    /// > by there being no [`RequestResponseEvent::ResponseSent`] event.
+    /// > Code interested in ensuring a response has been successfully
+    /// > handed to the transport layer, e.g. before continuing with the next
+    /// > step in a multi-step protocol, should listen to these events.
     InboundFailure {
         /// The peer from whom the request was received.
         peer: PeerId,
@@ -158,6 +156,16 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
         request_id: RequestId,
         /// The error that occurred.
         error: InboundFailure,
+    },
+    /// A response to an inbound request has been sent.
+    ///
+    /// When this event is received, the response has been flushed on
+    /// the underlying transport connection.
+    ResponseSent {
+        /// The peer to whom the response was sent.
+        peer: PeerId,
+        /// The ID of the inbound request whose response was sent.
+        request_id: RequestId,
     },
 }
 
@@ -186,14 +194,17 @@ pub enum OutboundFailure {
 #[derive(Debug)]
 pub enum InboundFailure {
     /// The inbound request timed out, either while reading the
-    /// incoming request or before a response is sent, i.e. if
+    /// incoming request or before a response is sent, e.g. if
     /// [`RequestResponse::send_response`] is not called in a
     /// timely manner.
     Timeout,
-    /// The local peer supports none of the requested protocols.
+    /// The local peer supports none of the protocols requested
+    /// by the remote.
     UnsupportedProtocols,
-    /// The connection closed before a response was delivered.
-    ConnectionClosed,
+    /// The local peer failed to respond to an inbound request
+    /// due to the [`ResponseChannel`] being dropped instead of
+    /// being passed to [`RequestResponse::send_response`].
+    ResponseOmission,
 }
 
 /// A channel for sending a response to an inbound request.
@@ -379,17 +390,18 @@ where
 
     /// Initiates sending a response to an inbound request.
     ///
-    /// If the `ResponseChannel` is already closed due to a timeout,
-    /// the response is discarded and eventually [`RequestResponseEvent::InboundFailure`]
-    /// is emitted by `RequestResponse::poll`.
+    /// If the `ResponseChannel` is already closed due to a timeout or
+    /// the connection being closed, the response is returned as an `Err`
+    /// for further handling. Once the response has been successfully sent
+    /// on the corresponding connection, [`RequestResponseEvent::ResponseSent`]
+    /// is emitted.
     ///
-    /// The provided `ResponseChannel` is obtained from a
+    /// The provided `ResponseChannel` is obtained from an inbound
     /// [`RequestResponseMessage::Request`].
-    pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response) {
-        // Fails only if the inbound upgrade timed out waiting for the response,
-        // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
-        // which in turn results in `RequestResponseEvent::InboundFailure`.
-        let _ = ch.sender.send(rs);
+    pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response)
+        -> Result<(), TCodec::Response>
+    {
+        ch.sender.send(rs)
     }
 
     /// Adds a known address for a peer that can be used for
@@ -576,6 +588,20 @@ where
                 self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::Message { peer, message }
                 ));
+            }
+            RequestResponseHandlerEvent::ResponseSent(request_id) => {
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::ResponseSent { peer, request_id }));
+            }
+            RequestResponseHandlerEvent::ResponseOmission(request_id) => {
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::InboundFailure {
+                            peer,
+                            request_id,
+                            error: InboundFailure::ResponseOmission
+                        }));
             }
             RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
                 if let Some((peer, _conn)) = self.pending_responses.remove(&request_id) {
