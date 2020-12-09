@@ -1,3 +1,7 @@
+# 0.26.2 [2020-12-09]
+
+- Update minimum patch version for `async-tls`.
+
 # 0.26.1 [2020-12-07]
 
 - Update `rustls`.
