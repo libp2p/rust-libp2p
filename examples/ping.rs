@@ -43,8 +43,7 @@ use futures::{future, prelude::*};
 use libp2p::{identity, PeerId, ping::{Ping, PingConfig}, Swarm};
 use std::{error::Error, task::{Context, Poll}};
 
-#[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId.
@@ -53,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = libp2p::build_development_transport(id_keys).await?;
+    let transport = libp2p::build_development_transport(id_keys)?;
 
     // Create a ping network behaviour.
     //

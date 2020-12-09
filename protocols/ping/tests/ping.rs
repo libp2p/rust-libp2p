@@ -191,7 +191,7 @@ fn mk_transport(muxer: MuxerChoice) -> (
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
-    (peer_id, async_std::task::block_on(TcpConfig::new()).unwrap()
+    (peer_id, TcpConfig::new()
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())

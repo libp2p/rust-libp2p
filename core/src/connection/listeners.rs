@@ -41,12 +41,10 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// # Example
 ///
 /// ```no_run
-/// # #[async_std::main]
-/// # async fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::connection::{ListenersEvent, ListenersStream};
 ///
-/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new().await.unwrap());
+/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
 ///
 /// // Ask the `listeners` to start listening on the given multiaddress.
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
@@ -76,7 +74,6 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///         }
 ///     }
 /// })
-/// # }
 /// ```
 pub struct ListenersStream<TTrans>
 where

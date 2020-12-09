@@ -58,7 +58,7 @@ use std::{
 };
 
 /// Builds the transport that serves as a common ground for all connections.
-pub async fn build_transport(
+pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)>
@@ -67,7 +67,7 @@ pub async fn build_transport(
     let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
     let yamux_config = YamuxConfig::default();
 
-    let base_transport = TcpConfig::new().await.unwrap().nodelay(true);
+    let base_transport = TcpConfig::new().nodelay(true);
     let maybe_encrypted = match psk {
         Some(psk) => EitherTransport::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
@@ -136,8 +136,7 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
     Ok(res)
 }
 
-#[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let ipfs_path: Box<Path> = get_ipfs_path();
@@ -155,7 +154,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Set up a an encrypted DNS-enabled TCP Transport over and Yamux protocol
-    let transport = build_transport(local_key.clone(), psk).await;
+    let transport = build_transport(local_key.clone(), psk);
 
     // Create a Gosspipsub topic
     let gossipsub_topic = gossipsub::Topic::new("chat".into());
