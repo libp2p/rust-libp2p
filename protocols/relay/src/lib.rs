@@ -47,13 +47,16 @@
 //! - **Incoming listen request**: The request received by a *relay* from a *destination* asking the
 //!   *relay* to listen for incoming connections on the behalf of the *destination*.
 
-pub mod behaviour;
+mod behaviour;
 mod error;
 
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message.pb.rs"));
 }
 
-pub mod handler;
-pub mod protocol;
-pub mod transport;
+mod handler;
+mod protocol;
+mod transport;
+
+pub use behaviour::Relay;
+pub use transport::RelayTransportWrapper;

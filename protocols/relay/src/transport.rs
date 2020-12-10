@@ -43,8 +43,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
     ///
     ///```
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_relay::behaviour::Relay;
-    /// # use libp2p_relay::transport::RelayTransportWrapper;
+    /// # use libp2p_relay::{Relay, RelayTransportWrapper};
     ///
     /// let inner_transport = DummyTransport::<()>::new();
     /// let (wrapper_transport, (channels)) = RelayTransportWrapper::new(inner_transport);

@@ -26,8 +26,7 @@ use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId, Swarm};
-use libp2p::relay::transport::RelayTransportWrapper;
-use libp2p::relay::behaviour::Relay;
+use libp2p::relay::{Relay, RelayTransportWrapper};
 use std::error::Error;
 use std::task::{Context, Poll};
 
