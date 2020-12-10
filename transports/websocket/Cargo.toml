@@ -2,7 +2,7 @@
 name = "libp2p-websocket"
 edition = "2018"
 description = "WebSocket transport for libp2p"
-version = "0.26.2"
+version = "0.26.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-tls = "0.10.2"
+async-tls = "0.11.0"
 either = "1.5.3"
 futures = "0.3.1"
 libp2p-core = { version = "0.25.0", path = "../../core" }
