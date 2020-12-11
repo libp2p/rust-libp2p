@@ -304,9 +304,7 @@ where
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response)
-        -> Result<(), C::Response>
-    {
+    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response) {
         log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
         if let Some(info) = self.peer_info.get_mut(&ch.peer) {
             if info.recv_budget.remaining == 0 { // need to send more credit to the remote peer
@@ -315,10 +313,7 @@ where
                 self.send_credit(&ch.peer, crd);
             }
         }
-        match self.behaviour.send_response(ch, Message::response(res)) {
-            Ok(()) => Ok(()),
-            Err(m) => Err(m.into_parts().1.expect("Missing response data.")),
-        }
+        self.behaviour.send_response(ch, Message::response(res))
     }
 
     /// Add a known peer address.
@@ -523,15 +518,8 @@ where
                                             info.send_budget.remaining += credit;
                                             info.send_budget.grant = Some(id);
                                         }
-                                        match self.behaviour.send_response(channel, Message::ack(id)) {
-                                            Err(_) => log::debug! {
-                                                "{:08x}: Failed to send ack for credit grant {}.",
-                                                self.id, id
-                                            },
-                                            Ok(()) => {
-                                                info.send_budget.received.insert(request_id);
-                                            }
-                                        }
+                                        self.behaviour.send_response(channel, Message::ack(id));
+                                        info.send_budget.received.insert(request_id);
                                     }
                                     continue
                                 }
