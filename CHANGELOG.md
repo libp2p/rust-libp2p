@@ -23,9 +23,21 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.32.0 [unreleased]
+# Version 0.32.2 [2020-12-10]
+
+- Update `libp2p-websocket`.
+
+# Version 0.32.1 [2020-12-09]
+
+- Update minimum patch version of `libp2p-websocket`.
+
+# Version 0.32.0 [2020-12-08]
+
+- Update `libp2p-request-response`.
 
 - Update to `libp2p-mdns-0.26`.
+
+- Update `libp2p-websocket` minimum patch version.
 
 # Version 0.31.2 [2020-12-02]
 

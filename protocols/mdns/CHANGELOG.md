@@ -1,4 +1,8 @@
-# 0.26.0 [unreleased]
+# 0.26.0 [2020-12-08]
+
+- Create multiple multicast response packets as required to avoid
+  hitting the limit of 9000 bytes per MDNS packet.
+  [PR 1877](https://github.com/libp2p/rust-libp2p/pull/1877).
 
 - Detect interface changes and join the MDNS multicast
   group on all interfaces as they become available.

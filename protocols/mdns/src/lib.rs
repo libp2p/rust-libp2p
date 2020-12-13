@@ -30,9 +30,9 @@
 //! struct will automatically discover other libp2p nodes on the local network.
 //!
 
-/// Hardcoded name of the mDNS service. Part of the mDNS libp2p specifications.
+/// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
-/// Hardcoded name of the service used for DNS-SD.
+/// The meta query for looking up the `SERVICE_NAME`.
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
 
 pub use crate::{
