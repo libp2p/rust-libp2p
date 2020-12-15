@@ -488,8 +488,7 @@ where
         expected: bool,
     ) {
         if let Some(connection) = self.connected.get_mut(peer)
-            .map(|cs| cs.iter_mut().find(|c| c.id == connection))
-            .flatten()
+            .and_then(|cs| cs.iter_mut().find(|c| c.id == connection))
         {
             let removed = connection.pending_outbound_response.remove(&request);
             if expected {
@@ -508,8 +507,7 @@ where
         request: &RequestId,
     ) {
         if let Some(connection) = self.connected.get_mut(peer)
-            .map(|connections| connections.iter_mut().find(|c| c.id == connection))
-            .flatten()
+            .and_then(|connections| connections.iter_mut().find(|c| c.id == connection))
         {
             let removed = connection.pending_inbound_responses.remove(request);
             debug_assert!(removed, "Expected request id to be present.")
@@ -663,8 +661,7 @@ where
                 ));
 
                 match self.connected.get_mut(&peer)
-                    .map(|cs| cs.iter_mut().find(|c| c.id == connection))
-                    .flatten()
+                    .and_then(|cs| cs.iter_mut().find(|c| c.id == connection))
                 {
                     Some(connection) => {
                         let inserted = connection.pending_outbound_response.insert(request_id);
