@@ -18,15 +18,36 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Contains methods that handle the DNS encoding and decoding capabilities not available in the
-//! `dns_parser` library.
+//! (M)DNS encoding and decoding on top of the `dns_parser` library.
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use libp2p_core::{Multiaddr, PeerId};
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
-/// Maximum size of a DNS label as per RFC1035
+/// Maximum size of a DNS label as per RFC1035.
 const MAX_LABEL_LENGTH: usize = 63;
+
+/// DNS TXT records can have up to 255 characters as a single string value.
+///
+/// Current values are usually around 170-190 bytes long, varying primarily
+/// with the length of the contained `Multiaddr`.
+const MAX_TXT_VALUE_LENGTH: usize = 255;
+
+/// A conservative maximum size (in bytes) of a complete TXT record,
+/// as encoded by [`append_txt_record`].
+const MAX_TXT_RECORD_SIZE: usize = MAX_TXT_VALUE_LENGTH + 45;
+
+/// The maximum DNS packet size is 9000 bytes less the maximum
+/// sizes of the IP (60) and UDP (8) headers.
+const MAX_PACKET_SIZE: usize = 9000 - 68;
+
+/// A conservative maximum number of records that can be packed into
+/// a single DNS UDP packet, allowing up to 100 bytes of MDNS packet
+/// header data to be added by [`query_response_packet()`].
+const MAX_RECORDS_PER_PACKET: usize = (MAX_PACKET_SIZE - 100) / MAX_TXT_RECORD_SIZE;
+
+/// An encoded MDNS packet.
+pub type MdnsPacket = Vec<u8>;
 
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
@@ -49,7 +70,7 @@ pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
 }
 
 /// Builds the binary representation of a DNS query to send on the network.
-pub fn build_query() -> Vec<u8> {
+pub fn build_query() -> MdnsPacket {
     let mut out = Vec::with_capacity(33);
 
     // Program-generated transaction ID; unused by our implementation.
@@ -80,7 +101,7 @@ pub fn build_query() -> Vec<u8> {
     out
 }
 
-/// Builds the response to the DNS query.
+/// Builds the response to an address discovery DNS query.
 ///
 /// If there are more than 2^16-1 addresses, ignores the rest.
 pub fn build_query_response(
@@ -88,60 +109,59 @@ pub fn build_query_response(
     peer_id: PeerId,
     addresses: impl ExactSizeIterator<Item = Multiaddr>,
     ttl: Duration,
-) -> Result<Vec<u8>, MdnsResponseError> {
+) -> Vec<MdnsPacket> {
     // Convert the TTL into seconds.
     let ttl = duration_to_secs(ttl);
 
     // Add a limit to 2^16-1 addresses, as the protocol limits to this number.
-    let addresses = addresses.take(65535);
+    let mut addresses = addresses.take(65535);
 
-    // This capacity was determined empirically and is a reasonable upper limit.
-    let mut out = Vec::with_capacity(320);
-
-    append_u16(&mut out, id);
-    // 0x84 flag for an answer.
-    append_u16(&mut out, 0x8400);
-    // Number of questions, answers, authorities, additionals.
-    append_u16(&mut out, 0x0);
-    append_u16(&mut out, 0x1);
-    append_u16(&mut out, 0x0);
-    append_u16(&mut out, addresses.len() as u16);
-
-    // Our single answer.
-    // The name.
-    append_qname(&mut out, SERVICE_NAME);
-
-    // Flags.
-    append_u16(&mut out, 0x000c);
-    append_u16(&mut out, 0x0001);
-
-    // TTL for the answer
-    append_u32(&mut out, ttl);
-
-    // Peer Id.
     let peer_id_bytes = encode_peer_id(&peer_id);
     debug_assert!(peer_id_bytes.len() <= 0xffff);
-    append_u16(&mut out, peer_id_bytes.len() as u16);
-    out.extend_from_slice(&peer_id_bytes);
 
-    // The TXT records for answers.
-    for addr in addresses {
+    // The accumulated response packets.
+    let mut packets = Vec::new();
+
+    // The records accumulated per response packet.
+    let mut records = Vec::with_capacity(addresses.len() * MAX_TXT_RECORD_SIZE);
+
+    // Encode the addresses as TXT records, and multiple TXT records into a
+    // response packet.
+    while let Some(addr) = addresses.next() {
         let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
-        let mut txt_to_send_bytes = Vec::with_capacity(txt_to_send.len());
-        append_character_string(&mut txt_to_send_bytes, txt_to_send.as_bytes())?;
-        append_txt_record(&mut out, &peer_id_bytes, ttl, Some(&txt_to_send_bytes[..]))?;
+        let mut txt_record = Vec::with_capacity(txt_to_send.len());
+        match append_txt_record(&mut txt_record, &peer_id_bytes, ttl, &txt_to_send) {
+            Ok(()) => {
+                records.push(txt_record);
+            }
+            Err(e) => {
+                log::warn!("Excluding address {} from response: {:?}", addr, e);
+            }
+        }
+
+        if records.len() == MAX_RECORDS_PER_PACKET {
+            packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+            records.clear();
+        }
     }
 
-    // The DNS specs specify that the maximum allowed size is 9000 bytes.
-    if out.len() > 9000 {
-        return Err(MdnsResponseError::ResponseTooLong);
+    // If there are still unpacked records, i.e. if the number of records is not
+    // a multiple of `MAX_RECORDS_PER_PACKET`, create a final packet.
+    if !records.is_empty() {
+        packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
     }
 
-    Ok(out)
+    // If no packets have been built at all, because `addresses` is empty,
+    // construct an empty response packet.
+    if packets.is_empty() {
+        packets.push(query_response_packet(id, &peer_id_bytes, &Vec::new(), ttl));
+    }
+
+    packets
 }
 
-/// Builds the response to the DNS query.
-pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {
+/// Builds the response to a service discovery DNS query.
+pub fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPacket {
     // Convert the TTL into seconds.
     let ttl = duration_to_secs(ttl);
 
@@ -179,6 +199,42 @@ pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {
     // Since the output size is constant, we reserve the right amount ahead of time.
     // If this assert fails, adjust the capacity of `out` in the source code.
     debug_assert_eq!(out.capacity(), out.len());
+    out
+}
+
+/// Constructs an MDNS query response packet for an address lookup.
+fn query_response_packet(id: u16, peer_id: &Vec<u8>, records: &Vec<Vec<u8>>, ttl: u32) -> MdnsPacket {
+    let mut out = Vec::with_capacity(records.len() * MAX_TXT_RECORD_SIZE);
+
+    append_u16(&mut out, id);
+    // 0x84 flag for an answer.
+    append_u16(&mut out, 0x8400);
+    // Number of questions, answers, authorities, additionals.
+    append_u16(&mut out, 0x0);
+    append_u16(&mut out, 0x1);
+    append_u16(&mut out, 0x0);
+    append_u16(&mut out, records.len() as u16);
+
+    // Our single answer.
+    // The name.
+    append_qname(&mut out, SERVICE_NAME);
+
+    // Flags.
+    append_u16(&mut out, 0x000c);
+    append_u16(&mut out, 0x0001);
+
+    // TTL for the answer
+    append_u32(&mut out, ttl);
+
+    // Peer Id.
+    append_u16(&mut out, peer_id.len() as u16);
+    out.extend_from_slice(&peer_id);
+
+    // The TXT records.
+    for record in records {
+        out.extend_from_slice(&record);
+    }
+
     out
 }
 
@@ -262,21 +318,19 @@ fn append_qname(out: &mut Vec<u8>, name: &[u8]) {
 }
 
 /// Appends a `<character-string>` (as defined by RFC1035) to the `Vec`.
-fn append_character_string(out: &mut Vec<u8>, ascii_str: &[u8]) -> Result<(), MdnsResponseError> {
+fn append_character_string(out: &mut Vec<u8>, ascii_str: &str) -> Result<(), MdnsResponseError> {
     if !ascii_str.is_ascii() {
         return Err(MdnsResponseError::NonAsciiMultiaddr);
     }
 
-    if !ascii_str.iter().any(|&c| c == b' ') {
-        for &chr in ascii_str.iter() {
-            out.push(chr);
-        }
+    if !ascii_str.bytes().any(|c| c == b' ') {
+        out.extend_from_slice(ascii_str.as_bytes());
         return Ok(());
     }
 
     out.push(b'"');
 
-    for &chr in ascii_str.iter() {
+    for &chr in ascii_str.as_bytes() {
         if chr == b'\\' {
             out.push(b'\\');
             out.push(b'\\');
@@ -292,19 +346,19 @@ fn append_character_string(out: &mut Vec<u8>, ascii_str: &[u8]) -> Result<(), Md
     Ok(())
 }
 
-/// Appends a TXT record to the answer in `out`.
+/// Appends a TXT record to `out`.
 fn append_txt_record<'a>(
     out: &mut Vec<u8>,
     name: &[u8],
     ttl_secs: u32,
-    entries: impl IntoIterator<Item = &'a [u8]>,
+    value: &str,
 ) -> Result<(), MdnsResponseError> {
     // The name.
     out.extend_from_slice(name);
 
     // Flags.
     out.push(0x00);
-    out.push(0x10);     // TXT record.
+    out.push(0x10); // TXT record.
     out.push(0x80);
     out.push(0x01);
 
@@ -312,35 +366,23 @@ fn append_txt_record<'a>(
     append_u32(out, ttl_secs);
 
     // Add the strings.
-    let mut buffer = Vec::new();
-    for entry in entries {
-        if entry.len() > u8::max_value() as usize {
-            return Err(MdnsResponseError::TxtRecordTooLong);
-        }
-        buffer.push(entry.len() as u8);
-        buffer.extend_from_slice(entry);
-    }
-
-    // It is illegal to have an empty TXT record, but we can have one zero-bytes entry, which does
-    // the same.
-    if buffer.is_empty() {
-        buffer.push(0);
-    }
-
-    if buffer.len() > u16::max_value() as usize {
+    if value.len() > MAX_TXT_VALUE_LENGTH {
         return Err(MdnsResponseError::TxtRecordTooLong);
     }
+    let mut buffer = Vec::new();
+    buffer.push(value.len() as u8);
+    append_character_string(&mut buffer, value)?;
+
     append_u16(out, buffer.len() as u16);
     out.extend_from_slice(&buffer);
     Ok(())
 }
 
-/// Error that can happen when producing a DNS response.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MdnsResponseError {
+/// Errors that can occur on encoding an MDNS response.
+#[derive(Debug)]
+enum MdnsResponseError {
     TxtRecordTooLong,
     NonAsciiMultiaddr,
-    ResponseTooLong,
 }
 
 impl fmt::Display for MdnsResponseError {
@@ -349,11 +391,8 @@ impl fmt::Display for MdnsResponseError {
             MdnsResponseError::TxtRecordTooLong => {
                 write!(f, "TXT record invalid because it is too long")
             }
-            MdnsResponseError::NonAsciiMultiaddr => write!(
-                f,
-                "A multiaddr contains non-ASCII characters when serializd"
-            ),
-            MdnsResponseError::ResponseTooLong => write!(f, "DNS response is too long"),
+            MdnsResponseError::NonAsciiMultiaddr =>
+                write!(f, "A multiaddr contains non-ASCII characters when serialized"),
         }
     }
 }
@@ -378,14 +417,15 @@ mod tests {
         let my_peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
-        let query = build_query_response(
+        let packets = build_query_response(
             0xf8f8,
             my_peer_id,
             vec![addr1, addr2].into_iter(),
             Duration::from_secs(60),
-        )
-        .unwrap();
-        assert!(Packet::parse(&query).is_ok());
+        );
+        for packet in packets {
+            assert!(Packet::parse(&packet).is_ok());
+        }
     }
 
     #[test]

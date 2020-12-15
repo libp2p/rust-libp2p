@@ -140,6 +140,41 @@ jobs:
         command: clippy
         args: -- -A clippy::mutable_key_type -A clippy::type_complexity
 
+  run-benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.6.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Cache CARGO_HOME
+      uses: actions/cache@v2
+      with:
+        path: ~/.cargo
+        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+
+    - name: Run cargo bench
+      uses: actions-rs/cargo@v1
+      with:
+        command: bench
+        args: --workspace
+
   integration-test:
     name: Integration tests
     runs-on: ubuntu-latest
