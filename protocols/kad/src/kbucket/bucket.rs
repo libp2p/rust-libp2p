@@ -432,7 +432,7 @@ mod tests {
             let mut bucket = KBucket::<Key<PeerId>, ()>::new(timeout);
             let num_nodes = g.gen_range(1, K_VALUE.get() + 1);
             for _ in 0 .. num_nodes {
-                let key = Key::new(PeerId::random());
+                let key = Key::from(PeerId::random());
                 let node = Node { key: key.clone(), value: () };
                 let status = NodeStatus::arbitrary(g);
                 match bucket.insert(node, status) {
@@ -464,7 +464,7 @@ mod tests {
     fn fill_bucket(bucket: &mut KBucket<Key<PeerId>, ()>, status: NodeStatus) {
         let num_entries_start = bucket.num_entries();
         for i in 0 .. K_VALUE.get() - num_entries_start {
-            let key = Key::new(PeerId::random());
+            let key = Key::from(PeerId::random());
             let node = Node { key, value: () };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
             assert_eq!(bucket.num_entries(), num_entries_start + i + 1);
@@ -482,7 +482,7 @@ mod tests {
 
             // Fill the bucket, thereby populating the expected lists in insertion order.
             for status in status {
-                let key = Key::new(PeerId::random());
+                let key = Key::from(PeerId::random());
                 let node = Node { key: key.clone(), value: () };
                 let full = bucket.num_entries() == K_VALUE.get();
                 match bucket.insert(node, status) {
@@ -529,7 +529,7 @@ mod tests {
         fill_bucket(&mut bucket, NodeStatus::Disconnected);
 
         // Trying to insert another disconnected node fails.
-        let key = Key::new(PeerId::random());
+        let key = Key::from(PeerId::random());
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Disconnected) {
             InsertResult::Full => {},
@@ -544,7 +544,7 @@ mod tests {
 
             // Add a connected node, which is expected to be pending, scheduled to
             // replace the first (i.e. least-recently connected) node.
-            let key = Key::new(PeerId::random());
+            let key = Key::from(PeerId::random());
             let node = Node { key: key.clone(), value: () };
             match bucket.insert(node.clone(), NodeStatus::Connected) {
                 InsertResult::Pending { disconnected } =>
@@ -577,7 +577,7 @@ mod tests {
         assert_eq!(K_VALUE.get(), bucket.num_entries());
 
         // Trying to insert another connected node fails.
-        let key = Key::new(PeerId::random());
+        let key = Key::from(PeerId::random());
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Connected) {
             InsertResult::Full => {},
@@ -593,7 +593,7 @@ mod tests {
         let first_disconnected = first.clone();
 
         // Add a connected pending node.
-        let key = Key::new(PeerId::random());
+        let key = Key::from(PeerId::random());
         let node = Node { key: key.clone(), value: () };
         if let InsertResult::Pending { disconnected } = bucket.insert(node, NodeStatus::Connected) {
             assert_eq!(&disconnected, &first_disconnected.key);

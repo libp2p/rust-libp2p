@@ -1,3 +1,7 @@
+# 0.27.0 [unreleased]
+
+- Update `libp2p-swarm` and `libp2p-core`.
+
 # 0.26.0 [2020-12-08]
 
 - Create multiple multicast response packets as required to avoid

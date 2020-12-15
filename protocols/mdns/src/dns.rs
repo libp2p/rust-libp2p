@@ -281,7 +281,7 @@ fn segment_peer_id(peer_id: String) -> String {
 /// Combines and encodes a `PeerId` and service name for a DNS query.
 fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
     // DNS-safe encoding for the Peer ID
-    let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.as_bytes());
+    let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.to_bytes());
     // ensure we don't have any labels over 63 bytes long
     let encoded_peer_id = segment_peer_id(raw_peer_id);
     let service_name = str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII");

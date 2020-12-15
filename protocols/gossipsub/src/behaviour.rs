@@ -1100,7 +1100,7 @@ impl Gossipsub {
 
                 let signature = {
                     let message = rpc_proto::Message {
-                        from: Some(author.clone().into_bytes()),
+                        from: Some(author.clone().to_bytes()),
                         data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic_ids: topics.clone().into_iter().map(|t| t.into()).collect(),
