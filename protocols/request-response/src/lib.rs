@@ -563,30 +563,13 @@ where
     }
 
     fn inject_connection_closed(&mut self, peer_id: &PeerId, conn: &ConnectionId, _: &ConnectedPoint) {
-        let connections = match self.connected.get_mut(peer_id) {
-            Some(peer) => peer,
-            None => {
-                debug_assert!(
-                    false,
-                    "Expected some established connection to peer before closing.",
-                );
-                return
-            }
-        };
+        let connections = self.connected.get_mut(peer_id)
+            .expect("Expected some established connection to peer before closing.");
 
-        let connection = match connections.iter()
+        let connection = connections.iter()
             .position(|c| &c.id == conn)
             .map(|p: usize| connections.remove(p))
-        {
-            Some(connection) => connection,
-            None => {
-                debug_assert!(
-                    false,
-                    "Expected connection to be established before closing.",
-                );
-                return
-            }
-        };
+            .expect("Expected connection to be established before closing.");
 
         if connections.is_empty() {
             self.connected.remove(peer_id);
