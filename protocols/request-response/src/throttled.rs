@@ -340,8 +340,17 @@ where
     /// Are we waiting for a response to the given request?
     ///
     /// See [`RequestResponse::is_pending_outbound`] for details.
-    pub fn is_pending_outbound(&self, p: &RequestId) -> bool {
-        self.behaviour.is_pending_outbound(p)
+    pub fn is_pending_outbound(&self, p: &PeerId, r: &RequestId) -> bool {
+        self.behaviour.is_pending_outbound(p, r)
+    }
+
+
+    /// Is the remote waiting for the local node to respond to the given
+    /// request?
+    ///
+    /// See [`RequestResponse::is_pending_inbound`] for details.
+    pub fn is_pending_inbound(&self, p: &PeerId, r: &RequestId) -> bool {
+        self.behaviour.is_pending_inbound(p, r)
     }
 
     /// Send a credit grant to the given peer.

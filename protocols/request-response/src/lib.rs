@@ -427,12 +427,22 @@ where
         }
     }
 
-    /// Checks whether an outbound request initiated by
-    /// [`RequestResponse::send_request`] is still pending, i.e. waiting
-    /// for a response.
-    pub fn is_pending_outbound(&self, request_id: &RequestId) -> bool {
-        self.connected.iter()
-            .any(|(_, cs)| cs.iter().any(|c| c.pending_inbound_responses.contains(request_id)))
+    /// Checks whether an outbound request to the peer with the provided
+    /// [`PeerId`] initiated by [`RequestResponse::send_request`] is still
+    /// pending, i.e. waiting for a response.
+    pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
+        self.connected.get(peer)
+            .map(|cs| cs.iter().any(|c| c.pending_inbound_responses.contains(request_id)))
+            .unwrap_or(false)
+    }
+
+    /// Checks whether an inbound request from the peer with the provided
+    /// [`PeerId`] is still pending, i.e. waiting for a response by the local
+    /// node through [`RequestResponse::send_response`].
+    pub fn is_pending_inbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
+        self.connected.get(peer)
+            .map(|cs| cs.iter().any(|c| c.pending_outbound_response.contains(request_id)))
+            .unwrap_or(false)
     }
 
     /// Returns the next request ID.
