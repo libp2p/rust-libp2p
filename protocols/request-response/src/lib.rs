@@ -758,7 +758,7 @@ struct Connection {
     /// been received on this connection and emitted via `poll` but have not yet
     /// been answered.
     pending_outbound_response: HashSet<RequestId>,
-    /// Pending inbound responses for previously send requests on this
+    /// Pending inbound responses for previously sent requests on this
     /// connection.
     pending_inbound_responses: HashSet<RequestId>
 }
