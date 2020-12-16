@@ -382,19 +382,19 @@ where
 
     /// Initiates sending a response to an inbound request.
     ///
-    /// Once the response has been successfully sent on the corresponding
-    /// connection, [`RequestResponseEvent::ResponseSent`] is emitted.
+    /// If the [`ResponseChannel`] is already closed due to a timeout or the
+    /// connection being closed, the response is returned as an `Err` for
+    /// further handling. Once the response has been successfully sent on the
+    /// corresponding connection, [`RequestResponseEvent::ResponseSent`] is
+    /// emitted. In all other cases [`RequestResponseEvent::InboundFailure`]
+    /// will be or has been emitted.
     ///
     /// The provided `ResponseChannel` is obtained from an inbound
     /// [`RequestResponseMessage::Request`].
-    pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response) {
-        // Fails either if the inbound upgrade timed out waiting for the
-        // response in which case the handler emits
-        // `RequestResponseHandlerEvent::InboundTimeout` which in turn results
-        // in `RequestResponseEvent::InboundFailure`, or the connection itself
-        // closed which results in a `RequestResponseEvent::InboundFailure` as
-        // well.
-        let _ = ch.sender.send(rs);
+    pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response)
+        -> Result<(), TCodec::Response>
+    {
+        ch.sender.send(rs)
     }
 
     /// Adds a known address for a peer that can be used for

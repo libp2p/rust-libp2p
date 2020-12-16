@@ -77,7 +77,7 @@ fn ping_protocol() {
                 } => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
-                    swarm1.send_response(channel, pong.clone());
+                    swarm1.send_response(channel, pong.clone()).unwrap();
                 },
                 RequestResponseEvent::ResponseSent {
                     peer, ..
@@ -217,7 +217,7 @@ fn ping_protocol_throttled() {
                 }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
-                    swarm1.send_response(channel, pong.clone());
+                    swarm1.send_response(channel, pong.clone()).unwrap();
                 },
                 throttled::Event::Event(RequestResponseEvent::ResponseSent {
                     peer, ..

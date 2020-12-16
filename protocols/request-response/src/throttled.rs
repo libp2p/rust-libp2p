@@ -304,7 +304,9 @@ where
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response) {
+    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response)
+        -> Result<(), C::Response>
+    {
         log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
         if let Some(info) = self.peer_info.get_mut(&ch.peer) {
             if info.recv_budget.remaining == 0 { // need to send more credit to the remote peer
@@ -313,7 +315,10 @@ where
                 self.send_credit(&ch.peer, crd);
             }
         }
-        self.behaviour.send_response(ch, Message::response(res))
+        match self.behaviour.send_response(ch, Message::response(res)) {
+            Ok(()) => Ok(()),
+            Err(m) => Err(m.into_parts().1.expect("Missing response data.")),
+        }
     }
 
     /// Add a known peer address.
@@ -527,7 +532,9 @@ where
                                             info.send_budget.remaining += credit;
                                             info.send_budget.grant = Some(id);
                                         }
-                                        self.behaviour.send_response(channel, Message::ack(id));
+                                        // Note: Failing to send a response to a credit grant is
+                                        // handled along with other inbound failures further below.
+                                        let _ = self.behaviour.send_response(channel, Message::ack(id));
                                         info.send_budget.received.insert(request_id);
                                     }
                                     continue
