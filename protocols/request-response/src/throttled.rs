@@ -345,8 +345,17 @@ where
     /// Are we waiting for a response to the given request?
     ///
     /// See [`RequestResponse::is_pending_outbound`] for details.
-    pub fn is_pending_outbound(&self, p: &RequestId) -> bool {
-        self.behaviour.is_pending_outbound(p)
+    pub fn is_pending_outbound(&self, p: &PeerId, r: &RequestId) -> bool {
+        self.behaviour.is_pending_outbound(p, r)
+    }
+
+
+    /// Is the remote waiting for the local node to respond to the given
+    /// request?
+    ///
+    /// See [`RequestResponse::is_pending_inbound`] for details.
+    pub fn is_pending_inbound(&self, p: &PeerId, r: &RequestId) -> bool {
+        self.behaviour.is_pending_inbound(p, r)
     }
 
     /// Send a credit grant to the given peer.
@@ -523,15 +532,10 @@ where
                                             info.send_budget.remaining += credit;
                                             info.send_budget.grant = Some(id);
                                         }
-                                        match self.behaviour.send_response(channel, Message::ack(id)) {
-                                            Err(_) => log::debug! {
-                                                "{:08x}: Failed to send ack for credit grant {}.",
-                                                self.id, id
-                                            },
-                                            Ok(()) => {
-                                                info.send_budget.received.insert(request_id);
-                                            }
-                                        }
+                                        // Note: Failing to send a response to a credit grant is
+                                        // handled along with other inbound failures further below.
+                                        let _ = self.behaviour.send_response(channel, Message::ack(id));
+                                        info.send_budget.received.insert(request_id);
                                     }
                                     continue
                                 }
