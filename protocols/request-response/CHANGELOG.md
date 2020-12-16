@@ -1,3 +1,7 @@
+# 0.8.0 [unreleased]
+
+- Update `libp2p-swarm` and `libp2p-core`.
+
 # 0.7.0 [2020-12-08]
 
 - Refine emitted events for inbound requests, introducing

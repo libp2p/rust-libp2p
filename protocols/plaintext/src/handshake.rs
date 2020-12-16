@@ -53,7 +53,7 @@ pub struct Remote {
 impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Result<Self, PlainTextError> {
         let exchange = Exchange {
-            id: Some(config.local_public_key.clone().into_peer_id().into_bytes()),
+            id: Some(config.local_public_key.clone().into_peer_id().to_bytes()),
             pubkey: Some(config.local_public_key.clone().into_protobuf_encoding())
         };
         let mut buf = Vec::with_capacity(exchange.encoded_len());
@@ -86,7 +86,7 @@ impl HandshakeContext<Local> {
                 return Err(PlainTextError::InvalidPayload(None));
             },
         };
-        let peer_id = match PeerId::from_bytes(prop.id.unwrap_or_default()) {
+        let peer_id = match PeerId::from_bytes(&prop.id.unwrap_or_default()) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's exchange's id protobuf");
