@@ -51,7 +51,7 @@ use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
-    GossipsubEvent, IdentTopic as Topic, MessageAuthenticity, RawGossipsubMessage, ValidationMode,
+    GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
 use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         // To content-address message, we can take the hash of message and use it as an ID.
-        let message_id_fn = |message: &RawGossipsubMessage| {
+        let message_id_fn = |message: &GossipsubMessage| {
             let mut s = DefaultHasher::new();
             message.data.hash(&mut s);
             MessageId::from(s.finish().to_string())
@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .build()
             .expect("Valid config");
         // build a gossipsub network behaviour
-        let mut gossipsub =
+        let mut gossipsub: gossipsub::Gossipsub =
             gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
                 .expect("Correct configuration");
 
@@ -154,7 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         message,
                     } => println!(
                         "Got message: {} with id: {} from peer: {:?}",
-                        String::from_utf8_lossy(message.data()),
+                        String::from_utf8_lossy(&message.data),
                         id,
                         peer_id
                     ),

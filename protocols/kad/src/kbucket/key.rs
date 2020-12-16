@@ -103,7 +103,11 @@ impl From<Multihash> for Key<Multihash> {
 
 impl From<PeerId> for Key<PeerId> {
     fn from(p: PeerId) -> Self {
-        Key::new(p)
+       let bytes = KeyBytes(Sha256::digest(&p.to_bytes()));
+       Key {
+           preimage: p,
+           bytes
+       }
     }
 }
 

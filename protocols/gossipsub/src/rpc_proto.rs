@@ -37,7 +37,7 @@ mod test {
         let topic2 = Topic::new("t2").hash();
 
         let new_message1 = super::Message {
-            from: Some(PeerId::random().as_bytes().to_vec()),
+            from: Some(PeerId::random().to_bytes()),
             data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
             topic: topic1.clone().into_string(),
@@ -45,7 +45,7 @@ mod test {
             key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
         };
         let old_message1 = compat_proto::Message {
-            from: Some(PeerId::random().as_bytes().to_vec()),
+            from: Some(PeerId::random().to_bytes()),
             data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
             topic_ids: vec![topic1.clone().into_string()],
@@ -53,7 +53,7 @@ mod test {
             key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
         };
         let old_message2 = compat_proto::Message {
-            from: Some(PeerId::random().as_bytes().to_vec()),
+            from: Some(PeerId::random().to_bytes()),
             data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
             topic_ids: vec![topic1.clone().into_string(), topic2.clone().into_string()],

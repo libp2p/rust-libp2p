@@ -23,17 +23,17 @@ use std::time::Duration;
 
 use libp2p_core::PeerId;
 
-use crate::types::{FastMessageId, GenericGossipsubMessage, MessageId};
-use crate::RawGossipsubMessage;
+use crate::types::{FastMessageId, GossipsubMessage, MessageId, RawGossipsubMessage};
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
 pub enum ValidationMode {
-    /// This is the default setting. This requires the message author to be a valid `PeerId` and to
+    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and to
     /// be present as well as the sequence number. All messages must have valid signatures.
     ///
-    /// NOTE: This setting will reject messages from nodes using `PrivacyMode::Anonymous` and
-    /// all messages that do not have signatures.
+    /// NOTE: This setting will reject messages from nodes using
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`] and all messages that do not have
+    /// signatures.
     Strict,
     /// This setting permits messages that have no author, sequence number or signature. If any of
     /// these fields exist in the message these are validated.
@@ -48,198 +48,47 @@ pub enum ValidationMode {
     None,
 }
 
-// For general use cases.
-pub type GossipsubConfig = Config<Vec<u8>>;
-
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
-pub struct Config<T> {
-    /// The protocol id prefix to negotiate this protocol. The protocol id is of the form
-    /// `/<prefix>/<supported-versions>`. As gossipsub supports version 1.0 and 1.1, there are two
-    /// protocol id's supported.
-    ///
-    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
+pub struct GossipsubConfig {
     protocol_id_prefix: Cow<'static, str>,
-
-    // Overlay network parameters.
-    /// Number of heartbeats to keep in the `memcache` (default is 5).
     history_length: usize,
-
-    /// Number of past heartbeats to gossip about (default is 3).
     history_gossip: usize,
-
-    /// Target number of peers for the mesh network (D in the spec, default is 6).
     mesh_n: usize,
-
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
     mesh_n_low: usize,
-
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
-    /// is 12).
     mesh_n_high: usize,
-
-    /// Affects how peers are selected when pruning a mesh due to over subscription.
-    ///
-    /// At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
-    /// chosen randomly (D_score in the spec, default is 4).
     retain_scores: usize,
-
-    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
-    /// default is 6).
     gossip_lazy: usize,
-
-    /// Affects how many peers we will emit gossip to at each heartbeat.
-    /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
-    /// `gossip_lazy`, whichever is greater. The default is 0.25.
     gossip_factor: f64,
-
-    /// Initial delay in each heartbeat (default is 5 seconds).
     heartbeat_initial_delay: Duration,
-
-    /// Time between each heartbeat (default is 1 second).
     heartbeat_interval: Duration,
-
-    /// Time to live for fanout peers (default is 60 seconds).
     fanout_ttl: Duration,
-
-    /// The number of heartbeat ticks until we recheck the connection to explicit peers and
-    /// reconnecting if necessary (default 300).
     check_explicit_peers_ticks: u64,
-
-    /// The maximum byte size for each gossip (default is 65536 bytes).
-    ///
-    /// This represents the maximum size of the entire protobuf payload. It must be at least
-    /// large enough to support basic control messages. If Peer eXchange is enabled, this
-    /// must be large enough to transmit the desired peer information on pruning. It must be at
-    /// least 100 bytes. Default is 65536 bytes.
     max_transmit_size: usize,
-
-    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
-    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
-    /// received if duplicate messages are sent at a time greater than this setting apart. The
-    /// default is 1 minute.
     duplicate_cache_time: Duration,
-
-    /// When set to `true`, prevents automatic forwarding of all received messages. This setting
-    /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call [crate::GenericGossipsub::report_message_validation_result()] on the behaviour to forward message
-    /// once validated (default is `false`).
     validate_messages: bool,
-
-    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
-    /// for the available types. The default is ValidationMode::Strict.
     validation_mode: ValidationMode,
-
-    /// A user-defined function allowing the user to specify the message id of a gossipsub message.
-    /// The default value is to concatenate the source peer id with a sequence number. Setting this
-    /// parameter allows the user to address packets arbitrarily. One example is content based
-    /// addressing, where this function may be set to `hash(message)`. This would prevent messages
-    /// of the same content from being duplicated.
-    ///
-    /// The function takes a `GenericGossipsubMessage` as input and outputs a String to be
-    /// interpreted as the message id.
-    message_id_fn: fn(&GenericGossipsubMessage<T>) -> MessageId,
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from `RawGossipsubMessage` to
-    /// `GenericGossipsubMessage<T>` for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// On high intensive networks with lots of messages, where the message_id is based on the result of
-    /// decompressed traffic, it is beneficial to specify a `fast-message-id` that can identify and
-    /// filter duplicates quickly without performing the overhead of decompression.
-    ///
-    /// The function takes a `RawGossipsubMessage` as input and outputs a String to be
-    /// interpreted as the fast message id. Default is None.
+    message_id_fn: fn(&GossipsubMessage) -> MessageId,
     fast_message_id_fn: Option<fn(&RawGossipsubMessage) -> FastMessageId>,
-
-    /// By default, gossipsub will reject messages that are sent to us that has the same message
-    /// source as we have specified locally. Enabling this, allows these messages and prevents
-    /// penalizing the peer that sent us the message. Default is false.
     allow_self_origin: bool,
-
-    /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is false.
     do_px: bool,
-
-    /// Controls the number of peers to include in prune Peer eXchange.
-    /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
-    /// send them signed peer records for up to `prune_peers` other peers that we
-    /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
-    /// peer can reliably form a full mesh. The default is 16.
     prune_peers: usize,
-
-    /// Controls the backoff time for pruned peers. This is how long
-    /// a peer must wait before attempting to graft into our mesh again after being pruned.
-    /// When pruning a peer, we send them our value of `prune_backoff` so they know
-    /// the minimum time to wait. Peers running older versions may not send a backoff time,
-    /// so if we receive a prune message without one, we will wait at least `prune_backoff`
-    /// before attempting to re-graft. The default is one minute.
     prune_backoff: Duration,
-
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
-    /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
-    /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
-    /// prunes on our side and processing prunes on the receiving side this guarantees that we
-    /// get not punished for too early grafting. The default is 1.
     backoff_slack: u32,
-
-    /// Whether to do flood publishing or not. If enabled newly created messages authored by the
-    /// local node will always be sent to all peers that are subscribed to the topic and have a
-    /// good enough score. The default is true.
     flood_publish: bool,
-
-    /// If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
-    /// then there is an extra score penalty applied to the peer through P7. The default is 10
-    /// seconds.
     graft_flood_threshold: Duration,
-
-    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
-    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
-    /// The default is 2.
     mesh_outbound_min: usize,
-
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
-    /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
-    /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
-    /// threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
-    /// The default is 60.
     opportunistic_graft_ticks: u64,
-
-    /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     opportunistic_graft_peers: usize,
-
-    /// Controls how many times we will allow a peer to request the same message id through IWANT
-    /// gossip before we start ignoring them. This is designed to prevent peers from spamming us
-    /// with requests and wasting our resources. The default is 3.
     gossip_retransimission: u32,
-
-    /// The maximum number of messages to include in an IHAVE message.
-    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
-    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
-    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
-    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
     max_ihave_length: usize,
-
-    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
-    /// within a heartbeat. The default is 10.
     max_ihave_messages: usize,
-
-    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
-    /// If the message is not received within this window, a broken promise is declared and
-    /// the router may apply behavioural penalties. The default is 3 seconds.
     iwant_followup_time: Duration,
-
-    /// Enable support for flooodsub peers. Default false.
     support_floodsub: bool,
-
-    /// Published message ids time cache duration. The default is 10 seconds.
     published_message_ids_cache_time: Duration,
 }
 
-impl<T> Config<T> {
+impl GossipsubConfig {
     // All the getters
 
     /// The protocol id prefix to negotiate this protocol. The protocol id is of the form
@@ -279,9 +128,9 @@ impl<T> Config<T> {
     }
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
-    //
-    //  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
-    //  chosen randomly (D_score in the spec, default is 4).
+    ///
+    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
+    ///  chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&self) -> usize {
         self.retain_scores
     }
@@ -341,10 +190,9 @@ impl<T> Config<T> {
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call `validate_message()` on the behaviour to forward message
-    /// once validated (default is `false`). Furthermore, the application may optionally call
-    /// `invalidate_message()` on the behaviour to remove the message from the memcache. The
-    /// default is false.
+    /// true, the user must manually call [`crate::Gossipsub::report_message_validation_result()`]
+    /// on the behaviour to forward message once validated (default is `false`).
+    /// The default is `false`.
     pub fn validate_messages(&self) -> bool {
         self.validate_messages
     }
@@ -361,19 +209,19 @@ impl<T> Config<T> {
     /// addressing, where this function may be set to `hash(message)`. This would prevent messages
     /// of the same content from being duplicated.
     ///
-    /// The function takes a `GenericGossipsubMessage` as input and outputs a String to be interpreted as
+    /// The function takes a [`GossipsubMessage`] as input and outputs a String to be interpreted as
     /// the message id.
-    pub fn message_id(&self, message: &GenericGossipsubMessage<T>) -> MessageId {
+    pub fn message_id(&self, message: &GossipsubMessage) -> MessageId {
         (self.message_id_fn)(message)
     }
 
     /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from `RawGossipsubMessage` to
-    /// `GenericGossipsubMessage<T>` for duplicates. Two semantically different messages must always
+    /// to avoid possibly expensive transformations from [`RawGossipsubMessage`] to
+    /// [`GossipsubMessage`] for duplicates. Two semantically different messages must always
     /// have different fast message ids, but it is allowed that two semantically identical messages
     /// have different fast message ids as long as the message_id_fn produces the same id for them.
     ///
-    /// The function takes a `RawGossipsubMessage` as input and outputs a String to be
+    /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be
     /// interpreted as the fast message id. Default is None.
     pub fn fast_message_id(&self, message: &RawGossipsubMessage) -> Option<FastMessageId> {
         self.fast_message_id_fn
@@ -497,27 +345,24 @@ impl<T> Config<T> {
     }
 }
 
-impl<T: Clone> Default for Config<T> {
+impl Default for GossipsubConfig {
     fn default() -> Self {
         // use ConfigBuilder to also validate defaults
-        ConfigBuilder::default()
+        GossipsubConfigBuilder::default()
             .build()
             .expect("Default config parameters should be valid parameters")
     }
 }
 
 /// The builder struct for constructing a gossipsub configuration.
-pub struct ConfigBuilder<T> {
-    config: Config<T>,
+pub struct GossipsubConfigBuilder {
+    config: GossipsubConfig,
 }
 
-// For general use cases.
-pub type GossipsubConfigBuilder = ConfigBuilder<Vec<u8>>;
-
-impl<T: Clone> Default for ConfigBuilder<T> {
+impl Default for GossipsubConfigBuilder {
     fn default() -> Self {
-        ConfigBuilder {
-            config: Config {
+        GossipsubConfigBuilder {
+            config: GossipsubConfig {
                 protocol_id_prefix: Cow::Borrowed("meshsub"),
                 history_length: 5,
                 history_gossip: 3,
@@ -541,7 +386,7 @@ impl<T: Clone> Default for ConfigBuilder<T> {
                     let mut source_string = if let Some(peer_id) = message.source.as_ref() {
                         peer_id.to_base58()
                     } else {
-                        PeerId::from_bytes(vec![0, 1, 0])
+                        PeerId::from_bytes(&vec![0, 1, 0])
                             .expect("Valid peer id")
                             .to_base58()
                     };
@@ -571,13 +416,13 @@ impl<T: Clone> Default for ConfigBuilder<T> {
     }
 }
 
-impl<T> From<Config<T>> for ConfigBuilder<T> {
-    fn from(config: Config<T>) -> Self {
-        ConfigBuilder { config }
+impl From<GossipsubConfig> for GossipsubConfigBuilder {
+    fn from(config: GossipsubConfig) -> Self {
+        GossipsubConfigBuilder { config }
     }
 }
 
-impl<T: Clone> ConfigBuilder<T> {
+impl GossipsubConfigBuilder {
     /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(&mut self, protocol_id: impl Into<Cow<'static, str>>) -> &mut Self {
         self.config.protocol_id_prefix = protocol_id.into();
@@ -617,7 +462,7 @@ impl<T: Clone> ConfigBuilder<T> {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    /// At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
+    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the remainder are
     /// chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&mut self, retain_scores: usize) -> &mut Self {
         self.config.retain_scores = retain_scores;
@@ -682,8 +527,8 @@ impl<T: Clone> ConfigBuilder<T> {
 
     /// When set, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set,
-    /// the user must manually call `validate_message()` on the behaviour to forward a message
-    /// once validated.
+    /// the user must manually call [`crate::Gossipsub::report_message_validation_result()`] on the
+    /// behaviour to forward a message once validated.
     pub fn validate_messages(&mut self) -> &mut Self {
         self.config.validate_messages = true;
         self
@@ -702,19 +547,16 @@ impl<T: Clone> ConfigBuilder<T> {
     /// addressing, where this function may be set to `hash(message)`. This would prevent messages
     /// of the same content from being duplicated.
     ///
-    /// The function takes a [`GenericGossipsubMessage`] as input and outputs a String to be
+    /// The function takes a [`GossipsubMessage`] as input and outputs a String to be
     /// interpreted as the message id.
-    pub fn message_id_fn(
-        &mut self,
-        id_fn: fn(&GenericGossipsubMessage<T>) -> MessageId,
-    ) -> &mut Self {
+    pub fn message_id_fn(&mut self, id_fn: fn(&GossipsubMessage) -> MessageId) -> &mut Self {
         self.config.message_id_fn = id_fn;
         self
     }
 
     /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from `RawGossipsubMessage` to
-    /// [`GenericGossipsubMessage<T>`] for duplicates. Two semantically different messages must always
+    /// to avoid possibly expensive transformations from [`RawGossipsubMessage`] to
+    /// [`GossipsubMessage`] for duplicates. Two semantically different messages must always
     /// have different fast message ids, but it is allowed that two semantically identical messages
     /// have different fast message ids as long as the message_id_fn produces the same id for them.
     ///
@@ -738,9 +580,9 @@ impl<T: Clone> ConfigBuilder<T> {
     /// Controls the number of peers to include in prune Peer eXchange.
     ///
     /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
-    /// send them signed peer records for up to `prune_peers` other peers that we
-    /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
-    /// peer can reliably form a full mesh. The default is 16.
+    /// send them signed peer records for up to [`Self::prune_peers] other peers that we
+    /// know of. It is recommended that this value is larger than [`Self::mesh_n_high`] so that the
+    /// pruned peer can reliably form a full mesh. The default is 16.
     pub fn prune_peers(&mut self, prune_peers: usize) -> &mut Self {
         self.config.prune_peers = prune_peers;
         self
@@ -748,9 +590,9 @@ impl<T: Clone> ConfigBuilder<T> {
 
     /// Controls the backoff time for pruned peers. This is how long
     /// a peer must wait before attempting to graft into our mesh again after being pruned.
-    /// When pruning a peer, we send them our value of `prune_backoff` so they know
+    /// When pruning a peer, we send them our value of [`Self::prune_backoff`] so they know
     /// the minimum time to wait. Peers running older versions may not send a backoff time,
-    /// so if we receive a prune message without one, we will wait at least `prune_backoff`
+    /// so if we receive a prune message without one, we will wait at least [`Self::prune_backoff`]
     /// before attempting to re-graft. The default is one minute.
     pub fn prune_backoff(&mut self, prune_backoff: Duration) -> &mut Self {
         self.config.prune_backoff = prune_backoff;
@@ -863,8 +705,8 @@ impl<T: Clone> ConfigBuilder<T> {
         self
     }
 
-    /// Constructs a `GenericGossipsubConfig` from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<Config<T>, &str> {
+    /// Constructs a [`GossipsubConfig`] from the given configuration and validates the settings.
+    pub fn build(&self) -> Result<GossipsubConfig, &str> {
         // check all constraints on config
 
         if self.config.max_transmit_size < 100 {
@@ -895,7 +737,7 @@ impl<T: Clone> ConfigBuilder<T> {
     }
 }
 
-impl<T> std::fmt::Debug for Config<T> {
+impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
         let _ = builder.field("protocol_id_prefix", &self.protocol_id_prefix);
@@ -942,7 +784,7 @@ mod test {
 
     #[test]
     fn create_thing() {
-        let builder = GossipsubConfigBuilder::default()
+        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
             .protocol_id_prefix("purple")
             .build()
             .unwrap();

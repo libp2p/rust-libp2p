@@ -34,14 +34,16 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    core::{either::EitherTransport, transport, transport::upgrade::Version, muxing::StreamMuxerBox},
+    core::{
+        either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
+    },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify::{Identify, IdentifyEvent},
     identity,
     multiaddr::Protocol,
+    noise,
     ping::{self, Ping, PingConfig, PingEvent},
     pnet::{PnetConfig, PreSharedKey},
-    noise,
     swarm::NetworkBehaviourEventProcess,
     tcp::TcpConfig,
     yamux::YamuxConfig,
@@ -61,9 +63,10 @@ use std::{
 pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
-) -> transport::Boxed<(PeerId, StreamMuxerBox)>
-{
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&key_pair).unwrap();
+) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&key_pair)
+        .unwrap();
     let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
     let yamux_config = YamuxConfig::default();
 
@@ -184,7 +187,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     message,
                 } => println!(
                     "Got message: {} with id: {} from peer: {:?}",
-                    String::from_utf8_lossy(message.data()),
+                    String::from_utf8_lossy(&message.data),
                     id,
                     peer_id
                 ),

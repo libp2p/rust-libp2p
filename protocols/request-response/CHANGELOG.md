@@ -1,3 +1,15 @@
+# 0.8.0 [unreleased]
+
+- Update `libp2p-swarm` and `libp2p-core`.
+
+# 0.7.0 [2020-12-08]
+
+- Refine emitted events for inbound requests, introducing
+  the `ResponseSent` event and the `ResponseOmission`
+  inbound failures. This effectively removes previous
+  support for one-way protocols without responses.
+  [PR 1867](https://github.com/libp2p/rust-libp2p/pull/1867).
+
 # 0.6.0 [2020-11-25]
 
 - Update `libp2p-swarm` and `libp2p-core`.

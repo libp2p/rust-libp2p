@@ -239,13 +239,13 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::new(search_target.clone());
-        let qid = swarms[0].get_closest_peers(search_target.clone());
+        let search_target_key = kbucket::Key::from(search_target);
+        let qid = swarms[0].get_closest_peers(search_target);
 
         match swarms[0].query(&qid) {
             Some(q) => match q.info() {
                 QueryInfo::GetClosestPeers { key } => {
-                    assert_eq!(&key[..], search_target.borrow() as &[u8])
+                    assert_eq!(&key[..], search_target.to_bytes().as_slice())
                 },
                 i => panic!("Unexpected query info: {:?}", i)
             }
@@ -268,7 +268,7 @@ fn query_iter() {
                                 id, result: QueryResult::GetClosestPeers(Ok(ok)), ..
                             })) => {
                                 assert_eq!(id, qid);
-                                assert_eq!(&ok.key[..], search_target.as_bytes());
+                                assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert_eq!(swarm.queries.size(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
@@ -310,7 +310,7 @@ fn unresponsive_not_returned_direct() {
 
     // Ask first to search a random value.
     let search_target = PeerId::random();
-    swarms[0].get_closest_peers(search_target.clone());
+    swarms[0].get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -320,7 +320,7 @@ fn unresponsive_not_returned_direct() {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             result: QueryResult::GetClosestPeers(Ok(ok)), ..
                         })) => {
-                            assert_eq!(&ok.key[..], search_target.as_bytes());
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(ok.peers.len(), 0);
                             return Poll::Ready(());
                         }
@@ -360,7 +360,7 @@ fn unresponsive_not_returned_indirect() {
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
-    swarms[1].get_closest_peers(search_target.clone());
+    swarms[1].get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -370,7 +370,7 @@ fn unresponsive_not_returned_indirect() {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             result: QueryResult::GetClosestPeers(Ok(ok)), ..
                         })) => {
-                            assert_eq!(&ok.key[..], search_target.as_bytes());
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
                             return Poll::Ready(());
@@ -570,8 +570,8 @@ fn put_record() {
                         .cloned()
                         .collect::<Vec<_>>();
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1.clone()).distance(&key).cmp(
-                            &kbucket::Key::new(id2.clone()).distance(&key)));
+                        kbucket::Key::from(*id1).distance(&key).cmp(
+                            &kbucket::Key::from(*id2).distance(&key)));
 
                     let expected = expected
                         .into_iter()
@@ -838,8 +838,8 @@ fn add_provider() {
                         .collect::<Vec<_>>();
                     let kbucket_key = kbucket::Key::new(key);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1.clone()).distance(&kbucket_key).cmp(
-                            &kbucket::Key::new(id2.clone()).distance(&kbucket_key)));
+                        kbucket::Key::from(*id1).distance(&kbucket_key).cmp(
+                            &kbucket::Key::from(*id2).distance(&kbucket_key)));
 
                     let expected = expected
                         .into_iter()
@@ -1084,7 +1084,7 @@ fn manual_bucket_inserts() {
                         routable.push(peer);
                         if expected.is_empty() {
                             for peer in routable.iter() {
-                                let bucket = swarm.kbucket(peer.clone()).unwrap();
+                                let bucket = swarm.kbucket(*peer).unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }
                             return Poll::Ready(())

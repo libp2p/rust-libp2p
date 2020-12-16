@@ -34,7 +34,7 @@ pub trait Hasher {
 #[derive(Debug, Clone)]
 pub struct IdentityHash {}
 impl Hasher for IdentityHash {
-    /// Creates a `TopicHash` as a raw string.
+    /// Creates a [`TopicHash`] as a raw string.
     fn hash(topic_string: String) -> TopicHash {
         TopicHash { hash: topic_string }
     }
@@ -43,7 +43,7 @@ impl Hasher for IdentityHash {
 #[derive(Debug, Clone)]
 pub struct Sha256Hash {}
 impl Hasher for Sha256Hash {
-    /// Creates a `TopicHash` by SHA256 hashing the topic then base64 encoding the
+    /// Creates a [`TopicHash`] by SHA256 hashing the topic then base64 encoding the
     /// hash.
     fn hash(topic_string: String) -> TopicHash {
         let topic_descripter = rpc_proto::TopicDescriptor {

@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.25.2"
+version = "0.26.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asn1_der = "0.6.1"
 bs58 = "0.4.0"
-bytes = "0.5"
 ed25519-dalek = "1.0.1"
 either = "1.5"
 fnv = "1.0"
@@ -41,6 +40,7 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 
 [dev-dependencies]
 async-std = "1.6.2"
+criterion = "0.3"
 libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../protocols/noise" }
 libp2p-tcp = { path = "../transports/tcp", features = ["async-std"] }
@@ -54,3 +54,7 @@ prost-build = "0.6"
 [features]
 default = ["secp256k1"]
 secp256k1 = ["libsecp256k1"]
+
+[[bench]]
+name = "peer_id"
+harness = false

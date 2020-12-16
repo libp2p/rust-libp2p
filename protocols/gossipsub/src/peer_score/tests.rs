@@ -33,8 +33,8 @@ fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
 }
 
 // generates a random gossipsub message with sequence number i
-fn make_test_message(seq: u64) -> GossipsubMessage {
-    let m = RawGossipsubMessage {
+fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
+    let raw_message = RawGossipsubMessage {
         source: Some(PeerId::random()),
         data: vec![12, 34, 56],
         sequence_number: Some(seq),
@@ -44,18 +44,25 @@ fn make_test_message(seq: u64) -> GossipsubMessage {
         validated: true,
     };
 
-    let id = default_message_id()(&m);
-    GossipsubMessage::new(m, id)
+    let message = GossipsubMessage {
+        source: raw_message.source.clone(),
+        data: raw_message.data.clone(),
+        sequence_number: raw_message.sequence_number,
+        topic: raw_message.topic.clone(),
+    };
+
+    let id = default_message_id()(&message);
+    (id, raw_message)
 }
 
-fn default_message_id() -> fn(&RawGossipsubMessage) -> MessageId {
+fn default_message_id() -> fn(&GossipsubMessage) -> MessageId {
     |message| {
         // default message id is: source + sequence number
         // NOTE: If either the peer_id or source is not provided, we set to 0;
         let mut source_string = if let Some(peer_id) = message.source.as_ref() {
             peer_id.to_base58()
         } else {
-            PeerId::from_bytes(vec![0, 1, 0])
+            PeerId::from_bytes(&vec![0, 1, 0])
                 .expect("Valid peer id")
                 .to_base58()
         };
@@ -185,9 +192,9 @@ fn test_score_first_message_deliveries() {
     // deliver a bunch of messages from the peer
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.validate_message(&peer_id, &msg);
-        peer_score.deliver_message(&peer_id, &msg);
+        let (id, msg) = make_test_message(seq);
+        peer_score.validate_message(&peer_id, &id, &msg.topic);
+        peer_score.deliver_message(&peer_id, &id, &msg.topic);
     }
 
     peer_score.refresh_scores();
@@ -229,9 +236,9 @@ fn test_score_first_message_deliveries_cap() {
     // deliver a bunch of messages from the peer
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.validate_message(&peer_id, &msg);
-        peer_score.deliver_message(&peer_id, &msg);
+        let (id, msg) = make_test_message(seq);
+        peer_score.validate_message(&peer_id, &id, &msg.topic);
+        peer_score.deliver_message(&peer_id, &id, &msg.topic);
     }
 
     peer_score.refresh_scores();
@@ -270,9 +277,9 @@ fn test_score_first_message_deliveries_decay() {
     // deliver a bunch of messages from the peer
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.validate_message(&peer_id, &msg);
-        peer_score.deliver_message(&peer_id, &msg);
+        let (id, msg) = make_test_message(seq);
+        peer_score.validate_message(&peer_id, &id, &msg.topic);
+        peer_score.deliver_message(&peer_id, &id, &msg.topic);
     }
 
     peer_score.refresh_scores();
@@ -360,18 +367,18 @@ fn test_score_mesh_message_deliveries() {
     let messages = 100;
     let mut messages_to_send = Vec::new();
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.validate_message(&peer_id_a, &msg);
-        peer_score.deliver_message(&peer_id_a, &msg);
+        let (id, msg) = make_test_message(seq);
+        peer_score.validate_message(&peer_id_a, &id, &msg.topic);
+        peer_score.deliver_message(&peer_id_a, &id, &msg.topic);
 
-        peer_score.duplicated_message(&peer_id_b, &msg);
-        messages_to_send.push(msg);
+        peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
+        messages_to_send.push((id, msg));
     }
 
     std::thread::sleep(topic_params.mesh_message_deliveries_window + Duration::from_millis(20));
 
-    for msg in messages_to_send {
-        peer_score.duplicated_message(&peer_id_c, &msg);
+    for (id, msg) in messages_to_send {
+        peer_score.duplicated_message(&peer_id_c, &id, &msg.topic);
     }
 
     peer_score.refresh_scores();
@@ -435,9 +442,9 @@ fn test_score_mesh_message_deliveries_decay() {
     // deliver a bunch of messages from peer A
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.validate_message(&peer_id_a, &msg);
-        peer_score.deliver_message(&peer_id_a, &msg);
+        let (id, msg) = make_test_message(seq);
+        peer_score.validate_message(&peer_id_a, &id, &msg.topic);
+        peer_score.deliver_message(&peer_id_a, &id, &msg.topic);
     }
 
     // we should have a positive score, since we delivered more messages than the threshold
@@ -508,9 +515,10 @@ fn test_score_mesh_failure_penalty() {
     // deliver a bunch of messages from peer A
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.validate_message(&peer_id_a, &msg);
-        peer_score.deliver_message(&peer_id_a, &msg);
+        let (id, msg) = make_test_message(seq);
+
+        peer_score.validate_message(&peer_id_a, &id, &msg.topic);
+        peer_score.deliver_message(&peer_id_a, &id, &msg.topic);
     }
 
     // peers A and B should both have zero scores, since the failure penalty hasn't been applied yet
@@ -579,8 +587,8 @@ fn test_score_invalid_message_deliveries() {
     // reject a bunch of messages from peer A
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
+        let (id, msg) = make_test_message(seq);
+        peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationFailed);
     }
 
     peer_score.refresh_scores();
@@ -625,8 +633,8 @@ fn test_score_invalid_message_deliveris_decay() {
     // reject a bunch of messages from peer A
     let messages = 100;
     for seq in 0..messages {
-        let msg = make_test_message(seq);
-        peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
+        let (id, msg) = make_test_message(seq);
+        peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationFailed);
     }
 
     peer_score.refresh_scores();
@@ -681,12 +689,12 @@ fn test_score_reject_message_deliveries() {
         peer_score.add_peer(peer_id.clone());
     }
 
-    let msg = make_test_message(1);
+    let (id, msg) = make_test_message(1);
 
     // these should have no effect in the score
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlackListedPeer);
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlackListedSource);
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::BlackListedPeer);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::BlackListedSource);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationIgnored);
 
     peer_score.refresh_scores();
     let score_a = peer_score.score(&peer_id_a);
@@ -696,12 +704,12 @@ fn test_score_reject_message_deliveries() {
     assert_eq!(score_b, 0.0, "Should have no effect on the score");
 
     // insert a record in the message deliveries
-    peer_score.validate_message(&peer_id_a, &msg);
+    peer_score.validate_message(&peer_id_a, &id, &msg.topic);
 
     // this should have no effect in the score, and subsequent duplicate messages should have no
     // effect either
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
-    peer_score.duplicated_message(&peer_id_b, &msg);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationIgnored);
+    peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
     peer_score.refresh_scores();
     let score_a = peer_score.score(&peer_id_a);
@@ -714,12 +722,12 @@ fn test_score_reject_message_deliveries() {
     peer_score.deliveries.clear();
 
     // insert a record in the message deliveries
-    peer_score.validate_message(&peer_id_a, &msg);
+    peer_score.validate_message(&peer_id_a, &id, &msg.topic);
 
     // this should have no effect in the score, and subsequent duplicate messages should have no
     // effect either
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
-    peer_score.duplicated_message(&peer_id_b, &msg);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationIgnored);
+    peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
     peer_score.refresh_scores();
     let score_a = peer_score.score(&peer_id_a);
@@ -732,11 +740,11 @@ fn test_score_reject_message_deliveries() {
     peer_score.deliveries.clear();
 
     // insert a new record in the message deliveries
-    peer_score.validate_message(&peer_id_a, &msg);
+    peer_score.validate_message(&peer_id_a, &id, &msg.topic);
 
     // and reject the message to make sure duplicates are also penalized
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
-    peer_score.duplicated_message(&peer_id_b, &msg);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationFailed);
+    peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
     peer_score.refresh_scores();
     let score_a = peer_score.score(&peer_id_a);
@@ -749,11 +757,11 @@ fn test_score_reject_message_deliveries() {
     peer_score.deliveries.clear();
 
     // insert a new record in the message deliveries
-    peer_score.validate_message(&peer_id_a, &msg);
+    peer_score.validate_message(&peer_id_a, &id, &msg.topic);
 
     // and reject the message after a duplicate has arrived
-    peer_score.duplicated_message(&peer_id_b, &msg);
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
+    peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
+    peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationFailed);
 
     peer_score.refresh_scores();
     let score_a = peer_score.score(&peer_id_a);

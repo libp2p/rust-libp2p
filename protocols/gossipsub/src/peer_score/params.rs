@@ -57,7 +57,8 @@ pub struct PeerScoreThresholds {
     pub publish_threshold: f64,
 
     /// The score threshold below which message processing is suppressed altogether,
-    /// implementing an effective graylist according to peer score; should be negative and <= `publish_threshold`.
+    /// implementing an effective graylist according to peer score; should be negative and
+    /// <= `publish_threshold`.
     pub graylist_threshold: f64,
 
     /// The score threshold below which px will be ignored; this should be positive
@@ -247,11 +248,11 @@ pub struct TopicScoreParams {
     pub first_message_deliveries_cap: f64,
 
     ///  P3: mesh message deliveries
-    ///  This is the number of message deliveries in the mesh, within the `mesh_message_deliveries_window` of
-    ///  message validation; deliveries during validation also count and are retroactively applied
-    ///  when validation succeeds.
-    ///  This window accounts for the minimum time before a hostile mesh peer trying to game the score
-    ///  could replay back a valid message we just sent them.
+    ///  This is the number of message deliveries in the mesh, within the
+    ///  `mesh_message_deliveries_window` of message validation; deliveries during validation also
+    ///  count and are retroactively applied when validation succeeds.
+    ///  This window accounts for the minimum time before a hostile mesh peer trying to game the
+    ///  score could replay back a valid message we just sent them.
     ///  It effectively tracks first and near-first deliveries, ie a message seen from a mesh peer
     ///  before we have forwarded it to them.
     ///  The parameter has an associated counter, decaying with `mesh_message_deliveries_decay`.

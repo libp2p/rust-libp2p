@@ -31,7 +31,6 @@ use std::time::{Duration, Instant};
 
 mod params;
 use crate::error::ValidationError;
-use crate::types::GossipsubMessageWithId;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
@@ -49,7 +48,7 @@ pub(crate) struct PeerScore {
     peer_stats: HashMap<PeerId, PeerStats>,
     /// Tracking peers per IP.
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
-    /// Message delivery tracking. This is a time-cache of `DeliveryRecord`s.
+    /// Message delivery tracking. This is a time-cache of [`DeliveryRecord`]s.
     deliveries: TimeCache<MessageId, DeliveryRecord>,
     /// callback for monitoring message delivery times
     message_delivery_time_callback: Option<fn(&PeerId, &TopicHash, f64)>,
@@ -141,7 +140,7 @@ enum MeshStatus {
 }
 
 impl MeshStatus {
-    /// Initialises a new `Active` mesh status.
+    /// Initialises a new [`MeshStatus::Active`] mesh status.
     pub fn new_active() -> Self {
         MeshStatus::Active {
             graft_time: Instant::now(),
@@ -193,7 +192,7 @@ impl Default for DeliveryRecord {
 }
 
 impl PeerScore {
-    /// Creates a new `PeerScore` using a given set of peer scoring parameters.
+    /// Creates a new [`PeerScore`] using a given set of peer scoring parameters.
     #[allow(dead_code)]
     pub fn new(params: PeerScoreParams) -> Self {
         Self::new_with_message_delivery_time_callback(params, None)
@@ -421,7 +420,7 @@ impl PeerScore {
         });
     }
 
-    /// Adds a connected peer to `PeerScore`, initialising with empty ips (ips get added later
+    /// Adds a connected peer to [`PeerScore`], initialising with empty ips (ips get added later
     /// through add_ip.
     pub fn add_peer(&mut self, peer_id: PeerId) {
         let peer_stats = self.peer_stats.entry(peer_id).or_default();
@@ -550,32 +549,31 @@ impl PeerScore {
         }
     }
 
-    pub fn validate_message<T>(&mut self, _from: &PeerId, _msg: &GossipsubMessageWithId<T>) {
+    pub fn validate_message(&mut self, _from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
         // adds an empty record with the message id
         self.deliveries
-            .entry(_msg.message_id().clone())
+            .entry(msg_id.clone())
             .or_insert_with(DeliveryRecord::default);
 
         if let Some(callback) = self.message_delivery_time_callback {
-            let topic = &_msg.topic;
             if self
                 .peer_stats
                 .get(_from)
-                .and_then(|s| s.topics.get(topic))
+                .and_then(|s| s.topics.get(topic_hash))
                 .map(|ts| ts.in_mesh())
                 .unwrap_or(false)
             {
-                callback(_from, topic, 0.0);
+                callback(_from, topic_hash, 0.0);
             }
         }
     }
 
-    pub fn deliver_message<T>(&mut self, from: &PeerId, msg: &GossipsubMessageWithId<T>) {
-        self.mark_first_message_delivery(from, msg);
+    pub fn deliver_message(&mut self, from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
+        self.mark_first_message_delivery(from, topic_hash);
 
         let record = self
             .deliveries
-            .entry(msg.message_id().clone())
+            .entry(msg_id.clone())
             .or_insert_with(DeliveryRecord::default);
 
         // this should be the first delivery trace
@@ -590,25 +588,32 @@ impl PeerScore {
             // this check is to make sure a peer can't send us a message twice and get a double
             // count if it is a first delivery
             if &peer != from {
-                self.mark_duplicate_message_delivery(&peer, msg, None);
+                self.mark_duplicate_message_delivery(&peer, topic_hash, None);
             }
         }
     }
 
-    pub fn reject_message<T>(
+    /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
+    pub fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
+        debug!(
+            "Message from {} rejected because of ValidationError or SelfOrigin",
+            from
+        );
+        self.mark_invalid_message_delivery(from, topic_hash);
+    }
+
+    // Reject a message.
+    pub fn reject_message(
         &mut self,
         from: &PeerId,
-        msg: &GossipsubMessageWithId<T>,
+        msg_id: &MessageId,
+        topic_hash: &TopicHash,
         reason: RejectReason,
     ) {
         match reason {
             // these messages are not tracked, but the peer is penalized as they are invalid
             RejectReason::ValidationError(_) | RejectReason::SelfOrigin => {
-                debug!(
-                    "Message from {} rejected because of ValidationError or SelfOrigin",
-                    from
-                );
-                self.mark_invalid_message_delivery(from, msg);
+                self.reject_invalid_message(from, topic_hash);
                 return;
             }
             // we ignore those messages, so do nothing.
@@ -621,7 +626,7 @@ impl PeerScore {
         let peers: Vec<_> = {
             let mut record = self
                 .deliveries
-                .entry(msg.message_id().clone())
+                .entry(msg_id.clone())
                 .or_insert_with(DeliveryRecord::default);
 
             // this should be the first delivery trace
@@ -644,16 +649,21 @@ impl PeerScore {
             record.peers.drain().collect()
         };
 
-        self.mark_invalid_message_delivery(from, msg);
+        self.mark_invalid_message_delivery(from, topic_hash);
         for peer_id in peers.iter() {
-            self.mark_invalid_message_delivery(peer_id, msg)
+            self.mark_invalid_message_delivery(peer_id, topic_hash)
         }
     }
 
-    pub fn duplicated_message<T>(&mut self, from: &PeerId, msg: &GossipsubMessageWithId<T>) {
+    pub fn duplicated_message(
+        &mut self,
+        from: &PeerId,
+        msg_id: &MessageId,
+        topic_hash: &TopicHash,
+    ) {
         let record = self
             .deliveries
-            .entry(msg.message_id().clone())
+            .entry(msg_id.clone())
             .or_insert_with(DeliveryRecord::default);
 
         if record.peers.get(from).is_some() {
@@ -667,15 +677,14 @@ impl PeerScore {
             } else {
                 0.0
             };
-            let topic = &msg.topic;
             if self
                 .peer_stats
                 .get(from)
-                .and_then(|s| s.topics.get(topic))
+                .and_then(|s| s.topics.get(topic_hash))
                 .map(|ts| ts.in_mesh())
                 .unwrap_or(false)
             {
-                callback(from, topic, time);
+                callback(from, topic_hash, time);
             }
         }
 
@@ -688,11 +697,11 @@ impl PeerScore {
             DeliveryStatus::Valid(validated) => {
                 // mark the peer delivery time to only count a duplicate delivery once.
                 record.peers.insert(from.clone());
-                self.mark_duplicate_message_delivery(from, msg, Some(validated));
+                self.mark_duplicate_message_delivery(from, topic_hash, Some(validated));
             }
             DeliveryStatus::Invalid => {
                 // we no longer track delivery time
-                self.mark_invalid_message_delivery(from, msg);
+                self.mark_invalid_message_delivery(from, topic_hash);
             }
             DeliveryStatus::Ignored => {
                 // the message was ignored; do nothing (we don't know if it was valid)
@@ -748,13 +757,8 @@ impl PeerScore {
 
     /// Increments the "invalid message deliveries" counter for all scored topics the message
     /// is published in.
-    fn mark_invalid_message_delivery<T>(
-        &mut self,
-        peer_id: &PeerId,
-        msg: &GossipsubMessageWithId<T>,
-    ) {
+    fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, topic_hash: &TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            let topic_hash = &msg.topic;
             if let Some(topic_stats) =
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
             {
@@ -771,13 +775,8 @@ impl PeerScore {
     /// Increments the "first message deliveries" counter for all scored topics the message is
     /// published in, as well as the "mesh message deliveries" counter, if the peer is in the
     /// mesh for the topic.
-    fn mark_first_message_delivery<T>(
-        &mut self,
-        peer_id: &PeerId,
-        msg: &GossipsubMessageWithId<T>,
-    ) {
+    fn mark_first_message_delivery(&mut self, peer_id: &PeerId, topic_hash: &TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            let topic_hash = &msg.topic;
             if let Some(topic_stats) =
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
             {
@@ -815,10 +814,10 @@ impl PeerScore {
 
     /// Increments the "mesh message deliveries" counter for messages we've seen before, as long the
     /// message was received within the P3 window.
-    fn mark_duplicate_message_delivery<T>(
+    fn mark_duplicate_message_delivery(
         &mut self,
         peer_id: &PeerId,
-        msg: &GossipsubMessageWithId<T>,
+        topic_hash: &TopicHash,
         validated_time: Option<Instant>,
     ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
@@ -827,7 +826,6 @@ impl PeerScore {
             } else {
                 None
             };
-            let topic_hash = &msg.topic;
             if let Some(topic_stats) =
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
             {

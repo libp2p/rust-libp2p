@@ -46,8 +46,8 @@
 //! encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
-//! `PeerId` and a nonce (sequence number) of the message. The sequence numbers in this
-//! implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
+//! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
+//! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
 //! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
 //! the current go implementation.
 //!
@@ -55,22 +55,22 @@
 //!
 //! ## GossipsubConfig
 //!
-//! The [`Config`] struct specifies various network performance/tuning configuration
+//! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration
 //! parameters. Specifically it specifies:
 //!
-//! [`Config`]: struct.Config.html
+//! [`GossipsubConfig`]: struct.Config.html
 //!
-//! This struct implements the `Default` trait and can be initialised via
-//! `Config::default()`.
+//! This struct implements the [`Default`] trait and can be initialised via
+//! [`GossipsubConfig::default()`].
 //!
 //!
 //! ## Gossipsub
 //!
-//! The [`GenericGossipsub`] struct implements the `NetworkBehaviour` trait allowing it to act as the
-//! routing behaviour in a `Swarm`. This struct requires an instance of `PeerId` and
-//! [`Config`].
+//! The [`Gossipsub`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
+//! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
+//! [`libp2p_core::PeerId`] and [`GossipsubConfig`].
 //!
-//! [`GenericGossipsub`]: struct.GenericGossipsub.html
+//! [`Gossipsub`]: struct.Gossipsub.html
 
 //! ## Example
 //!
@@ -104,7 +104,7 @@
 //!     // set default parameters for gossipsub
 //!     let gossipsub_config = libp2p_gossipsub::GossipsubConfig::default();
 //!     // build a gossipsub network behaviour
-//!     let mut gossipsub =
+//!     let mut gossipsub: libp2p_gossipsub::Gossipsub =
 //!         libp2p_gossipsub::Gossipsub::new(message_authenticity, gossipsub_config).unwrap();
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
@@ -127,6 +127,7 @@ pub mod protocol;
 
 mod backoff;
 mod behaviour;
+mod compression;
 mod config;
 mod gossip_promises;
 mod handler;
@@ -143,20 +144,20 @@ extern crate derive_builder;
 
 mod rpc_proto;
 
-pub use self::behaviour::{
-    Event, GenericGossipsub, Gossipsub, GossipsubEvent, MessageAuthenticity,
-};
-pub use self::config::{
-    Config, ConfigBuilder, GossipsubConfig, GossipsubConfigBuilder, ValidationMode,
-};
+pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
+#[cfg(feature = "snappy")]
+pub use self::compression::SnappyCompression;
+pub use self::compression::{CompressionError, MessageCompression, NoCompression};
+
+pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, ValidationMode};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::types::{
-    FastMessageId, GenericGossipsubMessage, GossipsubMessage, GossipsubRpc, MessageAcceptance,
-    MessageId, RawGossipsubMessage,
+    FastMessageId, GossipsubMessage, GossipsubRpc, MessageAcceptance, MessageId,
+    RawGossipsubMessage,
 };
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

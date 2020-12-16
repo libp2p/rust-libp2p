@@ -29,7 +29,7 @@ use log::warn;
 use socket2::{Socket, Domain, Type};
 use std::{convert::TryFrom, fmt, io, net::{IpAddr, Ipv4Addr, UdpSocket, SocketAddr}, str, time::{Duration, Instant}};
 
-pub use dns::{MdnsResponseError, build_query_response, build_service_discovery_response};
+pub use dns::{build_query_response, build_service_discovery_response};
 
 lazy_static! {
     static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr = SocketAddr::from((
@@ -76,13 +76,15 @@ lazy_static! {
 ///     match packet {
 ///         MdnsPacket::Query(query) => {
 ///             println!("Query from {:?}", query.remote_addr());
-///             let resp = build_query_response(
+///             let packets = build_query_response(
 ///                 query.query_id(),
 ///                 my_peer_id.clone(),
 ///                 vec![].into_iter(),
 ///                 Duration::from_secs(120),
-///             ).unwrap();
-///             service.enqueue_response(resp);
+///             );
+///             for packet in packets {
+///                 service.enqueue_response(packet);
+///             }
 ///         }
 ///         MdnsPacket::Response(response) => {
 ///             for peer in response.discovered_peers() {
@@ -448,7 +450,7 @@ impl MdnsResponse {
             peer_name.retain(|c| c != '.');
 
             let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
-                Ok(bytes) => match PeerId::from_bytes(bytes) {
+                Ok(bytes) => match PeerId::from_bytes(&bytes) {
                     Ok(id) => id,
                     Err(_) => return None,
                 },
@@ -609,8 +611,10 @@ mod tests {
                                 peer_id.clone(),
                                 vec![].into_iter(),
                                 Duration::from_secs(120),
-                            ).unwrap();
-                            service.enqueue_response(resp);
+                            );
+                            for r in resp {
+                                service.enqueue_response(r);
+                            }
                         }
                         MdnsPacket::Response(response) => {
                             for peer in response.discovered_peers() {

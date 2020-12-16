@@ -29,7 +29,7 @@ pub trait TopicSubscriptionFilter {
 
     /// Filters a list of incoming subscriptions and returns a filtered set
     /// By default this deduplicates the subscriptions and calls
-    /// `Self::filter_incoming_subscription_set` on the filtered set.
+    /// [`Self::filter_incoming_subscription_set`] on the filtered set.
     fn filter_incoming_subscriptions<'a>(
         &mut self,
         subscriptions: &'a [GossipsubSubscription],
@@ -56,7 +56,7 @@ pub trait TopicSubscriptionFilter {
     }
 
     /// Filters a set of deduplicated subscriptions
-    /// By default this filters the elements based on `Self::allow_incoming_subscription`.
+    /// By default this filters the elements based on [`Self::allow_incoming_subscription`].
     fn filter_incoming_subscription_set<'a>(
         &mut self,
         mut subscriptions: HashSet<&'a GossipsubSubscription>,

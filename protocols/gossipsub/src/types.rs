@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::compression::{CompressionError, MessageCompression};
 use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::PeerId;
@@ -93,14 +94,14 @@ pub enum PeerKind {
     NotSupported,
 }
 
-/// A message received by the gossipsub system.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct GenericGossipsubMessage<T> {
+/// A message received by the gossipsub system and stored locally in caches..
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct RawGossipsubMessage {
     /// Id of the peer that published this message.
     pub source: Option<PeerId>,
 
     /// Content of the message. Its meaning is out of scope of this library.
-    pub data: T,
+    pub data: Vec<u8>,
 
     /// A random sequence number.
     pub sequence_number: Option<u64>,
@@ -111,80 +112,50 @@ pub struct GenericGossipsubMessage<T> {
     /// The signature of the message if it's signed.
     pub signature: Option<Vec<u8>>,
 
-    /// The public key of the message if it is signed and the source `PeerId` cannot be inlined.
+    /// The public key of the message if it is signed and the source [`PeerId`] cannot be inlined.
     pub key: Option<Vec<u8>>,
 
     /// Flag indicating if this message has been validated by the application or not.
     pub validated: bool,
 }
 
-impl<T> GenericGossipsubMessage<T> {
-    pub fn from<S: Into<T>>(m: GenericGossipsubMessage<S>) -> Self {
-        Self {
-            source: m.source,
-            data: m.data.into(),
-            sequence_number: m.sequence_number,
-            topic: m.topic,
-            signature: m.signature,
-            key: m.key,
-            validated: m.validated,
-        }
+/// The message sent to the user after a [`RawGossipsubMessage`] has been decompressed .
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct GossipsubMessage {
+    /// Id of the peer that published this message.
+    pub source: Option<PeerId>,
+
+    /// Decompressed content of the message.
+    pub data: Vec<u8>,
+
+    /// A random sequence number.
+    pub sequence_number: Option<u64>,
+
+    /// The topic this message belongs to
+    pub topic: TopicHash,
+}
+
+impl GossipsubMessage {
+    pub fn from_raw<C: MessageCompression>(
+        compression: &C,
+        raw_message: RawGossipsubMessage,
+        max_size: usize,
+    ) -> Result<Self, CompressionError> {
+        Ok(GossipsubMessage {
+            source: raw_message.source,
+            data: compression.decompress_message(raw_message.data, max_size)?,
+            sequence_number: raw_message.sequence_number,
+            topic: raw_message.topic,
+        })
     }
 }
 
-pub type RawGossipsubMessage = GenericGossipsubMessage<Vec<u8>>;
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct DataWithId<T> {
-    pub id: MessageId,
-    pub data: T,
-}
-
-impl<T: Into<Vec<u8>>> Into<Vec<u8>> for DataWithId<T> {
-    fn into(self) -> Vec<u8> {
-        self.data.into()
-    }
-}
-
-impl<T: AsRef<[u8]>> AsRef<[u8]> for DataWithId<T> {
-    fn as_ref(&self) -> &[u8] {
-        self.data.as_ref()
-    }
-}
-
-pub type GossipsubMessageWithId<T> = GenericGossipsubMessage<DataWithId<T>>;
-
-impl<T> GossipsubMessageWithId<T> {
-    pub fn new(m: GenericGossipsubMessage<T>, id: MessageId) -> Self {
-        Self {
-            source: m.source,
-            data: DataWithId { id, data: m.data },
-            sequence_number: m.sequence_number,
-            topic: m.topic,
-            signature: m.signature,
-            key: m.key,
-            validated: m.validated,
-        }
-    }
-
-    pub fn message_id(&self) -> &MessageId {
-        &self.data.id
-    }
-
-    pub fn data(&self) -> &T {
-        &self.data.data
-    }
-}
-
-// for backwards compatibility
-pub type GossipsubMessage = GossipsubMessageWithId<Vec<u8>>;
-
-impl<T: Debug + AsRef<[u8]>> fmt::Debug for GenericGossipsubMessage<T> {
+impl fmt::Debug for GossipsubMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GossipsubMessage")
             .field(
                 "data",
-                &format_args!("{:<20}", &hex_fmt::HexFmt(&self.data.as_ref())),
+                &format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)),
             )
             .field("source", &self.source)
             .field("sequence_number", &self.sequence_number)
@@ -277,7 +248,7 @@ impl Into<rpc_proto::Rpc> for GossipsubRpc {
 
         for message in self.messages.into_iter() {
             let message = rpc_proto::Message {
-                from: message.source.map(|m| m.into_bytes()),
+                from: message.source.map(|m| m.to_bytes()),
                 data: Some(message.data),
                 seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
                 topic: TopicHash::into_string(message.topic),
@@ -343,7 +314,7 @@ impl Into<rpc_proto::Rpc> for GossipsubRpc {
                         peers: peers
                             .into_iter()
                             .map(|info| rpc_proto::PeerInfo {
-                                peer_id: info.peer_id.map(|id| id.into_bytes()),
+                                peer_id: info.peer_id.map(|id| id.to_bytes()),
                                 /// TODO, see https://github.com/libp2p/specs/pull/217
                                 signed_peer_record: None,
                             })
