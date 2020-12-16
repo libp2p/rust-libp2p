@@ -1,6 +1,5 @@
 //! Allows compression algorithms to be added to the gossipsub layer.
 
-#[cfg(feature = "snappy")]
 use snap::raw::{decompress_len, Decoder, Encoder};
 
 pub trait MessageCompression {
@@ -21,7 +20,6 @@ pub enum CompressionError {
     Custom(String),
 }
 
-#[cfg(feature = "snappy")]
 impl From<snap::Error> for CompressionError {
     fn from(error: snap::Error) -> CompressionError {
         CompressionError::Custom(error.to_string())
@@ -47,11 +45,9 @@ impl MessageCompression for NoCompression {
 }
 
 /// Optional Snappy compression
-#[cfg(feature = "snappy")]
 #[derive(Default, Clone)]
 pub struct SnappyCompression;
 
-#[cfg(feature = "snappy")]
 impl MessageCompression for SnappyCompression {
     fn decompress_message(
         &self,

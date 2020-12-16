@@ -34,7 +34,6 @@ mod tests {
     };
 
     use super::super::*;
-    #[cfg(feature = "snappy")]
     use crate::compression::SnappyCompression;
     use crate::compression::{MessageCompression, NoCompression};
     use crate::error::ValidationError;
@@ -136,7 +135,6 @@ mod tests {
         inject_nodes()
     }
 
-    #[cfg(feature = "snappy")]
     // used for testing compression
     fn _inject_nodes_compression(
     ) -> InjectNodesBuilder<SnappyCompression, AllowAllSubscriptionFilter> {

@@ -145,9 +145,9 @@ extern crate derive_builder;
 mod rpc_proto;
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
-#[cfg(feature = "snappy")]
-pub use self::compression::SnappyCompression;
-pub use self::compression::{CompressionError, MessageCompression, NoCompression};
+pub use self::compression::{
+    CompressionError, MessageCompression, NoCompression, SnappyCompression,
+};
 
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, ValidationMode};
 pub use self::peer_score::{
