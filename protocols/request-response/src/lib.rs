@@ -441,7 +441,7 @@ where
     /// node through [`RequestResponse::send_response`].
     pub fn is_pending_inbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
         self.connected.get(peer)
-            .map(|cs| cs.iter().any(|c| c.pending_outbound_response.contains(request_id)))
+            .map(|cs| cs.iter().any(|c| c.pending_outbound_responses.contains(request_id)))
             .unwrap_or(false)
     }
 
@@ -490,7 +490,7 @@ where
         if let Some(connection) = self.connected.get_mut(peer)
             .and_then(|cs| cs.iter_mut().find(|c| c.id == connection))
         {
-            let removed = connection.pending_outbound_response.remove(&request);
+            let removed = connection.pending_outbound_responses.remove(&request);
             if expected {
                 debug_assert!(removed, "Expected request id to be present.")
             }
@@ -575,7 +575,7 @@ where
             self.connected.remove(peer_id);
         }
 
-        for request_id in connection.pending_outbound_response {
+        for request_id in connection.pending_outbound_responses {
             self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 RequestResponseEvent::InboundFailure {
                     peer: peer_id.clone(),
@@ -647,7 +647,7 @@ where
                     .and_then(|cs| cs.iter_mut().find(|c| c.id == connection))
                 {
                     Some(connection) => {
-                        let inserted = connection.pending_outbound_response.insert(request_id);
+                        let inserted = connection.pending_outbound_responses.insert(request_id);
                         debug_assert!(inserted, "Expect id of new request to be unknown.");
                     },
                     // Connection closed after `RequestResponseEvent::Request` has been emitted.
@@ -716,7 +716,7 @@ where
             RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => {
                 // Note: No need to call `self.remove_pending_outbound_response`,
                 // `RequestResponseHandlerEvent::Request` was never emitted for this request and
-                // thus request was never added to `pending_outbound_response`.
+                // thus request was never added to `pending_outbound_responses`.
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
@@ -757,7 +757,7 @@ struct Connection {
     /// Pending outbound responses where corresponding inbound requests have
     /// been received on this connection and emitted via `poll` but have not yet
     /// been answered.
-    pending_outbound_response: HashSet<RequestId>,
+    pending_outbound_responses: HashSet<RequestId>,
     /// Pending inbound responses for previously sent requests on this
     /// connection.
     pending_inbound_responses: HashSet<RequestId>
@@ -768,7 +768,7 @@ impl Connection {
         Self {
             id,
             address,
-            pending_outbound_response: Default::default(),
+            pending_outbound_responses: Default::default(),
             pending_inbound_responses: Default::default(),
         }
     }
