@@ -137,7 +137,7 @@ impl GossipsubCodec {
             }
         };
 
-        let source = match PeerId::from_bytes(from.clone()) {
+        let source = match PeerId::from_bytes(&from) {
             Ok(v) => v,
             Err(_) => {
                 debug!("Signature verification failed: Invalid Peer Id");
@@ -161,7 +161,7 @@ impl GossipsubCodec {
             .map(|key| PublicKey::from_protobuf_encoding(&key))
         {
             Some(Ok(key)) => key,
-            _ => match PublicKey::from_protobuf_encoding(&source.as_bytes()[2..]) {
+            _ => match PublicKey::from_protobuf_encoding(&source.to_bytes()[2..]) {
                 Ok(v) => v,
                 Err(_) => {
                     warn!("Signature verification failed: No valid public key supplied");
@@ -200,7 +200,7 @@ impl Encoder for GossipsubCodec {
 
         for message in item.messages.into_iter() {
             let message = rpc_proto::Message {
-                from: message.source.map(|m| m.into_bytes()),
+                from: message.source.map(|m| m.to_bytes()),
                 data: Some(message.data),
                 seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
                 topic_ids: message.topics.into_iter().map(TopicHash::into).collect(),
@@ -372,7 +372,7 @@ impl Decoder for GossipsubCodec {
 
             let source = if verify_source {
                 Some(
-                    PeerId::from_bytes(message.from.unwrap_or_default()).map_err(|_| {
+                    PeerId::from_bytes(&message.from.unwrap_or_default()).map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id")
                     })?,
                 )

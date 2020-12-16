@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.25.2"
+version = "0.26.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asn1_der = "0.6.1"
 bs58 = "0.4.0"
-bytes = "0.5"
 ed25519-dalek = "1.0.1"
 either = "1.5"
 fnv = "1.0"

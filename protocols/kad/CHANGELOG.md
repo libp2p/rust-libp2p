@@ -1,3 +1,7 @@
+# 0.27.0 [unreleased]
+
+- Update `libp2p-core` and `libp2p-swarm`.
+
 # 0.26.0 [2020-11-25]
 
 - Update `libp2p-core` and `libp2p-swarm`.
