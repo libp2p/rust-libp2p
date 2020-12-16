@@ -6,6 +6,9 @@
   to the underlying connection closing.
   [PR 1886](https://github.com/libp2p/rust-libp2p/pull/1886).
 
+- Derive Clone for `InboundFailure` and `Outbound}Failure`.
+  [PR 1891](https://github.com/libp2p/rust-libp2p/pull/1891)
+
 # 0.7.0 [2020-12-08]
 
 - Refine emitted events for inbound requests, introducing
