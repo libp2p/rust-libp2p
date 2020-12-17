@@ -218,7 +218,7 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 /// in whose context it is executing.
 ///
 /// [`Swarm`]: super::Swarm
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
@@ -264,7 +264,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     NotifyHandler {
         /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
-        /// The ID of the connection whose `ProtocolsHandler` to notify.
+        /// The options w.r.t. which connection handler to notify of the event.
         handler: NotifyHandler,
         /// The event to send.
         event: TInEvent,
@@ -325,15 +325,13 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
     }
 }
 
-/// The options w.r.t. which connection handlers to notify of an event.
+/// The options w.r.t. which connection handler to notify of an event.
 #[derive(Debug, Clone)]
 pub enum NotifyHandler {
     /// Notify a particular connection handler.
     One(ConnectionId),
     /// Notify an arbitrary connection handler.
     Any,
-    /// Notify all connection handlers.
-    All
 }
 
 /// The available conditions under which a new dialing attempt to
