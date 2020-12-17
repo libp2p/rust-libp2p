@@ -1,3 +1,7 @@
+# 0.26.0 [unreleased]
+
+- Update `async-io`.
+
 # 0.25.1 [2020-11-26]
 
 - Lower `async-std` version to `1.6`, for compatibility

@@ -78,7 +78,7 @@ impl MemoryStore {
     /// Creates a new `MemoryRecordStore` with the given configuration.
     pub fn with_config(local_id: PeerId, config: MemoryStoreConfig) -> Self {
         MemoryStore {
-            local_key: kbucket::Key::new(local_id),
+            local_key: kbucket::Key::from(local_id),
             config,
             records: HashMap::default(),
             provided: HashSet::default(),
@@ -161,9 +161,9 @@ impl<'a> RecordStore<'a> for MemoryStore {
             // It is a new provider record for that key.
             let local_key = self.local_key.clone();
             let key = kbucket::Key::new(record.key.clone());
-            let provider = kbucket::Key::new(record.provider.clone());
+            let provider = kbucket::Key::from(record.provider);
             if let Some(i) = providers.iter().position(|p| {
-                let pk = kbucket::Key::new(p.provider.clone());
+                let pk = kbucket::Key::from(p.provider);
                 provider.distance(&key) < pk.distance(&key)
             }) {
                 // Insert the new provider.
@@ -225,7 +225,7 @@ mod tests {
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {
         kbucket::Key::new(r.key.clone())
-            .distance(&kbucket::Key::new(r.provider.clone()))
+            .distance(&kbucket::Key::from(r.provider))
     }
 
     #[test]
@@ -318,4 +318,3 @@ mod tests {
         }
     }
 }
-

@@ -1,3 +1,8 @@
+# 0.26.0 [unreleased]
+
+- Make `PeerId` be `Copy`, including small `PeerId` API changes.
+  [PR 1874](https://github.com/libp2p/rust-libp2p/pull/1874/).
+
 # 0.25.2 [2020-12-02]
 
 - Require `multistream-select-0.9.1`.

@@ -101,7 +101,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
     fn try_from(peer: proto::message::Peer) -> Result<KadPeer, Self::Error> {
         // TODO: this is in fact a CID; not sure if this should be handled in `from_bytes` or
         //       as a special case here
-        let node_id = PeerId::from_bytes(peer.id)
+        let node_id = PeerId::from_bytes(&peer.id)
             .map_err(|_| invalid_data("invalid peer id"))?;
 
         let mut addrs = Vec::with_capacity(peer.addrs.len());
@@ -126,7 +126,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
 impl Into<proto::message::Peer> for KadPeer {
     fn into(self) -> proto::message::Peer {
         proto::message::Peer {
-            id: self.node_id.into_bytes(),
+            id: self.node_id.to_bytes(),
             addrs: self.multiaddrs.into_iter().map(|a| a.to_vec()).collect(),
             connection: {
                 let ct: proto::message::ConnectionType = self.connection_ty.into();
@@ -533,7 +533,7 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
 
     let publisher =
         if !record.publisher.is_empty() {
-            PeerId::from_bytes(record.publisher)
+            PeerId::from_bytes(&record.publisher)
                 .map(Some)
                 .map_err(|_| invalid_data("Invalid publisher peer ID."))?
         } else {
@@ -554,7 +554,7 @@ fn record_to_proto(record: Record) -> proto::Record {
     proto::Record {
         key: record.key.to_vec(),
         value: record.value,
-        publisher: record.publisher.map(PeerId::into_bytes).unwrap_or_default(),
+        publisher: record.publisher.map(|id| id.to_bytes()).unwrap_or_default(),
         ttl: record.expires
             .map(|t| {
                 let now = Instant::now();
