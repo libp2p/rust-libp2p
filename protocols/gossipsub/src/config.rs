@@ -81,6 +81,7 @@ pub struct GossipsubConfig {
     opportunistic_graft_ticks: u64,
     opportunistic_graft_peers: usize,
     gossip_retransimission: u32,
+    max_messages_per_rpc: Option<usize>,
     max_ihave_length: usize,
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
@@ -312,6 +313,12 @@ impl GossipsubConfig {
         self.opportunistic_graft_peers
     }
 
+    /// The maximum number of messages we will process in a given RPC. If this is unset, there is
+    /// no limit. The default is None.
+    pub fn max_messages_per_rpc(&self) -> Option<usize> {
+        self.max_messages_per_rpc
+    }
+
     /// The maximum number of messages to include in an IHAVE message.
     /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
     /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
@@ -406,6 +413,7 @@ impl Default for GossipsubConfigBuilder {
                 opportunistic_graft_ticks: 60,
                 opportunistic_graft_peers: 2,
                 gossip_retransimission: 3,
+                max_messages_per_rpc: None,
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
@@ -657,6 +665,13 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// The maximum number of messages we will process in a given RPC. If this is unset, there is
+    /// no limit. The default is None.
+    pub fn max_messages_per_rpc(&mut self, max: Option<usize>) -> &mut Self {
+        self.config.max_messages_per_rpc = max;
+        self
+    }
+
     /// The maximum number of messages to include in an IHAVE message.
     /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
     /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
@@ -766,6 +781,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
+        let _ = builder.field("max_messages_per_rpc", &self.max_messages_per_rpc);
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);

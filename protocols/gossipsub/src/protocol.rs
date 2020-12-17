@@ -576,7 +576,7 @@ mod tests {
                 .map(|_| g.gen())
                 .collect::<Vec<_>>();
             let topic_id = TopicId::arbitrary(g).0;
-            Message(gs.build_raw_message(topic_id, &data).unwrap())
+            Message(gs.build_raw_message(topic_id, data).unwrap())
         }
     }
 

@@ -27,7 +27,6 @@ smallvec = "1.4.2"
 prost = "0.6.1"
 hex_fmt = "0.3.0"
 regex = "1.4.0"
-snap = "1.0.3"
 
 [dev-dependencies]
 async-std = "1.6.3"

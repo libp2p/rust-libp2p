@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use crate::compression::{CompressionError, MessageCompression};
 use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::PeerId;
@@ -119,13 +118,14 @@ pub struct RawGossipsubMessage {
     pub validated: bool,
 }
 
-/// The message sent to the user after a [`RawGossipsubMessage`] has been decompressed .
+/// The message sent to the user after a [`RawGossipsubMessage`] has been transformed by a
+/// [`DataTransform`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {
     /// Id of the peer that published this message.
     pub source: Option<PeerId>,
 
-    /// Decompressed content of the message.
+    /// Content of the message.
     pub data: Vec<u8>,
 
     /// A random sequence number.
@@ -133,21 +133,6 @@ pub struct GossipsubMessage {
 
     /// The topic this message belongs to
     pub topic: TopicHash,
-}
-
-impl GossipsubMessage {
-    pub fn from_raw<C: MessageCompression>(
-        compression: &C,
-        raw_message: RawGossipsubMessage,
-        max_size: usize,
-    ) -> Result<Self, CompressionError> {
-        Ok(GossipsubMessage {
-            source: raw_message.source,
-            data: compression.decompress_message(raw_message.data, max_size)?,
-            sequence_number: raw_message.sequence_number,
-            topic: raw_message.topic,
-        })
-    }
 }
 
 impl fmt::Debug for GossipsubMessage {

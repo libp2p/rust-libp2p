@@ -47,7 +47,6 @@ use libp2p_swarm::{
 };
 
 use crate::backoff::BackoffStorage;
-use crate::compression::{MessageCompression, NoCompression};
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
@@ -58,6 +57,7 @@ use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
+use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
     FastMessageId, GossipsubControlAction, GossipsubMessage, GossipsubSubscription,
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
@@ -200,8 +200,14 @@ type GossipsubNetworkBehaviourAction = NetworkBehaviourAction<Arc<rpc_proto::Rpc
 /// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If
 /// message signing is disabled, the [`ValidationMode`] in the config should be adjusted to an
 /// appropriate level to accept unsigned messages.
+///
+/// The DataTransform trait allows applications to optionally add extra encoding/decoding
+/// functionality to the underlying messages. This is intended for custom compression algorithms.
+///
+/// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
+/// prevent unwanted messages being propagated and evaluated.
 pub struct Gossipsub<
-    C: MessageCompression = NoCompression,
+    D: DataTransform = IdentityTransform,
     F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
 > {
     /// Configuration providing gossipsub performance parameters.
@@ -290,13 +296,15 @@ pub struct Gossipsub<
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
 
-    /// Marker to pin the generic compression algorithm.
-    message_compression: C,
+    /// A general transformation function that can be applied to data received from the wire before
+    /// calculating the message-id and sending to the application. This is designed to allow the
+    /// user to implement arbitrary topic-based compression algorithms.
+    data_transform: D,
 }
 
-impl<C, F> Gossipsub<C, F>
+impl<D, F> Gossipsub<D, F>
 where
-    C: MessageCompression + Default,
+    D: DataTransform + Default,
     F: TopicSubscriptionFilter + Default,
 {
     /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
@@ -346,7 +354,7 @@ where
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
             subscription_filter: F::default(),
-            message_compression: C::default(),
+            data_transform: D::default(),
         })
     }
 
@@ -363,35 +371,35 @@ where
     }
 
     /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom message compression algorithm.
-    pub fn new_with_compression(
+    /// [`GossipsubConfig`] and a custom data transform.
+    pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
-        message_compression: C,
+        data_transform: D,
     ) -> Result<Self, &'static str> {
         let mut gs = Self::new(privacy, config)?;
-        gs.message_compression = message_compression;
+        gs.data_transform = data_transform;
         Ok(gs)
     }
 
     /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom subscription filter and message compression algorithm.
-    pub fn new_with_subscription_filter_and_compression(
+    /// [`GossipsubConfig`] and a custom subscription filter and data transform.
+    pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
         subscription_filter: F,
-        message_compression: C,
+        data_transform: D,
     ) -> Result<Self, &'static str> {
         let mut gs = Self::new(privacy, config)?;
         gs.subscription_filter = subscription_filter;
-        gs.message_compression = message_compression;
+        gs.data_transform = data_transform;
         Ok(gs)
     }
 }
 
-impl<C, F> Gossipsub<C, F>
+impl<D, F> Gossipsub<D, F>
 where
-    C: MessageCompression,
+    D: DataTransform,
     F: TopicSubscriptionFilter,
 {
     /// Lists the hashes of the topics we are currently subscribed to.
@@ -530,9 +538,15 @@ where
         data: impl Into<Vec<u8>>,
     ) -> Result<MessageId, PublishError> {
         let data = data.into();
-        let raw_message = self.build_raw_message(topic.into(), &data)?;
 
-        // calculate the message id from the uncompressed data
+        // Transform the data before building a raw_message.
+        let transformed_data = self
+            .data_transform
+            .outbound_transform(&topic.hash(), data.clone())?;
+
+        let raw_message = self.build_raw_message(topic.into(), transformed_data)?;
+
+        // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&GossipsubMessage {
             source: raw_message.source.clone(),
             data, // the uncompressed form
@@ -1534,25 +1548,22 @@ where
             }
         }
 
-        // Try and decompress the message. If it fails, consider it invalid.
-        let message = match GossipsubMessage::from_raw(
-            &self.message_compression,
-            raw_message.clone(),
-            self.config.max_transmit_size(),
-        ) {
+        // Try and perform the data transform to the message. If it fails, consider it invalid.
+        let message = match self.data_transform.inbound_transform(raw_message.clone()) {
             Ok(message) => message,
             Err(e) => {
-                debug!("Invalid message. Decompression error: {:?}", e);
+                debug!("Invalid message. Transform error: {:?}", e);
                 // Reject the message and return
                 self.handle_invalid_message(
                     propagation_source,
                     raw_message,
-                    ValidationError::DecompressionFailed,
+                    ValidationError::TransformFailed,
                 );
                 return;
             }
         };
 
+        // Calculate the message id on the transformed data.
         let msg_id = self.config.message_id(&message);
 
         // Check the validity of the message
@@ -2422,11 +2433,8 @@ where
     pub(crate) fn build_raw_message(
         &self,
         topic: TopicHash,
-        data: &[u8],
+        data: Vec<u8>,
     ) -> Result<RawGossipsubMessage, PublishError> {
-        // Compress the data if required.
-        let compressed_data = self.message_compression.compress_message(data.to_vec())?;
-
         match &self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
@@ -2439,7 +2447,7 @@ where
                 let signature = {
                     let message = rpc_proto::Message {
                         from: Some(author.clone().to_bytes()),
-                        data: Some(compressed_data.clone()),
+                        data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic: topic.clone().into_string(),
                         signature: None,
@@ -2459,7 +2467,7 @@ where
 
                 Ok(RawGossipsubMessage {
                     source: Some(author.clone()),
-                    data: compressed_data,
+                    data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
                     sequence_number: Some(sequence_number),
@@ -2472,7 +2480,7 @@ where
             PublishConfig::Author(peer_id) => {
                 Ok(RawGossipsubMessage {
                     source: Some(peer_id.clone()),
-                    data: compressed_data,
+                    data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
                     sequence_number: Some(rand::random()),
@@ -2485,7 +2493,7 @@ where
             PublishConfig::RandomAuthor => {
                 Ok(RawGossipsubMessage {
                     source: Some(PeerId::random()),
-                    data: compressed_data,
+                    data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
                     sequence_number: Some(rand::random()),
@@ -2498,7 +2506,7 @@ where
             PublishConfig::Anonymous => {
                 Ok(RawGossipsubMessage {
                     source: None,
-                    data: compressed_data,
+                    data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
                     sequence_number: None,
@@ -2702,7 +2710,7 @@ fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
 
 impl<C, F> NetworkBehaviour for Gossipsub<C, F>
 where
-    C: Send + 'static + MessageCompression,
+    C: Send + 'static + DataTransform,
     F: Send + 'static + TopicSubscriptionFilter,
 {
     type ProtocolsHandler = GossipsubHandler;
@@ -2992,7 +3000,14 @@ where
                 }
 
                 // Handle messages
-                for raw_message in rpc.messages {
+                for (count, raw_message) in rpc.messages.into_iter().enumerate() {
+                    // Only process the amount of messages the configuration allows.
+                    if self.config.max_messages_per_rpc().is_some()
+                        && Some(count) >= self.config.max_messages_per_rpc()
+                    {
+                        warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
+                        break;
+                    }
                     self.handle_received_message(raw_message, &propagation_source);
                 }
 
@@ -3173,7 +3188,7 @@ fn validate_config(
     Ok(())
 }
 
-impl<C: MessageCompression, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F> {
+impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
             .field("config", &self.config)

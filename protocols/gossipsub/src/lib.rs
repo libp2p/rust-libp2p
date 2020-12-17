@@ -127,7 +127,6 @@ pub mod protocol;
 
 mod backoff;
 mod behaviour;
-mod compression;
 mod config;
 mod gossip_promises;
 mod handler;
@@ -136,6 +135,7 @@ mod peer_score;
 pub mod subscription_filter;
 pub mod time_cache;
 mod topic;
+mod transform;
 mod types;
 
 #[cfg(test)]
@@ -145,9 +145,7 @@ extern crate derive_builder;
 mod rpc_proto;
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
-pub use self::compression::{
-    CompressionError, MessageCompression, NoCompression, SnappyCompression,
-};
+pub use self::transform::{DataTransform, IdentityTransform};
 
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, ValidationMode};
 pub use self::peer_score::{
