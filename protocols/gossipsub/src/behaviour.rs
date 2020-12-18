@@ -313,6 +313,70 @@ where
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
     ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter_and_transform(
+            privacy,
+            config,
+            F::default(),
+            D::default(),
+        )
+    }
+}
+
+impl<D, F> Gossipsub<D, F>
+where
+    D: DataTransform + Default,
+    F: TopicSubscriptionFilter,
+{
+    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
+    /// [`GossipsubConfig`] and a custom subscription filter.
+    pub fn new_with_subscription_filter(
+        privacy: MessageAuthenticity,
+        config: GossipsubConfig,
+        subscription_filter: F,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter_and_transform(
+            privacy,
+            config,
+            subscription_filter,
+            D::default(),
+        )
+    }
+}
+
+impl<D, F> Gossipsub<D, F>
+where
+    D: DataTransform,
+    F: TopicSubscriptionFilter + Default,
+{
+    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
+    /// [`GossipsubConfig`] and a custom data transform.
+    pub fn new_with_transform(
+        privacy: MessageAuthenticity,
+        config: GossipsubConfig,
+        data_transform: D,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter_and_transform(
+            privacy,
+            config,
+            F::default(),
+            data_transform,
+        )
+    }
+}
+
+impl<D, F> Gossipsub<D, F>
+where
+    D: DataTransform,
+    F: TopicSubscriptionFilter,
+{
+    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
+    /// [`GossipsubConfig`] and a custom subscription filter and data transform.
+    pub fn new_with_subscription_filter_and_transform(
+        privacy: MessageAuthenticity,
+        config: GossipsubConfig,
+        subscription_filter: F,
+        data_transform: D,
+    ) -> Result<Self, &'static str> {
         // Set up the router given the configuration settings.
 
         // We do not allow configurations where a published message would also be rejected if it
@@ -353,47 +417,9 @@ where
             peer_protocols: HashMap::new(),
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
-            subscription_filter: F::default(),
-            data_transform: D::default(),
+            subscription_filter,
+            data_transform,
         })
-    }
-
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom subscription filter.
-    pub fn new_with_subscription_filter(
-        privacy: MessageAuthenticity,
-        config: GossipsubConfig,
-        subscription_filter: F,
-    ) -> Result<Self, &'static str> {
-        let mut gs = Self::new(privacy, config)?;
-        gs.subscription_filter = subscription_filter;
-        Ok(gs)
-    }
-
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom data transform.
-    pub fn new_with_transform(
-        privacy: MessageAuthenticity,
-        config: GossipsubConfig,
-        data_transform: D,
-    ) -> Result<Self, &'static str> {
-        let mut gs = Self::new(privacy, config)?;
-        gs.data_transform = data_transform;
-        Ok(gs)
-    }
-
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom subscription filter and data transform.
-    pub fn new_with_subscription_filter_and_transform(
-        privacy: MessageAuthenticity,
-        config: GossipsubConfig,
-        subscription_filter: F,
-        data_transform: D,
-    ) -> Result<Self, &'static str> {
-        let mut gs = Self::new(privacy, config)?;
-        gs.subscription_filter = subscription_filter;
-        gs.data_transform = data_transform;
-        Ok(gs)
     }
 }
 
