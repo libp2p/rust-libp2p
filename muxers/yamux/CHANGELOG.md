@@ -1,4 +1,4 @@
-# 0.29.0 [unreleased]
+# 0.29.0 [2020-12-17]
 
 - Update `libp2p-core`.
 

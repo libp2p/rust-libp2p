@@ -1,4 +1,4 @@
-# 0.8.0 [unreleased]
+# 0.8.0 [2020-12-17]
 
 - Update `libp2p-swarm` and `libp2p-core`.
 
