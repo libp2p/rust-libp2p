@@ -71,7 +71,7 @@ libp2p-mplex = { version = "0.26.0", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.28.0", path = "protocols/noise", optional = true }
 libp2p-ping = { version = "0.26.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.26.0", path = "protocols/plaintext", optional = true }
-libp2p-pnet = { version = "0.19.2", path = "protocols/pnet", optional = true }
+libp2p-pnet = { version = "0.20.0", path = "protocols/pnet", optional = true }
 libp2p-request-response = { version = "0.8.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.26.0", path = "swarm" }
 libp2p-uds = { version = "0.26.0", path = "transports/uds", optional = true }
@@ -104,6 +104,7 @@ members = [
     "misc/peer-id-generator",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/deflate",
     "protocols/floodsub",
     "protocols/gossipsub",
     "protocols/identify",
@@ -112,6 +113,7 @@ members = [
     "protocols/noise",
     "protocols/ping",
     "protocols/plaintext",
+    "protocols/pnet",
     "protocols/request-response",
     "protocols/secio",
     "swarm",

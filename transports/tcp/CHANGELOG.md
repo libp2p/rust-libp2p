@@ -1,4 +1,4 @@
-# 0.26.0 [unreleased]
+# 0.26.0 [2020-12-17]
 
 - Update `async-io`.
 

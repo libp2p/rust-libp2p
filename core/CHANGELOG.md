@@ -1,4 +1,4 @@
-# 0.26.0 [unreleased]
+# 0.26.0 [2020-12-17]
 
 - Make `PeerId` be `Copy`, including small `PeerId` API changes.
   [PR 1874](https://github.com/libp2p/rust-libp2p/pull/1874/).

@@ -1,6 +1,10 @@
-# 0.26.0 [unreleased]
+# 0.26.0 [2020-12-17]
 
 - Update `libp2p-core`.
+
+- Remove `NotifyHandler::All` thus removing the requirement for events send from
+  a `NetworkBehaviour` to a `ProtocolsHandler` to be `Clone`.
+  [PR 1880](https://github.com/libp2p/rust-libp2p/pull/1880).
 
 # 0.25.1 [2020-11-26]
 
