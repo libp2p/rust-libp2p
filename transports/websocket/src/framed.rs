@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_rustls::{webpki, client, server};
+use futures_rustls::{webpki, client, server};
 use crate::{error::Error, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
