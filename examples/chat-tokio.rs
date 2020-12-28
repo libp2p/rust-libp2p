@@ -36,7 +36,6 @@
 //!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
 //! ```
 
-use futures::prelude::*;
 use libp2p::{
     Multiaddr,
     NetworkBehaviour,
@@ -154,7 +153,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let to_publish = {
             tokio::select! {
-                line = stdin.try_next() => Some((floodsub_topic.clone(), line?.expect("Stdin closed"))),
+                line = stdin.next_line() => Some((floodsub_topic.clone(), line?.expect("Stdin closed"))),
                 event = swarm.next() => {
                     println!("New Event: {:?}", event);
                     None
