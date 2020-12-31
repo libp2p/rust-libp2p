@@ -25,3 +25,6 @@ webpki-roots = "0.18"
 
 [dev-dependencies]
 libp2p-tcp = { path = "../tcp", features = ["async-std"] }
+
+[package.metadata.workspaces]
+independent = true

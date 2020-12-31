@@ -19,3 +19,6 @@ async-std = "1.6.2"
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
 quickcheck = "0.9"
 rand = "0.7"
+
+[package.metadata.workspaces]
+independent = true

@@ -22,3 +22,6 @@ void = "1"
 libp2p-mplex = { path = "../muxers/mplex" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
+
+[package.metadata.workspaces]
+independent = true

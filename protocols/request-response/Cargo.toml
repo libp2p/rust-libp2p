@@ -23,3 +23,6 @@ libp2p-noise = { path = "../noise" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
 rand = "0.7"
+
+[package.metadata.workspaces]
+independent = true

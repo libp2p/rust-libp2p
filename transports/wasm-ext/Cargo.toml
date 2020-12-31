@@ -19,3 +19,6 @@ wasm-bindgen-futures = "0.4.4"
 
 [features]
 websocket = []
+
+[package.metadata.workspaces]
+independent = true

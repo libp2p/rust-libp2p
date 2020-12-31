@@ -13,3 +13,6 @@ publish = false
 [dependencies]
 libp2p-core = { path = "../../core" }
 num_cpus = "1.8"
+
+[package.metadata.workspaces]
+independent = true

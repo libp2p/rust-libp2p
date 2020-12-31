@@ -22,3 +22,6 @@ async-std = "1.6.2"
 quickcheck = "0.9.0"
 rand = "0.7.2"
 rw-stream-sink = "0.2.1"
+
+[package.metadata.workspaces]
+independent = true

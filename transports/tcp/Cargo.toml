@@ -23,3 +23,6 @@ tokio = { version = "0.2", default-features = false, features = ["tcp"], optiona
 [dev-dependencies]
 libp2p-tcp = { path = ".", features = ["async-std"] }
 
+
+[package.metadata.workspaces]
+independent = true

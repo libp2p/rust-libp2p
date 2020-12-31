@@ -22,3 +22,6 @@ smallvec = "1.0"
 [build-dependencies]
 prost-build = "0.6"
 
+
+[package.metadata.workspaces]
+independent = true
