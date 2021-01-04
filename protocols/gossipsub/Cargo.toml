@@ -24,7 +24,7 @@ log = "0.4.8"
 sha2 = "0.9.1"
 base64 = "0.13.0"
 smallvec = "1.1.0"
-prost = "0.6.1"
+prost = "0.7"
 hex_fmt = "0.3.0"
 lru_time_cache = "0.11.0"
 
