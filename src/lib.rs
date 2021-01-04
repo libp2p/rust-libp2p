@@ -216,7 +216,7 @@ pub use libp2p_plaintext as plaintext;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
 #[cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
