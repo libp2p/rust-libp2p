@@ -118,7 +118,7 @@ where
 /// Request substream upgrade protocol.
 ///
 /// Sends a request and receives a response.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RequestProtocol<TCodec>
 where
     TCodec: RequestResponseCodec
