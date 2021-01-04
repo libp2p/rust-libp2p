@@ -215,7 +215,7 @@ pub use libp2p_ping as ping;
 pub use libp2p_plaintext as plaintext;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
@@ -268,8 +268,8 @@ pub use self::transport_ext::TransportExt;
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
 pub fn build_development_transport(keypair: identity::Keypair)
     -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
@@ -280,13 +280,16 @@ pub fn build_development_transport(keypair: identity::Keypair)
 ///
 /// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
 pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
     -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
     let transport = {
+        #[cfg(feature = "tcp-async-io")]
         let tcp = tcp::TcpConfig::new().nodelay(true);
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
         let transport = dns::DnsConfig::new(tcp)?;
         let trans_clone = transport.clone();
         transport.or_transport(websocket::WsConfig::new(trans_clone))
@@ -308,13 +311,16 @@ pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
 ///
 /// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))))]
 pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
     -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
     let transport = {
+        #[cfg(feature = "tcp-async-io")]
         let tcp = tcp::TcpConfig::new().nodelay(true);
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
         let transport = dns::DnsConfig::new(tcp)?;
         let trans_clone = transport.clone();
         transport.or_transport(websocket::WsConfig::new(trans_clone))
