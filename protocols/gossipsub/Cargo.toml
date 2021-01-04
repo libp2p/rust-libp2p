@@ -37,4 +37,4 @@ quickcheck = "0.9.2"
 hex = "0.4.2"
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"

@@ -25,5 +25,5 @@ libp2p-noise = { path = "../../protocols/noise" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"
 

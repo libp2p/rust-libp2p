@@ -41,7 +41,7 @@ wasm-bindgen-futures = "0.4.5"
 web-sys = { version = "0.3.10", features = ["Crypto", "CryptoKey", "SubtleCrypto", "Window"] }
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"
 
 [features]
 default = ["secp256k1"]

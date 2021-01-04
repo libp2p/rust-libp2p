@@ -49,7 +49,7 @@ quickcheck = "0.9.0"
 wasm-timer = "0.2"
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"
 
 [features]
 default = ["secp256k1"]
