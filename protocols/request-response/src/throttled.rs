@@ -52,8 +52,9 @@ use super::{
     RequestResponseConfig,
     RequestResponseEvent,
     RequestResponseMessage,
-    ResponseChannel
 };
+
+pub type ResponseChannel<R> = super::ResponseChannel<Message<R>>;
 
 /// A wrapper around [`RequestResponse`] which adds request limits per peer.
 pub struct Throttled<C>
@@ -304,7 +305,7 @@ where
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response)
+    pub fn send_response(&mut self, ch: ResponseChannel<C::Response>, res: C::Response)
         -> Result<(), C::Response>
     {
         log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);

@@ -329,7 +329,7 @@ impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 }
 
 /// Event to send to the handler.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum KademliaHandlerIn<TUserData> {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
@@ -429,7 +429,7 @@ pub enum KademliaHandlerIn<TUserData> {
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct KademliaRequestId {
     /// Unique identifier for an incoming connection.
     connec_unique_id: UniqueConnecId,
