@@ -22,7 +22,7 @@ use crate::behaviour::GossipsubRpc;
 use crate::config::ValidationMode;
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use futures::prelude::*;
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
