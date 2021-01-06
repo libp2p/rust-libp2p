@@ -13,24 +13,25 @@ categories = ["network-programming", "asynchronous"]
 bytes = "0.5"
 fnv = "1.0"
 futures = "0.3.1"
+futures_codec = "0.4"
 libp2p-core = { version = "0.25.0", path = "../../core" }
 libp2p-swarm = { version = "0.25.0", path = "../../swarm" }
 log = "0.4"
+pin-project = "1"
 prost = "0.6.1"
 rand = "0.6"
 smallvec = "0.6.9"
-futures_codec = "0.4"
 unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 void = "1.0"
-pin-project = "1"
 
 [build-dependencies]
 prost-build = "0.6"
 
 [dev-dependencies]
 env_logger = "0.7.1"
+libp2p = { path = "../.." }
+libp2p-kad = { path = "../kad" }
+libp2p-ping = { path = "../ping" }
 libp2p-plaintext = { path = "../plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
-libp2p-ping = { path = "../ping" }
-libp2p = { path = "../.." }
 rand = "0.7.2"
