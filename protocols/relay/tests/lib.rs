@@ -1,11 +1,11 @@
 use futures::executor::LocalPool;
 use futures::future::FutureExt;
-use futures::stream::StreamExt;
+use futures::stream::{Stream, StreamExt};
 use futures::task::Spawn;
 use libp2p::NetworkBehaviour;
+use libp2p_core::either::EitherTransport;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::MemoryTransport;
-use libp2p_core::transport::Transport;
+use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
 use libp2p_core::{identity, upgrade, PeerId};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
@@ -52,18 +52,50 @@ impl NetworkBehaviourEventProcess<()> for CombinedBehaviour {
     }
 }
 
-fn build_swarm() -> Swarm<CombinedBehaviour> {
+enum Reachability {
+    Firewalled,
+    Routable,
+}
+
+/// Wrapper around a [`Transport`] allowing outgoing but denying incoming connections.
+///
+/// Meant for testing purposes only.
+#[derive(Clone)]
+pub struct Firewall<T>(pub T);
+
+impl<T: Transport> Transport for Firewall<T> {
+    type Output = <T as Transport>::Output;
+    type Error = <T as Transport>::Error;
+    type Listener = futures::stream::Pending<<<T as Transport>::Listener as Stream>::Item>;
+    type ListenerUpgrade = <T as Transport>::ListenerUpgrade;
+    type Dial = <T as Transport>::Dial;
+
+    fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        Ok(futures::stream::pending())
+    }
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr)
+    }
+}
+
+fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
 
-    let memory_transport = MemoryTransport::default();
-    let (relay_wrapped_transport, (to_transport, from_transport)) =
-        RelayTransportWrapper::new(memory_transport);
+    let transport = MemoryTransport::default();
 
-    let transport = relay_wrapped_transport
+    let transport = match reachability {
+        Reachability::Firewalled => EitherTransport::Left(Firewall(transport)),
+        Reachability::Routable => EitherTransport::Right(transport),
+    };
+
+    let (transport, (to_transport, from_transport)) = RelayTransportWrapper::new(transport);
+
+    let transport = transport
         .upgrade(upgrade::Version::V1)
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
@@ -85,9 +117,9 @@ fn node_a_connect_to_node_b_listening_via_relay() {
 
     let mut pool = LocalPool::new();
 
-    let mut node_a_swarm = build_swarm();
-    let mut node_b_swarm = build_swarm();
-    let mut relay_swarm = build_swarm();
+    let mut node_a_swarm = build_swarm(Reachability::Firewalled);
+    let mut node_b_swarm = build_swarm(Reachability::Firewalled);
+    let mut relay_swarm = build_swarm(Reachability::Routable);
 
     let node_a_peer_id = Swarm::local_peer_id(&node_a_swarm).clone();
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
@@ -240,9 +272,9 @@ fn node_a_connect_to_node_b_not_listening_via_relay() {
 
     let mut pool = LocalPool::new();
 
-    let mut node_a_swarm = build_swarm();
-    let mut node_b_swarm = build_swarm();
-    let mut relay_swarm = build_swarm();
+    let mut node_a_swarm = build_swarm(Reachability::Firewalled);
+    let mut node_b_swarm = build_swarm(Reachability::Routable);
+    let mut relay_swarm = build_swarm(Reachability::Routable);
 
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
@@ -336,8 +368,8 @@ fn node_a_try_connect_to_offline_node_b() {
 
     let mut pool = LocalPool::new();
 
-    let mut node_a_swarm = build_swarm();
-    let mut relay_swarm = build_swarm();
+    let mut node_a_swarm = build_swarm(Reachability::Firewalled);
+    let mut relay_swarm = build_swarm(Reachability::Routable);
 
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
     let node_b_peer_id = PeerId::random();
@@ -412,7 +444,7 @@ fn node_a_try_connect_to_offline_node_b_via_offline_relay() {
 
     let mut pool = LocalPool::new();
 
-    let mut node_a_swarm = build_swarm();
+    let mut node_a_swarm = build_swarm(Reachability::Firewalled);
 
     let relay_peer_id = PeerId::random();
     let node_b_peer_id = PeerId::random();
@@ -461,9 +493,9 @@ fn node_a_connect_to_node_b_via_established_connection_to_relay() {
 
     let mut pool = LocalPool::new();
 
-    let mut node_a_swarm = build_swarm();
-    let mut node_b_swarm = build_swarm();
-    let mut relay_swarm = build_swarm();
+    let mut node_a_swarm = build_swarm(Reachability::Firewalled);
+    let mut node_b_swarm = build_swarm(Reachability::Routable);
+    let mut relay_swarm = build_swarm(Reachability::Routable);
 
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
