@@ -1,3 +1,23 @@
+// Copyright 2020 Sigma Prime Pty Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 //! This trait allows of extended user-level decoding that can apply to message-data before a
 //! message-id is calculated.
 //!
@@ -7,9 +27,9 @@
 
 use crate::{GossipsubMessage, RawGossipsubMessage, TopicHash};
 
-/// A general trait of transforming a [`RawGossipubMessage`] into a [`GossipsubMessage`]. The
+/// A general trait of transforming a [`RawGossipsubMessage`] into a [`GossipsubMessage`]. The
 /// [`RawGossipsubMessage`] is obtained from the wire and the [`GossipsubMessage`] is used to
-/// calculate the [`MessageId`] of the message and is what is sent to the application.
+/// calculate the [`crate::MessageId`] of the message and is what is sent to the application.
 ///
 /// The inbound/outbound transforms must be inverses. Applying the inbound transform and then the
 /// outbound transform MUST leave the underlying data un-modified.
@@ -23,7 +43,7 @@ pub trait DataTransform {
     ) -> Result<GossipsubMessage, std::io::Error>;
 
     /// Takes the data to be published (a topic and associated data) transforms the data. The
-    /// transformed data will then be used to create a [`RawGossipsubMessage`] to be sent to peers.
+    /// transformed data will then be used to create a [`crate::RawGossipsubMessage`] to be sent to peers.
     fn outbound_transform(
         &self,
         topic: &TopicHash,

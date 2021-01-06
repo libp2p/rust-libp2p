@@ -119,7 +119,7 @@ pub struct RawGossipsubMessage {
 }
 
 /// The message sent to the user after a [`RawGossipsubMessage`] has been transformed by a
-/// [`DataTransform`].
+/// [`crate::DataTransform`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {
     /// Id of the peer that published this message.
