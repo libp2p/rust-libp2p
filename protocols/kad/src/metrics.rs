@@ -162,9 +162,11 @@ impl Metrics {
             KademliaHandlerEvent::GetProvidersRes { .. } => ("get_providers_res", Response),
             KademliaHandlerEvent::GetRecordRes { .. } => ("get_record_res", Response),
             KademliaHandlerEvent::PutRecordRes { .. } => ("put_record_res", Response),
+            KademliaHandlerEvent::ProtocolConfirmed { .. } => ("protocol_confirmed", Response),
 
             // error
             KademliaHandlerEvent::QueryError { .. } => ("query_error_from_handler", Error),
+
         };
 
         self.with_metrics(|m| {

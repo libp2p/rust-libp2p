@@ -48,7 +48,7 @@ use libp2p_swarm::{
     NotifyHandler,
     PollParameters,
 };
-use log::{info, debug, warn};
+use log::{info, debug, warn, LevelFilter};
 use smallvec::SmallVec;
 use std::{borrow::Cow, error, iter, time::Duration};
 use std::collections::{HashSet, VecDeque};
@@ -878,9 +878,16 @@ where
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
         let local_addrs = &self.local_addrs;
+        let trust = &self.trust;
         self.store.providers(key)
             .into_iter()
             .filter_map(move |p| {
+                let provider_id = if log::max_level() >= LevelFilter::Debug {
+                    p.provider.to_string()
+                } else {
+                    String::new()
+                };
+
                 let kad_peer = if &p.provider != source {
                     let node_id = p.provider;
                     let connection_ty = if connected.contains(&node_id) {
@@ -892,8 +899,8 @@ where
                     if &node_id == kbuckets.local_key().preimage() {
                         // The provider is either the local node and we fill in
                         // the local addresses on demand,
-                        let self_key = self.kbuckets.local_public_key();
-                        let certificates = self.trust.get_all_certs(&self_key, &[]);
+                        let self_key = kbuckets.local_public_key();
+                        let certificates = trust.get_all_certs(&self_key, &[]);
                         let multiaddrs = local_addrs.iter().cloned().collect::<Vec<_>>();
                         Some(KadPeer {
                             public_key: self_key,
@@ -913,8 +920,15 @@ where
                             } else {
                                 p.addresses
                             };
-                            let certificates = node_id.as_public_key().map(|provider_pk|
-                                self.trust.get_all_certs(provider_pk, &[])
+                            let certificates = node_id.as_public_key().and_then(|provider_pk|
+                                match provider_pk {
+                                    libp2p_core::identity::PublicKey::Ed25519(pk) =>
+                                        Some(trust.get_all_certs(pk, &[])),
+                                    key => {
+                                        log::warn!("Provider {} has a non-Ed25519 public key: {:?}", node_id, key);
+                                        None
+                                    }
+                                }
                             ).unwrap_or_default();
 
                             KadPeer {
@@ -935,7 +949,7 @@ where
                 debug!(
                     "Local provider for {}: {}; source: {}; found? {}",
                     bs58::encode(key).into_string(),
-                    p.provider,
+                    provider_id,
                     source,
                     kad_peer.is_some()
                 );

@@ -97,7 +97,7 @@ libp2p-websocket = { package = "fluence-fork-libp2p-websocket", version = "0.27.
 async-std = "1.6.2"
 env_logger = "0.8.1"
 tokio = { version = "0.3", features = ["io-util", "io-std", "stream", "macros", "rt", "rt-multi-thread"] }
-trust-graph = "0.1.0"
+trust-graph = "0.2.0"
 
 [workspace]
 members = [
