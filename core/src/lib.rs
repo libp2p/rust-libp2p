@@ -23,14 +23,14 @@
 //! The main concepts of libp2p-core are:
 //!
 //! - A [`PeerId`] is a unique global identifier for a node on the network.
-//!   Each node must have a different `PeerId`. Normally, a `PeerId` is the
+//!   Each node must have a different [`PeerId`]. Normally, a [`PeerId`] is the
 //!   hash of the public key used to negotiate encryption on the
 //!   communication channel, thereby guaranteeing that they cannot be spoofed.
 //! - The [`Transport`] trait defines how to reach a remote node or listen for
-//!   incoming remote connections. See the `transport` module.
+//!   incoming remote connections. See the [`transport`] module.
 //! - The [`StreamMuxer`] trait is implemented on structs that hold a connection
 //!   to a remote and can subdivide this connection into multiple substreams.
-//!   See the `muxing` module.
+//!   See the [`muxing`] module.
 //! - The [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] traits
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
@@ -55,13 +55,14 @@ pub mod transport;
 pub mod upgrade;
 
 pub use multiaddr::Multiaddr;
+pub use multihash;
 pub use muxing::StreamMuxer;
 pub use peer_id::PeerId;
 pub use identity::PublicKey;
 pub use transport::Transport;
 pub use translation::address_translation;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
-pub use connection::{Connected, Endpoint, ConnectedPoint, ConnectionInfo};
+pub use connection::{Connected, Endpoint, ConnectedPoint};
 pub use network::Network;
 
 use std::{future::Future, pin::Pin};
@@ -78,20 +79,8 @@ pub trait Executor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>);
 }
 
-impl<'a, T: ?Sized + Executor> Executor for &'a T {
+impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for F {
     fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        T::exec(&**self, f)
-    }
-}
-
-impl<'a, T: ?Sized + Executor> Executor for &'a mut T {
-    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        T::exec(&**self, f)
-    }
-}
-
-impl<T: ?Sized + Executor> Executor for Box<T> {
-    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        T::exec(&**self, f)
+        self(f)
     }
 }

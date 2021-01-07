@@ -4,15 +4,41 @@
 use futures::prelude::*;
 use libp2p_core::{
     Multiaddr,
+    PeerId,
+    Transport,
     connection::{
         ConnectionHandler,
         ConnectionHandlerEvent,
         Substream,
         SubstreamEndpoint,
     },
+    identity,
     muxing::{StreamMuxer, StreamMuxerBox},
+    network::{Network, NetworkConfig},
+    transport,
+    upgrade,
 };
+use libp2p_mplex as mplex;
+use libp2p_noise as noise;
+use libp2p_tcp as tcp;
 use std::{io, pin::Pin, task::Context, task::Poll};
+
+type TestNetwork = Network<TestTransport, (), (), TestHandler>;
+type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
+
+/// Creates a new `TestNetwork` with a TCP transport.
+pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_public_key = local_key.public();
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
+    let transport: TestTransport = tcp::TcpConfig::new()
+        .upgrade(upgrade::Version::V1)
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(mplex::MplexConfig::new())
+        .boxed();
+
+    TestNetwork::new(transport, local_public_key.into(), cfg)
+}
 
 pub struct TestHandler();
 
@@ -35,7 +61,7 @@ impl ConnectionHandler for TestHandler {
     fn poll(&mut self, _: &mut Context<'_>)
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
     {
-        Poll::Ready(Ok(ConnectionHandlerEvent::Custom(())))
+        Poll::Pending
     }
 }
 

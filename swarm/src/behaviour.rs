@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{AddressScore, AddressRecord};
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::{ConnectionId, ListenerId}};
 use std::{error, task::Context, task::Poll};
@@ -182,7 +183,7 @@ pub trait PollParameters {
     /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
     type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
     /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
-    type ExternalAddressesIter: ExactSizeIterator<Item = Multiaddr>;
+    type ExternalAddressesIter: ExactSizeIterator<Item = AddressRecord>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
@@ -217,7 +218,7 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 /// in whose context it is executing.
 ///
 /// [`Swarm`]: super::Swarm
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
@@ -263,14 +264,15 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     NotifyHandler {
         /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
-        /// The ID of the connection whose `ProtocolsHandler` to notify.
+        /// The options w.r.t. which connection handler to notify of the event.
         handler: NotifyHandler,
         /// The event to send.
         event: TInEvent,
     },
 
-    /// Informs the `Swarm` about a multi-address observed by a remote for
-    /// the local node.
+    /// Informs the `Swarm` about an address observed by a remote for
+    /// the local node by which the local node is supposedly publicly
+    /// reachable.
     ///
     /// It is advisable to issue `ReportObservedAddr` actions at a fixed frequency
     /// per node. This way address information will be more accurate over time
@@ -278,18 +280,58 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     ReportObservedAddr {
         /// The observed address of the local node.
         address: Multiaddr,
+        /// The score to associate with this observation, i.e.
+        /// an indicator for the trusworthiness of this address
+        /// relative to other observed addresses.
+        score: AddressScore,
     },
 }
 
-/// The options w.r.t. which connection handlers to notify of an event.
+impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
+    /// Map the handler event.
+    pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent> {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) =>
+                NetworkBehaviourAction::GenerateEvent(e),
+            NetworkBehaviourAction::DialAddress { address } =>
+                NetworkBehaviourAction::DialAddress { address },
+            NetworkBehaviourAction::DialPeer { peer_id, condition } =>
+                NetworkBehaviourAction::DialPeer { peer_id, condition },
+            NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event: f(event)
+                },
+            NetworkBehaviourAction::ReportObservedAddr { address, score } =>
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
+        }
+    }
+
+    /// Map the event the swarm will return.
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E> {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) =>
+                NetworkBehaviourAction::GenerateEvent(f(e)),
+            NetworkBehaviourAction::DialAddress { address } =>
+                NetworkBehaviourAction::DialAddress { address },
+            NetworkBehaviourAction::DialPeer { peer_id, condition } =>
+                NetworkBehaviourAction::DialPeer { peer_id, condition },
+            NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
+                NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
+            NetworkBehaviourAction::ReportObservedAddr { address, score } =>
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
+        }
+    }
+}
+
+/// The options w.r.t. which connection handler to notify of an event.
 #[derive(Debug, Clone)]
 pub enum NotifyHandler {
     /// Notify a particular connection handler.
     One(ConnectionId),
     /// Notify an arbitrary connection handler.
     Any,
-    /// Notify all connection handlers.
-    All
 }
 
 /// The available conditions under which a new dialing attempt to

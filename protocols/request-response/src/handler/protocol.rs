@@ -26,17 +26,9 @@
 use crate::RequestId;
 use crate::codec::RequestResponseCodec;
 
-use futures::{
-    channel::oneshot,
-    future::BoxFuture,
-    prelude::*,
-};
-use libp2p_core::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-};
-use libp2p_swarm::{
-    NegotiatedSubstream,
-};
+use futures::{channel::oneshot, future::BoxFuture, prelude::*};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
 use std::io;
 
@@ -79,8 +71,10 @@ where
 {
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
-    pub(crate) request_sender: oneshot::Sender<TCodec::Request>,
-    pub(crate) response_receiver: oneshot::Receiver<TCodec::Response>
+    pub(crate) request_sender: oneshot::Sender<(RequestId, TCodec::Request)>,
+    pub(crate) response_receiver: oneshot::Receiver<TCodec::Response>,
+    pub(crate) request_id: RequestId
+
 }
 
 impl<TCodec> UpgradeInfo for ResponseProtocol<TCodec>
@@ -99,7 +93,7 @@ impl<TCodec> InboundUpgrade<NegotiatedSubstream> for ResponseProtocol<TCodec>
 where
     TCodec: RequestResponseCodec + Send + 'static,
 {
-    type Output = ();
+    type Output = bool;
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -107,14 +101,16 @@ where
         async move {
             let read = self.codec.read_request(&protocol, &mut io);
             let request = read.await?;
-            if let Ok(()) = self.request_sender.send(request) {
+            if let Ok(()) = self.request_sender.send((self.request_id, request)) {
                 if let Ok(response) = self.response_receiver.await {
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
+                } else {
+                    return Ok(false)
                 }
             }
             io.close().await?;
-            Ok(())
+            Ok(true)
         }.boxed()
     }
 }
@@ -122,7 +118,7 @@ where
 /// Request substream upgrade protocol.
 ///
 /// Sends a request and receives a response.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RequestProtocol<TCodec>
 where
     TCodec: RequestResponseCodec

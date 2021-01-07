@@ -78,7 +78,7 @@ impl MemoryStore {
     /// Creates a new `MemoryRecordStore` with the given configuration.
     pub fn with_config(local_id: PeerId, config: MemoryStoreConfig) -> Self {
         MemoryStore {
-            local_key: kbucket::Key::new(local_id),
+            local_key: kbucket::Key::from(local_id),
             config,
             records: HashMap::default(),
             provided: HashSet::default(),
@@ -161,9 +161,9 @@ impl<'a> RecordStore<'a> for MemoryStore {
             // It is a new provider record for that key.
             let local_key = self.local_key.clone();
             let key = kbucket::Key::new(record.key.clone());
-            let provider = kbucket::Key::new(record.provider.clone());
+            let provider = kbucket::Key::from(record.provider);
             if let Some(i) = providers.iter().position(|p| {
-                let pk = kbucket::Key::new(p.provider.clone());
+                let pk = kbucket::Key::from(p.provider);
                 provider.distance(&key) < pk.distance(&key)
             }) {
                 // Insert the new provider.
@@ -215,17 +215,17 @@ impl<'a> RecordStore<'a> for MemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use multihash::{wrap, Code};
+    use libp2p_core::multihash::{Code, Multihash};
     use quickcheck::*;
     use rand::Rng;
 
     fn random_multihash() -> Multihash {
-        wrap(Code::Sha2_256, &rand::thread_rng().gen::<[u8; 32]>())
+        Multihash::wrap(Code::Sha2_256.into(), &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {
         kbucket::Key::new(r.key.clone())
-            .distance(&kbucket::Key::new(r.provider.clone()))
+            .distance(&kbucket::Key::from(r.provider))
     }
 
     #[test]
@@ -259,7 +259,7 @@ mod tests {
             let key = Key::from(random_multihash());
 
             let mut records = providers.into_iter().map(|p| {
-                ProviderRecord::new(key.clone(), p.into_preimage())
+                ProviderRecord::new(key.clone(), p.into_preimage(), Vec::new())
             }).collect::<Vec<_>>();
 
             for r in &records {
@@ -280,7 +280,7 @@ mod tests {
         let id = PeerId::random();
         let mut store = MemoryStore::new(id.clone());
         let key = random_multihash();
-        let rec = ProviderRecord::new(key, id.clone());
+        let rec = ProviderRecord::new(key, id.clone(), Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![Cow::Borrowed(&rec)], store.provided().collect::<Vec<_>>());
         store.remove_provider(&rec.key, &id);
@@ -292,7 +292,7 @@ mod tests {
         let mut store = MemoryStore::new(PeerId::random());
         let key = random_multihash();
         let prv = PeerId::random();
-        let mut rec = ProviderRecord::new(key, prv);
+        let mut rec = ProviderRecord::new(key, prv, Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![rec.clone()], store.providers(&rec.key).to_vec());
         rec.expires = Some(Instant::now());
@@ -306,16 +306,15 @@ mod tests {
         for _ in 0 .. store.config.max_provided_keys {
             let key = random_multihash();
             let prv = PeerId::random();
-            let rec = ProviderRecord::new(key, prv);
+            let rec = ProviderRecord::new(key, prv, Vec::new());
             let _ = store.add_provider(rec);
         }
         let key = random_multihash();
         let prv = PeerId::random();
-        let rec = ProviderRecord::new(key, prv);
+        let rec = ProviderRecord::new(key, prv, Vec::new());
         match store.add_provider(rec) {
             Err(Error::MaxProvidedKeys) => {}
             _ => panic!("Unexpected result"),
         }
     }
 }
-

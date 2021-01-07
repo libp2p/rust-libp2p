@@ -28,11 +28,23 @@
 //! 3. Type `GET my-key` in terminal two and hit return.
 //!
 //! 4. Close with Ctrl-c.
+//!
+//! You can also store provider records instead of key value records.
+//!
+//! 1. Using two terminal windows, start two instances. If you local network
+//!    allows mDNS, they will automatically connect.
+//!
+//! 2. Type `PUT_PROVIDER my-key` in terminal one and hit return.
+//!
+//! 3. Type `GET_PROVIDERS my-key` in terminal two and hit return.
+//!
+//! 4. Close with Ctrl-c.
 
 use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
+    AddProviderOk,
     Kademlia,
     KademliaEvent,
     PeerRecord,
@@ -91,6 +103,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         fn inject_event(&mut self, message: KademliaEvent) {
             match message {
                 KademliaEvent::QueryResult { result, .. } => match result {
+                    QueryResult::GetProviders(Ok(ok)) => {
+                        for peer in ok.providers {
+                            println!(
+                                "Peer {:?} provides key {:?}",
+                                peer,
+                                std::str::from_utf8(ok.key.as_ref()).unwrap()
+                            );
+                        }
+                    }
+                    QueryResult::GetProviders(Err(err)) => {
+                        eprintln!("Failed to get providers: {:?}", err);
+                    }
                     QueryResult::GetRecord(Ok(ok)) => {
                         for PeerRecord { record: Record { key, value, .. }, ..} in ok.records {
                             println!(
@@ -112,6 +136,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     QueryResult::PutRecord(Err(err)) => {
                         eprintln!("Failed to put record: {:?}", err);
                     }
+                    QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
+                        println!("Successfully put provider record {:?}",
+                            std::str::from_utf8(key.as_ref()).unwrap()
+                        );
+                    }
+                    QueryResult::StartProviding(Err(err)) => {
+                        eprintln!("Failed to put provider record: {:?}", err);
+                    }
                     _ => {}
                 }
                 _ => {}
@@ -128,7 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => unreachable!("only ed25519 supported"),
         };
         let kademlia = Kademlia::new(local_key, local_peer_id.clone(), store, TrustGraph::new(vec![]));
-        let mdns = Mdns::new()?;
+        let mdns = task::block_on(Mdns::new())?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
     };
@@ -184,6 +216,18 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
             };
             kademlia.get_record(&key, Quorum::One);
         }
+        Some("GET_PROVIDERS") => {
+            let key = {
+                match args.next() {
+                    Some(key) => Key::new(&key),
+                    None => {
+                        eprintln!("Expected key");
+                        return
+                    }
+                }
+            };
+            kademlia.get_providers(key);
+        }
         Some("PUT") => {
             let key = {
                 match args.next() {
@@ -210,9 +254,22 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                 expires: None,
             };
             kademlia.put_record(record, Quorum::One).expect("Failed to store record locally.");
+        },
+        Some("PUT_PROVIDER") => {
+            let key = {
+                match args.next() {
+                    Some(key) => Key::new(&key),
+                    None => {
+                        eprintln!("Expected key");
+                        return;
+                    }
+                }
+            };
+
+            kademlia.start_providing(key).expect("Failed to start providing key");
         }
         _ => {
-            eprintln!("expected GET or PUT");
+            eprintln!("expected GET, GET_PROVIDERS, PUT or PUT_PROVIDER");
         }
     }
 }

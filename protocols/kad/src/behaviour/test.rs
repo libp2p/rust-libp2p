@@ -32,21 +32,21 @@ use futures::{
 };
 use futures_timer::Delay;
 use libp2p_core::{
+    connection::{ConnectedPoint, ConnectionId},
     PeerId,
     Transport,
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
-    muxing::StreamMuxerBox,
-    upgrade
+    upgrade,
+    multihash::{Code, Multihash, MultihashDigest},
 };
-use libp2p_secio::SecioConfig;
+use libp2p_noise as noise;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
-use std::{collections::{HashSet, HashMap}, time::Duration, io, num::NonZeroUsize, u64};
-use multihash::{wrap, Code, Multihash};
+use std::{collections::{HashSet, HashMap}, time::Duration, num::NonZeroUsize, u64};
 use libp2p_core::identity::ed25519;
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
@@ -59,12 +59,11 @@ fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, 
     let ed25519_key = ed25519::Keypair::generate();
     let local_key = identity::Keypair::Ed25519(ed25519_key.clone());
     let local_public_key = local_key.public();
+    let noise_keys = noise::Keypair::<noise::X25519>::new().into_authentic(&local_key).unwrap();
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(SecioConfig::new(local_key))
-        .multiplex(yamux::Config::default())
-        .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-        .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
     let local_id = local_public_key.clone().into_peer_id();
@@ -134,7 +133,7 @@ fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
 }
 
 fn random_multihash() -> Multihash {
-    wrap(Code::Sha2_256, &thread_rng().gen::<[u8; 32]>())
+    Multihash::wrap(Code::Sha2_256.into(), &thread_rng().gen::<[u8; 32]>()).unwrap()
 }
 
 #[derive(Clone, Debug)]
@@ -245,13 +244,13 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::new(search_target.clone());
-        let qid = swarms[0].get_closest_peers(search_target.clone());
+        let search_target_key = kbucket::Key::from(search_target);
+        let qid = swarms[0].get_closest_peers(search_target);
 
         match swarms[0].query(&qid) {
             Some(q) => match q.info() {
                 QueryInfo::GetClosestPeers { key } => {
-                    assert_eq!(&key[..], search_target.borrow() as &[u8])
+                    assert_eq!(&key[..], search_target.to_bytes().as_slice())
                 },
                 i => panic!("Unexpected query info: {:?}", i)
             }
@@ -274,7 +273,7 @@ fn query_iter() {
                                 id, result: QueryResult::GetClosestPeers(Ok(ok)), ..
                             })) => {
                                 assert_eq!(id, qid);
-                                assert_eq!(&ok.key[..], search_target.as_bytes());
+                                assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert_eq!(swarm.queries.size(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
@@ -317,7 +316,7 @@ fn unresponsive_not_returned_direct() {
 
     // Ask first to search a random value.
     let search_target = PeerId::random();
-    swarms[0].1.get_closest_peers(search_target.clone());
+    swarms[0].1.get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -327,7 +326,7 @@ fn unresponsive_not_returned_direct() {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             result: QueryResult::GetClosestPeers(Ok(ok)), ..
                         })) => {
-                            assert_eq!(&ok.key[..], search_target.as_bytes());
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(ok.peers.len(), 0);
                             return Poll::Ready(());
                         }
@@ -369,7 +368,7 @@ fn unresponsive_not_returned_indirect() {
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
-    swarms[1].get_closest_peers(search_target.clone());
+    swarms[1].get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -379,7 +378,7 @@ fn unresponsive_not_returned_indirect() {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             result: QueryResult::GetClosestPeers(Ok(ok)), ..
                         })) => {
-                            assert_eq!(&ok.key[..], search_target.as_bytes());
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
                             return Poll::Ready(());
@@ -583,8 +582,8 @@ fn put_record() {
                         .cloned()
                         .collect::<Vec<_>>();
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1.clone()).distance(&key).cmp(
-                            &kbucket::Key::new(id2.clone()).distance(&key)));
+                        kbucket::Key::from(*id1).distance(&key).cmp(
+                            &kbucket::Key::from(*id2).distance(&key)));
 
                     let expected = expected
                         .into_iter()
@@ -715,8 +714,8 @@ fn get_record_many() {
                             ..
                         })) => {
                             assert_eq!(id, qid);
-                            assert_eq!(records.len(), num_results);
-                            assert_eq!(records.first().unwrap().record, record);
+                            assert!(records.len() >= num_results);
+                            assert!(records.into_iter().all(|r| r.record == record));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -853,8 +852,8 @@ fn add_provider() {
                         .collect::<Vec<_>>();
                     let kbucket_key = kbucket::Key::new(key);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1.clone()).distance(&kbucket_key).cmp(
-                            &kbucket::Key::new(id2.clone()).distance(&kbucket_key)));
+                        kbucket::Key::from(*id1).distance(&kbucket_key).cmp(
+                            &kbucket::Key::from(*id2).distance(&kbucket_key)));
 
                     let expected = expected
                         .into_iter()
@@ -951,7 +950,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
 
-    let key = Key::new(&multihash::Sha2_256::digest(&thread_rng().gen::<[u8; 32]>()));
+    let key = Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
     let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
 
@@ -1101,7 +1100,7 @@ fn manual_bucket_inserts() {
                         routable.push(peer);
                         if expected.is_empty() {
                             for peer in routable.iter() {
-                                let bucket = swarm.kbucket(peer.clone()).unwrap();
+                                let bucket = swarm.kbucket(*peer).unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }
                             return Poll::Ready(())
@@ -1114,6 +1113,61 @@ fn manual_bucket_inserts() {
         }
         Poll::Pending
     }));
+}
+
+#[test]
+fn network_behaviour_inject_address_change() {
+    let local_peer_id = PeerId::random();
+
+    let remote_peer_id = PeerId::random();
+    let connection_id = ConnectionId::new(1);
+    let old_address: Multiaddr = Protocol::Memory(1).into();
+    let new_address: Multiaddr = Protocol::Memory(2).into();
+
+    let mut kademlia = Kademlia::new(
+        local_peer_id.clone(),
+        MemoryStore::new(local_peer_id),
+    );
+
+    let endpoint = ConnectedPoint::Dialer { address:  old_address.clone() };
+
+    // Mimick a connection being established.
+    kademlia.inject_connection_established(
+        &remote_peer_id,
+        &connection_id,
+        &endpoint,
+    );
+    kademlia.inject_connected(&remote_peer_id);
+
+    // At this point the remote is not yet known to support the
+    // configured protocol name, so the peer is not yet in the
+    // local routing table and hence no addresses are known.
+    assert!(kademlia.addresses_of_peer(&remote_peer_id).is_empty());
+
+    // Mimick the connection handler confirming the protocol for
+    // the test connection, so that the peer is added to the routing table.
+    kademlia.inject_event(
+        remote_peer_id.clone(),
+        connection_id.clone(),
+        KademliaHandlerEvent::ProtocolConfirmed { endpoint }
+    );
+
+    assert_eq!(
+        vec![old_address.clone()],
+        kademlia.addresses_of_peer(&remote_peer_id),
+    );
+
+    kademlia.inject_address_change(
+        &remote_peer_id,
+        &connection_id,
+        &ConnectedPoint::Dialer { address: old_address.clone() },
+        &ConnectedPoint::Dialer {  address: new_address.clone() },
+    );
+
+    assert_eq!(
+        vec![new_address.clone()],
+        kademlia.addresses_of_peer(&remote_peer_id),
+    );
 }
 
 fn make_swarms(total: usize, config: KademliaConfig) -> Vec<(Keypair, Multiaddr, TestSwarm)> {

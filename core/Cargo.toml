@@ -2,7 +2,7 @@
 name = "fluence-fork-libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.20.1"
+version = "0.26.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,8 +14,8 @@ name = "libp2p_core"
 
 [dependencies]
 asn1_der = "0.6.1"
-bs58 = "0.3.0"
-ed25519-dalek = "1.0.0-pre.4"
+bs58 = "0.4.0"
+ed25519-dalek = "1.0.1"
 either = "1.5"
 fnv = "1.0"
 futures = { version = "0.3.1", features = ["executor", "thread-pool"] }
@@ -23,18 +23,18 @@ futures-timer = "3"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
-multiaddr = { package = "fluence-fork-parity-multiaddr", version = "0.9.1", path = "../misc/multiaddr" }
-multihash = "0.11.0"
-multistream-select = { version = "0.8.2", path = "../misc/multistream-select", package = "fluence-fork-multistream-select" }
-parking_lot = "0.10.0"
-pin-project = "0.4.17"
+multiaddr = { package = "fluence-fork-parity-multiaddr", version = "0.10.0", path = "../misc/multiaddr" }
+multihash = { version = "0.13", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
+multistream-select = { version = "0.9.1", path = "../misc/multistream-select", package = "fluence-fork-multistream-select" }
+parking_lot = "0.11.0"
+pin-project = "1.0.0"
 prost = "0.6.1"
 rand = "0.7"
 rw-stream-sink = "0.2.0"
-sha2 = "0.8.0"
+sha2 = "0.9.1"
 smallvec = "1.0"
 thiserror = "1.0"
-unsigned-varint = "0.4"
+unsigned-varint = "0.5"
 void = "1"
 zeroize = "1"
 serde = { version = "1.0.114", default-features = false }
@@ -44,9 +44,11 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 
 [dev-dependencies]
 async-std = "1.6.2"
+criterion = "0.3"
 libp2p-mplex = { path = "../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
-libp2p-secio = { path = "../protocols/secio", package = "fluence-fork-libp2p-secio" }
+libp2p-noise = { path = "../protocols/noise", package = "fluence-fork-libp2p-secio" }
 libp2p-tcp = { path = "../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
+multihash = { version = "0.13", default-features = false, features = ["arb"] }
 quickcheck = "0.9.0"
 wasm-timer = "0.2"
 
@@ -56,6 +58,10 @@ prost-build = "0.6"
 [features]
 default = ["secp256k1"]
 secp256k1 = ["libsecp256k1"]
+
+[[bench]]
+name = "peer_id"
+harness = false
 
 [package.metadata.workspaces]
 independent = true

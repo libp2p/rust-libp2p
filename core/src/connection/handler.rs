@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, PeerId};
+use crate::Multiaddr;
 use std::{task::Context, task::Poll};
 use super::{Connected, SubstreamEndpoint};
 
@@ -69,7 +69,7 @@ pub trait ConnectionHandler {
 }
 
 /// Prototype for a `ConnectionHandler`.
-pub trait IntoConnectionHandler<TConnInfo = PeerId> {
+pub trait IntoConnectionHandler {
     /// The node handler.
     type Handler: ConnectionHandler;
 
@@ -77,16 +77,16 @@ pub trait IntoConnectionHandler<TConnInfo = PeerId> {
     ///
     /// The implementation is given a `Connected` value that holds information about
     /// the newly established connection for which a handler should be created.
-    fn into_handler(self, connected: &Connected<TConnInfo>) -> Self::Handler;
+    fn into_handler(self, connected: &Connected) -> Self::Handler;
 }
 
-impl<T, TConnInfo> IntoConnectionHandler<TConnInfo> for T
+impl<T> IntoConnectionHandler for T
 where
     T: ConnectionHandler
 {
     type Handler = Self;
 
-    fn into_handler(self, _: &Connected<TConnInfo>) -> Self {
+    fn into_handler(self, _: &Connected) -> Self {
         self
     }
 }

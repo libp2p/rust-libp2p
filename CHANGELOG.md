@@ -23,7 +23,110 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.23.0 (2020-??-??)
+# Version 0.34.0 [unreleased]
+
+- Update `libp2p-request-response`.
+
+# Version 0.33.0 [2020-12-17]
+
+- Update `libp2p-core` and all dependent crates.
+
+# Version 0.32.2 [2020-12-10]
+
+- Update `libp2p-websocket`.
+
+# Version 0.32.1 [2020-12-09]
+
+- Update minimum patch version of `libp2p-websocket`.
+
+# Version 0.32.0 [2020-12-08]
+
+- Update `libp2p-request-response`.
+
+- Update to `libp2p-mdns-0.26`.
+
+- Update `libp2p-websocket` minimum patch version.
+
+# Version 0.31.2 [2020-12-02]
+
+- Bump minimum `libp2p-core` patch version.
+
+# Version 0.31.1 [2020-11-26]
+
+- Bump minimum `libp2p-tcp` patch version.
+
+# Version 0.31.0 [2020-11-25]
+
+- Update `multistream-select` and all dependent crates.
+
+# Version 0.30.1 [2020-11-11]
+
+- Update `libp2p-plaintext`.
+
+# Version 0.30.0 [2020-11-09]
+
+- Update `libp2p-mdns`, `libp2p-tcp` and `libp2p-uds` as well as `libp2p-core`
+  and all its dependers.
+
+# Version 0.29.1 [2020-10-20]
+
+- Update `libp2p-core`.
+
+# Version 0.29.0 [2020-10-16]
+
+- Update `libp2p-core`, `libp2p-floodsub`, `libp2p-gossipsub`, `libp2p-mplex`,
+  `libp2p-noise`, `libp2p-plaintext`, `libp2p-pnet`, `libp2p-request-response`,
+  `libp2p-swarm`, `libp2p-tcp`, `libp2p-websocket` and `parity-multiaddr`.
+
+# Version 0.28.1 [2020-09-10]
+
+- Update to `libp2p-core` `0.22.1`.
+
+# Version 0.28.0 [2020-09-09]
+
+- Update `libp2p-yamux` to `0.25.0`. *Step 4 of 4 in a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+# Version 0.27.0 [2020-09-09]
+
+- Update `libp2p-yamux` to `0.24.0`. *Step 3 of 4 in a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+# Version 0.26.0 [2020-09-09]
+
+- Update `libp2p-yamux` to `0.23.0`. *Step 2 of 4 in a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+# Version 0.25.0 [2020-09-09]
+
+- Remove the deprecated `libp2p-secio` dependency. To continue to use
+  SECIO, add an explicit dependency on `libp2p-secio`. However,
+  transitioning to `libp2p-noise` is strongly recommended.
+
+- Update `libp2p-yamux` to `0.22.0`. *This version starts a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+- Bump `libp2p-noise` to `0.24`. See the `libp2p-noise`
+changelog for details about the `LegacyConfig`.
+
+- The `ProtocolsHandler` in `libp2p-swarm` has a new associated type
+  `InboundOpenInfo` ([PR 1714]).
+
+[PR 1714]: https://github.com/libp2p/rust-libp2p/pull/1714
+
+# Version 0.24.0 [2020-08-18]
+
+- Update `libp2p-core`, `libp2p-gossipsub`, `libp2p-kad`, `libp2p-mdns`,
+  `libp2p-ping`, `libp2p-request-response`, `libp2p-swarm` and dependent crates.
+
+# Version 0.23.0 (2020-08-03)
+
+**NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
+on an existing deployment, this version must not be skipped
+or the provided legacy configuration for `libp2p-noise` used!
+
+- Bump `libp2p-noise` dependency to `0.22`. See the `libp2p-noise`
+changelog for details about the `LegacyConfig`.
 
 - Refactored bandwidth logging ([PR 1670](https://github.com/libp2p/rust-libp2p/pull/1670)).
 
