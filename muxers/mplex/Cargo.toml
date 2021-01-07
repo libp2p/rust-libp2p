@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-mplex"
+name = "fluence-fork-libp2p-mplex"
 edition = "2018"
 description = "Mplex multiplexing protocol for libp2p"
 version = "0.20.0"
@@ -9,19 +9,22 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_mplex"
+
 [dependencies]
 bytes = "0.5"
 fnv = "1.0"
 futures = "0.3.1"
 futures_codec = "0.4"
-libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4"
 parking_lot = "0.10"
 unsigned-varint = { version = "0.4", features = ["futures-codec"] }
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 [package.metadata.workspaces]
 independent = true

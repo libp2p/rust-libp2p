@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-secio"
+name = "fluence-fork-libp2p-secio"
 edition = "2018"
 description = "Secio encryption protocol for libp2p"
 version = "0.20.0"
@@ -9,6 +9,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_secio"
+
 [dependencies]
 aes-ctr = "0.3"
 aesni = { version = "0.6", features = ["nocheck"], optional = true }
@@ -16,7 +19,7 @@ ctr = "0.3"
 futures = "0.3.1"
 hmac = "0.7.0"
 lazy_static = "1.2.0"
-libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4.6"
 prost = "0.6.1"
 pin-project = "0.4.17"
@@ -48,8 +51,8 @@ aes-all = ["aesni"]
 [dev-dependencies]
 async-std = "1.6.2"
 criterion = "0.3"
-libp2p-mplex = { path = "../../muxers/mplex" }
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-mplex = { path = "../../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 [package.metadata.workspaces]
 independent = true

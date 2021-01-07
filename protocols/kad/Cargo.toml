@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-kad"
+name = "fluence-fork-libp2p-kad"
 edition = "2018"
 description = "Kademlia protocol for libp2p"
 version = "0.21.0"
@@ -9,6 +9,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_kad"
+
 [dependencies]
 arrayvec = "0.5.1"
 bytes = "0.5"
@@ -17,8 +20,8 @@ fnv = "1.0"
 futures_codec = "0.4"
 futures = "0.3.1"
 log = "0.4"
-libp2p-core = { version = "0.20.0", path = "../../core" }
-libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.20.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 multihash = "0.11.0"
 prost = "0.6.1"
 rand = "0.7.2"
@@ -36,8 +39,8 @@ prometheus = "0.9.0"
 
 [dev-dependencies]
 futures-timer = "3.0"
-libp2p-secio = { path = "../secio" }
-libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-secio = { path = "../secio", package = "fluence-fork-libp2p-secio" }
+libp2p-yamux = { path = "../../muxers/yamux", package = "fluence-fork-libp2p-yamux" }
 quickcheck = "0.9.0"
 env_logger = "0.7.1"
 

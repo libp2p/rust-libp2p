@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-mdns"
+name = "fluence-fork-libp2p-mdns"
 edition = "2018"
 version = "0.20.0"
 description = "Implementation of the libp2p mDNS discovery method"
@@ -9,6 +9,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_mdns"
+
 [dependencies]
 async-std = "1.6.2"
 data-encoding = "2.0"
@@ -16,8 +19,8 @@ dns-parser = "0.8"
 either = "1.5.3"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.20.0", path = "../../core" }
-libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.20.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 log = "0.4"
 net2 = "0.2"
 rand = "0.7"

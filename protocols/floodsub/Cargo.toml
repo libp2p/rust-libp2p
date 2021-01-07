@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-floodsub"
+name = "fluence-fork-libp2p-floodsub"
 edition = "2018"
 description = "Floodsub protocol for libp2p"
 version = "0.20.0"
@@ -9,12 +9,15 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_floodsub"
+
 [dependencies]
 cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.3.1"
-libp2p-core = { version = "0.20.0", path = "../../core" }
-libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.20.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 prost = "0.6.1"
 rand = "0.7"
 smallvec = "1.0"

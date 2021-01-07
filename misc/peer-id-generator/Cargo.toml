@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 publish = false
 
 [dependencies]
-libp2p-core = { path = "../../core" }
+libp2p-core = { path = "../../core", package = "fluence-fork-libp2p-core" }
 num_cpus = "1.8"
 
 [package.metadata.workspaces]

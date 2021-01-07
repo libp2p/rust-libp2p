@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-core"
+name = "fluence-fork-libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
 version = "0.20.1"
@@ -8,6 +8,9 @@ license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
+
+[lib]
+name = "libp2p_core"
 
 [dependencies]
 asn1_der = "0.6.1"
@@ -20,9 +23,9 @@ futures-timer = "3"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
-multiaddr = { package = "parity-multiaddr", version = "0.9.1", path = "../misc/multiaddr" }
+multiaddr = { package = "fluence-fork-parity-multiaddr", version = "0.9.1", path = "../misc/multiaddr" }
 multihash = "0.11.0"
-multistream-select = { version = "0.8.2", path = "../misc/multistream-select" }
+multistream-select = { version = "0.8.2", path = "../misc/multistream-select", package = "fluence-fork-multistream-select" }
 parking_lot = "0.10.0"
 pin-project = "0.4.17"
 prost = "0.6.1"
@@ -41,9 +44,9 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-mplex = { path = "../muxers/mplex" }
-libp2p-secio = { path = "../protocols/secio" }
-libp2p-tcp = { path = "../transports/tcp", features = ["async-std"] }
+libp2p-mplex = { path = "../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
+libp2p-secio = { path = "../protocols/secio", package = "fluence-fork-libp2p-secio" }
+libp2p-tcp = { path = "../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 quickcheck = "0.9.0"
 wasm-timer = "0.2"
 

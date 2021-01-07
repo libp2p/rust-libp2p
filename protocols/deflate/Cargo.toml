@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-deflate"
+name = "fluence-fork-libp2p-deflate"
 edition = "2018"
 description = "Deflate encryption protocol for libp2p"
 version = "0.20.0"
@@ -9,14 +9,17 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_deflate"
+
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
 flate2 = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 quickcheck = "0.9"
 rand = "0.7"
 

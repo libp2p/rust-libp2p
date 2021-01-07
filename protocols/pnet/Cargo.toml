@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-pnet"
+name = "fluence-fork-libp2p-pnet"
 edition = "2018"
 description = "Private swarm support for libp2p"
 version = "0.19.1"
@@ -8,6 +8,9 @@ license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
+
+[lib]
+name = "libp2p_pnet"
 
 [dependencies]
 futures = "0.3.1"

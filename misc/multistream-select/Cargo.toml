@@ -1,5 +1,5 @@
 [package]
-name = "multistream-select"
+name = "fluence-fork-multistream-select"
 description = "Multistream-select negotiation protocol for libp2p"
 version = "0.8.2"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -8,6 +8,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 edition = "2018"
+
+[lib]
+name = "multistream_select"
 
 [dependencies]
 bytes = "0.5"

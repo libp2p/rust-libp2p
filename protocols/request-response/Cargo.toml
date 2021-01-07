@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-request-response"
+name = "fluence-fork-libp2p-request-response"
 edition = "2018"
 description = "Generic Request/Response Protocols"
 version = "0.1.1"
@@ -9,19 +9,22 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_request_response"
+
 [dependencies]
 async-trait = "0.1"
 futures = "0.3.1"
-libp2p-core = { version = "0.20.0", path = "../../core" }
-libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.20.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 smallvec = "1.4"
 wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-noise = { path = "../noise" }
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
-libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-noise = { path = "../noise", package = "fluence-fork-libp2p-noise" }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
+libp2p-yamux = { path = "../../muxers/yamux", package = "fluence-fork-libp2p-yamux" }
 rand = "0.7"
 
 [package.metadata.workspaces]

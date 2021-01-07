@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-websocket"
+name = "fluence-fork-libp2p-websocket"
 edition = "2018"
 description = "WebSocket transport for libp2p"
 version = "0.21.1"
@@ -9,11 +9,14 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_websocket"
+
 [dependencies]
 async-tls = "0.8.0"
 either = "1.5.3"
 futures = "0.3.1"
-libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4.8"
 quicksink = "0.1"
 rustls = "0.18.0"
@@ -24,7 +27,7 @@ webpki = "0.21"
 webpki-roots = "0.18"
 
 [dev-dependencies]
-libp2p-tcp = { path = "../tcp", features = ["async-std"] }
+libp2p-tcp = { path = "../tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 [package.metadata.workspaces]
 independent = true

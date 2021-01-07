@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-tcp"
+name = "fluence-fork-libp2p-tcp"
 edition = "2018"
 description = "TCP/IP transport protocol for libp2p"
 version = "0.20.0"
@@ -9,19 +9,22 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_tcp"
+
 [dependencies]
 async-std = { version = "1.6.2", optional = true }
 futures = "0.3.1"
 futures-timer = "3.0"
 get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
-libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4.1"
 socket2 = "0.3.12"
 tokio = { version = "0.2", default-features = false, features = ["tcp"], optional = true }
 
 [dev-dependencies]
-libp2p-tcp = { path = ".", features = ["async-std"] }
+libp2p-tcp = { path = ".", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 
 [package.metadata.workspaces]

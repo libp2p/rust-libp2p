@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-swarm"
+name = "fluence-fork-libp2p-swarm"
 edition = "2018"
 description = "The libp2p swarm"
 version = "0.20.1"
@@ -9,9 +9,12 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_swarm"
+
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.20.0", path = "../core" }
+libp2p-core = { version = "0.20.0", path = "../core", package = "fluence-fork-libp2p-core" }
 log = "0.4"
 rand = "0.7"
 smallvec = "1.0"
@@ -19,7 +22,7 @@ wasm-timer = "0.2"
 void = "1"
 
 [dev-dependencies]
-libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-mplex = { path = "../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
 
