@@ -537,8 +537,6 @@ mod tests {
     use quickcheck::*;
     use rand::{Rng, rngs::StdRng, SeedableRng};
 
-    use super::*;
-
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0 .. n).map(|_| PeerId::from_multihash(
             Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap()
