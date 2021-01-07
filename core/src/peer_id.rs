@@ -46,7 +46,7 @@ impl fmt::Debug for PeerId {
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        bs58::encode(self.as_bytes()).into_string().fmt(f)
+        self.to_base58().fmt(f)
     }
 }
 
@@ -120,15 +120,15 @@ impl PeerId {
 
     /// Returns public key if it was inlined in this `PeerId`.
     pub fn as_public_key(&self) -> Option<PublicKey> {
-        match self.multihash.algorithm() {
-            Code::Identity => PublicKey::from_protobuf_encoding(self.multihash.digest()).ok(),
+        match Code::try_from(self.multihash.code()) {
+            Ok(Code::Identity) => PublicKey::from_protobuf_encoding(self.multihash.digest()).ok(),
             _ => None
         }
     }
 
     /// Returns true if this peer id is inlining (usually means it stores public key)
     pub fn is_inlining(&self) -> bool {
-        matches!(self.multihash.algorithm(), Code::Identity)
+        matches!(Code::try_from(self.multihash.code()), Ok(Code::Identity))
     }
 }
 

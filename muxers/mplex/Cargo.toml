@@ -37,8 +37,6 @@ rand = "0.7"
 [[bench]]
 name = "split_send_size"
 harness = false
-async-std = "1.6.2"
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 [package.metadata.workspaces]
 independent = true

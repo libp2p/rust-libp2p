@@ -1117,17 +1117,12 @@ fn manual_bucket_inserts() {
 
 #[test]
 fn network_behaviour_inject_address_change() {
-    let local_peer_id = PeerId::random();
+    let (_, _, mut kademlia) = build_node();
 
     let remote_peer_id = PeerId::random();
     let connection_id = ConnectionId::new(1);
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
-
-    let mut kademlia = Kademlia::new(
-        local_peer_id.clone(),
-        MemoryStore::new(local_peer_id),
-    );
 
     let endpoint = ConnectedPoint::Dialer { address:  old_address.clone() };
 

@@ -132,14 +132,13 @@ members = [
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
 
-[patch.'https://github.com/fluencelabs/rust-libp2p']
-libp2p-core = { package = "fluence-fork-libp2p-core", path = "core" }
-
 # NOTE: this is required because trust-graph depends on libp2p-core,
 #       and patches it to git only in patch section, which apparently isn't
 #       visible via dependency mechanics (i.e., not visible HERE)
 [patch.crates-io]
 libp2p-core = { package = "fluence-fork-libp2p-core", path = "core" }
+# required for wasm compilation
+# adds saturating_duration_since methods
 wasm-timer = { git = "https://github.com/fluencelabs/wasm-timer", branch = "saturating_duration_since" }
 
 [package.metadata.workspaces]

@@ -537,8 +537,6 @@ mod tests {
     use quickcheck::*;
     use rand::{Rng, rngs::StdRng, SeedableRng};
 
-    use libp2p_core::PeerId;
-
     use super::*;
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {

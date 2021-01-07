@@ -52,6 +52,11 @@ impl Addresses {
         self.addrs.iter()
     }
 
+    /// Returns a mutable iterator over the addresses.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Multiaddr> {
+        self.addrs.iter_mut()
+    }
+
     /// Returns the number of addresses in the list.
     pub fn len(&self) -> usize {
         self.addrs.len()

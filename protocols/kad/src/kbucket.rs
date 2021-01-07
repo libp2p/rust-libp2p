@@ -606,9 +606,11 @@ mod tests {
 
     #[test]
     fn buckets_are_non_overlapping_and_exhaustive() {
-        let local_key = Key::from(PeerId::random());
+        let keypair = ed25519::Keypair::generate();
+        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let local_key = Key::from(PeerId::from(public_key));
         let timeout = Duration::from_secs(0);
-        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+        let mut table = KBucketsTable::<KeyBytes, ()>::new(keypair, local_key.into(), timeout);
 
         let mut prev_max = U256::from(0);
 

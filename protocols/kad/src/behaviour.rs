@@ -386,7 +386,7 @@ where
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
-            local_addrs: HashSet::new()
+            local_addrs: HashSet::new(),
             trust,
             metrics: Metrics::disabled(),
         }
@@ -880,38 +880,55 @@ where
         let local_addrs = &self.local_addrs;
         self.store.providers(key)
             .into_iter()
-            .filter_map(move |p|
+            .filter_map(move |p| {
                 let kad_peer = if &p.provider != source {
                     let node_id = p.provider;
-                    let multiaddrs = p.addresses;
                     let connection_ty = if connected.contains(&node_id) {
                         KadConnectionType::Connected
                     } else {
                         KadConnectionType::NotConnected
                     };
-                    if multiaddrs.is_empty() {
+
+                    if &node_id == kbuckets.local_key().preimage() {
                         // The provider is either the local node and we fill in
-                        // the local addresses on demand, or it is a legacy
-                        // provider record without addresses, in which case we
-                        // try to find addresses in the routing table, as was
-                        // done before provider records were stored along with
-                        // their addresses.
-                        if &node_id == kbuckets.local_key().preimage() {
-                            Some(local_addrs.iter().cloned().collect::<Vec<_>>())
-                        } else {
-                            let key = kbucket::Key::from(node_id);
-                            kbuckets.entry(&key).view().map(|e| e.node.value.clone().into_vec())
-                        }
-                    } else {
-                        Some(multiaddrs)
-                    }
-                    .map(|multiaddrs| {
-                        KadPeer {
+                        // the local addresses on demand,
+                        let self_key = self.kbuckets.local_public_key();
+                        let certificates = self.trust.get_all_certs(&self_key, &[]);
+                        let multiaddrs = local_addrs.iter().cloned().collect::<Vec<_>>();
+                        Some(KadPeer {
+                            public_key: self_key,
                             node_id,
                             multiaddrs,
                             connection_ty,
-                        }
-                    })
+                            certificates
+                        })
+                    } else {
+                        let key = kbucket::Key::from(node_id);
+                        kbuckets.entry(&key).view().map(|e| {
+                            let contact = e.node.value;
+                            let multiaddrs = if p.addresses.is_empty() {
+                                // This is a legacy (pre-#1708) provider without addresses,
+                                // so take addresses from the routing table
+                                contact.addresses.clone().into_vec()
+                            } else {
+                                p.addresses
+                            };
+                            let certificates = node_id.as_public_key().map(|provider_pk|
+                                self.trust.get_all_certs(provider_pk, &[])
+                            ).unwrap_or_default();
+
+                            KadPeer {
+                                node_id,
+                                multiaddrs,
+                                public_key: contact.public_key.clone(),
+                                connection_ty: match e.status {
+                                    NodeStatus::Connected => KadConnectionType::Connected,
+                                    NodeStatus::Disconnected => KadConnectionType::NotConnected
+                                },
+                                certificates
+                            }
+                        })
+                    }
                 } else {
                     None
                 };
@@ -925,13 +942,7 @@ where
                 kad_peer
             })
             .take(self.queries.config().replication_factor.get())
-            .collect::<Vec<_>>();
-
-        peers.iter_mut().for_each(|peer|
-            peer.certificates = self.trust.get_all_certs(&peer.public_key, &[])
-        );
-
-        peers
+            .collect::<Vec<_>>()
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
@@ -1785,8 +1796,8 @@ where
         let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
         // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
-            if addrs.replace(old, new) {
+        if let Some(contact) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
+            if contact.addresses.replace(old, new) {
                 debug!("Address '{}' replaced with '{}' for peer '{}'.", old, new, peer);
             } else {
                 debug!(
@@ -1818,8 +1829,8 @@ where
         // large performance impact. If so, the code below might be worth
         // revisiting.
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(peer) {
-                for addr in addrs.iter_mut() {
+            if let Some(contact) = query.inner.contacts.get_mut(peer) {
+                for addr in contact.addresses.iter_mut() {
                     if addr == old {
                         *addr = new.clone();
                     }
@@ -1905,7 +1916,7 @@ where
 
                 let contact = self.queries
                     .iter_mut()
-                    .find_map(|q| q.inner.contacts.get(peer))
+                    .find_map(|q| q.inner.contacts.get(&source))
                     .cloned()
                     .and_then(|mut c|
                         new_address.map(|addr| {
@@ -1913,7 +1924,7 @@ where
                             c
                         }));
 
-                self.connection_updated(peer.clone(), contact, NodeStatus::Connected);
+                self.connection_updated(source, contact, NodeStatus::Connected);
             }
 
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
@@ -2590,22 +2601,6 @@ impl AddProviderError {
     pub fn into_key(self) -> record::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
-        }
-    }
-}
-
-impl From<kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>> for KadPeer {
-    fn from(e: kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>) -> KadPeer {
-        let Contact { addresses, public_key } = e.node.value;
-        KadPeer {
-            public_key: public_key.clone(),
-            node_id: e.node.key.clone().into_preimage(),
-            multiaddrs: addresses.clone().into_vec(),
-            connection_ty: match e.status {
-                NodeStatus::Connected => KadConnectionType::Connected,
-                NodeStatus::Disconnected => KadConnectionType::NotConnected
-            },
-            certificates: vec![]
         }
     }
 }
