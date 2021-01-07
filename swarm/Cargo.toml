@@ -24,7 +24,7 @@ void = "1"
 
 [dev-dependencies]
 libp2p-mplex = { path = "../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
-libp2p-noise = { path = "../protocols/noise" }
+libp2p-noise = { path = "../protocols/noise", package = "fluence-fork-libp2p-noise" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
 

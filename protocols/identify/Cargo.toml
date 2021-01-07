@@ -24,7 +24,7 @@ wasm-timer = "0.2"
 [dev-dependencies]
 async-std = "1.6.2"
 libp2p-mplex = { path = "../../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
-libp2p-noise = { path = "../../protocols/noise", package = "fluence-fork-libp2p-secio" }
+libp2p-noise = { path = "../../protocols/noise", package = "fluence-fork-libp2p-noise" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 [build-dependencies]
