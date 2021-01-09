@@ -589,15 +589,6 @@ where
             .into_protobuf(),
         );
 
-        // check that the size doesn't exceed the max transmission size
-        if event.encoded_len() > self.config.max_transmit_size() {
-            // NOTE: The size limit can be reached by excessive topics or an excessive message.
-            // This is an estimate that should be within 10% of the true encoded value. It is
-            // possible to have a message that exceeds the RPC limit and is not caught here. A
-            // warning log will be emitted in this case.
-            return Err(PublishError::MessageTooLarge);
-        }
-
         // Add published message to the duplicate cache.
         if !self.duplicate_cache.insert(msg_id.clone()) {
             // This message has already been seen. We don't re-publish messages that have already
