@@ -24,7 +24,6 @@ use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::{GenericArray, typenum::U32};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
-
 use crate::record;
 
 construct_uint! {
