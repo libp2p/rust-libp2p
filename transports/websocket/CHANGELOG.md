@@ -1,3 +1,7 @@
+# 0.27.0 [2020-12-17]
+
+- Update `libp2p-core`.
+
 # 0.26.3 [2020-12-10]
 
 - Update `async-tls`.

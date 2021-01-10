@@ -18,18 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use libp2p_core::{identity, PeerId};
 
 fn from_bytes(c: &mut Criterion) {
     let peer_id_bytes = identity::Keypair::generate_ed25519()
         .public()
         .into_peer_id()
-        .into_bytes();
+        .to_bytes();
 
     c.bench_function("from_bytes", |b| {
         b.iter(|| {
-            black_box(PeerId::from_bytes(peer_id_bytes.clone()).unwrap());
+            black_box(PeerId::from_bytes(&peer_id_bytes).unwrap());
         })
     });
 }

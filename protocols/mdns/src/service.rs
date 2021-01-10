@@ -450,7 +450,7 @@ impl MdnsResponse {
             peer_name.retain(|c| c != '.');
 
             let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
-                Ok(bytes) => match PeerId::from_bytes(bytes) {
+                Ok(bytes) => match PeerId::from_bytes(&bytes) {
                     Ok(id) => id,
                     Err(_) => return None,
                 },

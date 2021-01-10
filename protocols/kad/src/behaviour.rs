@@ -47,7 +47,7 @@ use libp2p_swarm::{
 };
 use log::{info, debug, warn};
 use smallvec::SmallVec;
-use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
+use std::{borrow::Cow, error, iter, time::Duration};
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -337,7 +337,7 @@ where
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
-        let local_key = kbucket::Key::new(id.clone());
+        let local_key = kbucket::Key::from(id);
 
         let put_record_job = config
             .record_replication_interval
@@ -428,7 +428,7 @@ where
     /// If the routing table has been updated as a result of this operation,
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> RoutingUpdate {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().insert(address) {
@@ -495,7 +495,7 @@ where
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr)
         -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
     {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().remove(address).is_err() {
@@ -524,7 +524,7 @@ where
     pub fn remove_peer(&mut self, peer: &PeerId)
         -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
     {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(entry, _) => {
                 Some(entry.remove())
@@ -551,9 +551,9 @@ where
     pub fn kbucket<K>(&mut self, key: K)
         -> Option<kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Addresses>>
     where
-        K: Borrow<[u8]> + Clone
+        K: Into<kbucket::Key<K>> + Clone
     {
-        self.kbuckets.bucket(&kbucket::Key::new(key))
+        self.kbuckets.bucket(&key.into())
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -562,10 +562,10 @@ where
     /// [`KademliaEvent::QueryResult{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
-        K: Borrow<[u8]> + Clone
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone
     {
-        let info = QueryInfo::GetClosestPeers { key: key.borrow().to_vec() };
-        let target = kbucket::Key::new(key);
+        let info = QueryInfo::GetClosestPeers { key: key.clone().into() };
+        let target: kbucket::Key<K> = key.into();
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
@@ -823,7 +823,7 @@ where
                         if &node_id == kbuckets.local_key().preimage() {
                             Some(local_addrs.iter().cloned().collect::<Vec<_>>())
                         } else {
-                            let key = kbucket::Key::new(node_id.clone());
+                            let key = kbucket::Key::from(node_id);
                             kbuckets.entry(&key).view().map(|e| e.node.value.clone().into_vec())
                         }
                     } else {
@@ -870,7 +870,7 @@ where
 
     /// Updates the routing table with a new connection status and address of a peer.
     fn connection_updated(&mut self, peer: PeerId, address: Option<Multiaddr>, new_status: NodeStatus) {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, old_status) => {
                 if let Some(address) = address {
@@ -985,13 +985,13 @@ where
                             // Pr(bucket-253) = 1 - (7/8)^16   ~= 0.88
                             // Pr(bucket-252) = 1 - (15/16)^16 ~= 0.64
                             // ...
-                            let mut target = kbucket::Key::new(PeerId::random());
+                            let mut target = kbucket::Key::from(PeerId::random());
                             for _ in 0 .. 16 {
                                 let d = local_key.distance(&target);
                                 if b.contains(&d) {
                                     break;
                                 }
-                                target = kbucket::Key::new(PeerId::random());
+                                target = kbucket::Key::from(PeerId::random());
                             }
                             target
                         }).collect::<Vec<_>>().into_iter()
@@ -1447,7 +1447,7 @@ where
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::new(peer_id.clone());
+        let key = kbucket::Key::from(*peer_id);
         let mut peer_addrs =
             if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
@@ -1500,7 +1500,7 @@ where
         let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
         // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::new(peer.clone())).value() {
+        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
             if addrs.replace(old, new) {
                 debug!("Address '{}' replaced with '{}' for peer '{}'.", old, new, peer);
             } else {
@@ -1550,7 +1550,7 @@ where
         err: &dyn error::Error
     ) {
         if let Some(peer_id) = peer_id {
-            let key = kbucket::Key::new(peer_id.clone());
+            let key = kbucket::Key::from(*peer_id);
 
             if let Some(addrs) = self.kbuckets.entry(&key).value() {
                 // TODO: Ideally, the address should only be removed if the error can
@@ -2403,7 +2403,7 @@ impl QueryInfo {
     fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
-                key: peer.clone().into_bytes(),
+                key: peer.to_bytes(),
                 user_data: query_id,
             },
             QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {

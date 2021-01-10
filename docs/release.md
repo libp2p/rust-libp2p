@@ -25,7 +25,7 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 
     ```bash
     cd $CRATE-PATH
-    tag="$(sed -En 's/^name = \"(.*)\"$/\1/p' Cargo.toml)-$(sed -En 's/^version = \"(.*)\"$/\1/p' Cargo.toml)"
+    tag="$(sed -En 's/^name = \"(.*)\"$/\1/p' Cargo.toml | head -n 1)-$(sed -En 's/^version = \"(.*)\"$/\1/p' Cargo.toml)"
     # Use `-s` for a GPG signed tag or `-a` for an annotated tag.
     git tag -s "${tag}" -m "${tag}"
     git push origin "${tag}"

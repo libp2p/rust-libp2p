@@ -14,8 +14,8 @@ bytes = "0.5"
 fnv = "1.0"
 futures = "0.3.1"
 futures_codec = "0.4"
-libp2p-core = { version = "0.25.0", path = "../../core" }
-libp2p-swarm = { version = "0.25.0", path = "../../swarm" }
+libp2p-core = { version = "0.26.0", path = "../../core" }
+libp2p-swarm = { version = "0.26.0", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
 prost = "0.6.1"

@@ -24,6 +24,42 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
+/// A generic trait that can be extended for various hashing types for a topic.
+pub trait Hasher {
+    /// The function that takes a topic string and creates a topic hash.
+    fn hash(topic_string: String) -> TopicHash;
+}
+
+/// A type for representing topics who use the identity hash.
+#[derive(Debug, Clone)]
+pub struct IdentityHash {}
+impl Hasher for IdentityHash {
+    /// Creates a [`TopicHash`] as a raw string.
+    fn hash(topic_string: String) -> TopicHash {
+        TopicHash { hash: topic_string }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Sha256Hash {}
+impl Hasher for Sha256Hash {
+    /// Creates a [`TopicHash`] by SHA256 hashing the topic then base64 encoding the
+    /// hash.
+    fn hash(topic_string: String) -> TopicHash {
+        let topic_descripter = rpc_proto::TopicDescriptor {
+            name: Some(topic_string),
+            auth: None,
+            enc: None,
+        };
+        let mut bytes = Vec::with_capacity(topic_descripter.encoded_len());
+        topic_descripter
+            .encode(&mut bytes)
+            .expect("buffer is large enough");
+        let hash = encode(Sha256::digest(&bytes).as_slice());
+        TopicHash { hash }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TopicHash {
     /// The topic hash. Stored as a string to align with the protobuf API.
@@ -35,6 +71,10 @@ impl TopicHash {
         TopicHash { hash: hash.into() }
     }
 
+    pub fn into_string(self) -> String {
+        self.hash
+    }
+
     pub fn as_str(&self) -> &str {
         &self.hash
     }
@@ -42,48 +82,32 @@ impl TopicHash {
 
 /// A gossipsub topic.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Topic {
+pub struct Topic<H: Hasher> {
     topic: String,
+    phantom_data: std::marker::PhantomData<H>,
 }
 
-impl Topic {
-    pub fn new(topic: String) -> Self {
-        Topic { topic }
+impl<H: Hasher> From<Topic<H>> for TopicHash {
+    fn from(topic: Topic<H>) -> TopicHash {
+        topic.hash()
     }
+}
 
-    /// Creates a `TopicHash` by SHA256 hashing the topic then base64 encoding the
-    /// hash.
-    pub fn sha256_hash(&self) -> TopicHash {
-        let topic_descripter = rpc_proto::TopicDescriptor {
-            name: Some(self.topic.clone()),
-            auth: None,
-            enc: None,
-        };
-        let mut bytes = Vec::with_capacity(topic_descripter.encoded_len());
-        topic_descripter
-            .encode(&mut bytes)
-            .expect("buffer is large enough");
-        let hash = encode(Sha256::digest(&bytes).as_slice());
-
-        TopicHash { hash }
-    }
-
-    /// Creates a `TopicHash` as a raw string.
-    pub fn no_hash(&self) -> TopicHash {
-        TopicHash {
-            hash: self.topic.clone(),
+impl<H: Hasher> Topic<H> {
+    pub fn new(topic: impl Into<String>) -> Self {
+        Topic {
+            topic: topic.into(),
+            phantom_data: std::marker::PhantomData,
         }
     }
-}
 
-impl Into<String> for TopicHash {
-    fn into(self) -> String {
-        self.hash
+    pub fn hash(&self) -> TopicHash {
+        H::hash(self.topic.clone())
     }
 }
 
-impl fmt::Display for Topic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<H: Hasher> fmt::Display for Topic<H> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.topic)
     }
 }

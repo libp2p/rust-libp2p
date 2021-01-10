@@ -23,6 +23,14 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
+# Version 0.34.0 [unreleased]
+
+- Update `libp2p-request-response`.
+
+# Version 0.33.0 [2020-12-17]
+
+- Update `libp2p-core` and all dependent crates.
+
 # Version 0.32.2 [2020-12-10]
 
 - Update `libp2p-websocket`.

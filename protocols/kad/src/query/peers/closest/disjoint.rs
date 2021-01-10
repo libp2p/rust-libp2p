@@ -770,7 +770,7 @@ mod tests {
     impl Graph {
         fn get_closest_peer(&self, target: &KeyBytes) -> PeerId {
             self.0.iter()
-                .map(|(peer_id, _)| (target.distance(&Key::new(peer_id.clone())), peer_id))
+                .map(|(peer_id, _)| (target.distance(&Key::from(*peer_id)), peer_id))
                 .fold(None, |acc, (distance_b, peer_id_b)| {
                     match acc {
                         None => Some((distance_b, peer_id_b)),
@@ -848,7 +848,7 @@ mod tests {
 
             let mut known_closest_peers = graph.0.iter()
                 .take(K_VALUE.get())
-                .map(|(key, _peers)| Key::new(key.clone()))
+                .map(|(key, _peers)| Key::from(*key))
                 .collect::<Vec<_>>();
             known_closest_peers.sort_unstable_by(|a, b| {
                 target.distance(a).cmp(&target.distance(b))
@@ -934,7 +934,7 @@ mod tests {
                 }
             }
 
-            let mut result = iter.into_result().into_iter().map(Key::new).collect::<Vec<_>>();
+            let mut result = iter.into_result().into_iter().map(Key::from).collect::<Vec<_>>();
             result.sort_unstable_by(|a, b| {
                 target.distance(a).cmp(&target.distance(b))
             });
