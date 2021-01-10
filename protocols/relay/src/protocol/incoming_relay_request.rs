@@ -29,8 +29,6 @@ use libp2p_core::{Multiaddr, PeerId};
 
 use prost::Message;
 
-use std::sync::{Arc, Mutex};
-
 use std::io::Cursor;
 use unsigned_varint::codec::UviBytes;
 
@@ -44,21 +42,12 @@ use unsigned_varint::codec::UviBytes;
 /// source on it. This data must be transmitted to the destination.
 // TODO: debug
 #[must_use = "An incoming relay request should be either accepted or denied."]
+#[derive(Clone)]
 pub struct IncomingRelayRequest<TSubstream> {
     /// The stream to the source.
-    // TODO: Clean up mutex arc
-    stream: Arc<Mutex<Option<TSubstream>>>,
+    stream: TSubstream,
     /// Target of the request.
     dest: Peer,
-}
-
-impl<TSubstream> Clone for IncomingRelayRequest<TSubstream> {
-    fn clone(&self) -> Self {
-        IncomingRelayRequest {
-            stream: self.stream.clone(),
-            dest: self.dest.clone(),
-        }
-    }
 }
 
 impl<TSubstream> IncomingRelayRequest<TSubstream>
@@ -67,10 +56,7 @@ where
 {
     /// Creates a `IncomingRelayRequest`.
     pub(crate) fn new(stream: TSubstream, dest: Peer) -> Self {
-        IncomingRelayRequest {
-            stream: Arc::new(Mutex::new(Some(stream))),
-            dest,
-        }
+        IncomingRelayRequest { stream, dest }
     }
 
     /// Peer id of the node we should relay communications to.
@@ -103,7 +89,7 @@ where
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
+        let mut substream = Framed::new(self.stream, codec);
 
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
@@ -143,7 +129,7 @@ where
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
+        let mut substream = Framed::new(self.stream, codec);
 
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;

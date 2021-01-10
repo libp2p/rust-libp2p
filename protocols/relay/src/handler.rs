@@ -31,8 +31,8 @@ use libp2p_swarm::{
 use log::warn;
 use smallvec::SmallVec;
 use std::collections::HashMap;
-use std::task::{Context, Poll};
 use std::io;
+use std::task::{Context, Poll};
 
 /// Protocol handler that handles the relay protocol.
 ///
@@ -77,8 +77,13 @@ pub struct RelayHandler {
     outgoing_relay_requests: SmallVec<[(PeerId, Vec<Multiaddr>); 4]>,
 
     /// Requests asking the remote to become a destination.
-    outgoing_destination_requests:
-        SmallVec<[(PeerId, Vec<Multiaddr>, RelayHandlerIncomingRelayRequest); 4]>,
+    outgoing_destination_requests: SmallVec<
+        [(
+            PeerId,
+            Vec<Multiaddr>,
+            protocol::IncomingRelayRequest<NegotiatedSubstream>,
+        ); 4],
+    >,
 
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
@@ -90,7 +95,7 @@ pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back a
     /// `DenyIncomingRelayRequest`, or send a `OutgoingDestinationRequest` to a different handler containing
     /// this object.
-    IncomingRelayRequest(RelayHandlerIncomingRelayRequest),
+    IncomingRelayRequest(protocol::IncomingRelayRequest<NegotiatedSubstream>),
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
     /// destination. The behaviour can accept or deny the request via [`AcceptDestinationRequest`]
@@ -121,10 +126,9 @@ pub enum RelayHandlerEvent {
 }
 
 /// Event that can be sent to the relay handler.
-#[derive(Clone)]
 pub enum RelayHandlerIn {
     /// Denies a hop request sent by the node we talk to.
-    DenyIncomingRelayRequest(RelayHandlerIncomingRelayRequest),
+    DenyIncomingRelayRequest(protocol::IncomingRelayRequest<NegotiatedSubstream>),
 
     /// Denies a destination request sent by the node we talk to.
     DenyDestinationRequest(PeerId),
@@ -149,26 +153,8 @@ pub enum RelayHandlerIn {
         /// Addresses of the node whose communications are being relayed.
         source_addresses: Vec<Multiaddr>,
         /// Substream to the source.
-        substream: RelayHandlerIncomingRelayRequest,
+        substream: protocol::IncomingRelayRequest<NegotiatedSubstream>,
     },
-}
-
-/// The remote wants us to become a relay.
-#[derive(Clone)]
-pub struct RelayHandlerIncomingRelayRequest {
-    inner: protocol::IncomingRelayRequest<NegotiatedSubstream>,
-}
-
-impl RelayHandlerIncomingRelayRequest {
-    /// Peer id of the destination that we should relay to.
-    pub fn destination_id(&self) -> &PeerId {
-        self.inner.destination_id()
-    }
-
-    /// Returns the addresses of the target, as reported by the requester.
-    pub fn destination_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.inner.destination_addresses()
-    }
 }
 
 impl RelayHandler {
@@ -199,7 +185,7 @@ impl ProtocolsHandler for RelayHandler {
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol = upgrade::EitherUpgrade<
         protocol::OutgoingRelayRequest,
-        protocol::OutgoingDestinationRequest<RelayHandlerIncomingRelayRequest>,
+        protocol::OutgoingDestinationRequest<protocol::IncomingRelayRequest<NegotiatedSubstream>>,
     >;
     type OutboundOpenInfo = PeerId;
     type InboundOpenInfo = ();
@@ -223,10 +209,10 @@ impl ProtocolsHandler for RelayHandler {
                     .push(RelayHandlerEvent::IncomingDestinationRequest(source));
             }
             // We have been asked to act as a relay.
-            protocol::RelayRemoteRequest::HopRequest(hop_request) => {
+            protocol::RelayRemoteRequest::HopRequest(incoming_relay_request) => {
                 self.queued_events
                     .push(RelayHandlerEvent::IncomingRelayRequest(
-                        RelayHandlerIncomingRelayRequest { inner: hop_request },
+                        incoming_relay_request,
                     ));
             }
         }
@@ -249,7 +235,7 @@ impl ProtocolsHandler for RelayHandler {
             // We have successfully asked the node to be a destination.
             EitherOutput::Second((to_dest_substream, request)) => {
                 self.copy_futures
-                    .push(request.inner.fulfill(to_dest_substream));
+                    .push(request.fulfill(to_dest_substream));
             }
         }
     }
@@ -258,7 +244,7 @@ impl ProtocolsHandler for RelayHandler {
         match event {
             // Deny a relay request from the node we handle.
             RelayHandlerIn::DenyIncomingRelayRequest(rq) => {
-                let fut = rq.inner.deny();
+                let fut = rq.deny();
                 self.deny_futures.push(fut);
             }
             RelayHandlerIn::AcceptDestinationRequest(source) => {

@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    RelayHandler, RelayHandlerEvent, RelayHandlerIn, RelayHandlerIncomingRelayRequest,
-};
+use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerIn};
 use crate::transport::TransportToBehaviourMsg;
+use crate::protocol;
 use fnv::FnvHashSet;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
@@ -80,7 +79,7 @@ enum OutgoingRelayRequest {
 enum IncomingRelayRequest {
     DialingDestination {
         source_id: PeerId,
-        request: RelayHandlerIncomingRelayRequest,
+        request: protocol::IncomingRelayRequest<NegotiatedSubstream>,
     },
 }
 
