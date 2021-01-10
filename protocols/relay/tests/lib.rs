@@ -8,7 +8,8 @@ use libp2p_core::either::EitherTransport;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
 use libp2p_core::{identity, upgrade, PeerId};
-use libp2p_kad::{Kademlia, KademliaEvent};
+use libp2p_identify::{Identify, IdentifyEvent, IdentifyInfo};
+use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayTransportWrapper};
@@ -24,6 +25,7 @@ struct CombinedBehaviour {
     relay: Relay,
     ping: Ping,
     kad: Kademlia<MemoryStore>,
+    identify: Identify,
 
     #[behaviour(ignore)]
     events: Vec<CombinedEvent>,
@@ -58,6 +60,24 @@ impl NetworkBehaviourEventProcess<PingEvent> for CombinedBehaviour {
 impl NetworkBehaviourEventProcess<KademliaEvent> for CombinedBehaviour {
     fn inject_event(&mut self, event: KademliaEvent) {
         self.events.push(CombinedEvent::Kad(event));
+    }
+}
+
+impl NetworkBehaviourEventProcess<IdentifyEvent> for CombinedBehaviour {
+    fn inject_event(&mut self, event: IdentifyEvent) {
+        match event {
+            IdentifyEvent::Received {
+                peer_id,
+                info: IdentifyInfo { listen_addrs, .. },
+                ..
+            } => {
+                for addr in listen_addrs {
+                    self.kad.add_address(&peer_id, addr);
+                }
+            }
+            IdentifyEvent::Sent { .. } => {}
+            e => panic!("{:?}", e),
+        }
     }
 }
 
@@ -100,7 +120,7 @@ fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.into_peer_id();
+    let local_peer_id = local_public_key.clone().into_peer_id();
 
     let transport = MemoryTransport::default();
 
@@ -124,6 +144,11 @@ fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
             local_peer_id.clone(),
             MemoryStore::new(local_peer_id.clone()),
         ),
+        identify: Identify::new(
+            "test".to_string(),
+            "test-agent".to_string(),
+            local_public_key.clone(),
+        ),
         events: Default::default(),
     };
 
@@ -132,7 +157,7 @@ fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
 
 #[test]
 fn node_a_connect_to_node_b_listening_via_relay() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
 
@@ -142,10 +167,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
 
     let node_a_peer_id = Swarm::local_peer_id(&node_a_swarm).clone();
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
-    let node_b_peer_id_clone = node_b_peer_id.clone();
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let relay_peer_id_clone = relay_peer_id.clone();
-    let relay_peer_id_clone_clone = relay_peer_id.clone();
 
     let relay_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let node_b_address = relay_address
@@ -170,16 +192,22 @@ fn node_a_connect_to_node_b_listening_via_relay() {
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
 
     pool.run_until(async {
+        // Node B reporting listen address via relay.
+        assert!(matches!(
+            node_b_swarm.next_event().await,
+            SwarmEvent::NewListenAddr(_)
+        ));
+
         // Node B dialing Relay.
         match node_b_swarm.next_event().await {
-            SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id_clone),
+            SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id),
             e => panic!("{:?}", e),
         }
 
         // Node B establishing connection to Relay.
         match node_b_swarm.next_event().await {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                assert_eq!(peer_id, relay_peer_id_clone);
+                assert_eq!(peer_id, relay_peer_id);
             }
             e => panic!("{:?}", e),
         }
@@ -232,7 +260,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
             loop {
                 match node_a_swarm.next_event().await {
                     SwarmEvent::Dialing(peer_id) => {
-                        assert_eq!(peer_id, relay_peer_id_clone_clone);
+                        assert_eq!(peer_id, relay_peer_id);
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -244,7 +272,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
             loop {
                 match node_a_swarm.next_event().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                        assert_eq!(peer_id, relay_peer_id_clone_clone);
+                        assert_eq!(peer_id, relay_peer_id);
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -256,7 +284,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
             loop {
                 match node_a_swarm.next_event().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. }
-                        if peer_id == node_b_peer_id_clone =>
+                        if peer_id == node_b_peer_id =>
                     {
                         break
                     }
@@ -272,7 +300,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
                         peer,
                         result: Ok(_),
                     })) => {
-                        if peer == node_b_peer_id_clone {
+                        if peer == node_b_peer_id {
                             break;
                         }
                     }
@@ -287,7 +315,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
 
 #[test]
 fn node_a_connect_to_node_b_not_listening_via_relay() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
 
@@ -383,7 +411,7 @@ fn node_a_connect_to_node_b_not_listening_via_relay() {
 
 #[test]
 fn node_a_try_connect_to_offline_node_b() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
 
@@ -459,7 +487,7 @@ fn node_a_try_connect_to_offline_node_b() {
 
 #[test]
 fn node_a_try_connect_to_offline_node_b_via_offline_relay() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
 
@@ -508,7 +536,7 @@ fn node_a_try_connect_to_offline_node_b_via_offline_relay() {
 
 #[test]
 fn node_a_connect_to_node_b_via_established_connection_to_relay() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
 
@@ -596,7 +624,7 @@ fn node_a_connect_to_node_b_via_established_connection_to_relay() {
 
 #[test]
 fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_via_routable_relay() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
 
@@ -606,10 +634,7 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
 
     let node_a_peer_id = Swarm::local_peer_id(&node_a_swarm).clone();
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
-    let node_b_peer_id_clone = node_b_peer_id.clone();
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let relay_peer_id_clone = relay_peer_id.clone();
-    let relay_peer_id_clone_clone = relay_peer_id.clone();
 
     let relay_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let node_b_address = relay_address
@@ -618,12 +643,23 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(node_b_peer_id.into()));
 
+    node_a_swarm
+        .kad
+        .add_address(&relay_peer_id, relay_address.clone());
+    node_b_swarm
+        .kad
+        .add_address(&relay_peer_id, relay_address.clone());
+
     Swarm::listen_on(&mut relay_swarm, relay_address.clone()).unwrap();
     pool.spawner()
         .spawn_obj(
             async move {
                 loop {
-                    relay_swarm.next_event().await;
+                    match relay_swarm.next_event().await {
+                        SwarmEvent::Behaviour(CombinedEvent::Kad(_)) => {}
+                        SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                        _ => (),
+                    }
                 }
             }
             .boxed()
@@ -631,21 +667,51 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
         )
         .unwrap();
 
+    // Node B listen via Relay.
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
 
     pool.run_until(async {
+        // Node B reporting listen address via relay.
+        assert!(matches!(
+            node_b_swarm.next_event().await,
+            SwarmEvent::NewListenAddr(_)
+        ));
+
         // Node B dialing Relay.
         match node_b_swarm.next_event().await {
-            SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id_clone),
+            SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id),
             e => panic!("{:?}", e),
         }
 
         // Node B establishing connection to Relay.
-        match node_b_swarm.next_event().await {
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                assert_eq!(peer_id, relay_peer_id_clone);
+        loop {
+            match node_b_swarm.next_event().await {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    assert_eq!(peer_id, relay_peer_id);
+                    break;
+                }
+                SwarmEvent::Behaviour(CombinedEvent::Kad(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                e => panic!("{:?}", e),
             }
-            e => panic!("{:?}", e),
+        }
+
+        // Node B bootstrapping.
+        let query_id = node_b_swarm.kad.bootstrap().unwrap();
+        loop {
+            match node_b_swarm.next_event().await {
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
+                    id,
+                    result: QueryResult::Bootstrap(Ok(_)),
+                    ..
+                })) if query_id == id => {
+                    if node_b_swarm.kad.iter_queries().count() == 0 {
+                        break;
+                    }
+                }
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                e => panic!("{:?}", e),
+            }
         }
 
         let node_b = async move {
@@ -653,10 +719,7 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
             loop {
                 match node_b_swarm.next_event().await {
                     SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                        assert_eq!(
-                            send_back_addr,
-                            Protocol::P2p(node_a_peer_id.into()).into()
-                        );
+                        assert_eq!(send_back_addr, Protocol::P2p(node_a_peer_id.into()).into());
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -677,7 +740,7 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
                 }
             }
 
-            // Node B waiting for Ping from Node A via Relay.
+            // Node B waiting for Node A to close connection.
             loop {
                 match node_b_swarm.next_event().await {
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -685,68 +748,70 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
                         assert_eq!(peer_id, node_a_peer_id);
                         break;
                     }
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(_)) => {}
                     e => panic!("{:?}", e),
                 }
             }
         };
 
-        // Instruct Node A to dial Relay.
-        Swarm::dial_addr(&mut node_a_swarm, relay_address).unwrap();
         let node_a = async move {
-            // Node A dialing Relay.
-            loop {
-                match node_a_swarm.next_event().await {
-                    SwarmEvent::Dialing(peer_id) => {
-                        assert_eq!(peer_id, relay_peer_id_clone_clone);
-                        break;
-                    }
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    e => panic!("{:?}", e),
-                }
-            }
+            // Node A looking for Node B on the Kademlia DHT.
+            let mut query_id = node_a_swarm.kad.get_closest_peers(node_b_peer_id);
+            // One has to retry multiple times to wait for Relay to receive Identify event from Node
+            // B.
+            let mut tries = 0;
 
-            // Node A establishing connection to Relay.
+            // Node A establishing connection to Relay and, given that the DHT is small, Node
+            // B.
             loop {
                 match node_a_swarm.next_event().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                        assert_eq!(peer_id, relay_peer_id_clone_clone);
-                        break;
+                        if peer_id == relay_peer_id {
+                            continue;
+                        } else if peer_id == node_b_peer_id {
+                            break;
+                        } else {
+                            panic!("Unexpected peer id {:?}", peer_id);
+                        }
                     }
+                    SwarmEvent::Dialing(peer_id)
+                        if peer_id == relay_peer_id || peer_id == node_b_peer_id => {}
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
+                        id,
+                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
+                        ..
+                    })) if id == query_id => {
+                        tries += 1;
+                        if tries > 300 {
+                            panic!("Too many retries.");
+                        }
+
+                        query_id = node_a_swarm.kad.get_closest_peers(node_b_peer_id);
+                    }
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                        ..
+                    })) => {}
                     e => panic!("{:?}", e),
                 }
             }
 
-            // // Node A establishing connection to node B via Relay.
-            // loop {
-            //     match node_a_swarm.next_event().await {
-            //         SwarmEvent::ConnectionEstablished { peer_id, .. }
-            //             if peer_id == node_b_peer_id_clone =>
-            //         {
-            //             break
-            //         }
-            //         SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-            //         e => panic!("{:?}", e),
-            //     }
-            // }
-
-            // // Node A waiting for Ping from Node B via Relay.
-            // loop {
-            //     match node_a_swarm.next_event().await {
-            //         SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
-            //             peer,
-            //             result: Ok(_),
-            //         })) => {
-            //             if peer == node_b_peer_id_clone {
-            //                 break;
-            //             }
-            //         }
-            //         e => panic!("{:?}", e),
-            //     }
-            // }
+            // Node A waiting for Ping from Node B via Relay.
+            loop {
+                match node_a_swarm.next_event().await {
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                        peer,
+                        result: Ok(_),
+                    })) => {
+                        if peer == node_b_peer_id {
+                            break;
+                        }
+                    }
+                    e => panic!("{:?}", e),
+                }
+            }
         };
 
         futures::future::join(node_b, node_a).await
     });
-
 }

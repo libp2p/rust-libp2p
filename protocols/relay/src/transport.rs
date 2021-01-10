@@ -270,10 +270,6 @@ impl<T: Transport> Stream for RelayListener<T> {
             }
         }
 
-        if let Some(addr) = this.report_listen_addr.take() {
-            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
-        }
-
         match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {
             Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
                 stream,
@@ -290,6 +286,12 @@ impl<T: Transport> Stream for RelayListener<T> {
             }
             Poll::Ready(None) => unimplemented!(),
             Poll::Pending => {}
+        }
+
+        // TODO: This should likely only be reported once the relay connection is established. But
+        // how should one know that?
+        if let Some(addr) = this.report_listen_addr.take() {
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
         }
 
         Poll::Pending
