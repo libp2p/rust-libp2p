@@ -779,7 +779,7 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                     SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
                         id,
-                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
+                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
                         ..
                     })) if id == query_id => {
                         tries += 1;

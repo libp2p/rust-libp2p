@@ -19,13 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, Peer};
+use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
-use std::{error, io};
+use std::io;
 use std::io::Cursor;
 use unsigned_varint::codec::UviBytes;
 
@@ -72,7 +72,9 @@ where
     ///
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
-    pub fn accept(self) -> BoxFuture<'static, Result<(PeerId, TSubstream), IncomingDestinationRequestError>> {
+    pub fn accept(
+        self,
+    ) -> BoxFuture<'static, Result<(PeerId, TSubstream), IncomingDestinationRequestError>> {
         let IncomingDestinationRequest { stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
@@ -91,7 +93,8 @@ where
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
             Ok((from.peer_id, substream.into_inner()))
-        }.boxed()
+        }
+        .boxed()
     }
 
     /// Refuses the request.
@@ -115,10 +118,10 @@ where
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 }
-
 
 #[derive(Debug)]
 pub enum IncomingDestinationRequestError {

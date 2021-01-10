@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn test_split_relay_and_destination() {
         let addr: Multiaddr = "/ip6/::1/tcp/40425/p2p/12D3KooWSy38eUdLNqhmVQZYFy2tzpi9u5Zt3bYuqdh9vKzAvg42/p2p-circuit/p2p/12D3KooWSSCJLCSaSaxTzyajn2yDoybUKsPXdoc47LjjB9196Zbv".parse().unwrap();
-        let (relay, destination) = split_relay_and_destination(addr);
+        let (_relay, destination) = split_relay_and_destination(addr);
 
         assert!(!destination.is_empty());
     }

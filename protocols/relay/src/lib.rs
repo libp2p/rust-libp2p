@@ -48,7 +48,6 @@
 //!   *relay* to listen for incoming connections on the behalf of the *destination*.
 
 mod behaviour;
-mod error;
 
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message.pb.rs"));

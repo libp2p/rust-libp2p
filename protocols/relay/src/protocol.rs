@@ -20,9 +20,9 @@
 
 use crate::message_proto::circuit_relay;
 
-use libp2p_core::{multiaddr::Error as MultiaddrError, upgrade, Multiaddr, PeerId};
+use libp2p_core::{multiaddr::Error as MultiaddrError, Multiaddr, PeerId};
 use smallvec::SmallVec;
-use std::{convert::TryFrom, error, fmt, io};
+use std::{convert::TryFrom, error, fmt};
 
 /// Any message received on the wire whose length is superior to that will be refused and will
 /// trigger an error.
@@ -31,20 +31,23 @@ const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
 const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/relay/circuit/0.1.0";
 
 // Source -> Relay
-mod outgoing_relay_request;
 mod incoming_relay_request;
-pub use self::outgoing_relay_request::{OutgoingRelayRequest, OutgoingRelayRequestError};
+mod outgoing_relay_request;
 pub use self::incoming_relay_request::{IncomingRelayRequest, IncomingRelayRequestError};
+pub use self::outgoing_relay_request::{OutgoingRelayRequest, OutgoingRelayRequestError};
 
 // Relay -> Destination
-mod outgoing_destination_request;
 mod incoming_destination_request;
-pub use self::incoming_destination_request::{IncomingDestinationRequest, IncomingDestinationRequestError};
-pub use self::outgoing_destination_request::{OutgoingDestinationRequest, OutgoingDestinationRequestError};
+mod outgoing_destination_request;
+pub use self::incoming_destination_request::{
+    IncomingDestinationRequest, IncomingDestinationRequestError,
+};
+pub use self::outgoing_destination_request::{
+    OutgoingDestinationRequest, OutgoingDestinationRequestError,
+};
 
 mod listen;
 pub use self::listen::{RelayListen, RelayListenError, RelayRemoteRequest};
-
 
 /// Strong typed version of a `CircuitRelay_Peer`.
 ///

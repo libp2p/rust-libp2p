@@ -22,11 +22,10 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
 use libp2p::noise;
-use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::relay::{Relay, RelayTransportWrapper};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId, Swarm};
-use libp2p::relay::{Relay, RelayTransportWrapper};
+use libp2p::{identity, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};
 

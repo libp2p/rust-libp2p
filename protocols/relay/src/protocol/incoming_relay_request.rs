@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
-use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, Peer};
+use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
-use futures::future::{BoxFuture, Either, select};
-use futures::io::{Error, ErrorKind};
+use futures::future::{select, BoxFuture, Either};
+use futures::io::ErrorKind;
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
@@ -31,7 +31,6 @@ use prost::Message;
 
 use std::sync::{Arc, Mutex};
 
-use std::{io};
 use std::io::Cursor;
 use unsigned_varint::codec::UviBytes;
 
@@ -104,10 +103,7 @@ where
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(
-            self.stream.lock().unwrap().take().unwrap(),
-            codec,
-        );
+        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
 
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
@@ -123,11 +119,12 @@ where
                 Either::Left((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
                 // Source substream closed.
                 Either::Right((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
-                _ => {},
+                _ => {}
             }
 
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     /// Refuses the request.
@@ -146,16 +143,14 @@ where
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(
-            self.stream.lock().unwrap().take().unwrap(),
-            codec,
-        );
+        let mut substream = Framed::new(self.stream.lock().unwrap().take().unwrap(), codec);
 
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
 
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 }
 

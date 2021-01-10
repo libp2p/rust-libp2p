@@ -25,7 +25,6 @@ use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
-use std::io::{Error, ErrorKind};
 use std::iter;
 use unsigned_varint::codec::UviBytes;
 

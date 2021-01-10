@@ -32,7 +32,7 @@ use log::warn;
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::task::{Context, Poll};
-use std::{error, io};
+use std::io;
 
 /// Protocol handler that handles the relay protocol.
 ///
