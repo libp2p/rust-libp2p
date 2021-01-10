@@ -41,13 +41,13 @@
 //! implementations, due to undefined elements in the current specification.
 //!
 //! - **Topics** -  In gossipsub, topics configurable by the `hash_topics` configuration parameter.
-//! Topics are of type `TopicHash`. The current go implementation uses raw utf-8 strings, and this
+//! Topics are of type [`TopicHash`]. The current go implementation uses raw utf-8 strings, and this
 //! is default configuration in rust-libp2p. Topics can be hashed (SHA256 hashed then base64
 //! encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
-//! `PeerId` and a nonce (sequence number) of the message. The sequence numbers in this
-//! implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
+//! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
+//! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
 //! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
 //! the current go implementation.
 //!
@@ -58,39 +58,17 @@
 //! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration
 //! parameters. Specifically it specifies:
 //!
-//! [`GossipsubConfig`]: struct.GossipsubConfig.html
+//! [`GossipsubConfig`]: struct.Config.html
 //!
-//! - `protocol_id` - The protocol id that this implementation will accept connections on.
-//! - `history_length` - The number of heartbeats which past messages are kept in cache (default: 5).
-//! - `history_gossip` - The number of past heartbeats that the node will send gossip metadata
-//! about (default: 3).
-//! - `mesh_n` - The target number of peers store in the local mesh network.
-//! (default: 6).
-//! - `mesh_n_low` - The minimum number of peers in the local mesh network before.
-//! trying to add more peers to the mesh from the connected peer pool (default: 4).
-//! - `mesh_n_high` - The maximum number of peers in the local mesh network before removing peers to
-//! reach `mesh_n` peers (default: 12).
-//! - `gossip_lazy` - The number of peers that the local node will gossip to during a heartbeat (default: `mesh_n` = 6).
-//! - `heartbeat_initial_delay - The initial time delay before starting the first heartbeat (default: 5 seconds).
-//! - `heartbeat_interval` - The time between each heartbeat (default: 1 second).
-//! - `fanout_ttl` - The fanout time to live time period. The timeout required before removing peers from the fanout
-//! for a given topic (default: 1 minute).
-//! - `max_transmit_size` - This sets the maximum transmission size for total gossipsub messages on the network.
-//! - `hash_topics` - Whether to hash the topics using base64(SHA256(topic)) or to leave as plain utf-8 strings.
-//! - `manual_propagation` - Whether gossipsub should immediately forward received messages on the
-//! network. For applications requiring message validation, this should be set to false, then the
-//! application should call `propagate_message(message_id, propagation_source)` once validated, to
-//! propagate the message to peers.
-//!
-//! This struct implements the `Default` trait and can be initialised via
-//! `GossipsubConfig::default()`.
+//! This struct implements the [`Default`] trait and can be initialised via
+//! [`GossipsubConfig::default()`].
 //!
 //!
 //! ## Gossipsub
 //!
-//! The [`Gossipsub`] struct implements the `NetworkBehaviour` trait allowing it to act as the
-//! routing behaviour in a `Swarm`. This struct requires an instance of `PeerId` and
-//! [`GossipsubConfig`].
+//! The [`Gossipsub`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
+//! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
+//! [`libp2p_core::PeerId`] and [`GossipsubConfig`].
 //!
 //! [`Gossipsub`]: struct.Gossipsub.html
 
@@ -98,57 +76,86 @@
 //!
 //! An example of initialising a gossipsub compatible swarm:
 //!
-//! ```ignore
-//! #extern crate libp2p;
-//! #extern crate futures;
-//! #extern crate tokio;
-//! #use libp2p::gossipsub::GossipsubEvent;
-//! #use libp2p::{identity, gossipsub,
-//! #    tokio_codec::{FramedRead, LinesCodec},
-//! #};
-//! let local_key = identity::Keypair::generate_ed25519();
-//! let local_pub_key = local_key.public();
+//! ```
+//! use libp2p_gossipsub::GossipsubEvent;
+//! use libp2p_core::{identity::Keypair,transport::{Transport, MemoryTransport}, Multiaddr};
+//! use libp2p_gossipsub::MessageAuthenticity;
+//! let local_key = Keypair::generate_ed25519();
+//! let local_peer_id = libp2p_core::PeerId::from(local_key.public());
 //!
-//! // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-//! let transport = libp2p::build_development_transport(local_key);
+//! // Set up an encrypted TCP Transport over the Mplex
+//! // This is test transport (memory).
+//! let noise_keys = libp2p_noise::Keypair::<libp2p_noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
+//! let transport = MemoryTransport::default()
+//!            .upgrade(libp2p_core::upgrade::Version::V1)
+//!            .authenticate(libp2p_noise::NoiseConfig::xx(noise_keys).into_authenticated())
+//!            .multiplex(libp2p_mplex::MplexConfig::new())
+//!            .boxed();
 //!
-//! // Create a Floodsub/Gossipsub topic
-//! let topic = libp2p::floodsub::TopicBuilder::new("example").build();
+//! // Create a Gossipsub topic
+//! let topic = libp2p_gossipsub::IdentTopic::new("example");
+//!
+//! // Set the message authenticity - How we expect to publish messages
+//! // Here we expect the publisher to sign the message with their key.
+//! let message_authenticity = MessageAuthenticity::Signed(local_key);
 //!
 //! // Create a Swarm to manage peers and events
 //! let mut swarm = {
 //!     // set default parameters for gossipsub
-//!     let gossipsub_config = gossipsub::GossipsubConfig::default();
+//!     let gossipsub_config = libp2p_gossipsub::GossipsubConfig::default();
 //!     // build a gossipsub network behaviour
-//!     let mut gossipsub =
-//!         gossipsub::Gossipsub::new(local_pub_key.clone().into_peer_id(), gossipsub_config);
-//!     gossipsub.subscribe(topic.clone());
-//!     libp2p::Swarm::new(
+//!     let mut gossipsub: libp2p_gossipsub::Gossipsub =
+//!         libp2p_gossipsub::Gossipsub::new(message_authenticity, gossipsub_config).unwrap();
+//!     // subscribe to the topic
+//!     gossipsub.subscribe(&topic);
+//!     // create the swarm
+//!     libp2p_swarm::Swarm::new(
 //!         transport,
 //!         gossipsub,
-//!         libp2p::core::topology::MemoryTopology::empty(local_pub_key),
+//!         local_peer_id,
 //!     )
 //! };
 //!
-//! // Listen on all interfaces and whatever port the OS assigns
-//! let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+//! // Listen on a memory transport.
+//! let memory: Multiaddr = libp2p_core::multiaddr::Protocol::Memory(10).into();
+//! let addr = libp2p_swarm::Swarm::listen_on(&mut swarm, memory).unwrap();
 //! println!("Listening on {:?}", addr);
 //! ```
 
 pub mod error;
 pub mod protocol;
 
+mod backoff;
 mod behaviour;
 mod config;
+mod gossip_promises;
 mod handler;
 mod mcache;
+mod peer_score;
+pub mod subscription_filter;
+pub mod time_cache;
 mod topic;
+mod transform;
+mod types;
 
-mod rpc_proto {
-    include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));
-}
+#[cfg(test)]
+#[macro_use]
+extern crate derive_builder;
 
-pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc, MessageAuthenticity};
+mod rpc_proto;
+
+pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
+pub use self::transform::{DataTransform, IdentityTransform};
+
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, ValidationMode};
-pub use self::protocol::{GossipsubMessage, MessageId};
-pub use self::topic::{Topic, TopicHash};
+pub use self::peer_score::{
+    score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
+    TopicScoreParams,
+};
+pub use self::topic::{Hasher, Topic, TopicHash};
+pub use self::types::{
+    FastMessageId, GossipsubMessage, GossipsubRpc, MessageAcceptance, MessageId,
+    RawGossipsubMessage,
+};
+pub type IdentTopic = Topic<self::topic::IdentityHash>;
+pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
