@@ -82,6 +82,8 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let orig_addr = addr.clone();
+
         let (is_relay, addr) = is_relay_listen_address(addr);
         if !is_relay {
             let inner_listener = match self.inner_transport.listen_on(addr) {
@@ -99,6 +101,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                 // connections?
                 from_behaviour: self.from_behaviour.clone(),
                 msg_to_behaviour: None,
+                report_listen_addr: None,
             });
         }
 
@@ -120,6 +123,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             inner_listener: None,
             from_behaviour: self.from_behaviour.clone(),
             msg_to_behaviour,
+            report_listen_addr: Some(orig_addr),
         })
     }
 
@@ -218,6 +222,7 @@ pub struct RelayListener<T: Transport> {
     from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
 
     msg_to_behaviour: Option<BoxFuture<'static, Result<(), mpsc::SendError>>>,
+    report_listen_addr: Option<Multiaddr>,
 }
 
 impl<T: Transport> Stream for RelayListener<T> {
@@ -263,6 +268,10 @@ impl<T: Transport> Stream for RelayListener<T> {
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => {}
             }
+        }
+
+        if let Some(addr) = this.report_listen_addr.take() {
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
         }
 
         match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {

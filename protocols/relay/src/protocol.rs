@@ -60,7 +60,7 @@ impl TryFrom<circuit_relay::Peer> for Peer {
 
     fn try_from(peer: circuit_relay::Peer) -> Result<Peer, Self::Error> {
         let circuit_relay::Peer { id, addrs } = peer;
-        let peer_id = PeerId::from_bytes(id).map_err(|_| PeerParseError::PeerIdParseError)?;
+        let peer_id = PeerId::from_bytes(&id).map_err(|_| PeerParseError::PeerIdParseError)?;
         let mut parsed_addrs = SmallVec::with_capacity(addrs.len());
         for addr in addrs.into_iter() {
             let addr = Multiaddr::try_from(addr).map_err(PeerParseError::MultiaddrParseError)?;

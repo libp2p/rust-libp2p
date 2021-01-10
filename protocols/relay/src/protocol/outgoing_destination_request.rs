@@ -61,7 +61,7 @@ impl<TUserData> OutgoingDestinationRequest<TUserData> {
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Stop.into()),
             src_peer: Some(circuit_relay::Peer {
-                id: src_id.as_bytes().to_vec(),
+                id: src_id.to_bytes(),
                 addrs: src_addresses.into_iter().map(|a| a.to_vec()).collect(),
             }),
             dst_peer: None,

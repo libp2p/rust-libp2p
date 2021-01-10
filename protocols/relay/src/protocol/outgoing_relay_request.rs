@@ -82,7 +82,7 @@ where
             r#type: Some(circuit_relay::Type::Hop.into()),
             src_peer: None,
             dst_peer: Some(circuit_relay::Peer {
-                id: dest_id.as_bytes().to_vec(),
+                id: dest_id.to_bytes(),
                 addrs: dest_addresses.into_iter().map(|a| a.to_vec()).collect(),
             }),
             code: None,
