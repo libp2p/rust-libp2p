@@ -360,9 +360,7 @@ where
             Err(err) => return Err(err),
         };
 
-        // let stream = Async::new(socket.into_tcp_stream())?;
         let stream = T::new_stream(socket.into_tcp_stream()).await?;
-        // stream.writable().await?;
         Ok(stream)
     }
 }
