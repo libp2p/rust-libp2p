@@ -339,6 +339,7 @@ where
         let socket = self.create_socket(&socket_addr)?;
         socket.bind(&socket_addr.into())?;
         socket.listen(self.backlog as _)?;
+        socket.set_nonblocking(true)?;
         TcpListenStream::<T>::new(socket.into_tcp_listener(), self.port_reuse)
     }
 
