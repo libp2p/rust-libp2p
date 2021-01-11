@@ -1,3 +1,8 @@
+# 0.9.0 [unreleased]
+
+- Re-export `throttled`-specific response channel. [PR
+  1902](https://github.com/libp2p/rust-libp2p/pull/1902).
+
 # 0.8.0 [2020-12-17]
 
 - Update `libp2p-swarm` and `libp2p-core`.

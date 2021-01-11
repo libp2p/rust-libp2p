@@ -18,9 +18,9 @@ message Message {
 	optional bytes from = 1;
 	optional bytes data = 2;
 	optional bytes seqno = 3;
-	repeated string topic_ids = 4;
-    optional bytes signature = 5;
-    optional bytes key = 6;
+	required string topic = 4;
+  optional bytes signature = 5;
+  optional bytes key = 6;
 }
 
 message ControlMessage {
@@ -45,6 +45,13 @@ message ControlGraft {
 
 message ControlPrune {
 	optional string topic_id = 1;
+	repeated PeerInfo peers = 2; // gossipsub v1.1 PX
+	optional uint64 backoff = 3; // gossipsub v1.1 backoff time (in seconds)
+}
+
+message PeerInfo {
+	optional bytes peer_id = 1;
+	optional bytes signed_peer_record = 2;
 }
 
 // topicID = hash(topicDescriptor); (not the topic.name)

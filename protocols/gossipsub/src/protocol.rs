@@ -18,29 +18,36 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::GossipsubRpc;
 use crate::config::ValidationMode;
+use crate::error::{GossipsubHandlerError, ValidationError};
+use crate::handler::HandlerEvent;
 use crate::rpc_proto;
 use crate::topic::TopicHash;
+use crate::types::{
+    GossipsubControlAction, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
+    MessageId, PeerInfo, PeerKind, RawGossipsubMessage,
+};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
 use futures_codec::{Decoder, Encoder, Framed};
-use libp2p_core::{identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{
+    identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
+};
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, fmt, io, iter, pin::Pin};
+use std::{borrow::Cow, pin::Pin};
 use unsigned_varint::codec;
 
-pub const SIGNING_PREFIX: &'static [u8] = b"libp2p-pubsub:";
+pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
-/// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
+/// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
 #[derive(Clone)]
 pub struct ProtocolConfig {
-    /// The gossipsub protocol id to listen on.
-    protocol_id: Cow<'static, [u8]>,
+    /// The Gossipsub protocol id to listen on.
+    protocol_ids: Vec<ProtocolId>,
     /// The maximum transmit size for a packet.
     max_transmit_size: usize,
     /// Determines the level of validation to be done on incoming messages.
@@ -48,27 +55,71 @@ pub struct ProtocolConfig {
 }
 
 impl ProtocolConfig {
-    /// Builds a new `ProtocolConfig`.
+    /// Builds a new [`ProtocolConfig`].
+    ///
     /// Sets the maximum gossip transmission size.
     pub fn new(
-        protocol_id: impl Into<Cow<'static, [u8]>>,
+        id_prefix: Cow<'static, str>,
         max_transmit_size: usize,
         validation_mode: ValidationMode,
+        support_floodsub: bool,
     ) -> ProtocolConfig {
+        // support version 1.1.0 and 1.0.0 with user-customized prefix
+        let mut protocol_ids = vec![
+            ProtocolId::new(id_prefix.clone(), PeerKind::Gossipsubv1_1),
+            ProtocolId::new(id_prefix, PeerKind::Gossipsub),
+        ];
+
+        // add floodsub support if enabled.
+        if support_floodsub {
+            protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub));
+        }
+
         ProtocolConfig {
-            protocol_id: protocol_id.into(),
+            protocol_ids,
             max_transmit_size,
             validation_mode,
         }
     }
 }
 
+/// The protocol ID
+#[derive(Clone, Debug)]
+pub struct ProtocolId {
+    /// The RPC message type/name.
+    pub protocol_id: Vec<u8>,
+    /// The type of protocol we support
+    pub kind: PeerKind,
+}
+
+/// An RPC protocol ID.
+impl ProtocolId {
+    pub fn new(prefix: Cow<'static, str>, kind: PeerKind) -> Self {
+        let protocol_id = match kind {
+            PeerKind::Gossipsubv1_1 => format!("/{}/{}", prefix, "1.1.0"),
+            PeerKind::Gossipsub => format!("/{}/{}", prefix, "1.0.0"),
+            PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
+            // NOTE: This is used for informing the behaviour of unsupported peers. We do not
+            // advertise this variant.
+            PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),
+        }
+        .into_bytes();
+        ProtocolId { protocol_id, kind }
+    }
+}
+
+impl ProtocolName for ProtocolId {
+    fn protocol_name(&self) -> &[u8] {
+        &self.protocol_id
+    }
+}
+
 impl UpgradeInfo for ProtocolConfig {
-    type Info = Cow<'static, [u8]>;
-    type InfoIter = iter::Once<Self::Info>;
+    type Info = ProtocolId;
+    type InfoIter = Vec<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol_id.clone())
+        self.protocol_ids.clone()
     }
 }
 
@@ -76,16 +127,19 @@ impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = Framed<TSocket, GossipsubCodec>;
-    type Error = io::Error;
+    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
+    type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
-        Box::pin(future::ok(Framed::new(
-            socket,
-            GossipsubCodec::new(length_codec, self.validation_mode),
+        Box::pin(future::ok((
+            Framed::new(
+                socket,
+                GossipsubCodec::new(length_codec, self.validation_mode),
+            ),
+            protocol_id.kind,
         )))
     }
 }
@@ -94,16 +148,19 @@ impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
-    type Output = Framed<TSocket, GossipsubCodec>;
-    type Error = io::Error;
+    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
+    type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
-        Box::pin(future::ok(Framed::new(
-            socket,
-            GossipsubCodec::new(length_codec, self.validation_mode),
+        Box::pin(future::ok((
+            Framed::new(
+                socket,
+                GossipsubCodec::new(length_codec, self.validation_mode),
+            ),
+            protocol_id.kind,
         )))
     }
 }
@@ -191,113 +248,48 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item = GossipsubRpc;
-    type Error = io::Error;
+    type Item = rpc_proto::Rpc;
+    type Error = GossipsubHandlerError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        // Messages
-        let mut publish = Vec::new();
+        let mut buf = Vec::with_capacity(item.encoded_len());
 
-        for message in item.messages.into_iter() {
-            let message = rpc_proto::Message {
-                from: message.source.map(|m| m.to_bytes()),
-                data: Some(message.data),
-                seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
-                topic_ids: message.topics.into_iter().map(TopicHash::into).collect(),
-                signature: message.signature,
-                key: message.key,
-            };
-            publish.push(message);
-        }
-
-        // subscriptions
-        let subscriptions = item
-            .subscriptions
-            .into_iter()
-            .map(|sub| rpc_proto::rpc::SubOpts {
-                subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
-                topic_id: Some(sub.topic_hash.into()),
-            })
-            .collect::<Vec<_>>();
-
-        // control messages
-        let mut control = rpc_proto::ControlMessage {
-            ihave: Vec::new(),
-            iwant: Vec::new(),
-            graft: Vec::new(),
-            prune: Vec::new(),
-        };
-
-        let empty_control_msg = item.control_msgs.is_empty();
-
-        for action in item.control_msgs {
-            match action {
-                // collect all ihave messages
-                GossipsubControlAction::IHave {
-                    topic_hash,
-                    message_ids,
-                } => {
-                    let rpc_ihave = rpc_proto::ControlIHave {
-                        topic_id: Some(topic_hash.into()),
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.ihave.push(rpc_ihave);
-                }
-                GossipsubControlAction::IWant { message_ids } => {
-                    let rpc_iwant = rpc_proto::ControlIWant {
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.iwant.push(rpc_iwant);
-                }
-                GossipsubControlAction::Graft { topic_hash } => {
-                    let rpc_graft = rpc_proto::ControlGraft {
-                        topic_id: Some(topic_hash.into()),
-                    };
-                    control.graft.push(rpc_graft);
-                }
-                GossipsubControlAction::Prune { topic_hash } => {
-                    let rpc_prune = rpc_proto::ControlPrune {
-                        topic_id: Some(topic_hash.into()),
-                    };
-                    control.prune.push(rpc_prune);
-                }
-            }
-        }
-
-        let rpc = rpc_proto::Rpc {
-            subscriptions,
-            publish,
-            control: if empty_control_msg {
-                None
-            } else {
-                Some(control)
-            },
-        };
-
-        let mut buf = Vec::with_capacity(rpc.encoded_len());
-
-        rpc.encode(&mut buf)
+        item.encode(&mut buf)
             .expect("Buffer has sufficient capacity");
 
         // length prefix the protobuf message, ensuring the max limit is not hit
-        self.length_codec.encode(Bytes::from(buf), dst)
+        self.length_codec
+            .encode(Bytes::from(buf), dst)
+            .map_err(|_| GossipsubHandlerError::MaxTransmissionSize)
     }
 }
 
 impl Decoder for GossipsubCodec {
-    type Item = GossipsubRpc;
-    type Error = io::Error;
+    type Item = HandlerEvent;
+    type Error = GossipsubHandlerError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let packet = match self.length_codec.decode(src)? {
+        let packet = match self.length_codec.decode(src).map_err(|e| {
+            if let std::io::ErrorKind::PermissionDenied = e.kind() {
+                GossipsubHandlerError::MaxTransmissionSize
+            } else {
+                GossipsubHandlerError::Io(e)
+            }
+        })? {
             Some(p) => p,
             None => return Ok(None),
         };
 
-        let rpc = rpc_proto::Rpc::decode(&packet[..])?;
+        let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(std::io::Error::from)?;
 
+        // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
+        // Store any invalid messages.
+        let mut invalid_messages = Vec::new();
+
         for message in rpc.publish.into_iter() {
+            // Keep track of the type of invalid message.
+            let mut invalid_kind = None;
             let mut verify_signature = false;
             let mut verify_sequence_no = false;
             let mut verify_source = false;
@@ -323,72 +315,141 @@ impl Decoder for GossipsubCodec {
                 }
                 ValidationMode::Anonymous => {
                     if message.signature.is_some() {
-                        warn!("Message dropped. Signature field was non-empty and anonymous validation mode is set");
-                        return Ok(None);
-                    }
-                    if message.seqno.is_some() {
-                        warn!("Message dropped. Sequence number was non-empty and anonymous validation mode is set");
-                        return Ok(None);
-                    }
-                    if message.from.is_some() {
+                        warn!("Signature field was non-empty and anonymous validation mode is set");
+                        invalid_kind = Some(ValidationError::SignaturePresent);
+                    } else if message.seqno.is_some() {
+                        warn!("Sequence number was non-empty and anonymous validation mode is set");
+                        invalid_kind = Some(ValidationError::SequenceNumberPresent);
+                    } else if message.from.is_some() {
                         warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
-                        return Ok(None);
+                        invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
                 ValidationMode::None => {}
             }
 
+            // If the initial validation logic failed, add the message to invalid messages and
+            // continue processing the others.
+            if let Some(validation_error) = invalid_kind.take() {
+                let message = RawGossipsubMessage {
+                    source: None, // don't bother inform the application
+                    data: message.data.unwrap_or_default(),
+                    sequence_number: None, // don't inform the application
+                    topic: TopicHash::from_raw(message.topic),
+                    signature: None, // don't inform the application
+                    key: message.key,
+                    validated: false,
+                };
+                invalid_messages.push((message, validation_error));
+                // proceed to the next message
+                continue;
+            }
+
             // verify message signatures if required
-            if verify_signature {
-                // If a single message is unsigned, we will drop all of them
-                // Most implementations should not have a list of mixed signed/not-signed messages in a single RPC
-                // NOTE: Invalid messages are simply dropped with a warning log. We don't throw an
-                // error to avoid extra logic to deal with these errors in the handler.
-                if !GossipsubCodec::verify_signature(&message) {
-                    warn!("Message dropped. Invalid signature");
-                    // Drop the message
-                    return Ok(None);
-                }
+            if verify_signature && !GossipsubCodec::verify_signature(&message) {
+                warn!("Invalid signature for received message");
+
+                // Build the invalid message (ignoring further validation of sequence number
+                // and source)
+                let message = RawGossipsubMessage {
+                    source: None, // don't bother inform the application
+                    data: message.data.unwrap_or_default(),
+                    sequence_number: None, // don't inform the application
+                    topic: TopicHash::from_raw(message.topic),
+                    signature: None, // don't inform the application
+                    key: message.key,
+                    validated: false,
+                };
+                invalid_messages.push((message, ValidationError::InvalidSignature));
+                // proceed to the next message
+                continue;
             }
 
             // ensure the sequence number is a u64
             let sequence_number = if verify_sequence_no {
-                let seq_no = message.seqno.ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "sequence number was not provided",
-                    )
-                })?;
-                if seq_no.len() != 8 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "sequence number has an incorrect size",
-                    ));
+                if let Some(seq_no) = message.seqno {
+                    if seq_no.is_empty() {
+                        None
+                    } else if seq_no.len() != 8 {
+                        debug!(
+                            "Invalid sequence number length for received message. SeqNo: {:?} Size: {}",
+                            seq_no,
+                            seq_no.len()
+                        );
+                        let message = RawGossipsubMessage {
+                            source: None, // don't bother inform the application
+                            data: message.data.unwrap_or_default(),
+                            sequence_number: None, // don't inform the application
+                            topic: TopicHash::from_raw(message.topic),
+                            signature: message.signature, // don't inform the application
+                            key: message.key,
+                            validated: false,
+                        };
+                        invalid_messages.push((message, ValidationError::InvalidSequenceNumber));
+                        // proceed to the next message
+                        continue;
+                    } else {
+                        // valid sequence number
+                        Some(BigEndian::read_u64(&seq_no))
+                    }
+                } else {
+                    // sequence number was not present
+                    debug!("Sequence number not present but expected");
+                    let message = RawGossipsubMessage {
+                        source: None, // don't bother inform the application
+                        data: message.data.unwrap_or_default(),
+                        sequence_number: None, // don't inform the application
+                        topic: TopicHash::from_raw(message.topic),
+                        signature: message.signature, // don't inform the application
+                        key: message.key,
+                        validated: false,
+                    };
+                    invalid_messages.push((message, ValidationError::EmptySequenceNumber));
+                    continue;
                 }
-                Some(BigEndian::read_u64(&seq_no))
             } else {
+                // Do not verify the sequence number, consider it empty
                 None
             };
 
+            // Verify the message source if required
             let source = if verify_source {
-                Some(
-                    PeerId::from_bytes(&message.from.unwrap_or_default()).map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id")
-                    })?,
-                )
+                if let Some(bytes) = message.from {
+                    if !bytes.is_empty() {
+                        match PeerId::from_bytes(&bytes) {
+                            Ok(peer_id) => Some(peer_id), // valid peer id
+                            Err(_) => {
+                                // invalid peer id, add to invalid messages
+                                debug!("Message source has an invalid PeerId");
+                                let message = RawGossipsubMessage {
+                                    source: None, // don't bother inform the application
+                                    data: message.data.unwrap_or_default(),
+                                    sequence_number,
+                                    topic: TopicHash::from_raw(message.topic),
+                                    signature: message.signature, // don't inform the application
+                                    key: message.key,
+                                    validated: false,
+                                };
+                                invalid_messages.push((message, ValidationError::InvalidPeerId));
+                                continue;
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             } else {
                 None
             };
 
-            messages.push(GossipsubMessage {
+            // This message has passed all validation, add it to the validated messages.
+            messages.push(RawGossipsubMessage {
                 source,
                 data: message.data.unwrap_or_default(),
                 sequence_number,
-                topics: message
-                    .topic_ids
-                    .into_iter()
-                    .map(TopicHash::from_raw)
-                    .collect(),
+                topic: TopicHash::from_raw(message.topic),
                 signature: message.signature,
                 key: message.key,
                 validated: false,
@@ -432,13 +493,32 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let prune_msgs: Vec<GossipsubControlAction> = rpc_control
-                .prune
-                .into_iter()
-                .map(|prune| GossipsubControlAction::Prune {
-                    topic_hash: TopicHash::from_raw(prune.topic_id.unwrap_or_default()),
-                })
-                .collect();
+            let mut prune_msgs = Vec::new();
+
+            for prune in rpc_control.prune {
+                // filter out invalid peers
+                let peers = prune
+                    .peers
+                    .into_iter()
+                    .filter_map(|info| {
+                        info.peer_id
+                            .as_ref()
+                            .and_then(|id| PeerId::from_bytes(id).ok())
+                            .map(|peer_id|
+                                    //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
+                                    PeerInfo {
+                                        peer_id: Some(peer_id),
+                                    })
+                    })
+                    .collect::<Vec<PeerInfo>>();
+
+                let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
+                prune_msgs.push(GossipsubControlAction::Prune {
+                    topic_hash,
+                    peers,
+                    backoff: prune.backoff,
+                });
+            }
 
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
@@ -446,147 +526,40 @@ impl Decoder for GossipsubCodec {
             control_msgs.extend(prune_msgs);
         }
 
-        Ok(Some(GossipsubRpc {
-            messages,
-            subscriptions: rpc
-                .subscriptions
-                .into_iter()
-                .map(|sub| GossipsubSubscription {
-                    action: if Some(true) == sub.subscribe {
-                        GossipsubSubscriptionAction::Subscribe
-                    } else {
-                        GossipsubSubscriptionAction::Unsubscribe
-                    },
-                    topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
-                })
-                .collect(),
-            control_msgs,
+        Ok(Some(HandlerEvent::Message {
+            rpc: GossipsubRpc {
+                messages,
+                subscriptions: rpc
+                    .subscriptions
+                    .into_iter()
+                    .map(|sub| GossipsubSubscription {
+                        action: if Some(true) == sub.subscribe {
+                            GossipsubSubscriptionAction::Subscribe
+                        } else {
+                            GossipsubSubscriptionAction::Unsubscribe
+                        },
+                        topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
+                    })
+                    .collect(),
+                control_msgs,
+            },
+            invalid_messages,
         }))
     }
-}
-
-/// A type for gossipsub message ids.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MessageId(Vec<u8>);
-
-impl MessageId {
-    pub fn new(value: &[u8]) -> Self {
-        Self(value.to_vec())
-    }
-}
-
-impl<T: Into<Vec<u8>>> From<T> for MessageId {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl std::fmt::Display for MessageId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex_fmt::HexFmt(&self.0))
-    }
-}
-
-impl std::fmt::Debug for MessageId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MessageId({})", hex_fmt::HexFmt(&self.0))
-    }
-}
-
-/// A message received by the gossipsub system.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct GossipsubMessage {
-    /// Id of the peer that published this message.
-    pub source: Option<PeerId>,
-
-    /// Content of the message. Its meaning is out of scope of this library.
-    pub data: Vec<u8>,
-
-    /// A random sequence number.
-    pub sequence_number: Option<u64>,
-
-    /// List of topics this message belongs to.
-    ///
-    /// Each message can belong to multiple topics at once.
-    pub topics: Vec<TopicHash>,
-
-    /// The signature of the message if it's signed.
-    pub signature: Option<Vec<u8>>,
-
-    /// The public key of the message if it is signed and the source `PeerId` cannot be inlined.
-    pub key: Option<Vec<u8>>,
-
-    /// Flag indicating if this message has been validated by the application or not.
-    pub validated: bool,
-}
-
-impl fmt::Debug for GossipsubMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GossipsubMessage")
-            .field("data",&format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)))
-            .field("source", &self.source)
-            .field("sequence_number", &self.sequence_number)
-            .field("topics", &self.topics)
-            .finish()
-    }
-}
-
-/// A subscription received by the gossipsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GossipsubSubscription {
-    /// Action to perform.
-    pub action: GossipsubSubscriptionAction,
-    /// The topic from which to subscribe or unsubscribe.
-    pub topic_hash: TopicHash,
-}
-
-/// Action that a subscription wants to perform.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GossipsubSubscriptionAction {
-    /// The remote wants to subscribe to the given topic.
-    Subscribe,
-    /// The remote wants to unsubscribe from the given topic.
-    Unsubscribe,
-}
-
-/// A Control message received by the gossipsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GossipsubControlAction {
-    /// Node broadcasts known messages per topic - IHave control message.
-    IHave {
-        /// The topic of the messages.
-        topic_hash: TopicHash,
-        /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<MessageId>,
-    },
-    /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
-    IWant {
-        /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<MessageId>,
-    },
-    /// The node has been added to the mesh - Graft control message.
-    Graft {
-        /// The mesh topic the peer should be added to.
-        topic_hash: TopicHash,
-    },
-    /// The node has been removed from the mesh - Prune control message.
-    Prune {
-        /// The mesh topic the peer should be removed from.
-        topic_hash: TopicHash,
-    },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::topic::Topic;
-    use crate::{Gossipsub, GossipsubConfig};
+    use crate::config::GossipsubConfig;
+    use crate::Gossipsub;
+    use crate::IdentTopic as Topic;
     use libp2p_core::identity::Keypair;
     use quickcheck::*;
     use rand::Rng;
 
     #[derive(Clone, Debug)]
-    struct Message(GossipsubMessage);
+    struct Message(RawGossipsubMessage);
 
     impl Arbitrary for Message {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
@@ -594,16 +567,16 @@ mod tests {
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
             let config = GossipsubConfig::default();
-            let gs = Gossipsub::new(
+            let gs: Gossipsub = Gossipsub::new(
                 crate::MessageAuthenticity::Signed(keypair.0.clone()),
                 config,
-            );
-            let data = (0..g.gen_range(1, 1024)).map(|_| g.gen()).collect();
-            let topics = Vec::arbitrary(g)
-                .into_iter()
-                .map(|id: TopicId| id.0)
-                .collect();
-            Message(gs.build_message(topics, data).unwrap())
+            )
+            .unwrap();
+            let data = (0..g.gen_range(10, 10024))
+                .map(|_| g.gen())
+                .collect::<Vec<_>>();
+            let topic_id = TopicId::arbitrary(g).0;
+            Message(gs.build_raw_message(topic_id, data).unwrap())
         }
     }
 
@@ -612,10 +585,11 @@ mod tests {
 
     impl Arbitrary for TopicId {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            TopicId(
-                Topic::new((0..g.gen_range(0, 1024)).map(|_| g.gen::<char>()).collect())
-                    .sha256_hash(),
-            )
+            let topic_string: String = (0..g.gen_range(20, 1024))
+                .map(|_| g.gen::<char>())
+                .collect::<String>()
+                .into();
+            TopicId(Topic::new(topic_string).into())
         }
     }
 
@@ -645,6 +619,7 @@ mod tests {
     }
 
     #[test]
+    /// Test that RPC messages can be encoded and decoded successfully.
     fn encode_decode() {
         fn prop(message: Message) {
             let message = message.0;
@@ -657,12 +632,17 @@ mod tests {
 
             let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
             let mut buf = BytesMut::new();
-            codec.encode(rpc.clone(), &mut buf).unwrap();
-            let mut decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
+            codec.encode(rpc.clone().into_protobuf(), &mut buf).unwrap();
+            let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
             // mark as validated as its a published message
-            decoded_rpc.messages[0].validated = true;
+            match decoded_rpc {
+                HandlerEvent::Message { mut rpc, .. } => {
+                    rpc.messages[0].validated = true;
 
-            assert_eq!(rpc, decoded_rpc);
+                    assert_eq!(rpc, rpc);
+                }
+                _ => panic!("Must decode a message"),
+            }
         }
 
         QuickCheck::new().quickcheck(prop as fn(_) -> _)

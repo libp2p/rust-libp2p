@@ -21,6 +21,8 @@
 //! Error types that can result from gossipsub.
 
 use libp2p_core::identity::error::SigningError;
+use libp2p_core::upgrade::ProtocolError;
+use std::fmt;
 
 /// Error associated with publishing a gossipsub message.
 #[derive(Debug)]
@@ -31,10 +33,91 @@ pub enum PublishError {
     SigningError(SigningError),
     /// There were no peers to send this message to.
     InsufficientPeers,
+    /// The overall message was too large. This could be due to excessive topics or an excessive
+    /// message size.
+    MessageTooLarge,
+    /// The compression algorithm failed.
+    TransformFailed(std::io::Error),
+}
+
+/// Error associated with subscribing to a topic.
+#[derive(Debug)]
+pub enum SubscriptionError {
+    /// Couldn't publish our subscription
+    PublishError(PublishError),
+    /// We are not allowed to subscribe to this topic by the subscription filter
+    NotAllowed,
 }
 
 impl From<SigningError> for PublishError {
     fn from(error: SigningError) -> Self {
         PublishError::SigningError(error)
+    }
+}
+
+/// Errors that can occur in the protocols handler.
+#[derive(Debug)]
+pub enum GossipsubHandlerError {
+    /// The maximum number of inbound substreams created has been exceeded.
+    MaxInboundSubstreams,
+    /// The maximum number of outbound substreams created has been exceeded.
+    MaxOutboundSubstreams,
+    /// The message exceeds the maximum transmission size.
+    MaxTransmissionSize,
+    /// Protocol negotiation timeout.
+    NegotiationTimeout,
+    /// Protocol negotiation failed.
+    NegotiationProtocolError(ProtocolError),
+    /// IO error.
+    Io(std::io::Error),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ValidationError {
+    /// The message has an invalid signature,
+    InvalidSignature,
+    /// The sequence number was empty, expected a value.
+    EmptySequenceNumber,
+    /// The sequence number was the incorrect size
+    InvalidSequenceNumber,
+    /// The PeerId was invalid
+    InvalidPeerId,
+    /// Signature existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    SignaturePresent,
+    /// Sequence number existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    SequenceNumberPresent,
+    /// Message source existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    MessageSourcePresent,
+    /// The data transformation failed.
+    TransformFailed,
+}
+
+impl From<std::io::Error> for GossipsubHandlerError {
+    fn from(error: std::io::Error) -> GossipsubHandlerError {
+        GossipsubHandlerError::Io(error)
+    }
+}
+
+impl From<std::io::Error> for PublishError {
+    fn from(error: std::io::Error) -> PublishError {
+        PublishError::TransformFailed(error)
+    }
+}
+
+impl fmt::Display for GossipsubHandlerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for GossipsubHandlerError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GossipsubHandlerError::Io(io) => Some(io),
+            _ => None,
+        }
     }
 }

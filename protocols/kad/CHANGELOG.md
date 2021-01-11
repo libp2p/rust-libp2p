@@ -1,3 +1,8 @@
+# 0.27.1 [2021-01-11]
+
+- Add From impls for `kbucket::Key`.
+  [PR 1909](https://github.com/libp2p/rust-libp2p/pull/1909).
+
 # 0.27.0 [2020-12-17]
 
 - Update `libp2p-core` and `libp2p-swarm`.
