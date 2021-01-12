@@ -35,5 +35,5 @@ libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = "0.9.0"
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"
 
