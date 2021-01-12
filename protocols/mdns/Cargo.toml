@@ -27,4 +27,4 @@ void = "1.0.2"
 [dev-dependencies]
 async-std = "1.7.0"
 if-addrs = "0.6.5"
-tokio = { version = "0.3.4", default-features = false, features = ["rt", "rt-multi-thread"] }
+tokio = { version = "1.0.1", default-features = false, features = ["rt", "rt-multi-thread"] }
