@@ -2,7 +2,7 @@
 name = "libp2p-plaintext"
 edition = "2018"
 description = "Plaintext encryption dummy protocol for libp2p"
-version = "0.26.0"
+version = "0.27.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,13 +10,13 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.5"
+bytes = "1"
 futures = "0.3.1"
-futures_codec = "0.4.0"
-libp2p-core = { version = "0.26.0", path = "../../core" }
+asynchronous-codec = "0.5.0"
+libp2p-core = { version = "0.27.0", path = "../../core" }
 log = "0.4.8"
-prost = "0.6.1"
-unsigned-varint = { version = "0.5.1", features = ["futures-codec"] }
+prost = "0.7"
+unsigned-varint = { version = "0.6", features = ["asynchronous_codec"] }
 void = "1.0.2"
 
 [dev-dependencies]

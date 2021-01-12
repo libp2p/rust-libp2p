@@ -1,3 +1,7 @@
+# 0.11.0 [unreleased]
+
+- Update dependencies
+
 # 0.10.1 [2021-01-12]
 
 - Fix compilation with serde-1.0.119.

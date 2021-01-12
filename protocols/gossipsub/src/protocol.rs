@@ -32,7 +32,7 @@ use bytes::Bytes;
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use futures_codec::{Decoder, Encoder, Framed};
+use asynchronous_codec::{Decoder, Encoder, Framed};
 use libp2p_core::{
     identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
 };

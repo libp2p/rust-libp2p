@@ -1,3 +1,7 @@
+# 0.28.0 [unreleased]
+
+- Update dependencies.
+
 # 0.27.1 [2021-01-11]
 
 - Add From impls for `kbucket::Key`.
