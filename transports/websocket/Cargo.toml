@@ -24,4 +24,4 @@ webpki = "0.21"
 webpki-roots = "0.21"
 
 [dev-dependencies]
-libp2p-tcp = { path = "../tcp", features = ["async-std"] }
+libp2p-tcp = { path = "../tcp" }

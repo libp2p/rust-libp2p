@@ -113,6 +113,10 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.transport.map(wrap_connection as WrapperFn<T::Output>).dial(addr)
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
 }
 
 /// Type alias corresponding to `framed::WsConfig::Listener`.

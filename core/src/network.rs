@@ -30,7 +30,6 @@ use crate::{
     Executor,
     Multiaddr,
     PeerId,
-    address_translation,
     connection::{
         ConnectionId,
         ConnectionLimit,
@@ -176,30 +175,27 @@ where
         self.listeners.listen_addrs()
     }
 
-    /// Call this function in order to know which address remotes should dial to
-    /// access your local node.
+    /// Maps the given `observed_addr`, representing an address of the local
+    /// node observed by a remote peer, onto the locally known listen addresses
+    /// to yield one or more addresses of the local node that may be publicly
+    /// reachable.
     ///
-    /// When receiving an observed address on a tcp connection that we initiated, the observed
-    /// address contains our tcp dial port, not our tcp listen port. We know which port we are
-    /// listening on, thereby we can replace the port within the observed address.
+    /// I.e. this method incorporates the view of other peers into the listen
+    /// addresses seen by the local node to account for possible IP and port
+    /// mappings performed by intermediate network devices in an effort to
+    /// obtain addresses for the local peer that are also reachable for peers
+    /// other than the peer who reported the `observed_addr`.
     ///
-    /// When receiving an observed address on a tcp connection that we did **not** initiated, the
-    /// observed address should contain our listening port. In case it differs from our listening
-    /// port there might be a proxy along the path.
-    ///
-    /// # Arguments
-    ///
-    /// * `observed_addr` - should be an address a remote observes you as, which can be obtained for
-    /// example with the identify protocol.
-    ///
+    /// The translation is transport-specific. See [`Transport::address_translation`].
     pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
         -> impl Iterator<Item = Multiaddr> + 'a
     where
         TMuxer: 'a,
         THandler: 'a,
     {
+        let transport = self.listeners.transport();
         let mut addrs: Vec<_> = self.listen_addrs()
-            .filter_map(move |server| address_translation(server, observed_addr))
+            .filter_map(move |server| transport.address_translation(server, observed_addr))
             .collect();
 
         // remove duplicates

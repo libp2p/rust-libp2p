@@ -18,15 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use async_io::Async;
 use futures::{future::{self, Either}, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
 use libp2p_core::transport::{Transport, ListenerEvent};
 use libp2p_noise::{Keypair, X25519, X25519Spec, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
-use libp2p_tcp::{TcpConfig, TcpTransStream};
+use libp2p_tcp::TcpConfig;
 use log::info;
 use quickcheck::QuickCheck;
-use std::{convert::TryInto, io};
+use std::{convert::TryInto, io, net::TcpStream};
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -175,7 +176,7 @@ fn ik_xx() {
     QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
-type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<TcpTransStream>>);
+type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<Async<TcpStream>>>);
 
 fn run<T, U, I, C>(server_transport: T, client_transport: U, messages: I)
 where
