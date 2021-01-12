@@ -3251,7 +3251,7 @@ impl fmt::Debug for PublishConfig {
 mod local_test {
     use super::*;
     use crate::IdentTopic;
-    use futures_codec::Encoder;
+    use asynchronous_codec::Encoder;
     use quickcheck::*;
     use rand::Rng;
 

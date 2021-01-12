@@ -25,7 +25,9 @@
 
 # Version 0.34.0 [unreleased]
 
-- Update `libp2p-request-response`.
+- Update `libp2p-gossipsub`, `libp2p-kad` and `libp2p-request-response`.
+
+- Update dependencies.
 
 # Version 0.33.0 [2020-12-17]
 

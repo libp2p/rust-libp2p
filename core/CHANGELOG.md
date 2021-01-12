@@ -1,3 +1,7 @@
+# 0.27.0 [unreleased]
+
+- Update dependencies.
+
 # 0.26.0 [2020-12-17]
 
 - Make `PeerId` be `Copy`, including small `PeerId` API changes.
