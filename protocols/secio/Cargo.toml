@@ -21,7 +21,7 @@ hmac = "0.9.0"
 lazy_static = "1.2.0"
 libp2p-core = { version = "0.26.0", path = "../../core" }
 log = "0.4.6"
-prost = "0.6.1"
+prost = "0.7.0"
 pin-project = "1.0.0"
 quicksink = "0.1"
 rand = "0.7"
