@@ -93,7 +93,7 @@ libp2p-websocket = { version = "0.28.0", path = "transports/websocket", optional
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.8.1"
-tokio = { version = "0.3", features = ["io-util", "io-std", "stream", "macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
 members = [
