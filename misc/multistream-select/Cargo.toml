@@ -10,7 +10,7 @@ categories = ["network-programming", "asynchronous"]
 edition = "2018"
 
 [dependencies]
-bytes = "0.5"
+bytes = "1.0"
 futures = "0.3"
 log = "0.4"
 pin-project = "1.0.0"

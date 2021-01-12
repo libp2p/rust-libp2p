@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 arrayvec = "0.5.1"
-bytes = "0.5"
+bytes = "1.0"
 either = "1.5"
 fnv = "1.0"
 futures_codec = "0.4"
