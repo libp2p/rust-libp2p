@@ -1,5 +1,9 @@
 # 0.27.0 [unreleased]
 
+- (Re)add `Transport::address_translation` to permit transport-specific
+  translations of observed addresses onto listening addresses.
+  [PR 1887](https://github.com/libp2p/rust-libp2p/pull/1887)
+
 - Update dependencies.
 
 # 0.26.0 [2020-12-17]

@@ -10,16 +10,24 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = { version = "1.6.5", optional = true }
-futures = "0.3.1"
+async-io-crate = { package = "async-io", version = "1.2.0", optional = true }
+futures = "0.3.8"
 futures-timer = "3.0"
-if-addrs = "0.6.4"
+if-watch = { version = "0.1.4", optional = true }
+if-addrs = { version = "0.6.4", optional = true }
 ipnet = "2.0.0"
+libc = "0.2.80"
 libp2p-core = { version = "0.27.0", path = "../../core" }
-log = "0.4.1"
-socket2 = { version = "0.3.12" }
-tokio = { version = "0.3", default-features = false, features = ["net"], optional = true }
+log = "0.4.11"
+socket2 = { version = "0.3.17", features = ["reuseport"] }
+tokio-crate = { package = "tokio", version = "0.3", default-features = false, features = ["net"], optional = true }
+
+[features]
+default = ["async-io"]
+tokio = ["tokio-crate", "if-addrs"]
+async-io = ["async-io-crate", "if-watch"]
 
 [dev-dependencies]
-libp2p-tcp = { path = ".", features = ["async-std"] }
-
+async-std = { version = "1.6.5", features = ["attributes"] }
+tokio-crate = { package = "tokio", version = "0.3", default-features = false, features = ["net", "rt"] }
+env_logger = "0.8.2"

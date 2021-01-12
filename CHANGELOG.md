@@ -25,9 +25,10 @@
 
 # Version 0.34.0 [unreleased]
 
-- Update `libp2p-gossipsub`, `libp2p-kad` and `libp2p-request-response`.
+- Update `libp2p-core` and all dependent crates.
 
-- Update dependencies.
+- The `tcp-async-std` feature is now `tcp-async-io`, still
+  enabled by default.
 
 # Version 0.33.0 [2020-12-17]
 

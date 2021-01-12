@@ -57,6 +57,10 @@ where
         let p = ConnectedPoint::Dialer { address: addr };
         Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
 }
 
 /// Custom `Stream` implementation to avoid boxing.

@@ -26,7 +26,7 @@ async-std = "1.7.0"
 criterion = "0.3"
 env_logger = "0.8"
 futures = "0.3"
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-plaintext = { path = "../../protocols/plaintext" }
 quickcheck = "0.9"
 rand = "0.7"

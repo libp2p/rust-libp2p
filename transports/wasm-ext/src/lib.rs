@@ -206,6 +206,10 @@ impl Transport for ExtTransport {
             inner: SendWrapper::new(promise.into()),
         })
     }
+
+    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        None
+    }
 }
 
 /// Future that dial a remote through an external transport.

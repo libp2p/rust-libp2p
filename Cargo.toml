@@ -25,7 +25,7 @@ default = [
     "pnet",
     "request-response",
     "secp256k1",
-    "tcp-async-std",
+    "tcp-async-io",
     "uds",
     "wasm-ext",
     "websocket",
@@ -44,7 +44,7 @@ ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
 request-response = ["libp2p-request-response"]
-tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
+tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
 uds = ["libp2p-uds"]
 wasm-ext = ["libp2p-wasm-ext"]
@@ -91,7 +91,7 @@ libp2p-tcp = { version = "0.27.0", path = "transports/tcp", optional = true }
 libp2p-websocket = { version = "0.28.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
-async-std = "1.6.2"
+async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.8.1"
 tokio = { version = "0.3", features = ["io-util", "io-std", "stream", "macros", "rt", "rt-multi-thread"] }
 
