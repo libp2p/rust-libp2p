@@ -1,5 +1,5 @@
 # 0.9.0 [unreleased]
-  
+
 - Update dependencies.
 
 - Re-export `throttled`-specific response channel. [PR
