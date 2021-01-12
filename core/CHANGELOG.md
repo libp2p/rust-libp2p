@@ -1,4 +1,4 @@
-# 0.27.0 [unreleased]
+# 0.27.0 [2021-01-12]
 
 - (Re)add `Transport::address_translation` to permit transport-specific
   translations of observed addresses onto listening addresses.
