@@ -1,3 +1,7 @@
+# 0.11.0 [unreleased]
+
+- Update dependencies
+
 # 0.10.0 [2020-11-25]
 
 - Upgrade multihash to `0.13`.
