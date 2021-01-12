@@ -69,6 +69,10 @@ where
         };
         Ok(future)
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
 }
 
 /// Custom `Stream` to avoid boxing.

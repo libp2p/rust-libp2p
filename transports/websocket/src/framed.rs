@@ -262,6 +262,10 @@ where
 
         Ok(Box::pin(future))
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
 }
 
 impl<T> WsConfig<T>
@@ -586,4 +590,3 @@ where
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
-

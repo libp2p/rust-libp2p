@@ -64,6 +64,10 @@ where
             Err(err) => Err(err.map(map)),
         }
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
 }
 
 /// Listening stream for `MapErr`.
