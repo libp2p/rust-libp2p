@@ -24,7 +24,7 @@ use crate::structs_proto::Exchange;
 
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
 use prost::Message;

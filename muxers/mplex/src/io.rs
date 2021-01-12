@@ -24,7 +24,7 @@ use crate::codec::{Codec, Frame, LocalStreamId, RemoteStreamId};
 use log::{debug, trace};
 use futures::{prelude::*, ready, stream::Fuse};
 use futures::task::{AtomicWaker, ArcWake, waker_ref, WakerRef};
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use nohash_hasher::{IntMap, IntSet};
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -1006,7 +1006,7 @@ mod tests {
     use async_std::task;
     use bytes::BytesMut;
     use futures::prelude::*;
-    use futures_codec::{Decoder, Encoder};
+    use asynchronous_codec::{Decoder, Encoder};
     use quickcheck::*;
     use rand::prelude::*;
     use std::collections::HashSet;
