@@ -24,7 +24,7 @@ rand = "0.7.2"
 sha2 = "0.9.1"
 smallvec = "1.0"
 wasm-timer = "0.2"
-uint = "0.8"
+uint = "0.9"
 unsigned-varint = { version = "0.6", features = ["asynchronous_codec"] }
 void = "1.0"
 
