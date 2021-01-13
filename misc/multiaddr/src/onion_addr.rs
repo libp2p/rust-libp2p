@@ -1,7 +1,4 @@
-use std::borrow::Cow;
-use std::fmt::Debug;
-use serde::export::Formatter;
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 /// Represents an Onion v3 address
 #[derive(Clone)]
@@ -30,7 +27,7 @@ impl PartialEq for Onion3Addr<'_> {
     }
 }
 
-impl Eq for Onion3Addr<'_> { }
+impl Eq for Onion3Addr<'_> {}
 
 impl From<([u8; 35], u16)> for Onion3Addr<'_> {
     fn from(parts: ([u8; 35], u16)) -> Self {
@@ -44,11 +41,11 @@ impl<'a> From<(&'a [u8; 35], u16)> for Onion3Addr<'a> {
     }
 }
 
-impl Debug for Onion3Addr<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-       f.debug_tuple("Onion3Addr")
-           .field(&format!("{:02x?}", &self.0[..]))
-           .field(&self.1)
-           .finish()
+impl fmt::Debug for Onion3Addr<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_tuple("Onion3Addr")
+            .field(&format!("{:02x?}", &self.0[..]))
+            .field(&self.1)
+            .finish()
     }
 }
