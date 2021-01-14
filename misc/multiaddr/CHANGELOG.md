@@ -1,3 +1,8 @@
+# 0.9.7 [2021-01-14]
+
+- Fix compilation with serde 1.0.119. See original
+  [PR 1912](https://github.com/libp2p/rust-libp2p/pull/1912).
+
 # 0.9.6 [2020-11-17]
 
 - Move the `from_url` module and functionality behind the `url` feature,
