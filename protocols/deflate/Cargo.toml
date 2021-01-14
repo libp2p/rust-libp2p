@@ -17,5 +17,5 @@ flate2 = "1.0"
 [dev-dependencies]
 async-std = "1.6.2"
 libp2p-tcp = { path = "../../transports/tcp" }
-quickcheck = "0.9"
+quickcheck = "1.0"
 rand = "0.7"
