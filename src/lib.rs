@@ -56,7 +56,7 @@
 //! the dialing to take place and eventually resolve to a connection. Polling
 //! futures is typically done through a [tokio] runtime.
 //!
-//! The easiest way to create a transport is to use [`build_development_transport`].
+//! The easiest way to create a transport is to use [`development_transport`].
 //! This function provides support for the most common protocols but it is also
 //! subject to change over time and should thus not be used in production
 //! configurations.
@@ -130,7 +130,7 @@
 //!      identity of the remote peer of the established connection, which is
 //!      usually obtained through a transport encryption protocol such as
 //!      [`noise`] that authenticates the peer. See the implementation of
-//!      [`build_development_transport`] for an example.
+//!      [`development_transport`] for an example.
 //!   3. Creating a struct that implements the [`NetworkBehaviour`] trait and combines all the
 //!      desired network behaviours, implementing the event handlers as per the
 //!      desired application's networking logic.
