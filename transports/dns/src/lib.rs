@@ -262,9 +262,7 @@ where
 {
     match proto {
         Protocol::Dns(ref name) => {
-            let name = name.to_string();
-            let fqdn = format!("{}.", name);
-            resolver.lookup_ip(fqdn).map(move |res| match res {
+            resolver.lookup_ip(fqdn(name)).map(move |res| match res {
                 Ok(ips) => Ok(ips.into_iter()
                     .next()
                     .map(Protocol::from)
@@ -273,9 +271,7 @@ where
             }).left_future()
         }
         Protocol::Dns4(ref name) => {
-            let name = name.to_string();
-            let fqdn = format!("{}.", name);
-            resolver.ipv4_lookup(fqdn).map(move |res| match res {
+            resolver.ipv4_lookup(fqdn(name)).map(move |res| match res {
                 Ok(ips) => Ok(ips.into_iter()
                     .map(IpAddr::from)
                     .next()
@@ -285,9 +281,7 @@ where
             }).left_future().left_future().right_future()
         }
         Protocol::Dns6(ref name) => {
-            let name = name.to_string();
-            let fqdn = format!("{}.", name);
-            resolver.ipv6_lookup(fqdn).map(move |res| match res {
+            resolver.ipv6_lookup(fqdn(name)).map(move |res| match res {
                 Ok(ips) => Ok(ips.into_iter()
                     .map(IpAddr::from)
                     .next()
@@ -297,6 +291,14 @@ where
             }).right_future().left_future().right_future()
         },
         proto => future::ready(Ok(proto)).right_future().right_future()
+    }
+}
+
+fn fqdn(name: &std::borrow::Cow<'_, str>) -> String {
+    if name.ends_with(".") {
+        name.to_string()
+    } else {
+        format!("{}.", name)
     }
 }
 
