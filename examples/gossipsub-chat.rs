@@ -62,7 +62,8 @@ use std::{
     task::{Context, Poll},
 };
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
 
     // Create a random PeerId
@@ -71,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key.clone())?;
+    let transport = libp2p::development_transport(local_key.clone()).await?;
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net");

@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [features]
 default = [
     "deflate",
-    "dns",
+    "dns-async-std",
     "floodsub",
     "identify",
     "kad",
@@ -32,7 +32,8 @@ default = [
     "yamux",
 ]
 deflate = ["libp2p-deflate"]
-dns = ["libp2p-dns"]
+dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
+dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
 floodsub = ["libp2p-floodsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
