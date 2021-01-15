@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_tls::{client, server};
+use futures_rustls::{webpki, client, server};
 use crate::{error::Error, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
@@ -310,7 +310,7 @@ where
             if use_tls { // begin TLS session
                 let dns_name = dns_name.expect("for use_tls we have checked that dns_name is some");
                 trace!("starting TLS handshake with {}", address);
-                let stream = self.tls_config.client.connect(&dns_name, stream)
+                let stream = self.tls_config.client.connect(dns_name.as_ref(), stream)
                     .map_err(|e| {
                         debug!("TLS handshake with {} failed: {}", address, e);
                         Error::Tls(tls::Error::from(e))

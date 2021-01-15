@@ -1,4 +1,4 @@
-# 0.27.0 [unreleased]
+# 0.27.0 [2021-01-12]
 
 - Add support for port reuse and (re)add transport-specific
   address translation. Thereby use only `async-io` instead of

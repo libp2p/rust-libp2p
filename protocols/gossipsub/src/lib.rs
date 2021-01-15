@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Gossipsub is a P2P pubsub (publish/subscription) routing layer designed to extend upon
-//! flooodsub and meshsub routing protocols.
+//! floodsub and meshsub routing protocols.
 //!
 //! # Overview
 //!
