@@ -112,6 +112,10 @@ impl<T: Transport> Transport for Firewall<T> {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr)
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.0.address_translation(server, observed)
+    }
 }
 
 fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {

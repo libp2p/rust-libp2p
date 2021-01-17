@@ -183,6 +183,10 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             .boxed(),
         ))
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner_transport.address_translation(server, observed)
+    }
 }
 
 fn contains_circuit_protocol(addr: &Multiaddr) -> bool {
