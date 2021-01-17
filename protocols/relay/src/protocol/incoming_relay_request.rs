@@ -18,18 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use super::copy_future::CopyFuture;
 use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
-use futures::future::{select, BoxFuture, Either};
+use futures::future::BoxFuture;
 use futures::io::ErrorKind;
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
-
 use prost::Message;
-
 use std::io::Cursor;
+use std::time::Duration;
 use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to relay communications to another node.
@@ -94,17 +94,14 @@ where
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
 
-            let (from_source, mut to_source) = substream.into_inner().split();
-            let (from_destination, mut to_destination) = dest_stream.split();
+            // TODO: When releasing, one should make sure that all buffers are empty.
+            //
+            // TODO: Move timeout into constant or configuration option.
+            let copy_future =
+                CopyFuture::new(substream.release().0, dest_stream, Duration::from_secs(30));
 
-            let source_to_destination = futures::io::copy(from_source, &mut to_destination);
-            let destination_to_source = futures::io::copy(from_destination, &mut to_source);
-
-            match select(source_to_destination, destination_to_source).await {
-                // Destination substream closed.
-                Either::Left((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
-                // Source substream closed.
-                Either::Right((Err(e), _)) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
+            match copy_future.await {
+                Err(e) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
                 _ => {}
             }
 

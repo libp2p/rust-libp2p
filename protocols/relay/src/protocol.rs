@@ -49,6 +49,8 @@ pub use self::outgoing_destination_request::{
 mod listen;
 pub use self::listen::{RelayListen, RelayListenError, RelayRemoteRequest};
 
+pub mod copy_future;
+
 /// Strong typed version of a `CircuitRelay_Peer`.
 ///
 /// Can be parsed from a `CircuitRelay_Peer` using the `TryFrom` trait.
