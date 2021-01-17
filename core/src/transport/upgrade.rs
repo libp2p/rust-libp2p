@@ -334,6 +334,10 @@ where
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.0.listen_on(addr)
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.0.address_translation(server, observed)
+    }
 }
 
 /// An inbound or outbound upgrade.
@@ -382,6 +386,10 @@ where
             stream: Box::pin(stream),
             upgrade: self.upgrade
         })
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
     }
 }
 

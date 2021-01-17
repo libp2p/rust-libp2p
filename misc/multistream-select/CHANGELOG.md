@@ -1,3 +1,7 @@
+# 0.10.0 [2021-01-12]
+
+- Update dependencies.
+
 # 0.9.1 [2020-12-02]
 
 - Ensure uniform outcomes for failed negotiations with both

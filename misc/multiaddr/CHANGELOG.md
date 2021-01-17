@@ -1,3 +1,12 @@
+# 0.11.0 [2021-01-12]
+
+- Update dependencies
+
+# 0.10.1 [2021-01-12]
+
+- Fix compilation with serde-1.0.119.
+  [PR 1912](https://github.com/libp2p/rust-libp2p/pull/1912)
+
 # 0.10.0 [2020-11-25]
 
 - Upgrade multihash to `0.13`.

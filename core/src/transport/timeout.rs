@@ -101,6 +101,10 @@ where
             timer: Delay::new(self.outgoing_timeout),
         })
     }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
+    }
 }
 
 // TODO: can be removed and replaced with an `impl Stream` once impl Trait is fully stable

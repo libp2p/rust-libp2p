@@ -1,4 +1,6 @@
-# 0.9.0 [unreleased]
+# 0.9.0 [2021-01-12]
+
+- Update dependencies.
 
 - Re-export `throttled`-specific response channel. [PR
   1902](https://github.com/libp2p/rust-libp2p/pull/1902).

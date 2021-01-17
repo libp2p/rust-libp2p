@@ -128,6 +128,11 @@ pub trait Transport {
     where
         Self: Sized;
 
+    /// Performs a transport-specific mapping of an address `observed` by
+    /// a remote onto a local `listen` address to yield an address for
+    /// the local node that may be reachable for other peers.
+    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where

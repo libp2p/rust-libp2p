@@ -62,21 +62,16 @@ fn ping_pong() {
         let mut count2 = count.get();
 
         let peer1 = async move {
-            while let Some(_) = swarm1.next().now_or_never() {}
-
-            for l in Swarm::listeners(&swarm1) {
-                tx.send(l.clone()).await.unwrap();
-            }
-
             loop {
-                match swarm1.next().await {
-                    PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                match swarm1.next_event().await {
+                    SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
+                    SwarmEvent::Behaviour(PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) }) => {
                         count1 -= 1;
                         if count1 == 0 {
                             return (pid1.clone(), peer, rtt)
                         }
                     },
-                    PingEvent { result: Err(e), .. } => panic!("Ping failure: {:?}", e),
+                    SwarmEvent::Behaviour(PingEvent { result: Err(e), .. }) => panic!("Ping failure: {:?}", e),
                     _ => {}
                 }
             }
@@ -132,16 +127,11 @@ fn max_failures() {
         Swarm::listen_on(&mut swarm1, addr).unwrap();
 
         let peer1 = async move {
-            while let Some(_) = swarm1.next().now_or_never() {}
-
-            for l in Swarm::listeners(&swarm1) {
-                tx.send(l.clone()).await.unwrap();
-            }
-
             let mut count1: u8 = 0;
 
             loop {
                 match swarm1.next_event().await {
+                    SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
                     SwarmEvent::Behaviour(PingEvent {
                         result: Ok(PingSuccess::Ping { .. }), ..
                     }) => {

@@ -191,6 +191,10 @@ impl Transport for MemoryTransport {
 
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
+
+    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        None
+    }
 }
 
 /// Error that can be produced from the `MemoryTransport`.
