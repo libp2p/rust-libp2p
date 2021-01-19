@@ -594,7 +594,7 @@ where
             return Err(PublishError::MessageTooLarge);
         }
 
-        // Add published message to the duplicate cache.
+        // Check the if the message has been published before
         if self.duplicate_cache.contains(&msg_id) {
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
