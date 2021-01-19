@@ -431,12 +431,14 @@ where
     /// [`PeerId`] initiated by [`RequestResponse::send_request`] is still
     /// pending, i.e. waiting for a response.
     pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
-        // check if request id is exists in already established connections
+        // Check if request is already sent on established connection.
         let est_conn = self.connected.get(peer)
             .map(|cs| cs.iter().any(|c| c.pending_inbound_responses.contains(request_id)))
             .unwrap_or(false);
-        // check if peer exists in pending connections
-        let pen_conn = self.pending_outbound_requests.contains_key(peer);
+        // Check if request is still pending to be sent.
+        let pen_conn = self.pending_outbound_requests.get(peer)
+            .map(|cs| cs.iter().any(|c| {c.request_id == *request_id}))
+            .unwrap_or(false);
 
         est_conn || pen_conn
     }
