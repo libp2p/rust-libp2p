@@ -437,7 +437,7 @@ where
             .unwrap_or(false);
         // Check if request is still pending to be sent.
         let pen_conn = self.pending_outbound_requests.get(peer)
-            .map(|cs| cs.iter().any(|c| {c.request_id == *request_id}))
+            .map(|rps| rps.iter().any(|rp| {rp.request_id == *request_id}))
             .unwrap_or(false);
 
         est_conn || pen_conn
