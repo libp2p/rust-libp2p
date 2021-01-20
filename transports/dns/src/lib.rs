@@ -45,9 +45,9 @@ use libp2p_core::{
 };
 use log::{debug, trace};
 use std::{error, fmt, net::IpAddr};
-#[allow(unused_imports)]
+#[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
-#[allow(unused_imports)]
+#[cfg(any(feature = "async-std", feature = "tokio"))]
 use trust_dns_resolver::system_conf;
 use trust_dns_resolver::{
     AsyncResolver,
@@ -89,7 +89,7 @@ where
 impl<T> DnsConfig<T> {
     /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
     pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
-        let (cfg, opts) = trust_dns_resolver::system_conf::read_system_conf()?;
+        let (cfg, opts) = system_conf::read_system_conf()?;
         Self::custom(inner, cfg, opts).await
     }
 
@@ -108,7 +108,7 @@ impl<T> DnsConfig<T> {
 impl<T> TokioDnsConfig<T> {
     /// Creates a new [`TokioDnsConfig`] from the OS's DNS configuration and defaults.
     pub fn system(inner: T) -> Result<TokioDnsConfig<T>, io::Error> {
-        let (cfg, opts) = trust_dns_resolver::system_conf::read_system_conf()?;
+        let (cfg, opts) = system_conf::read_system_conf()?;
         Self::custom(inner, cfg, opts)
     }
 
@@ -386,7 +386,7 @@ mod tests {
             // Failure due to no records.
             match transport
                 .clone()
-                .dial("/dns4/domaindoesnotexistforsureamiright.com/tcp/20000".parse().unwrap())
+                .dial("/dns4/example.invalid/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
             {
