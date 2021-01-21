@@ -93,6 +93,7 @@ fn ping_protocol() {
         let addr = rx.next().await.unwrap();
         swarm2.add_address(&peer1_id, addr.clone());
         let mut req_id = swarm2.send_request(&peer1_id, ping.clone());
+        assert!(swarm2.is_pending_outbound(&peer1_id, &req_id));
 
         loop {
             match swarm2.next().await {
