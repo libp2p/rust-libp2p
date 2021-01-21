@@ -25,7 +25,7 @@
 
 # Version 0.35.0 [unreleased]
 
-- Update `libp2p-gossipsub`.
+- Update `libp2p-gossipsub` and `libp2p-request-response`.
 
 # Version 0.34.0 [2021-01-12]
 
