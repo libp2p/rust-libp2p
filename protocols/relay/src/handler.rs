@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol;
+use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
@@ -33,25 +34,27 @@ use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::io;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 /// Protocol handler that handles the relay protocol.
 ///
 /// There are four possible situations in play here:
 ///
-/// - The handler emits `RelayHandlerEvent::IncomingRelayRequest` if the node we handle asks us to act as a
-///   relay. You must send a `RelayHandlerIn::OutgoingDestinationRequest` to another handler, or send back
-///   a `DenyIncomingRelayRequest`.
+/// - The handler emits `RelayHandlerEvent::IncomingRelayRequest` if the node we handle asks us to
+///   act as a relay. You must send a `RelayHandlerIn::OutgoingDestinationRequest` to another
+///   handler, or send back a `DenyIncomingRelayRequest`.
 ///
-/// - The handler emits `RelayHandlerEvent::IncomingDestinationRequest` if the node we handle asks us to
-///   act as a destination. You must either call `accept` on the produced object, or send back a
-///   `DenyDestinationRequest`.
+/// - The handler emits `RelayHandlerEvent::IncomingDestinationRequest` if the node we handle asks
+///   us to act as a destination. You must either call `accept` on the produced object, or send back
+///   a `DenyDestinationRequest`.
 ///
 /// - Send a `RelayHandlerIn::OutgoingRelayRequest` if the node we handle must act as a relay to a
-///   destination. The handler will either send back a `RelayRequestSuccess` containing the
-///   stream to the destination, or a `OutgoingRelayRequestDenied`.
+///   destination. The handler will either send back a `RelayRequestSuccess` containing the stream
+///   to the destination, or a `OutgoingRelayRequestDenied`.
 ///
-/// - Send a `RelayHandlerIn::OutgoingDestinationRequest` if the node we handle must act as a destination.
-///   The handler will automatically notify the source whether the request was accepted or denied.
+/// - Send a `RelayHandlerIn::OutgoingDestinationRequest` if the node we handle must act as a
+///   destination. The handler will automatically notify the source whether the request was accepted
+///   or denied.
 ///
 pub struct RelayHandler {
     /// Futures that send back negative responses.
@@ -87,6 +90,17 @@ pub struct RelayHandler {
 
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
+
+    /// Tracks substreams lend out to other [`Relayandler`]s.
+    ///
+    /// For each substream between a source and oneself, there is a future in here that resolves
+    /// once the given substream is dropped.
+    ///
+    /// Once all substreams are dropped and this handler has no other work, [`KeepAlive::Until`] can
+    /// be set eventually allowing the connection to be closed.
+    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
+
+    keep_alive: KeepAlive,
 }
 
 /// Event produced by the relay handler.
@@ -168,6 +182,8 @@ impl RelayHandler {
             outgoing_relay_requests: Default::default(),
             outgoing_destination_requests: Default::default(),
             queued_events: Default::default(),
+            alive_lend_out_substreams: Default::default(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -209,7 +225,8 @@ impl ProtocolsHandler for RelayHandler {
                     .push(RelayHandlerEvent::IncomingDestinationRequest(source));
             }
             // We have been asked to act as a relay.
-            protocol::RelayRemoteRequest::HopRequest(incoming_relay_request) => {
+            protocol::RelayRemoteRequest::HopRequest((incoming_relay_request, notifyee)) => {
+                self.alive_lend_out_substreams.push(notifyee);
                 self.queued_events
                     .push(RelayHandlerEvent::IncomingRelayRequest(
                         incoming_relay_request,
@@ -234,8 +251,7 @@ impl ProtocolsHandler for RelayHandler {
             }
             // We have successfully asked the node to be a destination.
             EitherOutput::Second((to_dest_substream, request)) => {
-                self.copy_futures
-                    .push(request.fulfill(to_dest_substream));
+                self.copy_futures.push(request.fulfill(to_dest_substream));
             }
         }
     }
@@ -306,12 +322,7 @@ impl ProtocolsHandler for RelayHandler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // TODO: Rework this.
-        //
-        // TODO: In case the local node acts as a relay, and this handler is the handler to the source,
-        // make sure this handler is shut down once the last copy future copying between source and
-        // destination and vice versa is done.
-        KeepAlive::Yes
+        self.keep_alive
     }
 
     fn poll(
@@ -386,6 +397,24 @@ impl ProtocolsHandler for RelayHandler {
         if !self.queued_events.is_empty() {
             let event = self.queued_events.remove(0);
             return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
+        }
+
+        while let Poll::Ready(Some(Err(Canceled))) =
+            self.alive_lend_out_substreams.poll_next_unpin(cx)
+        {}
+
+        if !self.deny_futures.is_empty()
+            || !self.accept_destination_futures.is_empty()
+            || !self.copy_futures.is_empty()
+            || !self.alive_lend_out_substreams.is_empty()
+        {
+            // Protocol handler is busy.
+            self.keep_alive = KeepAlive::Yes;
+        } else {
+            // Protocol handler is idle.
+            if matches!(self.keep_alive, KeepAlive::Yes) {
+                self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(2));
+            }
         }
 
         Poll::Pending

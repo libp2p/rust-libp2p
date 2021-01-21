@@ -354,10 +354,6 @@ impl NetworkBehaviour for Relay {
             }
         }
 
-        if let Some(event) = self.outbox_to_swarm.pop_front() {
-            return Poll::Ready(event);
-        }
-
         loop {
             match self.from_transport.poll_next_unpin(cx) {
                 Poll::Ready(Some(TransportToBehaviourMsg::DialRequest {
@@ -415,6 +411,10 @@ impl NetworkBehaviour for Relay {
                 Poll::Ready(None) => panic!("Channel to transport wrapper is closed"),
                 Poll::Pending => break,
             }
+        }
+
+        if let Some(event) = self.outbox_to_swarm.pop_front() {
+            return Poll::Ready(event);
         }
 
         Poll::Pending

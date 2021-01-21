@@ -24,6 +24,7 @@ use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
 use futures::future::BoxFuture;
 use futures::io::ErrorKind;
+use futures::channel::oneshot;
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
@@ -42,21 +43,24 @@ use unsigned_varint::codec::UviBytes;
 /// source on it. This data must be transmitted to the destination.
 // TODO: debug
 #[must_use = "An incoming relay request should be either accepted or denied."]
-#[derive(Clone)]
 pub struct IncomingRelayRequest<TSubstream> {
     /// The stream to the source.
     stream: TSubstream,
     /// Target of the request.
     dest: Peer,
+
+    _notifier: oneshot::Sender<()>,
 }
 
 impl<TSubstream> IncomingRelayRequest<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    /// Creates a `IncomingRelayRequest`.
-    pub(crate) fn new(stream: TSubstream, dest: Peer) -> Self {
-        IncomingRelayRequest { stream, dest }
+    /// Creates a [`IncomingRelayRequest`] as well as a Future that resolves once the
+    /// [`IncomingRelayRequest`] is dropped.
+    pub(crate) fn new(stream: TSubstream, dest: Peer) -> (Self, oneshot::Receiver<()>) {
+        let (tx, rx) = oneshot::channel();
+        (IncomingRelayRequest { stream, dest, _notifier: tx }, rx)
     }
 
     /// Peer id of the node we should relay communications to.
@@ -98,10 +102,10 @@ where
             //
             // TODO: Move timeout into constant or configuration option.
             let copy_future =
-                CopyFuture::new(substream.release().0, dest_stream, Duration::from_secs(30));
+                CopyFuture::new(substream.release().0, dest_stream, Duration::from_secs(2));
 
             match copy_future.await {
-                Err(e) if e.kind() != ErrorKind::UnexpectedEof => panic!(e),
+                Err(e) if e.kind() != ErrorKind::TimedOut => panic!(e),
                 _ => {}
             }
 

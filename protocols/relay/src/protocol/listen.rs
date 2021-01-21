@@ -24,6 +24,7 @@ use crate::protocol::incoming_relay_request::IncomingRelayRequest;
 use crate::protocol::{Peer, PeerParseError, PROTOCOL_NAME};
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
+use futures::channel::oneshot;
 use libp2p_core::upgrade;
 use prost::Message;
 
@@ -41,7 +42,7 @@ pub enum RelayRemoteRequest<TSubstream> {
     /// We have been asked to become a destination.
     DestinationRequest(IncomingDestinationRequest<TSubstream>),
     /// We have been asked to relay communications to another node.
-    HopRequest(IncomingRelayRequest<TSubstream>),
+    HopRequest((IncomingRelayRequest<TSubstream>, oneshot::Receiver<()>)),
 }
 
 impl RelayListen {
@@ -88,8 +89,8 @@ where
                 circuit_relay::Type::Hop => {
                     // TODO Handle
                     let peer = Peer::try_from(dst_peer.unwrap())?;
-                    let rq = IncomingRelayRequest::new(substream.into_inner(), peer);
-                    Ok(RelayRemoteRequest::HopRequest(rq))
+                    let (rq, notifyee) = IncomingRelayRequest::new(substream.into_inner(), peer);
+                    Ok(RelayRemoteRequest::HopRequest((rq, notifyee)))
                 }
                 circuit_relay::Type::Stop => {
                     // TODO Handle
