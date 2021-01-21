@@ -106,7 +106,7 @@ fn ping_protocol() {
                     assert_eq!(&peer, &peer1_id);
                     assert_eq!(req_id, request_id);
                     if count >= num_pings {
-                       break 
+                        return
                     } else {
                         req_id = swarm2.send_request(&peer1_id, ping.clone());
                     }
@@ -114,11 +114,6 @@ fn ping_protocol() {
                 e => panic!("Peer2: Unexpected event: {:?}", e)
             }
         }
-
-        let req_id2 = swarm2.send_request(&peer1_id, ping.clone());
-        // check if is_pending_outbound returns false for a finished request when we have already issued a new one
-        assert!(swarm2.is_pending_outbound(&peer1_id, &req_id) == false);
-        assert!(swarm2.is_pending_outbound(&peer1_id, &req_id2));
     };
 
     async_std::task::spawn(Box::pin(peer1));
