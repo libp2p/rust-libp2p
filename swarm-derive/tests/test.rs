@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core_derive::*;
+use libp2p_swarm_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
@@ -291,15 +291,15 @@ fn event_process_false() {
         identify: libp2p::identify::Identify,
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, unreachable_code)]
     fn bar() {
         require_net_behaviour::<Foo>();
 
-        let mut swarm: libp2p::Swarm<Foo> = unimplemented!();
+        let mut _swarm: libp2p::Swarm<Foo> = unimplemented!();
 
         // check that the event is bubbled up all the way to swarm
         let _ = async {
-            match swarm.next().await {
+            match _swarm.next().await {
                 BehaviourOutEvent::Ping(_) => {},
                 BehaviourOutEvent::Identify(_) => {},
             }
