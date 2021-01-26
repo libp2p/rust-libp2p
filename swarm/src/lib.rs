@@ -695,7 +695,8 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if this.network.is_disconnected(&peer_id) => true,
                             DialPeerCondition::NotDialing
                                 if !this.network.is_dialing(&peer_id) => true,
-                            _ => false
+                            DialPeerCondition::Always => true,
+                            _ => false,
                         };
                         if condition_matched {
                             if ExpandedSwarm::dial(this, &peer_id).is_ok() {
