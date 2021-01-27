@@ -258,7 +258,7 @@ pub use self::core::{
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
-pub use libp2p_core_derive::NetworkBehaviour;
+pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
