@@ -1,3 +1,7 @@
+# 0.22.0 [unreleased]
+
+- Rename the crate to `libp2p-swarm-derive`.
+
 # 0.21.0 [2020-11-25]
 
 - Update for compatibility with `libp2p-swarm-0.25`.
