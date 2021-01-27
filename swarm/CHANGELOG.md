@@ -1,8 +1,8 @@
-# 0.27.1 [unreleased]
+# 0.27.1 [2021-01-27]
 
 - Make `OneShotHandler`s `max_dial_negotiate` limit configurable.
   [PR 1936](https://github.com/libp2p/rust-libp2p/pull/1936).
-  
+
 - Fix handling of DialPeerCondition::Always.
   [PR 1937](https://github.com/libp2p/rust-libp2p/pull/1937).
 
