@@ -42,7 +42,7 @@ pub enum RelayRemoteRequest<TSubstream> {
     /// We have been asked to become a destination.
     DestinationRequest(IncomingDestinationRequest<TSubstream>),
     /// We have been asked to relay communications to another node.
-    HopRequest((IncomingRelayRequest<TSubstream>, oneshot::Receiver<()>)),
+    RelayRequest((IncomingRelayRequest<TSubstream>, oneshot::Receiver<()>)),
 }
 
 impl RelayListen {
@@ -90,7 +90,7 @@ where
                     // TODO Handle
                     let peer = Peer::try_from(dst_peer.unwrap())?;
                     let (rq, notifyee) = IncomingRelayRequest::new(substream.into_inner(), peer);
-                    Ok(RelayRemoteRequest::HopRequest((rq, notifyee)))
+                    Ok(RelayRemoteRequest::RelayRequest((rq, notifyee)))
                 }
                 circuit_relay::Type::Stop => {
                     // TODO Handle

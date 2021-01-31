@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::BehaviourToTransportMsg;
+use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
@@ -36,6 +37,7 @@ use std::task::{Context, Poll};
 
 pub enum TransportToBehaviourMsg {
     DialRequest {
+        request_id: RequestId,
         relay_addr: Multiaddr,
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
@@ -170,6 +172,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                 let (tx, rx) = oneshot::channel();
                 to_behaviour
                     .send(TransportToBehaviourMsg::DialRequest {
+                        request_id: RequestId::new(),
                         relay_addr,
                         relay_peer_id,
                         destination_addr,

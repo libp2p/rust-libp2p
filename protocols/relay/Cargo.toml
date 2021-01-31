@@ -20,7 +20,7 @@ libp2p-swarm = { version = "0.27.0", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
 prost = "0.6.1"
-rand = "0.6"
+rand = "0.7"
 smallvec = "0.6.9"
 unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 void = "1.0"

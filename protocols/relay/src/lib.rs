@@ -59,3 +59,13 @@ mod transport;
 
 pub use behaviour::Relay;
 pub use transport::RelayTransportWrapper;
+
+// TODO: No need to be public.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RequestId(u64);
+
+impl RequestId {
+    fn new() -> RequestId {
+        RequestId(rand::random())
+    }
+}
