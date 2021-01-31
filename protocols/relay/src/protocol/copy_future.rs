@@ -42,13 +42,8 @@ pub struct CopyFuture<S, D> {
     configured_timeout: Duration,
 }
 
-impl<S, D> CopyFuture<S, D> {
-    pub fn new(source: S, destination: D, timeout: Duration) -> Self
-    where
-        // TODO: All needed?
-        S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        D: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+impl<S: AsyncRead, D: AsyncRead> CopyFuture<S, D> {
+    pub fn new(source: S, destination: D, timeout: Duration) -> Self {
         CopyFuture {
             source: BufReader::new(source),
             destination: BufReader::new(destination),
@@ -60,9 +55,8 @@ impl<S, D> CopyFuture<S, D> {
 
 impl<S, D> Future for CopyFuture<S, D>
 where
-    // TODO: All needed?
-    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    D: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    S: AsyncRead + AsyncWrite + Unpin,
+    D: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = io::Result<()>;
 

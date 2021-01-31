@@ -112,7 +112,6 @@ struct OutgoingRelayRequest {
 }
 
 /// Event produced by the relay handler.
-//#[derive(Debug)]      // TODO: restore
 pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back a
     /// `DenyIncomingRelayRequest`, or send a `OutgoingDestinationRequest` to a different handler containing
@@ -328,7 +327,6 @@ impl ProtocolsHandler for RelayHandler {
     fn inject_dial_upgrade_error(
         &mut self,
         (peer_id, request_id): Self::OutboundOpenInfo,
-        // TODO: Fix
         error: ProtocolsHandlerUpgrErr<
             EitherError<
                 protocol::OutgoingRelayRequestError,
@@ -397,7 +395,6 @@ impl ProtocolsHandler for RelayHandler {
                         source_addrs,
                         substream,
                     )),
-                    // TODO: Does one need this PeerId?
                     (source, request_id),
                 ),
             });
