@@ -41,15 +41,15 @@ use unsigned_varint::codec::UviBytes;
 /// to the *destination*.
 pub struct OutgoingRelayRequest {
     dest_id: PeerId,
-    dest_addresses: Vec<Multiaddr>,
+    dest_address: Multiaddr,
 }
 
 impl OutgoingRelayRequest {
     /// Builds a request for the target to act as a relay to a third party.
-    pub fn new(dest_id: PeerId, dest_addresses: impl IntoIterator<Item = Multiaddr>) -> Self {
+    pub fn new(dest_id: PeerId, dest_address: Multiaddr) -> Self {
         OutgoingRelayRequest {
             dest_id,
-            dest_addresses: dest_addresses.into_iter().collect(),
+            dest_address,
         }
     }
 }
@@ -74,7 +74,7 @@ where
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         let OutgoingRelayRequest {
             dest_id,
-            dest_addresses,
+            dest_address,
         } = self;
 
         let message = CircuitRelay {
@@ -82,7 +82,7 @@ where
             src_peer: None,
             dst_peer: Some(circuit_relay::Peer {
                 id: dest_id.to_bytes(),
-                addrs: dest_addresses.into_iter().map(|a| a.to_vec()).collect(),
+                addrs: vec![dest_address.to_vec()],
             }),
             code: None,
         };

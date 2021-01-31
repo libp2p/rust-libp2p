@@ -183,8 +183,8 @@ impl NetworkBehaviour for Relay {
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::OutgoingRelayRequest {
                             request_id,
-                            target: destination_peer_id.clone(),
-                            addresses: vec![destination_addr.clone()],
+                            destination_peer_id,
+                            destination_address: destination_addr.clone(),
                         },
                     });
 
@@ -324,10 +324,9 @@ impl NetworkBehaviour for Relay {
                     .unwrap();
                 send_back.send(stream).unwrap();
             }
-            RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => {
-                self.outbox_to_transport
-                    .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, source })
-            }
+            RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self
+                .outbox_to_transport
+                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, source }),
         }
     }
 
@@ -370,8 +369,8 @@ impl NetworkBehaviour for Relay {
                                 handler: NotifyHandler::Any,
                                 event: RelayHandlerIn::OutgoingRelayRequest {
                                     request_id,
-                                    target: destination_peer_id.clone(),
-                                    addresses: vec![destination_addr.clone()],
+                                    destination_peer_id: destination_peer_id.clone(),
+                                    destination_address: destination_addr.clone(),
                                 },
                             });
 
