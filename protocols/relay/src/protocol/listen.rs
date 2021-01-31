@@ -21,7 +21,7 @@
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::incoming_destination_request::IncomingDestinationRequest;
 use crate::protocol::incoming_relay_request::IncomingRelayRequest;
-use crate::protocol::{Peer, PeerParseError, PROTOCOL_NAME};
+use crate::protocol::{Peer, PeerParseError, PROTOCOL_NAME, MAX_ACCEPTED_MESSAGE_LEN};
 use futures::{future::BoxFuture, prelude::*};
 use futures_codec::Framed;
 use futures::channel::oneshot;
@@ -71,9 +71,8 @@ where
 
     fn upgrade_inbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         async move {
-            let codec = UviBytes::<bytes::Bytes>::default();
-            // TODO: Do we need this?
-            // codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
+            let mut codec = UviBytes::<bytes::Bytes>::default();
+            codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
             let mut substream = Framed::<TSubstream, _>::new(substream, codec);
 
             let msg: bytes::BytesMut = substream.next().await.unwrap().unwrap();
@@ -95,6 +94,7 @@ where
                 circuit_relay::Type::Stop => {
                     // TODO Handle
                     let peer = Peer::try_from(src_peer.unwrap())?;
+                    // TODO: Handle additional data when calling `into_inner`.
                     let rq = IncomingDestinationRequest::new(substream.into_inner(), peer);
                     Ok(RelayRemoteRequest::DestinationRequest(rq))
                 }

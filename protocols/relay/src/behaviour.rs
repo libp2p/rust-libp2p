@@ -195,9 +195,6 @@ impl NetworkBehaviour for Relay {
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
-        //
-        // TODO: What if two outgoing destination requests are in progress? The latter will
-        // not find anything here.
         if let Some(reqs) = self.incoming_relay_requests.remove(id) {
             for req in reqs {
                 let IncomingRelayRequest::DialingDestination {
@@ -271,8 +268,7 @@ impl NetworkBehaviour for Relay {
             RelayHandlerEvent::IncomingRelayRequest(request_id, request) => {
                 if self.connected_peers.contains(request.destination_id()) {
                     let dest_id = request.destination_id().clone();
-                    // TODO: Why is this called `send_back`?
-                    let send_back = RelayHandlerIn::OutgoingDestinationRequest {
+                    let event = RelayHandlerIn::OutgoingDestinationRequest {
                         source: event_source,
                         request_id,
                         source_addresses: Vec::new(), // TODO: wrong
@@ -281,9 +277,8 @@ impl NetworkBehaviour for Relay {
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id: dest_id,
-                            // TODO: Any correct here?
                             handler: NotifyHandler::Any,
-                            event: send_back,
+                            event,
                         });
                 } else {
                     let dest_id = request.destination_id().clone();
@@ -309,7 +304,6 @@ impl NetworkBehaviour for Relay {
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
-                        // TODO: Any correct here?
                         handler: NotifyHandler::Any,
                         event: send_back,
                     });
