@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerIn};
-use crate::transport::TransportToBehaviourMsg;
 use crate::protocol;
+use crate::transport::TransportToBehaviourMsg;
 use fnv::FnvHashSet;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
@@ -54,7 +54,8 @@ pub struct Relay {
 
     /// Requests by the local node to a relay to relay a connection for the local node to a
     /// destination.
-    outgoing_relay_requests: HashMap<PeerId, OutgoingRelayRequest>,
+    outgoing_relay_requests: OutgoingRelayRequests,
+
     /// Requests for the local node to act as a relay from a source to a destination indexed by
     /// destination [`PeerId`].
     incoming_relay_requests: HashMap<PeerId, IncomingRelayRequest>,
@@ -63,17 +64,24 @@ pub struct Relay {
     relay_listeners: HashMap<PeerId, RelayListener>,
 }
 
-enum OutgoingRelayRequest {
-    Dialing {
-        relay_addr: Multiaddr,
-        // relay_peer_id: PeerId,
-        destination_addr: Multiaddr,
-        destination_peer_id: PeerId,
-        send_back: oneshot::Sender<NegotiatedSubstream>,
-    },
-    Upgrading {
-        send_back: oneshot::Sender<NegotiatedSubstream>,
-    },
+#[derive(Default)]
+struct OutgoingRelayRequests {
+    /// Indexed by the relay peer id.
+    dialing: HashMap<PeerId, OutgoingDialingRelayRequest>,
+    /// Indexed by the destination peer id.
+    upgrading: HashMap<PeerId, OutgoingUpgradingRelayRequest>,
+}
+
+struct OutgoingDialingRelayRequest {
+    relay_addr: Multiaddr,
+    // relay_peer_id: PeerId,
+    destination_addr: Multiaddr,
+    destination_peer_id: PeerId,
+    send_back: oneshot::Sender<NegotiatedSubstream>,
+}
+
+struct OutgoingUpgradingRelayRequest {
+    send_back: oneshot::Sender<NegotiatedSubstream>,
 }
 
 enum IncomingRelayRequest {
@@ -126,18 +134,14 @@ impl NetworkBehaviour for Relay {
             None
         }));
 
-        addresses.extend(
-            self.outgoing_relay_requests
-                .iter()
-                .filter_map(|(peer_id, r)| {
-                    if let OutgoingRelayRequest::Dialing { relay_addr, .. } = r {
-                        if peer_id == remote_peer_id {
-                            return Some(relay_addr.clone());
-                        }
-                    }
-                    None
-                }),
-        );
+        addresses.extend(self.outgoing_relay_requests.dialing.iter().filter_map(
+            |(peer_id, OutgoingDialingRelayRequest { relay_addr, .. })| {
+                if peer_id == remote_peer_id {
+                    return Some(relay_addr.clone());
+                }
+                None
+            },
+        ));
 
         addresses.extend(
             self.incoming_relay_requests
@@ -168,33 +172,28 @@ impl NetworkBehaviour for Relay {
                 .insert(id.clone(), RelayListener::Connected(addr.clone()));
         }
 
-        match self.outgoing_relay_requests.remove(id) {
-            Some(OutgoingRelayRequest::Dialing {
+        if let Some(req) = self.outgoing_relay_requests.dialing.remove(id) {
+            let OutgoingDialingRelayRequest {
                 relay_addr: _,
                 // relay_peer_id: _,
                 destination_addr,
                 destination_peer_id,
                 send_back,
-            }) => {
-                self.outbox_to_swarm
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: id.clone(),
-                        handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::OutgoingRelayRequest {
-                            target: destination_peer_id.clone(),
-                            addresses: vec![destination_addr.clone()],
-                        },
-                    });
+            } = req;
+            self.outbox_to_swarm
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: id.clone(),
+                    handler: NotifyHandler::Any,
+                    event: RelayHandlerIn::OutgoingRelayRequest {
+                        target: destination_peer_id.clone(),
+                        addresses: vec![destination_addr.clone()],
+                    },
+                });
 
-                self.outgoing_relay_requests.insert(
-                    destination_peer_id,
-                    OutgoingRelayRequest::Upgrading { send_back },
-                );
-            }
-            Some(entry @ OutgoingRelayRequest::Upgrading { .. }) => {
-                self.outgoing_relay_requests.insert(id.clone(), entry);
-            }
-            None => {}
+            self.outgoing_relay_requests.upgrading.insert(
+                destination_peer_id,
+                OutgoingUpgradingRelayRequest { send_back },
+            );
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
@@ -220,16 +219,12 @@ impl NetworkBehaviour for Relay {
     }
 
     fn inject_dial_failure(&mut self, peer_id: &PeerId) {
-        match self.outgoing_relay_requests.remove(peer_id) {
-            Some(OutgoingRelayRequest::Dialing { send_back, .. }) => {
-                // TODO: Introduce better error handling, sending back an actual addr reach failure
-                // error to the transport wrapper.
-                drop(send_back);
-            }
-            Some(OutgoingRelayRequest::Upgrading { .. }) => {
-                unreachable!("We never directly dial the destination.")
-            }
-            None => {}
+        if let Some(OutgoingDialingRelayRequest { send_back, .. }) =
+            self.outgoing_relay_requests.dialing.remove(peer_id)
+        {
+            // TODO: Introduce better error handling, sending back an actual addr reach failure
+            // error to the transport wrapper.
+            drop(send_back);
         }
 
         self.incoming_relay_requests.remove(peer_id);
@@ -315,15 +310,18 @@ impl NetworkBehaviour for Relay {
             }
 
             RelayHandlerEvent::OutgoingRelayRequestError(destination) => {
-                self.outgoing_relay_requests.remove(&destination).unwrap();
+                self.outgoing_relay_requests
+                    .upgrading
+                    .remove(&destination)
+                    .unwrap();
             }
             RelayHandlerEvent::OutgoingRelayRequestSuccess(destination, stream) => {
-                // TODO: Instead of this unnecessary check, one could as well not safe dialing and
-                // upgrading outbound relay requests in the same HashMap.
-                let send_back = match self.outgoing_relay_requests.remove(&destination).unwrap() {
-                    OutgoingRelayRequest::Upgrading { send_back } => send_back,
-                    _ => todo!("Handle"),
-                };
+                let send_back = self
+                    .outgoing_relay_requests
+                    .upgrading
+                    .remove(&destination)
+                    .map(|OutgoingUpgradingRelayRequest { send_back }| send_back)
+                    .unwrap();
                 send_back.send(stream).unwrap();
             }
             RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self
@@ -374,14 +372,14 @@ impl NetworkBehaviour for Relay {
                                 },
                             });
 
-                        self.outgoing_relay_requests.insert(
+                        self.outgoing_relay_requests.upgrading.insert(
                             destination_peer_id,
-                            OutgoingRelayRequest::Upgrading { send_back },
+                            OutgoingUpgradingRelayRequest { send_back },
                         );
                     } else {
-                        self.outgoing_relay_requests.insert(
+                        self.outgoing_relay_requests.dialing.insert(
                             relay_peer_id.clone(),
-                            OutgoingRelayRequest::Dialing {
+                            OutgoingDialingRelayRequest {
                                 relay_addr,
                                 // relay_peer_id: relay_peer_id.clone(),
                                 destination_addr,
