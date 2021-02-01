@@ -1,53 +1,72 @@
+
+# Individual crates
+
+## Main APIs
+
 - [`libp2p-core` CHANGELOG](core/CHANGELOG.md)
-- [`libp2p-deflate` CHANGELOG](protocols/deflate/CHANGELOG.md)
-- [`libp2p-dns` CHANGELOG](transports/dns/CHANGELOG.md)
+- [`libp2p-swarm` CHANGELOG](swarm/CHANGELOG.md)
+- [`libp2p-swarm-derive` CHANGELOG](swarm-derive/CHANGELOG.md)
+
+## Application Protocols
+
 - [`libp2p-floodsub` CHANGELOG](protocols/floodsub/CHANGELOG.md)
 - [`libp2p-gossipsub` CHANGELOG](protocols/gossipsub/CHANGELOG.md)
 - [`libp2p-identify` CHANGELOG](protocols/identify/CHANGELOG.md)
 - [`libp2p-kad` CHANGELOG](protocols/kad/CHANGELOG.md)
 - [`libp2p-mdns` CHANGELOG](protocols/mdns/CHANGELOG.md)
-- [`libp2p-mplex` CHANGELOG](muxers/mplex/CHANGELOG.md)
-- [`libp2p-noise` CHANGELOG](protocols/noise/CHANGELOG.md)
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
-- [`libp2p-plaintext` CHANGELOG](protocols/plaintext/CHANGELOG.md)
-- [`libp2p-pnet` CHANGELOG](protocols/pnet/CHANGELOG.md)
 - [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
-- [`libp2p-swarm` CHANGELOG](swarm/CHANGELOG.md)
+
+## Transport Protocols & Upgrades
+
+- [`libp2p-deflate` CHANGELOG](transports/deflate/CHANGELOG.md)
+- [`libp2p-dns` CHANGELOG](transports/dns/CHANGELOG.md)
+- [`libp2p-noise` CHANGELOG](transports/noise/CHANGELOG.md)
+- [`libp2p-plaintext` CHANGELOG](transports/plaintext/CHANGELOG.md)
+- [`libp2p-pnet` CHANGELOG](transports/pnet/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
-- [`libp2p-yamux` CHANGELOG](muxers/yamux/CHANGELOG.md)
-- [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
-- [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
-- [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.35.0 [unreleased]
+## Multiplexers
+
+- [`libp2p-mplex` CHANGELOG](muxers/mplex/CHANGELOG.md)
+- [`libp2p-yamux` CHANGELOG](muxers/yamux/CHANGELOG.md)
+
+## Utilities
+
+- [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
+- [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
+
+# `libp2p` facade crate
+
+## Version 0.35.0 [unreleased]
 
 - Use `libp2p-swarm-derive`, the former `libp2p-core-derive`.
 
 - Update `libp2p-gossipsub` and `libp2p-request-response`.
 
-# Version 0.34.0 [2021-01-12]
+## Version 0.34.0 [2021-01-12]
 
 - Update `libp2p-core` and all dependent crates.
 
 - The `tcp-async-std` feature is now `tcp-async-io`, still
   enabled by default.
 
-# Version 0.33.0 [2020-12-17]
+## Version 0.33.0 [2020-12-17]
 
 - Update `libp2p-core` and all dependent crates.
 
-# Version 0.32.2 [2020-12-10]
+## Version 0.32.2 [2020-12-10]
 
 - Update `libp2p-websocket`.
 
-# Version 0.32.1 [2020-12-09]
+## Version 0.32.1 [2020-12-09]
 
 - Update minimum patch version of `libp2p-websocket`.
 
-# Version 0.32.0 [2020-12-08]
+## Version 0.32.0 [2020-12-08]
 
 - Update `libp2p-request-response`.
 
@@ -55,57 +74,57 @@
 
 - Update `libp2p-websocket` minimum patch version.
 
-# Version 0.31.2 [2020-12-02]
+## Version 0.31.2 [2020-12-02]
 
 - Bump minimum `libp2p-core` patch version.
 
-# Version 0.31.1 [2020-11-26]
+## Version 0.31.1 [2020-11-26]
 
 - Bump minimum `libp2p-tcp` patch version.
 
-# Version 0.31.0 [2020-11-25]
+## Version 0.31.0 [2020-11-25]
 
 - Update `multistream-select` and all dependent crates.
 
-# Version 0.30.1 [2020-11-11]
+## Version 0.30.1 [2020-11-11]
 
 - Update `libp2p-plaintext`.
 
-# Version 0.30.0 [2020-11-09]
+## Version 0.30.0 [2020-11-09]
 
 - Update `libp2p-mdns`, `libp2p-tcp` and `libp2p-uds` as well as `libp2p-core`
   and all its dependers.
 
-# Version 0.29.1 [2020-10-20]
+## Version 0.29.1 [2020-10-20]
 
 - Update `libp2p-core`.
 
-# Version 0.29.0 [2020-10-16]
+## Version 0.29.0 [2020-10-16]
 
 - Update `libp2p-core`, `libp2p-floodsub`, `libp2p-gossipsub`, `libp2p-mplex`,
   `libp2p-noise`, `libp2p-plaintext`, `libp2p-pnet`, `libp2p-request-response`,
   `libp2p-swarm`, `libp2p-tcp`, `libp2p-websocket` and `parity-multiaddr`.
 
-# Version 0.28.1 [2020-09-10]
+## Version 0.28.1 [2020-09-10]
 
 - Update to `libp2p-core` `0.22.1`.
 
-# Version 0.28.0 [2020-09-09]
+## Version 0.28.0 [2020-09-09]
 
 - Update `libp2p-yamux` to `0.25.0`. *Step 4 of 4 in a multi-release
   upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
 
-# Version 0.27.0 [2020-09-09]
+## Version 0.27.0 [2020-09-09]
 
 - Update `libp2p-yamux` to `0.24.0`. *Step 3 of 4 in a multi-release
   upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
 
-# Version 0.26.0 [2020-09-09]
+## Version 0.26.0 [2020-09-09]
 
 - Update `libp2p-yamux` to `0.23.0`. *Step 2 of 4 in a multi-release
   upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
 
-# Version 0.25.0 [2020-09-09]
+## Version 0.25.0 [2020-09-09]
 
 - Remove the deprecated `libp2p-secio` dependency. To continue to use
   SECIO, add an explicit dependency on `libp2p-secio`. However,
@@ -122,12 +141,12 @@ changelog for details about the `LegacyConfig`.
 
 [PR 1714]: https://github.com/libp2p/rust-libp2p/pull/1714
 
-# Version 0.24.0 [2020-08-18]
+## Version 0.24.0 [2020-08-18]
 
 - Update `libp2p-core`, `libp2p-gossipsub`, `libp2p-kad`, `libp2p-mdns`,
   `libp2p-ping`, `libp2p-request-response`, `libp2p-swarm` and dependent crates.
 
-# Version 0.23.0 (2020-08-03)
+## Version 0.23.0 (2020-08-03)
 
 **NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
 on an existing deployment, this version must not be skipped
@@ -138,7 +157,7 @@ changelog for details about the `LegacyConfig`.
 
 - Refactored bandwidth logging ([PR 1670](https://github.com/libp2p/rust-libp2p/pull/1670)).
 
-# Version 0.22.0 (2020-07-17)
+## Version 0.22.0 (2020-07-17)
 
 **NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
 on an existing deployment using `libp2p-noise`, this version
@@ -146,11 +165,11 @@ must not be skipped!
 
 - Bump `libp2p-noise` dependency to `0.21`.
 
-# Version 0.21.1 (2020-07-02)
+## Version 0.21.1 (2020-07-02)
 
 - Bump `libp2p-websockets` lower bound.
 
-# Version 0.21.0 (2020-07-01)
+## Version 0.21.0 (2020-07-01)
 
 - Conditional compilation fixes for the `wasm32-wasi` target
   ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
@@ -160,7 +179,7 @@ must not be skipped!
 
 - Updated libp2p dependencies.
 
-# Version 0.19.1 (2020-05-25)
+## Version 0.19.1 (2020-05-25)
 
 - Temporarily pin all `async-std` dependencies to `< 1.6`.
   [PR 1589](https://github.com/libp2p/rust-libp2p/pull/1589)
@@ -168,7 +187,7 @@ must not be skipped!
 - `libp2p-core-derive`: Fully qualified std::result::Result in macro
   [PR 1587](https://github.com/libp2p/rust-libp2p/pull/1587)
 
-# Version 0.19.0 (2020-05-18)
+## Version 0.19.0 (2020-05-18)
 
 - `libp2p-core`, `libp2p-swarm`: Added support for multiple dialing
   attempts per peer, with a configurable limit.
@@ -226,12 +245,12 @@ must not be skipped!
   be supported. IPv4 listener addresses are not affected by this change.
   [PR 1555](https://github.com/libp2p/rust-libp2p/pull/1555)
 
-# Version 0.18.1 (2020-04-17)
+## Version 0.18.1 (2020-04-17)
 
 - `libp2p-swarm`: Make sure inject_dial_failure is called in all situations.
   [PR 1549](https://github.com/libp2p/rust-libp2p/pull/1549)
 
-# Version 0.18.0 (2020-04-09)
+## Version 0.18.0 (2020-04-09)
 
 - `libp2p-core`: Treat connection limit errors as pending connection errors.
   [PR 1546](https://github.com/libp2p/rust-libp2p/pull/1546)
@@ -248,7 +267,7 @@ must not be skipped!
 - `libp2p-wasm-ext`: Fix "parsed is null" errors being thrown.
   [PR 1535](https://github.com/libp2p/rust-libp2p/pull/1535)
 
-# Version 0.17.0 (2020-04-02)
+## Version 0.17.0 (2020-04-02)
 
 - `libp2p-core`: Finished "identity hashing" for peer IDs migration.
   [PR 1460](https://github.com/libp2p/rust-libp2p/pull/1460)
@@ -295,18 +314,18 @@ must not be skipped!
 - `multihash`: Removed the crate in favour of the upstream crate.
   [PR 1472](https://github.com/libp2p/rust-libp2p/pull/1472)
 
-# Version 0.16.2 (2020-02-28)
+## Version 0.16.2 (2020-02-28)
 
 - Fixed yamux connections not properly closing and being stuck in the `CLOSE_WAIT` state.
 - Added a `websocket_transport()` function in `libp2p-wasm-ext`, behind a Cargo feature.
 - Fixed ambiguity in `IntoProtocolsHandler::select` vs `ProtocolsHandler::select` in the `NetworkBehaviour` custom derive.
 
-# Version 0.16.1 (2020-02-18)
+## Version 0.16.1 (2020-02-18)
 
 - Fixed wrong representation of `PeerId`s being used in `Kademlia::get_closest_peers`.
 - Implemented `FusedStream` for `Swarm`.
 
-# Version 0.16.0 (2020-02-13)
+## Version 0.16.0 (2020-02-13)
 
 - Removed the `Substream` associated type from the `ProtocolsHandler` trait. The type of the substream is now always `libp2p::swarm::NegotiatedSubstream`.
 - As a consequence of the previous change, most of the implementations of the `NetworkBehaviour` trait provided by libp2p (`Ping`, `Identify`, `Kademlia`, `Floodsub`, `Gossipsub`) have lost a generic parameter.
@@ -322,7 +341,7 @@ must not be skipped!
 - All crates prefixed with `libp2p-` now use the same version number.
 - Added a new variant `ListenerEvent::Error` for listeners to report non-fatal errors. `libp2p-tcp` uses this variant to report errors that happen on remote sockets before they have been accepted and errors when trying to determine the local machine's IP address.
 
-# Version 0.15.0 (2020-01-24)
+## Version 0.15.0 (2020-01-24)
 
 - Added `libp2p-gossipsub`.
 - Added `SwarmBuilder::executor` to allow configuring which tasks executor to use.
@@ -335,7 +354,7 @@ must not be skipped!
 - Fixed `libp2p-kad` keeping connections alive when it shouldn't.
 - Fixed `InboundUpgrade` not always properly implemented on `NoiseConfig`.
 
-# Version 0.14.0-alpha.1 (2020-01-07)
+## Version 0.14.0-alpha.1 (2020-01-07)
 
 - Upgraded the crate to stable futures.
 - Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
@@ -347,16 +366,16 @@ must not be skipped!
 - Revamped the API of `libp2p_websockets::framed`.
 - Added protocol string to `Error::UnknownProtocolString`.
 
-# Version 0.13.2 (2020-01-02)
+## Version 0.13.2 (2020-01-02)
 
 - Fixed the `libp2p-noise` handshake not flushing the underlying stream before waiting for a response.
 - Fixed semver issue with the `protobuf` crate.
 
-# Version 0.13.1 (2019-11-13)
+## Version 0.13.1 (2019-11-13)
 
 - Maintenance release to bump dependencies and deal with an accidental breaking change in multihash 0.1.4.
 
-# Version 0.13.0 (2019-11-05)
+## Version 0.13.0 (2019-11-05)
 
 - Reworked the transport upgrade API. See https://github.com/libp2p/rust-libp2p/pull/1240 for more information.
 - Added a parameter allowing to choose the protocol negotiation protocol when upgrading a connection or a substream. See https://github.com/libp2p/rust-libp2p/pull/1245 for more information.
@@ -369,7 +388,7 @@ must not be skipped!
 - Added some `Debug` trait implementations.
 - Fixed potential arithmetic overflows in `libp2p-kad` and `multistream-select`.
 
-# Version 0.12.0 (2019-08-15)
+## Version 0.12.0 (2019-08-15)
 
 - In some situations, `multistream-select` will now assume that protocol negotiation immediately succeeds. If it turns out that it failed, an error is generated when reading or writing from/to the stream.
 - Replaced `listen_addr` with `local_addr` in events related to incoming connections. The address no longer has to match a previously-reported address.
@@ -380,7 +399,7 @@ must not be skipped!
 - Added `Toggle::is_enabled()`.
 - Removed `IdentifyTransport`.
 
-# Version 0.11.0 (2019-07-18)
+## Version 0.11.0 (2019-07-18)
 
 - `libp2p-kad`: Completed the core functionality of the record storage API, thereby extending the `RecordStore` for provider records. All records expire by default and are subject to regular republication and caching as per the Kademlia spec(s). Expiration and publication intervals are configurable through the `KademliaConfig`.
 - `libp2p-kad`: The routing table now never stores peers without a known (listen) address. In particular, on receiving a new inbound connection, the Kademlia behaviour now emits `KademliaEvent::UnroutablePeer` to indicate that in order for the peer to be added to the routing table and hence considered a reachable node in the DHT, a listen address of the peer must be discovered and reported via `Kademlia::add_address`. This is usually achieved through the use of the `Identify` protocol on the same connection(s).
@@ -391,7 +410,7 @@ must not be skipped!
 - Replaced unbounded channels with bounded ones at the boundary between the `Network` (formerly `RawSwarm`) and `NodeHandler`. The node handlers will now wait if the main task is busy, instead of continuing to push events to the channel.
 - Fixed the `address_translation` function ignoring `/dns` addresses.
 
-# Version 0.10.0 (2019-06-25)
+## Version 0.10.0 (2019-06-25)
 
 - `PollParameters` is now a trait instead of a struct.
 - The `Swarm` can now be customized with connection information.
@@ -400,12 +419,12 @@ must not be skipped!
 - Improved the heuristics for determining external multiaddresses based on reports.
 - Various fixes to Kademlia iterative queries and the WebSockets transport.
 
-# Version 0.9.1 (2019-06-05)
+## Version 0.9.1 (2019-06-05)
 
 - `EitherOutput` now implements `Stream` and `Sink` if their variants also implement these traits.
 - `libp2p::websocket::error::Error` now implements `Sync`.
 
-# Version 0.9.0 (2019-06-04)
+## Version 0.9.0 (2019-06-04)
 
 - Major fixes and performance improvements to libp2p-kad.
 - Initial prototype for record storage in libp2p-kad.
@@ -417,11 +436,11 @@ must not be skipped!
 - Added some utility functions in `core::identity::secp256k1`.
 - It is now possible to inject an artificial connection in the `RawSwarm`.
 
-# Version 0.8.1 (2019-05-15)
+## Version 0.8.1 (2019-05-15)
 
 - Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
 
-# Version 0.8.0 (2019-05-15)
+## Version 0.8.0 (2019-05-15)
 
 - Crate now successfully runs from within the browser when compiled to WASM.
 - Modified the constructors of `NoiseConfig` to accept any type of public key. The Noise handshake has consequently been modified.
@@ -437,11 +456,11 @@ must not be skipped!
 - Added `multiaddr::from_url`.
 - Added `OptionalTransport`.
 
-# Version 0.7.1 (2019-05-15)
+## Version 0.7.1 (2019-05-15)
 
 - Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
 
-# Version 0.7.0 (2019-04-23)
+## Version 0.7.0 (2019-04-23)
 
 - Fixed the inactive connections shutdown mechanism not working.
 - `Transport::listen_on` must now return a `Stream` that produces `ListenEvent`s. This makes it possible to notify about listened addresses at a later point in time.
@@ -457,7 +476,7 @@ must not be skipped!
 - Reworked the `PingEvent`.
 - Renamed `KeepAlive::Forever` to `Yes` and `KeepAlive::Now` to `No`.
 
-# Version 0.6.0 (2019-03-29)
+## Version 0.6.0 (2019-03-29)
 
 - Replaced `NetworkBehaviour::inject_dial_failure` with `inject_dial_failure` and
   `inject_addr_reach_failure`. The former is called when we have finished trying to dial a node
@@ -470,7 +489,7 @@ must not be skipped!
 - Added `Swarm::external_addresses`.
 - Added a `core::swarm::toggle::Toggle` that allows having a disabled `NetworkBehaviour`.
 
-# Version 0.5.0 (2019-03-13)
+## Version 0.5.0 (2019-03-13)
 
 - Moved the `SecioKeypair` struct in `core/identity` and renamed it to `Keypair`.
 - mplex now supports half-closed substreams.
@@ -487,15 +506,15 @@ must not be skipped!
 - Reworked some API of `core/nodes/node.rs` and `core/nodes/handled_node.rs`.
 - The core now works even outside of a tokio context.
 
-# Version 0.4.2 (2019-02-27)
+## Version 0.4.2 (2019-02-27)
 
 - Fixed periodic pinging not working.
 
-# Version 0.4.1 (2019-02-20)
+## Version 0.4.1 (2019-02-20)
 
 - Fixed wrong version of libp2p-noise.
 
-# Version 0.4.0 (2019-02-20)
+## Version 0.4.0 (2019-02-20)
 
 - The `multiaddr!` macro has been moved to the `multiaddr` crate and is now reexported under the name `build_multiaddr!`.
 - Modified the functions in `upgrade::transfer` to be more convenient to use.
@@ -511,12 +530,12 @@ must not be skipped!
 - Added `IdentifyEvent::SendBack`, when we send back our information.
 - Rewrote the `MemoryTransport` to be similar to the `TcpConfig`.
 
-# Version 0.3.1 (2019-02-02)
+## Version 0.3.1 (2019-02-02)
 
 - Added `NetworkBehaviour::inject_replaced` that is called whenever we replace a connection with a different connection to the same peer.
 - Fixed various issues with Kademlia.
 
-# Version 0.3.0 (2019-01-30)
+## Version 0.3.0 (2019-01-30)
 
 - Removed the `topology` module and everything it contained, including the `Topology` trait.
 - Added `libp2p-noise` that supports Noise handshakes, as an alternative to `libp2p-secio`.
@@ -535,15 +554,15 @@ must not be skipped!
 - Added `SecioKeypair::ed25519_raw_key()`.
 - Fix improper connection shutdown in `ProtocolsHandler`.
 
-# Version 0.2.2 (2019-01-14)
+## Version 0.2.2 (2019-01-14)
 
 - Fixed improper dependencies versions causing deriving `NetworkBehaviour` to generate an error.
 
-# Version 0.2.1 (2019-01-14)
+## Version 0.2.1 (2019-01-14)
 
 - Added the `IntoNodeHandler` and `IntoProtocolsHandler` traits, allowing node handlers and protocol handlers to know the `PeerId` of the node they are interacting with.
 
-# Version 0.2 (2019-01-10)
+## Version 0.2 (2019-01-10)
 
 - The `Transport` trait now has an `Error` associated type instead of always using `std::io::Error`.
 - Merged `PeriodicPing` and `PingListen` into one `Ping` behaviour.
