@@ -114,7 +114,6 @@ members = [
     "protocols/plaintext",
     "protocols/pnet",
     "protocols/request-response",
-    "protocols/secio",
     "swarm",
     "swarm-derive",
     "transports/dns",
