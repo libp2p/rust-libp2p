@@ -67,10 +67,10 @@ libp2p-gossipsub = { version = "0.28.0", path = "./protocols/gossipsub", optiona
 libp2p-identify = { version = "0.27.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.28.0", path = "protocols/kad", optional = true }
 libp2p-mplex = { version = "0.27.0", path = "muxers/mplex", optional = true }
-libp2p-noise = { version = "0.29.0", path = "protocols/noise", optional = true }
+libp2p-noise = { version = "0.29.0", path = "transports/noise", optional = true }
 libp2p-ping = { version = "0.27.0", path = "protocols/ping", optional = true }
-libp2p-plaintext = { version = "0.27.0", path = "protocols/plaintext", optional = true }
-libp2p-pnet = { version = "0.20.0", path = "protocols/pnet", optional = true }
+libp2p-plaintext = { version = "0.27.0", path = "transports/plaintext", optional = true }
+libp2p-pnet = { version = "0.20.0", path = "transports/pnet", optional = true }
 libp2p-request-response = { version = "0.9.1", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.27.1", path = "swarm" }
 libp2p-swarm-derive = { version = "0.22.0", path = "swarm-derive" }
@@ -84,7 +84,7 @@ smallvec = "1.0"
 wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
-libp2p-deflate = { version = "0.27.1", path = "protocols/deflate", optional = true }
+libp2p-deflate = { version = "0.27.1", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.27.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.28.0", path = "protocols/mdns", optional = true }
 libp2p-tcp = { version = "0.27.0", path = "transports/tcp", optional = true }
@@ -103,20 +103,20 @@ members = [
     "misc/peer-id-generator",
     "muxers/mplex",
     "muxers/yamux",
-    "protocols/deflate",
     "protocols/floodsub",
     "protocols/gossipsub",
     "protocols/identify",
     "protocols/kad",
     "protocols/mdns",
-    "protocols/noise",
     "protocols/ping",
-    "protocols/plaintext",
-    "protocols/pnet",
     "protocols/request-response",
     "swarm",
     "swarm-derive",
+    "transports/deflate",
     "transports/dns",
+    "transports/noise",
+    "transports/plaintext",
+    "transports/pnet",
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
