@@ -343,7 +343,7 @@ where
             .record_replication_interval
             .or(config.record_publication_interval)
             .map(|interval| PutRecordJob::new(
-                id.clone(),
+                id,
                 interval,
                 config.record_publication_interval,
                 config.record_ttl,
@@ -371,7 +371,7 @@ where
     }
 
     /// Gets an iterator over immutable references to all running queries.
-    pub fn iter_queries<'a>(&'a self) -> impl Iterator<Item = QueryRef<'a>> {
+    pub fn iter_queries(&self) -> impl Iterator<Item = QueryRef<'_>> {
         self.queries.iter().filter_map(|query|
             if !query.is_finished() {
                 Some(QueryRef { query })
@@ -381,7 +381,7 @@ where
     }
 
     /// Gets an iterator over mutable references to all running queries.
-    pub fn iter_queries_mut<'a>(&'a mut self) -> impl Iterator<Item = QueryMut<'a>> {
+    pub fn iter_queries_mut(&mut self) -> impl Iterator<Item = QueryMut<'_>> {
         self.queries.iter_mut().filter_map(|query|
             if !query.is_finished() {
                 Some(QueryMut { query })
@@ -391,7 +391,7 @@ where
     }
 
     /// Gets an immutable reference to a running query, if it exists.
-    pub fn query<'a>(&'a self, id: &QueryId) -> Option<QueryRef<'a>> {
+    pub fn query(&self, id: &QueryId) -> Option<QueryRef<'_>> {
         self.queries.get(id).and_then(|query|
             if !query.is_finished() {
                 Some(QueryRef { query })
@@ -434,7 +434,7 @@ where
                 if entry.value().insert(address) {
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::RoutingUpdated {
-                            peer: peer.clone(),
+                            peer: *peer,
                             addresses: entry.value().clone(),
                             old_peer: None,
                         }
@@ -458,7 +458,7 @@ where
                     kbucket::InsertResult::Inserted => {
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
-                                peer: peer.clone(),
+                                peer: *peer,
                                 addresses,
                                 old_peer: None,
                             }
@@ -620,7 +620,7 @@ where
     /// with an explicit expiration will always expire at that instant and until then
     /// is subject to regular (re-)replication and (re-)publication.
     pub fn put_record(&mut self, mut record: Record, quorum: Quorum) -> Result<QueryId, store::Error> {
-        record.publisher = Some(self.kbuckets.local_key().preimage().clone());
+        record.publisher = Some(*self.kbuckets.local_key().preimage());
         self.store.put(record.clone())?;
         record.expires = record.expires.or_else(||
             self.record_ttl.map(|ttl| Instant::now() + ttl));
@@ -682,7 +682,7 @@ where
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
-            peer: local_key.preimage().clone(),
+            peer: *local_key.preimage(),
             remaining: None
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
@@ -723,7 +723,7 @@ where
         let local_addrs = Vec::new();
         let record = ProviderRecord::new(
             key.clone(),
-            self.kbuckets.local_key().preimage().clone(),
+            *self.kbuckets.local_key().preimage(),
             local_addrs);
         self.store.add_provider(record)?;
         let target = kbucket::Key::new(key.clone());
@@ -767,15 +767,15 @@ where
     where
         I: Iterator<Item = &'a KadPeer> + Clone
     {
-        let local_id = self.kbuckets.local_key().preimage().clone();
-        let others_iter = peers.filter(|p| p.node_id != local_id);
+        let local_id = self.kbuckets.local_key().preimage();
+        let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
                 log::trace!("Peer {:?} reported by {:?} in query {:?}.",
                             peer, source, query_id);
                 let addrs = peer.multiaddrs.iter().cloned().collect();
-                query.inner.addresses.insert(peer.node_id.clone(), addrs);
+                query.inner.addresses.insert(peer.node_id, addrs);
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
@@ -919,7 +919,7 @@ where
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
                                 let event = KademliaEvent::RoutingUpdated {
-                                    peer: peer.clone(),
+                                    peer,
                                     addresses,
                                     old_peer: None,
                                 };
@@ -1045,7 +1045,7 @@ where
                 key,
                 phase: AddProviderPhase::GetClosestPeers
             } => {
-                let provider_id = params.local_peer_id().clone();
+                let provider_id = *params.local_peer_id();
                 let external_addresses = params.external_addresses().map(|r| r.addr).collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
@@ -1487,7 +1487,7 @@ where
             });
         }
 
-        self.connected_peers.insert(peer.clone());
+        self.connected_peers.insert(*peer);
     }
 
     fn inject_address_change(
@@ -1594,7 +1594,7 @@ where
         for query in self.queries.iter_mut() {
             query.on_failure(id);
         }
-        self.connection_updated(id.clone(), None, NodeStatus::Disconnected);
+        self.connection_updated(*id, None, NodeStatus::Disconnected);
         self.connected_peers.remove(id);
     }
 
@@ -1612,7 +1612,7 @@ where
                 // since the remote address on an inbound connection may be specific
                 // to that connection (e.g. typically the TCP port numbers).
                 let address = match endpoint {
-                    ConnectedPoint::Dialer { address } => Some(address.clone()),
+                    ConnectedPoint::Dialer { address } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
                 self.connection_updated(source, address, NodeStatus::Connected);
@@ -1725,7 +1725,7 @@ where
                         key, records, quorum, cache_at
                     } = &mut query.inner.info {
                         if let Some(record) = record {
-                            records.push(PeerRecord{ peer: Some(source.clone()), record });
+                            records.push(PeerRecord{ peer: Some(source), record });
 
                             let quorum = quorum.get();
                             if records.len() >= quorum {
@@ -1749,7 +1749,7 @@ where
                             // closest node to the key that did *not* return the
                             // value is tracked in order to cache the record on
                             // that node if the query turns out to be successful.
-                            let source_key = kbucket::Key::from(source.clone());
+                            let source_key = kbucket::Key::from(source);
                             if let Some(cache_key) = cache_at {
                                 let key = kbucket::Key::new(key.clone());
                                 if source_key.distance(&key) < cache_key.distance(&key) {
@@ -1780,7 +1780,7 @@ where
                     if let QueryInfo::PutRecord {
                         phase: PutRecordPhase::PutRecord { success, .. }, quorum, ..
                     } = &mut query.inner.info {
-                        success.push(source.clone());
+                        success.push(source);
 
                         let quorum = quorum.get();
                         if success.len() >= quorum {
@@ -1905,7 +1905,7 @@ where
                                 peer_id, event, handler: NotifyHandler::Any
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
-                            query.inner.pending_rpcs.push((peer_id.clone(), event));
+                            query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                                 peer_id, condition: DialPeerCondition::Disconnected
                             });
@@ -2423,7 +2423,7 @@ impl QueryInfo {
                     KademliaHandlerIn::AddProvider {
                         key: key.clone(),
                         provider: crate::protocol::KadPeer {
-                            node_id: provider_id.clone(),
+                            node_id: *provider_id,
                             multiaddrs: external_addresses.clone(),
                             connection_ty: crate::protocol::KadConnectionType::Connected,
                         }
