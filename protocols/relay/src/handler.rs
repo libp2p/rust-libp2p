@@ -25,10 +25,10 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::{upgrade, Multiaddr, PeerId};
+use libp2p_core::{upgrade, Multiaddr, PeerId, ConnectedPoint};
 use libp2p_swarm::{
-    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    KeepAlive, IntoProtocolsHandler, NegotiatedSubstream, ProtocolsHandler,
+    ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -36,6 +36,21 @@ use std::collections::HashMap;
 use std::io;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
+
+#[derive(Default)]
+pub struct RelayHandlerProto {}
+
+impl IntoProtocolsHandler for RelayHandlerProto {
+    type Handler = RelayHandler;
+
+    fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+        RelayHandler::new(endpoint.get_remote_address().clone())
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        protocol::RelayListen::new()
+    }
+}
 
 /// Protocol handler that handles the relay protocol.
 ///
@@ -58,6 +73,7 @@ use std::time::{Duration, Instant};
 ///   or denied.
 ///
 pub struct RelayHandler {
+    remote_address: Multiaddr,
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
 
@@ -84,7 +100,7 @@ pub struct RelayHandler {
         [(
             PeerId,
             RequestId,
-            Vec<Multiaddr>,
+            Multiaddr,
             protocol::IncomingRelayRequest<NegotiatedSubstream>,
         ); 4],
     >,
@@ -116,10 +132,11 @@ pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back a
     /// `DenyIncomingRelayRequest`, or send a `OutgoingDestinationRequest` to a different handler containing
     /// this object.
-    IncomingRelayRequest(
-        RequestId,
-        protocol::IncomingRelayRequest<NegotiatedSubstream>,
-    ),
+    IncomingRelayRequest {
+        request_id: RequestId,
+        source_addr: Multiaddr,
+        request: protocol::IncomingRelayRequest<NegotiatedSubstream>,
+    },
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
     /// destination. The behaviour can accept or deny the request via [`AcceptDestinationRequest`]
@@ -175,8 +192,8 @@ pub enum RelayHandlerIn {
         /// Peer id of the node whose communications are being relayed.
         source: PeerId,
         request_id: RequestId,
-        /// Addresses of the node whose communications are being relayed.
-        source_addresses: Vec<Multiaddr>,
+        /// Address of the node whose communications are being relayed.
+        source_addr: Multiaddr,
         /// Substream to the source.
         substream: protocol::IncomingRelayRequest<NegotiatedSubstream>,
     },
@@ -184,8 +201,9 @@ pub enum RelayHandlerIn {
 
 impl RelayHandler {
     /// Builds a new `RelayHandler`.
-    pub fn new() -> Self {
+    pub fn new(remote_address: Multiaddr) -> Self {
         RelayHandler {
+            remote_address,
             deny_futures: Default::default(),
             incoming_destination_request_pending_approval: Default::default(),
             accept_destination_futures: Default::default(),
@@ -196,12 +214,6 @@ impl RelayHandler {
             alive_lend_out_substreams: Default::default(),
             keep_alive: KeepAlive::Yes,
         }
-    }
-}
-
-impl Default for RelayHandler {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -231,10 +243,11 @@ impl ProtocolsHandler for RelayHandler {
             protocol::RelayRemoteRequest::RelayRequest((incoming_relay_request, notifyee)) => {
                 self.alive_lend_out_substreams.push(notifyee);
                 self.queued_events
-                    .push(RelayHandlerEvent::IncomingRelayRequest(
+                    .push(RelayHandlerEvent::IncomingRelayRequest{
                         request_id,
-                        incoming_relay_request,
-                    ));
+                        source_addr: self.remote_address.clone(),
+                        request: incoming_relay_request,
+                    });
             }
             // We have been asked to become a destination.
             protocol::RelayRemoteRequest::DestinationRequest(dest_request) => {
@@ -311,13 +324,13 @@ impl ProtocolsHandler for RelayHandler {
             RelayHandlerIn::OutgoingDestinationRequest {
                 source,
                 request_id,
-                source_addresses,
+                source_addr,
                 substream,
             } => {
                 self.outgoing_destination_requests.push((
                     source,
                     request_id,
-                    source_addresses,
+                    source_addr,
                     substream,
                 ));
             }
@@ -385,14 +398,14 @@ impl ProtocolsHandler for RelayHandler {
 
         // Request the remote to act as destination.
         if !self.outgoing_destination_requests.is_empty() {
-            let (source, request_id, source_addrs, substream) =
+            let (source, request_id, source_addr, substream) =
                 self.outgoing_destination_requests.remove(0);
             self.outgoing_destination_requests.shrink_to_fit();
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::B(protocol::OutgoingDestinationRequest::new(
                         source.clone(),
-                        source_addrs,
+                        source_addr,
                         substream,
                     )),
                     (source, request_id),

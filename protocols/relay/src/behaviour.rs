@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{RelayHandler, RelayHandlerEvent, RelayHandlerIn};
+use crate::handler::{RelayHandlerEvent, RelayHandlerIn, RelayHandlerProto};
 use crate::protocol;
 use crate::transport::TransportToBehaviourMsg;
 use crate::RequestId;
@@ -32,7 +32,7 @@ use libp2p_core::{
 };
 use libp2p_swarm::{
     DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, ProtocolsHandler,
+    NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
@@ -87,6 +87,7 @@ struct OutgoingUpgradingRelayRequest {
 enum IncomingRelayRequest {
     DialingDestination {
         source_id: PeerId,
+        source_addr: Multiaddr,
         request_id: RequestId,
         request: protocol::IncomingRelayRequest<NegotiatedSubstream>,
     },
@@ -116,11 +117,11 @@ impl Relay {
 }
 
 impl NetworkBehaviour for Relay {
-    type ProtocolsHandler = RelayHandler;
+    type ProtocolsHandler = RelayHandlerProto;
     type OutEvent = ();
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        RelayHandler::default()
+        RelayHandlerProto::default()
     }
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -199,13 +200,14 @@ impl NetworkBehaviour for Relay {
             for req in reqs {
                 let IncomingRelayRequest::DialingDestination {
                     source_id,
+                    source_addr,
                     request_id,
                     request,
                 } = req;
                 let event = RelayHandlerIn::OutgoingDestinationRequest {
                     source: source_id,
                     request_id,
-                    source_addresses: Vec::new(), // TODO: wrong
+                    source_addr,
                     substream: request,
                 };
 
@@ -265,13 +267,17 @@ impl NetworkBehaviour for Relay {
     ) {
         match event {
             // Remote wants us to become a relay.
-            RelayHandlerEvent::IncomingRelayRequest(request_id, request) => {
+            RelayHandlerEvent::IncomingRelayRequest {
+                request_id,
+                source_addr,
+                request,
+            } => {
                 if self.connected_peers.contains(request.destination_id()) {
                     let dest_id = request.destination_id().clone();
                     let event = RelayHandlerIn::OutgoingDestinationRequest {
                         source: event_source,
                         request_id,
-                        source_addresses: Vec::new(), // TODO: wrong
+                        source_addr,
                         substream: request,
                     };
                     self.outbox_to_swarm
@@ -289,6 +295,7 @@ impl NetworkBehaviour for Relay {
                             request_id,
                             request,
                             source_id: event_source,
+                            source_addr,
                         });
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::DialPeer {
@@ -334,12 +341,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<RelayHandlerIn, Self::OutEvent>> {
         if !self.outbox_to_transport.is_empty() {
             match self.to_transport.poll_ready(cx) {
                 Poll::Ready(Ok(())) => {

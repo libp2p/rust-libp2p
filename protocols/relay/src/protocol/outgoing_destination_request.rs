@@ -55,14 +55,14 @@ impl<TUserData> OutgoingDestinationRequest<TUserData> {
     // TODO: change parameters?
     pub(crate) fn new(
         src_id: PeerId,
-        src_addresses: impl IntoIterator<Item = Multiaddr>,
+        src_addr: Multiaddr,
         user_data: TUserData,
     ) -> Self {
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Stop.into()),
             src_peer: Some(circuit_relay::Peer {
                 id: src_id.to_bytes(),
-                addrs: src_addresses.into_iter().map(|a| a.to_vec()).collect(),
+                addrs: vec![src_addr.to_vec()],
             }),
             dst_peer: None,
             code: None,
