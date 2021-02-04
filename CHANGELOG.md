@@ -45,7 +45,7 @@
 
 - Use `libp2p-swarm-derive`, the former `libp2p-core-derive`.
 
-- Update `libp2p-gossipsub` and `libp2p-request-response`.
+- Update `libp2p-gossipsub`, `libp2p-request-response` and `libp2p-swarm`.
 
 ## Version 0.34.0 [2021-01-12]
 
