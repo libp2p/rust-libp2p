@@ -25,7 +25,7 @@ wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-noise = { path = "../noise" }
+libp2p-noise = { path = "../../transports/noise" }
 libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 rand = "0.7"
