@@ -140,7 +140,7 @@ fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol<'_>>) {
 }
 
 fn multihash(s: &str) -> Multihash {
-    Multihash::from_bytes(bs58::decode(s).into_vec().unwrap()).unwrap()
+    Multihash::from_bytes(&bs58::decode(s).into_vec().unwrap()).unwrap()
 }
 
 #[test]

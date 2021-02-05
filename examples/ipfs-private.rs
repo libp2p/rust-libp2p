@@ -34,17 +34,19 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    core::{either::EitherTransport, transport::upgrade::Version, StreamMuxer},
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
+    core::{
+        either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
+    },
+    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify::{Identify, IdentifyEvent},
     identity,
     multiaddr::Protocol,
+    noise,
     ping::{self, Ping, PingConfig, PingEvent},
     pnet::{PnetConfig, PreSharedKey},
-    secio::SecioConfig,
     swarm::NetworkBehaviourEventProcess,
     tcp::TcpConfig,
-    yamux::Config as YamuxConfig,
+    yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
 use std::{
@@ -61,22 +63,11 @@ use std::{
 pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
-) -> impl Transport<
-    Output = (
-        PeerId,
-        impl StreamMuxer<
-                OutboundSubstream = impl Send,
-                Substream = impl Send,
-                Error = impl Into<io::Error>,
-            > + Send
-            + Sync,
-    ),
-    Error = impl Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send,
-> + Clone {
-    let secio_config = SecioConfig::new(key_pair);
+) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&key_pair)
+        .unwrap();
+    let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
     let yamux_config = YamuxConfig::default();
 
     let base_transport = TcpConfig::new().nodelay(true);
@@ -88,9 +79,10 @@ pub fn build_transport(
     };
     maybe_encrypted
         .upgrade(Version::V1)
-        .authenticate(secio_config)
+        .authenticate(noise_config)
         .multiplex(yamux_config)
         .timeout(Duration::from_secs(20))
+        .boxed()
 }
 
 /// Get the current ipfs repo path, either from the IPFS_PATH environment variable or
@@ -168,7 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = build_transport(local_key.clone(), psk);
 
     // Create a Gosspipsub topic
-    let gossipsub_topic = gossipsub::Topic::new("chat".into());
+    let gossipsub_topic = gossipsub::IdentTopic::new("chat");
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
@@ -178,22 +170,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         ping: Ping,
     }
 
-    impl NetworkBehaviourEventProcess<IdentifyEvent>
-        for MyBehaviour
-    {
+    impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
         // Called when `identify` produces an event.
         fn inject_event(&mut self, event: IdentifyEvent) {
             println!("identify: {:?}", event);
         }
     }
 
-    impl NetworkBehaviourEventProcess<GossipsubEvent>
-        for MyBehaviour
-    {
+    impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
         // Called when `gossipsub` produces an event.
         fn inject_event(&mut self, event: GossipsubEvent) {
             match event {
-                GossipsubEvent::Message(peer_id, id, message) => println!(
+                GossipsubEvent::Message {
+                    propagation_source: peer_id,
+                    message_id: id,
+                    message,
+                } => println!(
                     "Got message: {} with id: {} from peer: {:?}",
                     String::from_utf8_lossy(&message.data),
                     id,
@@ -204,9 +196,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl NetworkBehaviourEventProcess<PingEvent>
-        for MyBehaviour
-    {
+    impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
         // Called when `ping` produces an event.
         fn inject_event(&mut self, event: PingEvent) {
             use ping::handler::{PingFailure, PingSuccess};
@@ -247,9 +237,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let gossipsub_config = GossipsubConfigBuilder::default()
             .max_transmit_size(262144)
-            .build();
+            .build()
+            .expect("valid config");
         let mut behaviour = MyBehaviour {
-            gossipsub: Gossipsub::new(local_peer_id.clone(), gossipsub_config),
+            gossipsub: Gossipsub::new(
+                MessageAuthenticity::Signed(local_key.clone()),
+                gossipsub_config,
+            )
+            .expect("Valid configuration"),
             identify: Identify::new(
                 "/ipfs/0.1.0".into(),
                 "rust-ipfs-example".into(),
@@ -259,7 +254,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         println!("Subscribing to {:?}", gossipsub_topic);
-        behaviour.gossipsub.subscribe(gossipsub_topic.clone());
+        behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
         Swarm::new(transport, behaviour, local_peer_id.clone())
     };
 
@@ -280,12 +275,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
-            match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => {
-                    swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes());
-                }
+            if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
+                Poll::Ready(Some(line)) => swarm
+                    .gossipsub
+                    .publish(gossipsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
+            } {
+                println!("Publish error: {:?}", e);
             }
         }
         loop {

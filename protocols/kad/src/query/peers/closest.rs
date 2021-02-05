@@ -531,19 +531,15 @@ enum PeerState {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use libp2p_core::{PeerId, multihash::{Code, Multihash}};
     use std::{iter, time::Duration};
-
-    use multihash::Multihash;
     use quickcheck::*;
     use rand::{Rng, rngs::StdRng, SeedableRng};
 
-    use libp2p_core::PeerId;
-
-    use super::*;
-
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0 .. n).map(|_| PeerId::from_multihash(
-            multihash::wrap(multihash::Code::Sha2_256, &g.gen::<[u8; 32]>())
+            Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap()
         ).unwrap()).collect()
     }
 

@@ -7,6 +7,9 @@ use std::{error, fmt, iter, net::IpAddr};
 /// generated multiaddress. This includes a username, password, path (if not supported by the
 /// multiaddr), and query string.
 ///
+/// This function is only present if the `url` feature is enabled, and it is
+/// enabled by default.
+///
 /// The supported URL schemes are:
 ///
 /// - `ws://example.com/`
@@ -30,6 +33,9 @@ pub fn from_url(url: &str) -> std::result::Result<Multiaddr, FromUrlErr> {
 ///
 /// This function is similar to [`from_url`], except that we don't return an error if some
 /// information in the URL cannot be retain in the generated multiaddres.
+///
+/// This function is only present if the `url` feature is enabled, and it is
+/// enabled by default.
 ///
 /// # Example
 ///
@@ -76,13 +82,13 @@ fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Mul
         return Err(FromUrlErr::BadUrl);
     };
 
-    if !lossy {
-        if !url.username().is_empty() || url.password().is_some() ||
-            (lost_path && url.path() != "/" && !url.path().is_empty()) ||
-            url.query().is_some() || url.fragment().is_some()
-        {
-            return Err(FromUrlErr::InformationLoss);
-        }
+    if !lossy && (
+        !url.username().is_empty() ||
+        url.password().is_some() ||
+        (lost_path && url.path() != "/" && !url.path().is_empty()) ||
+        url.query().is_some() || url.fragment().is_some()
+    ) {
+        return Err(FromUrlErr::InformationLoss);
     }
 
     Ok(iter::once(ip)
@@ -98,12 +104,13 @@ fn from_url_inner_path(url: url::Url, lossy: bool) -> std::result::Result<Multia
         _ => unreachable!("We only call this function for one of the given schemes; qed")
     };
 
-    if !lossy {
-        if !url.username().is_empty() || url.password().is_some() ||
-            url.query().is_some() || url.fragment().is_some()
-        {
-            return Err(FromUrlErr::InformationLoss);
-        }
+    if !lossy && (
+        !url.username().is_empty() ||
+        url.password().is_some() ||
+        url.query().is_some() ||
+        url.fragment().is_some()
+    ) {
+        return Err(FromUrlErr::InformationLoss);
     }
 
     Ok(Multiaddr::from(protocol))

@@ -26,7 +26,13 @@ mod test;
 
 use crate::K_VALUE;
 use crate::addresses::{Addresses, Remove};
-use crate::handler::{KademliaHandler, KademliaHandlerConfig, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
+use crate::handler::{
+    KademliaHandlerProto,
+    KademliaHandlerConfig,
+    KademliaRequestId,
+    KademliaHandlerEvent,
+    KademliaHandlerIn
+};
 use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus, KBucketRef, KeyBytes};
 use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
@@ -41,11 +47,10 @@ use libp2p_swarm::{
     NetworkBehaviourAction,
     NotifyHandler,
     PollParameters,
-    ProtocolsHandler
 };
-use log::{info, debug, warn};
+use log::{info, debug, warn, LevelFilter};
 use smallvec::SmallVec;
-use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
+use std::{borrow::Cow, error, iter, time::Duration};
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -98,6 +103,9 @@ pub struct Kademlia<TStore> {
 
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
+
+    /// The currently known addresses of the local node.
+    local_addrs: HashSet<Multiaddr>,
 
     /// The record storage.
     store: TStore,
@@ -349,7 +357,7 @@ where
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn with_config(kp: Keypair, id: PeerId, store: TStore, config: KademliaConfig, trust: TrustGraph) -> Self {
-        let local_key = kbucket::Key::new(id.clone());
+        let local_key = kbucket::Key::from(id);
 
         let put_record_job = config
             .record_replication_interval
@@ -378,6 +386,7 @@ where
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
+            local_addrs: HashSet::new(),
             trust,
             metrics: Metrics::disabled(),
         }
@@ -446,7 +455,7 @@ where
     /// If the routing table has been updated as a result of this operation,
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr, public_key: PublicKey) -> RoutingUpdate {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(*peer);
         let result = match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().insert(address) {
@@ -504,7 +513,7 @@ where
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr)
         -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Contact>>
     {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().addresses.remove(address, Remove::Completely).is_err() {
@@ -533,7 +542,7 @@ where
     pub fn remove_peer(&mut self, peer: &PeerId)
         -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Contact>>
     {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(entry, _) => {
                 Some(entry.remove())
@@ -560,9 +569,9 @@ where
     pub fn kbucket<K>(&mut self, key: K)
         -> Option<kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Contact>>
     where
-        K: Borrow<[u8]> + Clone
+        K: Into<kbucket::Key<K>> + Clone
     {
-        self.kbuckets.bucket(&kbucket::Key::new(key))
+        self.kbuckets.bucket(&key.into())
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -571,10 +580,10 @@ where
     /// [`KademliaEvent::QueryResult{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
-        K: Borrow<[u8]> + Clone
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone
     {
-        let info = QueryInfo::GetClosestPeers { key: key.borrow().to_vec() };
-        let target = kbucket::Key::new(key);
+        let info = QueryInfo::GetClosestPeers { key: key.clone().into() };
+        let target: kbucket::Key<K> = key.into();
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
@@ -728,11 +737,19 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`KademliaEvent::QueryResult{QueryResult::AddProvider}`].
+    /// reported via [`KademliaEvent::QueryResult{QueryResult::StartProviding}`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         self.print_bucket_table();
+
+        // Note: We store our own provider records locally without local addresses
+        // to avoid redundant storage and outdated addresses. Instead these are
+        // acquired on demand when returning a `ProviderRecord` for the local node.
+        let local_addrs = Vec::new();
         // TODO: calculate weight for self?
-        let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
+        let record = ProviderRecord::new(
+            key.clone(),
+            self.kbuckets.local_key().preimage().clone(),
+            local_addrs);
         self.store.add_provider(record)?;
         let target = kbucket::Key::new(key.clone());
         debug!(
@@ -859,32 +876,87 @@ where
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
-        let mut peers = self.store.providers(key)
+        let connected = &mut self.connected_peers;
+        let local_addrs = &self.local_addrs;
+        let trust = &self.trust;
+        self.store.providers(key)
             .into_iter()
             .filter_map(move |p| {
+                let provider_id = if log::max_level() >= LevelFilter::Debug {
+                    p.provider.to_string()
+                } else {
+                    String::new()
+                };
+
                 let kad_peer = if &p.provider != source {
-                    let key = kbucket::Key::new(p.provider.clone());
-                    kbuckets.entry(&key).view().map(|e| KadPeer::from(e))
+                    let node_id = p.provider;
+                    let connection_ty = if connected.contains(&node_id) {
+                        KadConnectionType::Connected
+                    } else {
+                        KadConnectionType::NotConnected
+                    };
+
+                    if &node_id == kbuckets.local_key().preimage() {
+                        // The provider is either the local node and we fill in
+                        // the local addresses on demand,
+                        let self_key = kbuckets.local_public_key();
+                        let certificates = trust.get_all_certs(&self_key, &[]);
+                        let multiaddrs = local_addrs.iter().cloned().collect::<Vec<_>>();
+                        Some(KadPeer {
+                            public_key: self_key,
+                            node_id,
+                            multiaddrs,
+                            connection_ty,
+                            certificates
+                        })
+                    } else {
+                        let key = kbucket::Key::from(node_id);
+                        kbuckets.entry(&key).view().map(|e| {
+                            let contact = e.node.value;
+                            let multiaddrs = if p.addresses.is_empty() {
+                                // This is a legacy (pre-#1708) provider without addresses,
+                                // so take addresses from the routing table
+                                contact.addresses.clone().into_vec()
+                            } else {
+                                p.addresses
+                            };
+                            let certificates = node_id.as_public_key().and_then(|provider_pk|
+                                match provider_pk {
+                                    libp2p_core::identity::PublicKey::Ed25519(pk) =>
+                                        Some(trust.get_all_certs(pk, &[])),
+                                    key => {
+                                        log::warn!("Provider {} has a non-Ed25519 public key: {:?}", node_id, key);
+                                        None
+                                    }
+                                }
+                            ).unwrap_or_default();
+
+                            KadPeer {
+                                node_id,
+                                multiaddrs,
+                                public_key: contact.public_key.clone(),
+                                connection_ty: match e.status {
+                                    NodeStatus::Connected => KadConnectionType::Connected,
+                                    NodeStatus::Disconnected => KadConnectionType::NotConnected
+                                },
+                                certificates
+                            }
+                        })
+                    }
                 } else {
                     None
                 };
                 debug!(
                     "Local provider for {}: {}; source: {}; found? {}",
                     bs58::encode(key).into_string(),
-                    p.provider,
+                    provider_id,
                     source,
                     kad_peer.is_some()
                 );
                 kad_peer
             })
             .take(self.queries.config().replication_factor.get())
-            .collect::<Vec<_>>();
-
-        peers.iter_mut().for_each(|peer|
-            peer.certificates = self.trust.get_all_certs(&peer.public_key, &[])
-        );
-
-        peers
+            .collect::<Vec<_>>()
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
@@ -918,7 +990,7 @@ where
 
     /// Updates the routing table with a new connection status and address of a peer.
     fn connection_updated(&mut self, peer: PeerId, contact: Option<Contact>, new_status: NodeStatus) {
-        let key = kbucket::Key::new(peer.clone());
+        let key = kbucket::Key::from(peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, old_status) => {
                 if let Some(contact) = contact {
@@ -1080,13 +1152,13 @@ where
                             // Pr(bucket-253) = 1 - (7/8)^16   ~= 0.88
                             // Pr(bucket-252) = 1 - (15/16)^16 ~= 0.64
                             // ...
-                            let mut target = kbucket::Key::new(PeerId::random());
+                            let mut target = kbucket::Key::from(PeerId::random());
                             for _ in 0 .. 16 {
                                 let d = local_key.distance(&target);
                                 if b.contains(&d) {
                                     break;
                                 }
-                                target = kbucket::Key::new(PeerId::random());
+                                target = kbucket::Key::from(PeerId::random());
                             }
                             target
                         }).collect::<Vec<_>>().into_iter()
@@ -1142,7 +1214,7 @@ where
                 ..
             } => {
                 let provider_id = params.local_peer_id().clone();
-                let external_addresses = params.external_addresses().collect();
+                let external_addresses = params.external_addresses().map(|r| r.addr).collect();
                 let provider_key = self.kbuckets.local_public_key();
                 let certificates = self.trust.get_all_certs(&provider_key, &[]);
                 let inner = QueryInner::new(QueryInfo::AddProvider {
@@ -1573,7 +1645,8 @@ where
             let record = ProviderRecord {
                 key,
                 provider: provider.node_id,
-                expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl)
+                expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
+                addresses: provider.multiaddrs,
             };
             if let Err(e) = self.store.add_provider(record) {
                 info!("Provider record not stored: {:?}", e);
@@ -1669,11 +1742,11 @@ where
     for<'a> TStore: RecordStore<'a>,
     TStore: Send + 'static,
 {
-    type ProtocolsHandler = KademliaHandler<QueryId>;
+    type ProtocolsHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        KademliaHandler::new(KademliaHandlerConfig {
+        KademliaHandlerProto::new(KademliaHandlerConfig {
             protocol_config: self.protocol_config.clone(),
             allow_listening: true,
             idle_timeout: self.connection_idle_timeout,
@@ -1683,7 +1756,7 @@ where
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::new(peer_id.clone());
+        let key = kbucket::Key::from(*peer_id);
         let mut peer_addrs =
             if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
@@ -1703,27 +1776,11 @@ where
         peer_addrs
     }
 
-    fn inject_connection_established(&mut self, peer: &PeerId, _: &ConnectionId, endpoint: &ConnectedPoint) {
-        // The remote's address can only be put into the routing table,
-        // and thus shared with other nodes, if the local node is the dialer,
-        // since the remote address on an inbound connection is specific to
-        // that connection (e.g. typically the TCP port numbers).
-        let new_address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-
-        let contact = self.queries
-            .iter_mut()
-            .find_map(|q| q.inner.contacts.get(peer))
-            .cloned()
-            .and_then(|mut c|
-                new_address.map(|addr| {
-                    c.insert(addr);
-                    c
-                }));
-
-        self.connection_updated(peer.clone(), contact, NodeStatus::Connected);
+    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {
+        // When a connection is established, we don't know yet whether the
+        // remote supports the configured protocol name. Only once a connection
+        // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
+        // update the local routing table.
     }
 
     fn inject_connected(&mut self, peer: &PeerId) {
@@ -1743,6 +1800,59 @@ where
         self.metrics.node_connected();
     }
 
+    fn inject_address_change(
+        &mut self,
+        peer: &PeerId,
+        _: &ConnectionId,
+        old: &ConnectedPoint,
+        new: &ConnectedPoint
+    ) {
+        let (old, new) = (old.get_remote_address(), new.get_remote_address());
+
+        // Update routing table.
+        if let Some(contact) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
+            if contact.addresses.replace(old, new) {
+                debug!("Address '{}' replaced with '{}' for peer '{}'.", old, new, peer);
+            } else {
+                debug!(
+                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
+                     present.",
+                    old, new, peer,
+                );
+            }
+        } else {
+            debug!(
+                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
+                 routing table.",
+                old, new, peer,
+            );
+        }
+
+        // Update query address cache.
+        //
+        // Given two connected nodes: local node A and remote node B. Say node B
+        // is not in node A's routing table. Additionally node B is part of the
+        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
+        // B triggers an address change and then disconnects. Later on the
+        // earlier mentioned query on node A would like to connect to node B.
+        // Without replacing the address in the `QueryInner::addresses` set node
+        // A would attempt to dial the old and not the new address.
+        //
+        // While upholding correctness, iterating through all discovered
+        // addresses of a peer in all currently ongoing queries might have a
+        // large performance impact. If so, the code below might be worth
+        // revisiting.
+        for query in self.queries.iter_mut() {
+            if let Some(contact) = query.inner.contacts.get_mut(peer) {
+                for addr in contact.addresses.iter_mut() {
+                    if addr == old {
+                        *addr = new.clone();
+                    }
+                }
+            }
+        }
+    }
+
     fn inject_addr_reach_failure(
         &mut self,
         peer_id: Option<&PeerId>,
@@ -1750,7 +1860,7 @@ where
         err: &dyn error::Error
     ) {
         if let Some(peer_id) = peer_id {
-            let key = kbucket::Key::new(peer_id.clone());
+            let key = kbucket::Key::from(*peer_id);
 
             if let Some(contact) = self.kbuckets.entry(&key).value() {
                 // TODO: Ideally, the address should only be removed if the error can
@@ -1807,6 +1917,30 @@ where
     ) {
         self.metrics.received(&event);
         match event {
+            KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {
+                debug_assert!(self.connected_peers.contains(&source));
+                // The remote's address can only be put into the routing table,
+                // and thus shared with other nodes, if the local node is the dialer,
+                // since the remote address on an inbound connection may be specific
+                // to that connection (e.g. typically the TCP port numbers).
+                let new_address = match endpoint {
+                    ConnectedPoint::Dialer { address } => Some(address.clone()),
+                    ConnectedPoint::Listener { .. } => None,
+                };
+
+                let contact = self.queries
+                    .iter_mut()
+                    .find_map(|q| q.inner.contacts.get(&source))
+                    .cloned()
+                    .and_then(|mut c|
+                        new_address.map(|addr| {
+                            c.insert(addr);
+                            c
+                        }));
+
+                self.connection_updated(source, contact, NodeStatus::Connected);
+            }
+
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 self.print_bucket_table();
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
@@ -1996,9 +2130,23 @@ where
         };
     }
 
+    fn inject_new_listen_addr(&mut self, addr: &Multiaddr) {
+        self.local_addrs.insert(addr.clone());
+    }
+
+    fn inject_expired_listen_addr(&mut self, addr: &Multiaddr) {
+        self.local_addrs.remove(addr);
+    }
+
+    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
+        if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
+            self.local_addrs.insert(addr.clone());
+        }
+    }
+
     fn poll(&mut self, cx: &mut Context<'_>, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
-            <KademliaHandler<QueryId> as ProtocolsHandler>::InEvent,
+            KademliaHandlerIn<QueryId>,
             Self::OutEvent,
         >,
     > {
@@ -2471,22 +2619,6 @@ impl AddProviderError {
     }
 }
 
-impl From<kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>> for KadPeer {
-    fn from(e: kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>) -> KadPeer {
-        let Contact { addresses, public_key } = e.node.value;
-        KadPeer {
-            public_key: public_key.clone(),
-            node_id: e.node.key.clone().into_preimage(),
-            multiaddrs: addresses.clone().into_vec(),
-            connection_ty: match e.status {
-                NodeStatus::Connected => KadConnectionType::Connected,
-                NodeStatus::Disconnected => KadConnectionType::NotConnected
-            },
-            certificates: vec![]
-        }
-    }
-}
-
 impl From<kbucket::EntryView<kbucket::Key<PeerId>, Contact>> for KadPeer {
     fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, Contact>) -> KadPeer {
         let Contact { addresses, public_key } = e.node.value;
@@ -2619,7 +2751,7 @@ impl QueryInfo {
     fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
-                key: peer.clone().into_bytes(),
+                key: peer.to_bytes(),
                 user_data: query_id,
             },
             QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {
@@ -2787,3 +2919,8 @@ pub enum RoutingUpdate {
     /// peer ID).
     Failed,
 }
+
+/// The maximum number of local external addresses. When reached any
+/// further externally reported addresses are ignored. The behaviour always
+/// tracks all its listen addresses.
+const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;

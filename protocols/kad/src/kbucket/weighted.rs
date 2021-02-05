@@ -419,7 +419,7 @@ mod tests {
 
             let mut bucket = Weighted::new(Duration::from_secs(100000));
             for (i, (weight, status)) in weight_status.into_iter().enumerate() {
-                let key = Key::new(PeerId::random());
+                let key = Key::from(PeerId::random());
                 let node = Node {
                     key: key.clone(),
                     value: (),
@@ -464,7 +464,7 @@ mod tests {
             let mut map: HashMap<u32, Vec<(Node<Key<PeerId>, ()>, NodeStatus)>> = HashMap::new();
             for (weight, status) in weight_status {
                 let node: Node<Key<PeerId>, ()> = Node {
-                    key: Key::new(PeerId::random()),
+                    key: Key::from(PeerId::random()),
                     value: (),
                     weight,
                 };

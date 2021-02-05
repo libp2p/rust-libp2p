@@ -47,6 +47,7 @@ use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
     io,
+    sync::{atomic::{AtomicU64, Ordering}, Arc},
     time::Duration,
     task::{Context, Poll}
 };
@@ -79,9 +80,10 @@ where
     /// Inbound upgrades waiting for the incoming request.
     inbound: FuturesUnordered<BoxFuture<'static,
         Result<
-            (TCodec::Request, oneshot::Sender<TCodec::Response>),
+            ((RequestId, TCodec::Request), oneshot::Sender<TCodec::Response>),
             oneshot::Canceled
         >>>,
+    inbound_request_id: Arc<AtomicU64>
 }
 
 impl<TCodec> RequestResponseHandler<TCodec>
@@ -93,6 +95,7 @@ where
         codec: TCodec,
         keep_alive_timeout: Duration,
         substream_timeout: Duration,
+        inbound_request_id: Arc<AtomicU64>
     ) -> Self {
         Self {
             inbound_protocols,
@@ -104,34 +107,44 @@ where
             inbound: FuturesUnordered::new(),
             pending_events: VecDeque::new(),
             pending_error: None,
+            inbound_request_id
         }
     }
 }
 
 /// The events emitted by the [`RequestResponseHandler`].
 #[doc(hidden)]
+#[derive(Debug)]
 pub enum RequestResponseHandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec
 {
-    /// An inbound request.
+    /// A request has been received.
     Request {
+        request_id: RequestId,
         request: TCodec::Request,
         sender: oneshot::Sender<TCodec::Response>
     },
-    /// An inbound response.
+    /// A response has been received.
     Response {
         request_id: RequestId,
         response: TCodec::Response
     },
-    /// An outbound upgrade (i.e. request) timed out.
+    /// A response to an inbound request has been sent.
+    ResponseSent(RequestId),
+    /// A response to an inbound request was omitted as a result
+    /// of dropping the response `sender` of an inbound `Request`.
+    ResponseOmission(RequestId),
+    /// An outbound request timed out while sending the request
+    /// or waiting for the response.
     OutboundTimeout(RequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
     OutboundUnsupportedProtocols(RequestId),
-    /// An inbound request timed out.
-    InboundTimeout,
+    /// An inbound request timed out while waiting for the request
+    /// or sending the response.
+    InboundTimeout(RequestId),
     /// An inbound request failed to negotiate a mutually supported protocol.
-    InboundUnsupportedProtocols,
+    InboundUnsupportedProtocols(RequestId),
 }
 
 impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
@@ -144,8 +157,9 @@ where
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;
+    type InboundOpenInfo = RequestId;
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         // A channel for notifying the handler when the inbound
         // upgrade received the request.
         let (rq_send, rq_recv) = oneshot::channel();
@@ -153,6 +167,8 @@ where
         // A channel for notifying the inbound upgrade when the
         // response is sent.
         let (rs_send, rs_recv) = oneshot::channel();
+
+        let request_id = RequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
 
         // By keeping all I/O inside the `ResponseProtocol` and thus the
         // inbound substream upgrade via above channels, we ensure that it
@@ -165,6 +181,7 @@ where
             codec: self.codec.clone(),
             request_sender: rq_send,
             response_receiver: rs_recv,
+            request_id
         };
 
         // The handler waits for the request to come in. It then emits
@@ -172,15 +189,21 @@ where
         // `ResponseChannel`.
         self.inbound.push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
 
-        SubstreamProtocol::new(proto).with_timeout(self.substream_timeout)
+        SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        (): (),
+        sent: bool,
+        request_id: RequestId
     ) {
-        // Nothing to do, as the response has already been sent
-        // as part of the upgrade.
+        if sent {
+            self.pending_events.push_back(
+                RequestResponseHandlerEvent::ResponseSent(request_id))
+        } else {
+            self.pending_events.push_back(
+                RequestResponseHandlerEvent::ResponseOmission(request_id))
+        }
     }
 
     fn inject_fully_negotiated_outbound(
@@ -228,12 +251,12 @@ where
 
     fn inject_listen_upgrade_error(
         &mut self,
+        info: RequestId,
         error: ProtocolsHandlerUpgrErr<io::Error>
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(
-                    RequestResponseHandlerEvent::InboundTimeout);
+                self.pending_events.push_back(RequestResponseHandlerEvent::InboundTimeout(info))
             }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The local peer merely doesn't support the protocol(s) requested.
@@ -242,7 +265,7 @@ where
                 // An event is reported to permit user code to react to the fact that
                 // the local peer does not support the requested protocol(s).
                 self.pending_events.push_back(
-                    RequestResponseHandlerEvent::InboundUnsupportedProtocols);
+                    RequestResponseHandlerEvent::InboundUnsupportedProtocols(info));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -278,12 +301,12 @@ where
         // Check for inbound requests.
         while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
             match result {
-                Ok((rq, rs_sender)) => {
+                Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
                     self.keep_alive = KeepAlive::Yes;
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
                         RequestResponseHandlerEvent::Request {
-                            request: rq, sender: rs_sender
+                            request_id: id, request: rq, sender: rs_sender
                         }))
                 }
                 Err(oneshot::Canceled) => {
@@ -299,9 +322,8 @@ where
             let info = request.request_id;
             return Poll::Ready(
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(request)
-                        .with_timeout(self.substream_timeout),
-                    info,
+                    protocol: SubstreamProtocol::new(request, info)
+                        .with_timeout(self.substream_timeout)
                 },
             )
         }
@@ -312,7 +334,7 @@ where
             self.outbound.shrink_to_fit();
         }
 
-        if self.inbound.is_empty() {
+        if self.inbound.is_empty() && self.keep_alive.is_yes() {
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.

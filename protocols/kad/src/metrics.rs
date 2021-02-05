@@ -65,7 +65,7 @@ impl Metrics {
     }
 
     pub(super) fn enabled(registry: &Registry, peer_id: &PeerId) -> Self {
-        let peer_id = bs58::encode(peer_id).into_string();
+        let peer_id = peer_id.to_string();
         let opts = |name: &str| -> Opts {
             let mut opts = Opts::new(name, name)
                 .namespace("libp2p")
@@ -162,9 +162,11 @@ impl Metrics {
             KademliaHandlerEvent::GetProvidersRes { .. } => ("get_providers_res", Response),
             KademliaHandlerEvent::GetRecordRes { .. } => ("get_record_res", Response),
             KademliaHandlerEvent::PutRecordRes { .. } => ("put_record_res", Response),
+            KademliaHandlerEvent::ProtocolConfirmed { .. } => ("protocol_confirmed", Response),
 
             // error
             KademliaHandlerEvent::QueryError { .. } => ("query_error_from_handler", Error),
+
         };
 
         self.with_metrics(|m| {

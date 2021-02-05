@@ -41,7 +41,6 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// # Example
 ///
 /// ```no_run
-/// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::connection::{ListenersEvent, ListenersStream};
 ///
@@ -75,7 +74,6 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///         }
 ///     }
 /// })
-/// # }
 /// ```
 pub struct ListenersStream<TTrans>
 where
@@ -400,7 +398,7 @@ mod tests {
             match listeners.next().await.unwrap() {
                 ListenersEvent::Incoming { local_addr, send_back_addr, .. } => {
                     assert_eq!(local_addr, address);
-                    assert_eq!(send_back_addr, address);
+                    assert!(send_back_addr != address);
                 },
                 _ => panic!()
             }

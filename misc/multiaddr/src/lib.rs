@@ -5,6 +5,8 @@ pub use multihash;
 mod protocol;
 mod onion_addr;
 mod errors;
+
+#[cfg(feature = "url")]
 mod from_url;
 
 use serde::{
@@ -25,9 +27,11 @@ use std::{
     sync::Arc
 };
 pub use self::errors::{Result, Error};
-pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 pub use self::protocol::Protocol;
 pub use self::onion_addr::Onion3Addr;
+
+#[cfg(feature = "url")]
+pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 
 static_assertions::const_assert! {
     // This check is most certainly overkill right now, but done here
@@ -36,6 +40,7 @@ static_assertions::const_assert! {
 }
 
 /// Representation of a Multiaddr.
+#[allow(clippy::rc_buffer)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Multiaddr { bytes: Arc<Vec<u8>> }
 
@@ -53,6 +58,11 @@ impl Multiaddr {
     /// Return the length in bytes of this multiaddress.
     pub fn len(&self) -> usize {
         self.bytes.len()
+    }
+
+    /// Returns true if the length of this multiaddress is 0.
+    pub fn is_empty(&self) -> bool {
+        self.bytes.len() == 0
     }
 
     /// Return a copy of this [`Multiaddr`]'s byte representation.
@@ -346,7 +356,7 @@ impl<'de> Deserialize<'de> for Multiaddr {
                 formatter.write_str("multiaddress")
             }
             fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> StdResult<Self::Value, A::Error> {
-                let mut buf: Vec<u8> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                let mut buf: Vec<u8> = Vec::with_capacity(std::cmp::min(seq.size_hint().unwrap_or(0), 4096));
                 while let Some(e) = seq.next_element()? { buf.push(e); }
                 if self.is_human_readable {
                     let s = String::from_utf8(buf).map_err(DeserializerError::custom)?;

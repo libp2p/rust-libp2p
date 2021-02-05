@@ -21,7 +21,7 @@
 use crate::protocol::{FloodsubProtocol, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use crate::topic::Topic;
 use crate::FloodsubConfig;
-use cuckoofilter::CuckooFilter;
+use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
 use libp2p_swarm::{
@@ -33,6 +33,7 @@ use libp2p_swarm::{
     NotifyHandler,
     DialPeerCondition,
 };
+use log::warn;
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter};
@@ -206,7 +207,12 @@ impl Floodsub {
 
         let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
-            self.received.add(&message);
+            if let Err(e @ CuckooError::NotEnoughSpace) = self.received.add(&message) {
+                warn!(
+                    "Message was added to 'received' Cuckoofilter but some \
+                     other message was removed as a consequence: {}", e,
+                );
+            }
             if self.config.subscribe_local_messages {
                 self.events.push_back(
                     NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Message(message.clone())));
@@ -327,9 +333,16 @@ impl NetworkBehaviour for Floodsub {
 
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
-            // Note that this can false positive.
-            if !self.received.test_and_add(&message) {
-                continue;
+            // Note that this can result in false positives.
+            match self.received.test_and_add(&message) {
+                Ok(true) => {}, // Message  was added.
+                Ok(false) => continue, // Message already existed.
+                Err(e @ CuckooError::NotEnoughSpace) => { // Message added, but some other removed.
+                    warn!(
+                        "Message was added to 'received' Cuckoofilter but some \
+                         other message was removed as a consequence: {}", e,
+                    );
+                }
             }
 
             // Add the message to be dispatched to the user.

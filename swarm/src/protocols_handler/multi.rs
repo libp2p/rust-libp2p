@@ -36,18 +36,21 @@ use crate::upgrade::{
     UpgradeInfoSend
 };
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{ConnectedPoint, PeerId, upgrade::ProtocolName};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::upgrade::{self, ProtocolName, UpgradeError, NegotiationError, ProtocolError};
 use rand::Rng;
 use std::{
+    cmp,
     collections::{HashMap, HashSet},
     error,
     fmt,
     hash::Hash,
     iter::{self, FromIterator},
-    task::{Context, Poll}
+    task::{Context, Poll},
+    time::Duration
 };
 
-/// A [`ProtocolsHandler`] for multiple other `ProtocolsHandler`s.
+/// A [`ProtocolsHandler`] for multiple `ProtocolsHandler`s of the same type.
 #[derive(Clone)]
 pub struct MultiHandler<K, H> {
     handlers: HashMap<K, H>
@@ -73,6 +76,9 @@ where
     /// Create and populate a `MultiHandler` from the given handler iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
+    ///
+    /// > **Note**: All handlers should use the same [`upgrade::Version`] for
+    /// > the inbound and outbound [`SubstreamProtocol`]s.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
@@ -95,13 +101,38 @@ where
     type Error = <H as ProtocolsHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ProtocolsHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ProtocolsHandler>::OutboundProtocol;
+    type InboundOpenInfo = Info<K, <H as ProtocolsHandler>::InboundOpenInfo>;
     type OutboundOpenInfo = (K, <H as ProtocolsHandler>::OutboundOpenInfo);
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        let upgrades = self.handlers.iter()
-            .map(|(k, h)| (k.clone(), h.listen_protocol().into_upgrade().1))
-            .collect();
-        SubstreamProtocol::new(Upgrade { upgrades })
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        let (upgrade, info, timeout, version) = self.handlers.iter()
+            .map(|(k, h)| {
+                let p = h.listen_protocol();
+                let t = *p.timeout();
+                let (v, u, i) = p.into_upgrade();
+                (k.clone(), (v, u, i, t))
+            })
+            .fold((Upgrade::new(), Info::new(), Duration::from_secs(0), None),
+                |(mut upg, mut inf, mut timeout, mut version), (k, (v, u, i, t))| {
+                    upg.upgrades.push((k.clone(), u));
+                    inf.infos.push((k, i));
+                    timeout = cmp::max(timeout, t);
+                    version = version.map_or(Some(v), |vv|
+                        if v != vv {
+                            // Different upgrade (i.e. protocol negotiation) protocol
+                            // versions are usually incompatible and not negotiated
+                            // themselves, so a protocol upgrade may fail.
+                            log::warn!("Differing upgrade versions. Defaulting to V1.");
+                            Some(upgrade::Version::V1)
+                        } else {
+                            Some(v)
+                        });
+                    (upg, inf, timeout, version)
+                }
+            );
+        SubstreamProtocol::new(upgrade, info)
+            .with_timeout(timeout)
+            .with_upgrade_protocol(version.unwrap_or(upgrade::Version::V1))
     }
 
     fn inject_fully_negotiated_outbound (
@@ -118,10 +149,13 @@ where
 
     fn inject_fully_negotiated_inbound (
         &mut self,
-        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output
+        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        mut info: Self::InboundOpenInfo
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
-            h.inject_fully_negotiated_inbound(arg)
+            if let Some(i) = info.take(&key) {
+                h.inject_fully_negotiated_inbound(arg, i)
+            }
         } else {
             log::error!("inject_fully_negotiated_inbound: no handler for key")
         }
@@ -135,6 +169,12 @@ where
         }
     }
 
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        for h in self.handlers.values_mut() {
+            h.inject_address_change(addr)
+        }
+    }
+
     fn inject_dial_upgrade_error (
         &mut self,
         (key, arg): Self::OutboundOpenInfo,
@@ -144,6 +184,70 @@ where
             h.inject_dial_upgrade_error(arg, error)
         } else {
             log::error!("inject_dial_upgrade_error: no handler for protocol")
+        }
+    }
+
+    fn inject_listen_upgrade_error(
+        &mut self,
+        mut info: Self::InboundOpenInfo,
+        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
+    ) {
+        match error {
+            ProtocolsHandlerUpgrErr::Timer =>
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Timer)
+                    }
+                }
+            ProtocolsHandlerUpgrErr::Timeout =>
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Timeout)
+                    }
+                }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) =>
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)))
+                    }
+                }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::ProtocolError(e))) =>
+                match e {
+                    ProtocolError::IoError(e) =>
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::IoError(e.kind().into()));
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
+                        }
+                    ProtocolError::InvalidMessage =>
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
+                        }
+                    ProtocolError::InvalidProtocol =>
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
+                        }
+                    ProtocolError::TooManyProtocols =>
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
+                        }
+                }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) =>
+                if let Some(h) = self.handlers.get_mut(&k) {
+                    if let Some(i) = info.take(&k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)))
+                    }
+                }
         }
     }
 
@@ -211,6 +315,9 @@ where
     /// Create and populate an `IntoMultiHandler` from the given iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
+    ///
+    /// > **Note**: All handlers should use the same [`upgrade::Version`] for
+    /// > the inbound and outbound [`SubstreamProtocol`]s.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
@@ -255,10 +362,35 @@ impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
     }
 }
 
+/// The aggregated `InboundOpenInfo`s of supported inbound substream protocols.
+#[derive(Clone)]
+pub struct Info<K, I> {
+    infos: Vec<(K, I)>
+}
+
+impl<K: Eq, I> Info<K, I> {
+    fn new() -> Self {
+        Info { infos: Vec::new() }
+    }
+
+    pub fn take(&mut self, k: &K) -> Option<I> {
+        if let Some(p) = self.infos.iter().position(|(key, _)| key == k) {
+            return Some(self.infos.remove(p).1)
+        }
+        None
+    }
+}
+
 /// Inbound and outbound upgrade for all `ProtocolsHandler`s.
 #[derive(Clone)]
 pub struct Upgrade<K, H> {
     upgrades: Vec<(K, H)>
+}
+
+impl<K, H> Upgrade<K, H> {
+    fn new() -> Self {
+        Upgrade { upgrades: Vec::new() }
+    }
 }
 
 impl<K, H> fmt::Debug for Upgrade<K, H>
@@ -379,4 +511,3 @@ impl fmt::Display for DuplicateProtonameError {
 }
 
 impl error::Error for DuplicateProtonameError {}
-

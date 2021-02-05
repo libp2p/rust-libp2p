@@ -25,7 +25,7 @@ use futures::{
 };
 use log::trace;
 use pin_project::pin_project;
-use salsa20::{stream_cipher::SyncStreamCipher, XSalsa20};
+use salsa20::{cipher::SyncStreamCipher, XSalsa20};
 use std::{fmt, pin::Pin};
 
 /// A writer that encrypts and forwards to an inner writer

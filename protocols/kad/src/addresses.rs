@@ -52,6 +52,11 @@ impl Addresses {
         self.addrs.iter()
     }
 
+    /// Returns a mutable iterator over the addresses.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Multiaddr> {
+        self.addrs.iter_mut()
+    }
+
     /// Returns the number of addresses in the list.
     pub fn len(&self) -> usize {
         self.addrs.len()
@@ -96,6 +101,19 @@ impl Addresses {
         } else {
             false
         }
+    }
+
+    /// Replaces an old address with a new address.
+    ///
+    /// Returns true if the previous address was found and replaced with a clone
+    /// of the new address, returns false otherwise.
+    pub fn replace(&mut self, old: &Multiaddr, new: &Multiaddr) -> bool {
+        if let Some(a) = self.addrs.iter_mut().find(|a| *a == old) {
+            *a = new.clone();
+            return true
+        }
+
+        false
     }
 }
 

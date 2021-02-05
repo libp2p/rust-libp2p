@@ -25,6 +25,7 @@ mod payload_proto {
 }
 
 use bytes::Bytes;
+use crate::LegacyConfig;
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use crate::io::{NoiseOutput, framed::NoiseFramed};
@@ -125,14 +126,15 @@ pub fn rt1_initiator<T, C>(
     io: T,
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
-    identity_x: IdentityExchange
+    identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         send_identity(&mut state).await?;
         recv_identity(&mut state).await?;
         state.finish()
@@ -160,13 +162,14 @@ pub fn rt1_responder<T, C>(
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         recv_identity(&mut state).await?;
         send_identity(&mut state).await?;
         state.finish()
@@ -195,14 +198,15 @@ pub fn rt15_initiator<T, C>(
     io: T,
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
-    identity_x: IdentityExchange
+    identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         send_empty(&mut state).await?;
         recv_identity(&mut state).await?;
         send_identity(&mut state).await?;
@@ -232,14 +236,15 @@ pub fn rt15_responder<T, C>(
     io: T,
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
-    identity_x: IdentityExchange
+    identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         recv_empty(&mut state).await?;
         send_identity(&mut state).await?;
         recv_identity(&mut state).await?;
@@ -263,6 +268,8 @@ struct State<T> {
     id_remote_pubkey: Option<identity::PublicKey>,
     /// Whether to send the public identity key of the local node to the remote.
     send_identity: bool,
+    /// Legacy configuration parameters.
+    legacy: LegacyConfig,
 }
 
 impl<T> State<T> {
@@ -275,7 +282,8 @@ impl<T> State<T> {
         io: T,
         session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
-        identity_x: IdentityExchange
+        identity_x: IdentityExchange,
+        legacy: LegacyConfig,
     ) -> Result<Self, NoiseError> {
         let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
@@ -289,7 +297,8 @@ impl<T> State<T> {
                 io: NoiseFramed::new(io, s),
                 dh_remote_pubkey_sig: None,
                 id_remote_pubkey,
-                send_identity
+                send_identity,
+                legacy,
             }
         )
     }
@@ -365,25 +374,20 @@ where
 {
     let msg = recv(state).await?;
 
-    // NOTE: We first try to decode the entire frame as a protobuf message,
-    // as required by the libp2p-noise spec. As long as the frame length
-    // is less than 256 bytes, which is the case for all protobuf payloads
-    // not containing RSA keys, there is no room for misinterpretation,
-    // since if a two-bytes length prefix is present the first byte will
-    // be 0, which is always an unexpected protobuf tag value because the
-    // fields in the .proto file start with 1 and decoding thus expects
-    // a non-zero first byte. We will therefore always correctly fall back to
-    // the legacy protobuf parsing in these cases (again, not considering
-    // RSA keys, for which there may be a probabilistically very small chance
-    // of misinterpretation).
-    //
-    // This is only temporary! Once a release is made that supports
-    // decoding without a length prefix, a follow-up release will
-    // change `send_identity` such that no length prefix is sent.
-    // In yet another release the fallback protobuf parsing can then
-    // be removed.
-    let pb = payload_proto::NoiseHandshakePayload::decode(&msg[..])
-        .or_else(|e| {
+    let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
+
+    if pb_result.is_err() && state.legacy.recv_legacy_handshake {
+        // NOTE: This is support for legacy handshake payloads. As long as
+        // the frame length is less than 256 bytes, which is the case for
+        // all protobuf payloads not containing RSA keys, there is no room
+        // for misinterpretation, since if a two-bytes length prefix is present
+        // the first byte will be 0, which is always an unexpected protobuf tag
+        // value because the fields in the .proto file start with 1 and decoding
+        // thus expects a non-zero first byte. We will therefore always correctly
+        // fall back to the legacy protobuf parsing in these cases (again, not
+        // considering RSA keys, for which there may be a probabilistically
+        // very small chance of misinterpretation).
+        pb_result = pb_result.or_else(|e| {
             if msg.len() > 2 {
                 let mut buf = [0, 0];
                 buf.copy_from_slice(&msg[.. 2]);
@@ -398,7 +402,9 @@ where
             } else {
                 Err(e)
             }
-        })?;
+        });
+    }
+    let pb = pb_result?;
 
     if !pb.identity_key.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
@@ -424,17 +430,26 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = payload_proto::NoiseHandshakePayload::default();
+
     if state.send_identity {
         pb.identity_key = state.identity.public.clone().into_protobuf_encoding()
     }
+
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
     }
-    // NOTE: We temporarily need to continue sending the (legacy) length prefix
-    // for a short while to permit migration.
-    let mut msg = Vec::with_capacity(pb.encoded_len() + 2);
-    msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+
+    let mut msg =
+        if state.legacy.send_legacy_handshake {
+            let mut msg = Vec::with_capacity(2 + pb.encoded_len());
+            msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+            msg
+        } else {
+            Vec::with_capacity(pb.encoded_len())
+        };
+
     pb.encode(&mut msg).expect("Vec<u8> provides capacity as needed");
     state.io.send(&msg).await?;
+
     Ok(())
 }

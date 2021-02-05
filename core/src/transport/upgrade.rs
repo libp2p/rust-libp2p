@@ -24,15 +24,16 @@ pub use crate::upgrade::Version;
 
 use crate::{
     ConnectedPoint,
-    ConnectionInfo,
     Negotiated,
     transport::{
         Transport,
         TransportError,
         ListenerEvent,
         and_then::AndThen,
+        boxed::boxed,
+        timeout::TransportTimeout,
     },
-    muxing::StreamMuxer,
+    muxing::{StreamMuxer, StreamMuxerBox},
     upgrade::{
         self,
         OutboundUpgrade,
@@ -42,11 +43,18 @@ use crate::{
         UpgradeError,
         OutboundUpgradeApply,
         InboundUpgradeApply
-    }
+    },
+    PeerId
 };
 use futures::{prelude::*, ready};
 use multiaddr::Multiaddr;
-use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
+use std::{
+    error::Error,
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration
+};
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
 /// a [`Network`].
@@ -54,21 +62,22 @@ use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 /// The upgrade process is defined by the following stages:
 ///
 ///    [`authenticate`](Builder::authenticate)`{1}`
-/// -> [`apply`](Builder::apply)`{*}`
-/// -> [`multiplex`](Builder::multiplex)`{1}`
+/// -> [`apply`](Authenticated::apply)`{*}`
+/// -> [`multiplex`](Authenticated::multiplex)`{1}`
 ///
 /// It thus enforces the following invariants on every transport
-/// obtained from [`multiplex`](Builder::multiplex):
+/// obtained from [`multiplex`](Authenticated::multiplex):
 ///
 ///   1. The transport must be [authenticated](Builder::authenticate)
-///      and [multiplexed](Builder::multiplex).
+///      and [multiplexed](Authenticated::multiplex).
 ///   2. Authentication must precede the negotiation of a multiplexer.
 ///   3. Applying a multiplexer is the last step in the upgrade process.
 ///   4. The [`Transport::Output`] conforms to the requirements of a [`Network`],
-///      namely a tuple of a [`ConnectionInfo`] (from the authentication upgrade) and a
+///      namely a tuple of a [`PeerId`] (from the authentication upgrade) and a
 ///      [`StreamMuxer`] (from the multiplexing upgrade).
 ///
 /// [`Network`]: crate::Network
+#[derive(Clone)]
 pub struct Builder<T> {
     inner: T,
     version: upgrade::Version,
@@ -87,86 +96,31 @@ where
     /// Upgrades the transport to perform authentication of the remote.
     ///
     /// The supplied upgrade receives the I/O resource `C` and must
-    /// produce a pair `(I, D)`, where `I` is a [`ConnectionInfo`] and
-    /// `D` is a new I/O resource. The upgrade must thus at a minimum
-    /// identify the remote, which typically involves the use of a
-    /// cryptographic authentication protocol in the context of establishing
-    /// a secure channel.
+    /// produce a pair `(PeerId, D)`, where `D` is a new I/O resource.
+    /// The upgrade must thus at a minimum identify the remote, which typically
+    /// involves the use of a cryptographic authentication protocol in the
+    /// context of establishing a secure channel.
     ///
     /// ## Transitions
     ///
-    ///   * I/O upgrade: `C -> (I, D)`.
-    ///   * Transport output: `C -> (I, D)`
-    pub fn authenticate<C, D, U, I, E>(self, upgrade: U) -> Builder<
+    ///   * I/O upgrade: `C -> (PeerId, D)`.
+    ///   * Transport output: `C -> (PeerId, D)`
+    pub fn authenticate<C, D, U, E>(self, upgrade: U) -> Authenticated<
         AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>
     > where
         T: Transport<Output = C>,
-        I: ConnectionInfo,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: InboundUpgrade<Negotiated<C>, Output = (I, D), Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = (I, D), Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
         E: Error + 'static,
     {
         let version = self.version;
-        Builder::new(self.inner.and_then(move |conn, endpoint| {
+        Authenticated(Builder::new(self.inner.and_then(move |conn, endpoint| {
             Authenticate {
                 inner: upgrade::apply(conn, upgrade, endpoint, version)
             }
-        }), version)
-    }
-
-    /// Applies an arbitrary upgrade on an authenticated, non-multiplexed
-    /// transport.
-    ///
-    /// The upgrade receives the I/O resource (i.e. connection) `C` and
-    /// must produce a new I/O resource `D`. Any number of such upgrades
-    /// can be performed.
-    ///
-    /// ## Transitions
-    ///
-    ///   * I/O upgrade: `C -> D`.
-    ///   * Transport output: `(I, C) -> (I, D)`.
-    pub fn apply<C, D, U, I, E>(self, upgrade: U) -> Builder<Upgrade<T, U>>
-    where
-        T: Transport<Output = (I, C)>,
-        C: AsyncRead + AsyncWrite + Unpin,
-        D: AsyncRead + AsyncWrite + Unpin,
-        I: ConnectionInfo,
-        U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
-        E: Error + 'static,
-    {
-        Builder::new(Upgrade::new(self.inner, upgrade), self.version)
-    }
-
-    /// Upgrades the transport with a (sub)stream multiplexer.
-    ///
-    /// The supplied upgrade receives the I/O resource `C` and must
-    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
-    /// This ends the (regular) transport upgrade process, yielding the underlying,
-    /// configured transport.
-    ///
-    /// ## Transitions
-    ///
-    ///   * I/O upgrade: `C -> M`.
-    ///   * Transport output: `(I, C) -> (I, M)`.
-    pub fn multiplex<C, M, U, I, E>(self, upgrade: U)
-        -> AndThen<T, impl FnOnce((I, C), ConnectedPoint) -> Multiplex<C, U, I> + Clone>
-    where
-        T: Transport<Output = (I, C)>,
-        C: AsyncRead + AsyncWrite + Unpin,
-        M: StreamMuxer,
-        I: ConnectionInfo,
-        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
-        E: Error + 'static,
-    {
-        let version = self.version;
-        self.inner.and_then(move |(i, c), endpoint| {
-            let upgrade = upgrade::apply(c, upgrade, endpoint, version);
-            Multiplex { info: Some(i), upgrade }
-        })
+        }), version))
     }
 }
 
@@ -203,25 +157,25 @@ where
 /// An upgrade that negotiates a (sub)stream multiplexer on
 /// top of an authenticated transport.
 ///
-/// Configured through [`Builder::multiplex`].
+/// Configured through [`Authenticated::multiplex`].
 #[pin_project::pin_project]
-pub struct Multiplex<C, U, I>
+pub struct Multiplex<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
 {
-    info: Option<I>,
+    peer_id: Option<PeerId>,
     #[pin]
     upgrade: EitherUpgrade<C, U>,
 }
 
-impl<C, U, I, M, E> Future for Multiplex<C, U, I>
+impl<C, U, M, E> Future for Multiplex<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
     U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>
 {
-    type Output = Result<(I, M), UpgradeError<E>>;
+    type Output = Result<(PeerId, M), UpgradeError<E>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -229,15 +183,163 @@ where
             Ok(m) => m,
             Err(err) => return Poll::Ready(Err(err)),
         };
-        let i = this.info.take().expect("Multiplex future polled after completion.");
+        let i = this.peer_id.take().expect("Multiplex future polled after completion.");
         Poll::Ready(Ok((i, m)))
+    }
+}
+
+/// An transport with peer authentication, obtained from [`Builder::authenticate`].
+#[derive(Clone)]
+pub struct Authenticated<T>(Builder<T>);
+
+impl<T> Authenticated<T>
+where
+    T: Transport,
+    T::Error: 'static
+{
+    /// Applies an arbitrary upgrade.
+    ///
+    /// The upgrade receives the I/O resource (i.e. connection) `C` and
+    /// must produce a new I/O resource `D`. Any number of such upgrades
+    /// can be performed.
+    ///
+    /// ## Transitions
+    ///
+    ///   * I/O upgrade: `C -> D`.
+    ///   * Transport output: `(PeerId, C) -> (PeerId, D)`.
+    pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<Upgrade<T, U>>
+    where
+        T: Transport<Output = (PeerId, C)>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        D: AsyncRead + AsyncWrite + Unpin,
+        U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
+        E: Error + 'static,
+    {
+        Authenticated(Builder::new(Upgrade::new(self.0.inner, upgrade), self.0.version))
+    }
+
+    /// Upgrades the transport with a (sub)stream multiplexer.
+    ///
+    /// The supplied upgrade receives the I/O resource `C` and must
+    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
+    /// This ends the (regular) transport upgrade process.
+    ///
+    /// ## Transitions
+    ///
+    ///   * I/O upgrade: `C -> M`.
+    ///   * Transport output: `(PeerId, C) -> (PeerId, M)`.
+    pub fn multiplex<C, M, U, E>(self, upgrade: U) -> Multiplexed<
+        AndThen<T, impl FnOnce((PeerId, C), ConnectedPoint) -> Multiplex<C, U> + Clone>
+    > where
+        T: Transport<Output = (PeerId, C)>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        M: StreamMuxer,
+        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        E: Error + 'static,
+    {
+        let version = self.0.version;
+        Multiplexed(self.0.inner.and_then(move |(i, c), endpoint| {
+            let upgrade = upgrade::apply(c, upgrade, endpoint, version);
+            Multiplex { peer_id: Some(i), upgrade }
+        }))
+    }
+
+    /// Like [`Authenticated::multiplex`] but accepts a function which returns the upgrade.
+    ///
+    /// The supplied function is applied to [`PeerId`] and [`ConnectedPoint`]
+    /// and returns an upgrade which receives the I/O resource `C` and must
+    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
+    /// This ends the (regular) transport upgrade process.
+    ///
+    /// ## Transitions
+    ///
+    ///   * I/O upgrade: `C -> M`.
+    ///   * Transport output: `(PeerId, C) -> (PeerId, M)`.
+    pub fn multiplex_ext<C, M, U, E, F>(self, up: F) -> Multiplexed<
+        AndThen<T, impl FnOnce((PeerId, C), ConnectedPoint) -> Multiplex<C, U> + Clone>
+    > where
+        T: Transport<Output = (PeerId, C)>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        M: StreamMuxer,
+        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        E: Error + 'static,
+        F: for<'a> FnOnce(&'a PeerId, &'a ConnectedPoint) -> U + Clone
+    {
+        let version = self.0.version;
+        Multiplexed(self.0.inner.and_then(move |(peer_id, c), endpoint| {
+            let upgrade = upgrade::apply(c, up(&peer_id, &endpoint), endpoint, version);
+            Multiplex { peer_id: Some(peer_id), upgrade }
+        }))
+    }
+}
+
+/// A authenticated and multiplexed transport, obtained from
+/// [`Authenticated::multiplex`].
+#[derive(Clone)]
+pub struct Multiplexed<T>(T);
+
+impl<T> Multiplexed<T> {
+    /// Boxes the authenticated, multiplexed transport, including
+    /// the [`StreamMuxer`] and custom transport errors.
+    pub fn boxed<M>(self) -> super::Boxed<(PeerId, StreamMuxerBox)>
+    where
+        T: Transport<Output = (PeerId, M)> + Sized + Clone + Send + Sync + 'static,
+        T::Dial: Send + 'static,
+        T::Listener: Send + 'static,
+        T::ListenerUpgrade: Send + 'static,
+        T::Error: Send + Sync,
+        M: StreamMuxer + Send + Sync + 'static,
+        M::Substream: Send + 'static,
+        M::OutboundSubstream: Send + 'static
+    {
+        boxed(self.map(|(i, m), _| (i, StreamMuxerBox::new(m))))
+    }
+
+    /// Adds a timeout to the setup and protocol upgrade process for all
+    /// inbound and outbound connections established through the transport.
+    pub fn timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<T>> {
+        Multiplexed(TransportTimeout::new(self.0, timeout))
+    }
+
+    /// Adds a timeout to the setup and protocol upgrade process for all
+    /// outbound connections established through the transport.
+    pub fn outbound_timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<T>> {
+        Multiplexed(TransportTimeout::with_outgoing_timeout(self.0, timeout))
+    }
+
+    /// Adds a timeout to the setup and protocol upgrade process for all
+    /// inbound connections established through the transport.
+    pub fn inbound_timeout(self, timeout: Duration) -> Multiplexed<TransportTimeout<T>> {
+        Multiplexed(TransportTimeout::with_ingoing_timeout(self.0, timeout))
+    }
+}
+
+impl<T> Transport for Multiplexed<T>
+where
+    T: Transport,
+{
+    type Output = T::Output;
+    type Error = T::Error;
+    type Listener = T::Listener;
+    type ListenerUpgrade = T::ListenerUpgrade;
+    type Dial = T::Dial;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr)
+    }
+
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        self.0.listen_on(addr)
     }
 }
 
 /// An inbound or outbound upgrade.
 type EitherUpgrade<C, U> = future::Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>;
 
-/// An upgrade on an authenticated, non-multiplexed [`Transport`].
+/// A custom upgrade on an [`Authenticated`] transport.
 ///
 /// See [`Transport::upgrade`]
 #[derive(Debug, Copy, Clone)]
@@ -249,23 +351,23 @@ impl<T, U> Upgrade<T, U> {
     }
 }
 
-impl<T, C, D, U, I, E> Transport for Upgrade<T, U>
+impl<T, C, D, U, E> Transport for Upgrade<T, U>
 where
-    T: Transport<Output = (I, C)>,
+    T: Transport<Output = (PeerId, C)>,
     T::Error: 'static,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
     U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
     E: Error + 'static
 {
-    type Output = (I, D);
+    type Output = (PeerId, D);
     type Error = TransportUpgradeError<T::Error, E>;
     type Listener = ListenerStream<T::Listener, U>;
-    type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, I, C>;
-    type Dial = DialUpgradeFuture<T::Dial, U, I, C>;
+    type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
+    type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.inner.dial(addr.clone())
+        let future = self.inner.dial(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
@@ -319,23 +421,23 @@ where
 }
 
 /// The [`Transport::Dial`] future of an [`Upgrade`]d transport.
-pub struct DialUpgradeFuture<F, U, I, C>
+pub struct DialUpgradeFuture<F, U, C>
 where
     U: OutboundUpgrade<Negotiated<C>>,
     C: AsyncRead + AsyncWrite + Unpin,
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<I>, OutboundUpgradeApply<C, U>)>
+    upgrade: future::Either<Option<U>, (Option<PeerId>, OutboundUpgradeApply<C, U>)>
 }
 
-impl<F, U, I, C, D> Future for DialUpgradeFuture<F, U, I, C>
+impl<F, U, C, D> Future for DialUpgradeFuture<F, U, C>
 where
-    F: TryFuture<Ok = (I, C)>,
+    F: TryFuture<Ok = (PeerId, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error
 {
-    type Output = Result<(I, D), TransportUpgradeError<F::Error, U::Error>>;
+    type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -365,7 +467,7 @@ where
     }
 }
 
-impl<F, U, I, C> Unpin for DialUpgradeFuture<F, U, I, C>
+impl<F, U, C> Unpin for DialUpgradeFuture<F, U, C>
 where
     U: OutboundUpgrade<Negotiated<C>>,
     C: AsyncRead + AsyncWrite + Unpin,
@@ -378,14 +480,14 @@ pub struct ListenerStream<S, U> {
     upgrade: U
 }
 
-impl<S, U, F, I, C, D, E> Stream for ListenerStream<S, U>
+impl<S, U, F, C, D, E> Stream for ListenerStream<S, U>
 where
     S: TryStream<Ok = ListenerEvent<F, E>, Error = E>,
-    F: TryFuture<Ok = (I, C)>,
+    F: TryFuture<Ok = (PeerId, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D> + Clone
 {
-    type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>, TransportUpgradeError<E, U::Error>>, TransportUpgradeError<E, U::Error>>;
+    type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, C>, TransportUpgradeError<E, U::Error>>, TransportUpgradeError<E, U::Error>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match ready!(TryStream::try_poll_next(self.stream.as_mut(), cx)) {
@@ -412,23 +514,23 @@ impl<S, U> Unpin for ListenerStream<S, U> {
 }
 
 /// The [`Transport::ListenerUpgrade`] future of an [`Upgrade`]d transport.
-pub struct ListenerUpgradeFuture<F, U, I, C>
+pub struct ListenerUpgradeFuture<F, U, C>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>>
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<I>, InboundUpgradeApply<C, U>)>
+    upgrade: future::Either<Option<U>, (Option<PeerId>, InboundUpgradeApply<C, U>)>
 }
 
-impl<F, U, I, C, D> Future for ListenerUpgradeFuture<F, U, I, C>
+impl<F, U, C, D> Future for ListenerUpgradeFuture<F, U, C>
 where
-    F: TryFuture<Ok = (I, C)>,
+    F: TryFuture<Ok = (PeerId, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error
 {
-    type Output = Result<(I, D), TransportUpgradeError<F::Error, U::Error>>;
+    type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -458,7 +560,7 @@ where
     }
 }
 
-impl<F, U, I, C> Unpin for ListenerUpgradeFuture<F, U, I, C>
+impl<F, U, C> Unpin for ListenerUpgradeFuture<F, U, C>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>>

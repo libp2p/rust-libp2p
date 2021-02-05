@@ -27,28 +27,22 @@ use crate::{
         ConnectedPoint,
         ConnectionError,
         ConnectionHandler,
-        ConnectionInfo,
-        ConnectionLimit,
         Connected,
         EstablishedConnection,
-        IncomingInfo,
         IntoConnectionHandler,
         ListenerId,
         PendingConnectionError,
-        Substream,
-        pool::Pool,
     },
-    muxing::StreamMuxer,
-    transport::{Transport, TransportError},
+    transport::Transport,
+    PeerId
 };
-use futures::prelude::*;
-use std::{error, fmt, hash::Hash, num::NonZeroU32};
+use std::{fmt, num::NonZeroU32};
 
 /// Event that can happen on the `Network`.
-pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
+    THandler: IntoConnectionHandler,
 {
     /// One of the listeners gracefully closed.
     ListenerClosed {
@@ -86,7 +80,14 @@ where
     },
 
     /// A new connection arrived on a listener.
-    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>),
+    ///
+    /// To accept the connection, see [`Network::accept`](crate::Network::accept).
+    IncomingConnection {
+        /// The listener who received the connection.
+        listener_id: ListenerId,
+        /// The pending incoming connection.
+        connection: IncomingConnection<TTrans::ListenerUpgrade>,
+    },
 
     /// An error happened on a connection during its initial handshake.
     ///
@@ -101,25 +102,34 @@ where
         error: PendingConnectionError<TTrans::Error>,
     },
 
-    /// A new connection to a peer has been opened.
+    /// A new connection to a peer has been established.
     ConnectionEstablished {
         /// The newly established connection.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
-        /// The total number of established connections to the same peer, including the one that
-        /// has just been opened.
+        connection: EstablishedConnection<'a, TInEvent>,
+        /// The total number of established connections to the same peer,
+        /// including the one that has just been opened.
         num_established: NonZeroU32,
     },
 
-    /// An established connection to a peer has encountered an error.
+    /// An established connection to a peer has been closed.
     ///
-    /// The connection is closed as a result of the error.
-    ConnectionError {
+    /// A connection may close if
+    ///
+    ///   * it encounters an error, which includes the connection being
+    ///     closed by the remote. In this case `error` is `Some`.
+    ///   * it was actively closed by [`EstablishedConnection::start_close`],
+    ///     i.e. a successful, orderly close. In this case `error` is `None`.
+    ///   * it was actively closed by [`super::peer::ConnectedPeer::disconnect`] or
+    ///     [`super::peer::DialingPeer::disconnect`], i.e. dropped without an
+    ///     orderly close. In this case `error` is `None`.
+    ///
+    ConnectionClosed {
         /// The ID of the connection that encountered an error.
         id: ConnectionId,
         /// Information about the connection that encountered the error.
-        connected: Connected<TConnInfo>,
+        connected: Connected,
         /// The error that occurred.
-        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error>,
+        error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// The remaining number of established connections to the same peer.
         num_established: u32,
     },
@@ -130,7 +140,7 @@ where
         attempts_remaining: u32,
 
         /// Id of the peer we were trying to dial.
-        peer_id: TPeerId,
+        peer_id: PeerId,
 
         /// The multiaddr we failed to reach.
         multiaddr: Multiaddr,
@@ -151,7 +161,7 @@ where
     /// An established connection produced an event.
     ConnectionEvent {
         /// The connection on which the event occurred.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        connection: EstablishedConnection<'a, TInEvent>,
         /// Event that was produced by the node.
         event: TOutEvent,
     },
@@ -159,7 +169,7 @@ where
     /// An established connection has changed its address.
     AddressChange {
         /// The connection whose address has changed.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        connection: EstablishedConnection<'a, TInEvent>,
         /// New endpoint of this connection.
         new_endpoint: ConnectedPoint,
         /// Old endpoint of this connection.
@@ -167,17 +177,15 @@ where
     },
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for
+    NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler>
 where
     TInEvent: fmt::Debug,
     TOutEvent: fmt::Debug,
     TTrans: Transport,
     TTrans::Error: fmt::Debug,
-    THandler: IntoConnectionHandler<TConnInfo>,
+    THandler: IntoConnectionHandler,
     <THandler::Handler as ConnectionHandler>::Error: fmt::Debug,
-    TConnInfo: fmt::Debug,
-    TPeerId: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -206,10 +214,10 @@ where
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::IncomingConnection(event) => {
+            NetworkEvent::IncomingConnection { connection, .. } => {
                 f.debug_struct("IncomingConnection")
-                    .field("local_addr", &event.local_addr)
-                    .field("send_back_addr", &event.send_back_addr)
+                    .field("local_addr", &connection.local_addr)
+                    .field("send_back_addr", &connection.send_back_addr)
                     .finish()
             }
             NetworkEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
@@ -224,8 +232,9 @@ where
                     .field("connection", connection)
                     .finish()
             }
-            NetworkEvent::ConnectionError { connected, error, .. } => {
-                f.debug_struct("ConnectionError")
+            NetworkEvent::ConnectionClosed { id, connected, error, .. } => {
+                f.debug_struct("ConnectionClosed")
+                    .field("id", id)
                     .field("connected", connected)
                     .field("error", error)
                     .finish()
@@ -261,103 +270,12 @@ where
     }
 }
 
-/// A new connection arrived on a listener.
-pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-where
-    TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
-{
-    /// The listener who received the connection.
-    pub(super) listener_id: ListenerId,
-    /// The produced upgrade.
-    pub(super) upgrade: TTrans::ListenerUpgrade,
+/// A pending incoming connection produced by a listener.
+pub struct IncomingConnection<TUpgrade> {
+    /// The connection upgrade.
+    pub(crate) upgrade: TUpgrade,
     /// Local connection address.
-    pub(super) local_addr: Multiaddr,
+    pub local_addr: Multiaddr,
     /// Address used to send back data to the remote.
-    pub(super) send_back_addr: Multiaddr,
-    /// Reference to the `peers` field of the `Network`.
-    pub(super) pool: &'a mut Pool<
-        TInEvent,
-        TOutEvent,
-        THandler,
-        TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error,
-        TConnInfo,
-        TPeerId
-    >,
-}
-
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, TConnInfo, TPeerId>
-    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-where
-    TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-    TTrans::Error: Send + 'static,
-    TTrans::ListenerUpgrade: Send + 'static,
-    THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-    <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-    TMuxer: StreamMuxer + Send + Sync + 'static,
-    TMuxer::OutboundSubstream: Send,
-    TMuxer::Substream: Send,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
-    TPeerId: Eq + Hash + Clone + Send + 'static,
-{
-    /// The ID of the listener with the incoming connection.
-    pub fn listener_id(&self) -> ListenerId {
-        self.listener_id
-    }
-
-    /// Starts processing the incoming connection and sets the handler to use for it.
-    pub fn accept(self, handler: THandler) -> Result<ConnectionId, ConnectionLimit> {
-        self.accept_with_builder(|_| handler)
-    }
-
-    /// Same as `accept`, but accepts a closure that turns a `IncomingInfo` into a handler.
-    pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
-        -> Result<ConnectionId, ConnectionLimit>
-    where
-        TBuilder: FnOnce(IncomingInfo<'_>) -> THandler
-    {
-        let handler = builder(self.info());
-        let upgrade = self.upgrade
-            .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
-        let info = IncomingInfo {
-            local_addr: &self.local_addr,
-            send_back_addr: &self.send_back_addr,
-        };
-        self.pool.add_incoming(upgrade, handler, info)
-    }
-}
-
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    IncomingConnectionEvent<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-where
-    TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
-{
-    /// Returns the `IncomingInfo` corresponding to this incoming connection.
-    pub fn info(&self) -> IncomingInfo<'_> {
-        IncomingInfo {
-            local_addr: &self.local_addr,
-            send_back_addr: &self.send_back_addr,
-        }
-    }
-
-    /// Local connection address.
-    pub fn local_addr(&self) -> &Multiaddr {
-        &self.local_addr
-    }
-
-    /// Address used to send back data to the dialer.
-    pub fn send_back_addr(&self) -> &Multiaddr {
-        &self.send_back_addr
-    }
-
-    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
-    pub fn to_connected_point(&self) -> ConnectedPoint {
-        self.info().to_connected_point()
-    }
+    pub send_back_addr: Multiaddr,
 }
