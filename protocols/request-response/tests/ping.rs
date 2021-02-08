@@ -64,7 +64,7 @@ fn offline_peers() {
 
         let request_id2 = swarm1.send_request(&offline_peer, ping.clone());
                 
-        assert!(!swarm1.is_pending_outbound(&peer1_id, &request_id1));
+        assert!(!swarm1.is_pending_outbound(&offline_peer, &request_id1));
         assert!(swarm1.is_pending_outbound(&offline_peer, &request_id2));
     };
     
