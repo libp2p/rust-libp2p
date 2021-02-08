@@ -691,11 +691,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
                         let condition_matched = match condition {
-                            DialPeerCondition::Disconnected
-                                if this.network.is_disconnected(&peer_id) => true,
-                            DialPeerCondition::NotDialing
-                                if !this.network.is_dialing(&peer_id) => true,
-                            _ => false
+                            DialPeerCondition::Disconnected => this.network.is_disconnected(&peer_id),
+                            DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
+                            DialPeerCondition::Always => true,
                         };
                         if condition_matched {
                             if ExpandedSwarm::dial(this, &peer_id).is_ok() {

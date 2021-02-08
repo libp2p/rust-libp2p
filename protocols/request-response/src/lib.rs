@@ -230,6 +230,12 @@ impl<TResponse> ResponseChannel<TResponse> {
 }
 
 /// The ID of an inbound or outbound request.
+///
+/// Note: [`RequestId`]'s uniqueness is only guaranteed between two
+/// inbound and likewise between two outbound requests. There is no
+/// uniqueness guarantee in a set of both inbound and outbound
+/// [`RequestId`]s nor in a set of inbound or outbound requests
+/// originating from different [`RequestResponse`] behaviours.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 

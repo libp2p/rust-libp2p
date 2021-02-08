@@ -158,8 +158,7 @@ impl Keypair<X25519> {
     /// Returns `None` if the given identity keypair cannot be used as an X25519 keypair.
     ///
     /// > **Note**: If the identity keypair is already used in the context
-    /// > of other cryptographic protocols outside of Noise, e.g. for
-    /// > signing in the `secio` protocol, it should be preferred to
+    /// > of other cryptographic protocols outside of Noise, it should be preferred to
     /// > create a new static X25519 keypair for use in the Noise protocol.
     /// >
     /// > See also:
@@ -205,9 +204,8 @@ impl SecretKey<X25519> {
     /// Construct a X25519 secret key from a Ed25519 secret key.
     ///
     /// > **Note**: If the Ed25519 secret key is already used in the context
-    /// > of other cryptographic protocols outside of Noise, e.g. for
-    /// > signing in the `secio` protocol, it should be preferred to
-    /// > create a new keypair for use in the Noise protocol.
+    /// > of other cryptographic protocols outside of Noise, it should be preferred
+    /// > to create a new keypair for use in the Noise protocol.
     /// >
     /// > See also:
     /// >

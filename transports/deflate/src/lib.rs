@@ -133,10 +133,7 @@ impl<S> AsyncRead for DeflateOutput<S>
         loop {
             // Read from `self.inner` into `self.read_interm` if necessary.
             if this.read_interm.is_empty() && !this.inner_read_eof {
-                unsafe {
-                    this.read_interm.reserve(256);
-                    this.read_interm.set_len(this.read_interm.capacity());
-                }
+                this.read_interm.resize(this.read_interm.capacity() + 256, 0);
 
                 match AsyncRead::poll_read(Pin::new(&mut this.inner), cx, &mut this.read_interm) {
                     Poll::Ready(Ok(0)) => {
