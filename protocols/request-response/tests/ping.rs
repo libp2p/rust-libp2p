@@ -40,9 +40,8 @@ use std::{collections::HashSet, num::NonZeroU16};
 
 /// Check if is_response_outbound works properly
 #[test]
-fn pending_connections() {
+fn offline_peers() {
     let ping = Ping("ping".to_string().into_bytes());
-    let pong = Pong("pong".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
@@ -56,16 +55,18 @@ fn pending_connections() {
 
     let peer1 = async move {
         match swarm1.next().await {
-            OutboundFailure => {
+            RequestResponseEvent::OutboundFailure{peer, request_id: req_id, error: _error} => {
+                assert_eq!(&offline_peer, &peer);
+                assert_eq!(req_id, request_id1);
             },
             e => panic!("Peer: Unexpected event: {:?}", e),
         }
+
+        let request_id2 = swarm1.send_request(&offline_peer, ping.clone());
+                
+        assert!(!swarm1.is_pending_outbound(&peer1_id, &request_id1));
+        assert!(swarm1.is_pending_outbound(&offline_peer, &request_id2));
     };
-
-    let request_id2 = swarm1.send_request(&offline_peer, ping.clone());
-
-    assert!(!swarm1.is_pending_outbound(&peer1_id, &request_id1));
-    assert!(swarm1.is_pending_outbound(&peer1_id, &request_id2));
     
     let () = async_std::task::block_on(peer1);
 }
