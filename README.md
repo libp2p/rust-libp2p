@@ -23,6 +23,34 @@ Where to ask questions?
 - In the #libp2p IRC channel on freenode.
 - By opening an issue in this repository.
 
+
+## Repository Structure
+
+The main components of this repository are structured as follows:
+
+  * `core/`: The implementation of `libp2p-core` with its `Network`,
+    `Transport` and `StreamMuxer` API on which almost all other crates depend.
+
+  * `transports/`: Implementations of transport protocols (e.g. TCP) and protocol upgrades
+    (e.g. for authenticated encryption, compression, ...) based on the `libp2p-core` `Transport`
+    API .
+
+  * `muxers/`: Implementations of the `StreamMuxer` interface of `libp2p-core`,
+    e.g. (sub)stream multiplexing protocols on top of (typically TCP) connections.
+    Multiplexing protocols are (mandatory) `Transport` upgrades.
+
+  * `swarm/`: The implementation of `libp2p-swarm` building on `libp2p-core`
+    with the central interfaces `NetworkBehaviour` and `ProtocolsHandler` used
+    to implement application protocols (see `protocols/`).
+
+  * `protocols/`: Implementations of application protocols based on the
+    `libp2p-swarm` APIs.
+
+  * `misc/`: Utility libraries.
+
+  * `examples/`: Worked examples of built-in application protocols (see `protocols/`)
+    with common `Transport` configurations.
+
 ## Notable users
 
 (open a pull request if you want your project to be added here)
