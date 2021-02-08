@@ -42,31 +42,31 @@ use std::{collections::HashSet, num::NonZeroU16};
 #[test]
 fn pending_connections() {
     let ping = Ping("ping".to_string().into_bytes());
+    let pong = Pong("pong".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::throttled(PingCodec(), protocols.clone(), cfg.clone());
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
     let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
 
+    let request_id1 = swarm1.send_request(&offline_peer, ping.clone());
 
-    let peer1 = async {
-        let request_id1 = swarm1.send_request(&offline_peer, ping.clone());
-
+    let peer1 = async move {
         match swarm1.next().await {
-            RequestResponseEvent::Message{
-                peer,
-                message: RequestResponseMessage::Response { request_id, response }
-            } => {
-                assert_eq!(&peer, &peer1_id);
-                assert_eq!(request_id1, request_id);
+            OutboundFailure => {
             },
-            e => panic!("Peer1 : Unexpected event: {:?}", e),
+            e => panic!("Peer: Unexpected event: {:?}", e),
         }
     };
 
+    let request_id2 = swarm1.send_request(&offline_peer, ping.clone());
+
+    assert!(!swarm1.is_pending_outbound(&peer1_id, &request_id1));
+    assert!(swarm1.is_pending_outbound(&peer1_id, &request_id2));
+    
     let () = async_std::task::block_on(peer1);
 }
 
