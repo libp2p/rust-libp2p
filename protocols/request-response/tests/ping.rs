@@ -41,25 +41,33 @@ use std::{collections::HashSet, num::NonZeroU16};
 /// Check if is_response_outbound works properly
 #[test]
 fn pending_connections() {
-   let ping = Ping("ping".to_string().into_bytes());
-   let offline_peer = PeerId::random();
+    let ping = Ping("ping".to_string().into_bytes());
+    let offline_peer = PeerId::random();
 
-   let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-   let cfg = RequestResponseConfig::default();
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
 
-   let (peer1_id, trans) = mk_transport();
-   let ping_proto1 = RequestResponse::throttled(PingCodec(), protocols.clone(), cfg.clone());
-   let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
+    let (peer1_id, trans) = mk_transport();
+    let ping_proto1 = RequestResponse::throttled(PingCodec(), protocols.clone(), cfg.clone());
+    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
 
-   let request_id_1 = swarm1.send_request(&offline_peer, ping.clone()).unwrap();
 
-   // Poll swarm until request 1 is reported as failed.
-   swarm1.network.poll();
+    let peer1 = async {
+        let request_id1 = swarm1.send_request(&offline_peer, ping.clone());
 
-   let request_id_2 = swarm1.send_request(&offline_peer, ping.clone()).unwrap();
+        match swarm1.next().await {
+            RequestResponseEvent::Message{
+                peer,
+                message: RequestResponseMessage::Response { request_id, response }
+            } => {
+                assert_eq!(&peer, &peer1_id);
+                assert_eq!(request_id1, request_id);
+            },
+            e => panic!("Peer1 : Unexpected event: {:?}", e),
+        }
+    };
 
-   assert!(!swarm1.is_pending_outbound(&offline_peer, &request_id_1));
-   assert!(swarm1.is_pending_outbound(&offline_peer, &request_id_2));
+    let () = async_std::task::block_on(peer1);
 }
 
 /// Exercises a simple ping protocol.
