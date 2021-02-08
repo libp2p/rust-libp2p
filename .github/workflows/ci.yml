@@ -20,13 +20,13 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -71,13 +71,13 @@ jobs:
       run: apt-get install -y cmake
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -123,13 +123,13 @@ jobs:
         components: clippy
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -158,13 +158,13 @@ jobs:
         override: true
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -190,13 +190,13 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
