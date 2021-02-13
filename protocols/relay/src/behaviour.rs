@@ -77,11 +77,11 @@ struct OutgoingDialingRelayRequest {
     relay_addr: Multiaddr,
     destination_addr: Multiaddr,
     destination_peer_id: PeerId,
-    send_back: oneshot::Sender<NegotiatedSubstream>,
+    send_back: oneshot::Sender<Result<NegotiatedSubstream, OutgoingRelayRequestError>>,
 }
 
 struct OutgoingUpgradingRelayRequest {
-    send_back: oneshot::Sender<NegotiatedSubstream>,
+    send_back: oneshot::Sender<Result<NegotiatedSubstream, OutgoingRelayRequestError>>,
 }
 
 enum IncomingRelayRequest {
@@ -224,12 +224,11 @@ impl NetworkBehaviour for Relay {
     fn inject_dial_failure(&mut self, peer_id: &PeerId) {
         if let Some(reqs) = self.outgoing_relay_requests.dialing.remove(peer_id) {
             for req in reqs {
-                // TODO: Introduce better error handling, sending back an actual addr reach failure
-                // error to the transport wrapper.
-                drop(req.send_back);
+                let _ = req.send_back.send(Err(OutgoingRelayRequestError::DialingRelay));
             }
         }
 
+        // TODO: Send an error back to the source.
         self.incoming_relay_requests.remove(peer_id);
     }
 
@@ -329,7 +328,7 @@ impl NetworkBehaviour for Relay {
                     .remove(&request_id)
                     .map(|OutgoingUpgradingRelayRequest { send_back, .. }| send_back)
                     .unwrap();
-                send_back.send(stream).unwrap();
+                send_back.send(Ok(stream)).unwrap();
             }
             RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self
                 .outbox_to_transport
@@ -443,4 +442,9 @@ pub enum BehaviourToTransportMsg {
 enum RelayListener {
     Connecting(Multiaddr),
     Connected(Multiaddr),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum OutgoingRelayRequestError {
+    DialingRelay,
 }

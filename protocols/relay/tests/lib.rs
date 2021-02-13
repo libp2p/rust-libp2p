@@ -467,28 +467,22 @@ fn node_a_try_connect_to_offline_node_b_via_offline_relay() {
     Swarm::dial_addr(&mut node_a_swarm, node_b_address_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Node A dialing Relay to connect to Node B.
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::Dialing(peer_id) => {
-                    assert_eq!(peer_id, relay_peer_id);
-                    break;
-                }
-                e => panic!("{:?}", e),
-            }
+        match node_a_swarm.next_event().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
         }
 
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {
-                    break;
-                }
-                SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
-                    if address == node_b_address_via_relay =>
-                {
-                    break;
-                }
-                e => panic!("{:?}", e),
-            }
+        // Node A fail to reach Relay.
+        match node_a_swarm.next_event().await {
+            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
+        }
+
+        // Node A fail to reach Node B due to failure reaching Relay.
+        match node_a_swarm.next_event().await {
+            SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
+                if address == node_b_address_via_relay => {}
+            e => panic!("{:?}", e),
         }
     });
 }

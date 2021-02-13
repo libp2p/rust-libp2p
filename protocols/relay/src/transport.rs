@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::BehaviourToTransportMsg;
+use crate::behaviour::{BehaviourToTransportMsg, OutgoingRelayRequestError};
 use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
@@ -42,7 +42,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
-        send_back: oneshot::Sender<NegotiatedSubstream>,
+        send_back: oneshot::Sender<Result<NegotiatedSubstream, OutgoingRelayRequestError>>,
     },
     ListenRequest {
         address: Multiaddr,
@@ -180,7 +180,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                         send_back: tx,
                     })
                     .await?;
-                let stream = rx.await?;
+                let stream = rx.await??;
                 Ok(stream)
             }
             .boxed(),
@@ -358,8 +358,9 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 pub enum RelayError {
     MissingPeerId,
     InvalidHash,
-    FailedSendingMessageToBehaviour(mpsc::SendError),
+    SendingMessageToBehaviour(mpsc::SendError),
     ResponseFromBehaviourCanceled,
+    DialingRelay,
 }
 
 impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
@@ -370,7 +371,7 @@ impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
 
 impl From<mpsc::SendError> for RelayError {
     fn from(error: mpsc::SendError) -> Self {
-        RelayError::FailedSendingMessageToBehaviour(error)
+        RelayError::SendingMessageToBehaviour(error)
     }
 }
 
@@ -380,9 +381,17 @@ impl From<oneshot::Canceled> for RelayError {
     }
 }
 
+impl From<OutgoingRelayRequestError> for RelayError {
+    fn from(error: OutgoingRelayRequestError) -> Self {
+        match error {
+            OutgoingRelayRequestError::DialingRelay => RelayError::DialingRelay,
+        }
+    }
+}
+
 impl std::fmt::Display for RelayError {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!();
+        todo!();
     }
 }
 

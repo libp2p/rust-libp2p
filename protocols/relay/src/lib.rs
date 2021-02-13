@@ -58,7 +58,7 @@ mod protocol;
 mod transport;
 
 pub use behaviour::Relay;
-pub use transport::RelayTransportWrapper;
+pub use transport::{RelayError, RelayTransportWrapper};
 
 // TODO: No need to be public.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
