@@ -119,12 +119,13 @@ where
 /// indicating progress.
 fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     mut source: &mut S,
-    destination: &mut D,
+    mut destination: &mut D,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<bool>> {
     let buffer = ready!(Pin::new(&mut source).poll_fill_buf(cx))?;
     if buffer.is_empty() {
-        ready!(Pin::new(destination).poll_flush(cx))?;
+        ready!(Pin::new(&mut destination).poll_flush(cx))?;
+        ready!(Pin::new(&mut destination).poll_close(cx))?;
         return Poll::Ready(Ok(true));
     }
 
