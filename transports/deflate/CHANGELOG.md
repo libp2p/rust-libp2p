@@ -1,3 +1,8 @@
+# 0.27.1 [2021-01-27]
+
+- Ensure read buffers are initialised.
+  [PR 1933](https://github.com/libp2p/rust-libp2p/pull/1933).
+
 # 0.27.0 [2021-01-12]
 
 - Update dependencies.

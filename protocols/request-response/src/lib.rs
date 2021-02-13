@@ -230,6 +230,12 @@ impl<TResponse> ResponseChannel<TResponse> {
 }
 
 /// The ID of an inbound or outbound request.
+///
+/// Note: [`RequestId`]'s uniqueness is only guaranteed between two
+/// inbound and likewise between two outbound requests. There is no
+/// uniqueness guarantee in a set of both inbound and outbound
+/// [`RequestId`]s nor in a set of inbound or outbound requests
+/// originating from different [`RequestResponse`] behaviours.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 
@@ -431,9 +437,16 @@ where
     /// [`PeerId`] initiated by [`RequestResponse::send_request`] is still
     /// pending, i.e. waiting for a response.
     pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
-        self.connected.get(peer)
+        // Check if request is already sent on established connection.
+        let est_conn = self.connected.get(peer)
             .map(|cs| cs.iter().any(|c| c.pending_inbound_responses.contains(request_id)))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        // Check if request is still pending to be sent.
+        let pen_conn = self.pending_outbound_requests.get(peer)
+            .map(|rps| rps.iter().any(|rp| {rp.request_id == *request_id}))
+            .unwrap_or(false);
+
+        est_conn || pen_conn
     }
 
     /// Checks whether an inbound request from the peer with the provided

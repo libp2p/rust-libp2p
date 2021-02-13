@@ -34,6 +34,6 @@ libp2p = { path = "../.." }
 libp2p-kad = { path = "../kad" }
 libp2p-ping = { path = "../ping" }
 libp2p-identify = { path = "../identify" }
-libp2p-plaintext = { path = "../plaintext" }
+libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 rand = "0.7.2"
