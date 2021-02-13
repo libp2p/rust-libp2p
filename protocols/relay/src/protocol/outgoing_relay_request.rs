@@ -20,9 +20,9 @@
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
+use asynchronous_codec::{Framed, FramedParts};
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use asynchronous_codec::Framed;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
 use std::iter;
@@ -67,7 +67,7 @@ impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayRequest
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = TSubstream;
+    type Output = super::Connection<TSubstream>;
     type Error = OutgoingRelayRequestError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -135,7 +135,18 @@ where
                 e => return Err(OutgoingRelayRequestError::ReceivedErrorStatus(e)),
             }
 
-            Ok(substream.into_inner())
+            let FramedParts {
+                io,
+                read_buffer,
+                write_buffer,
+                ..
+            } = substream.into_parts();
+            assert!(
+                write_buffer.is_empty(),
+                "Expect a flushed Framed to have empty write buffer."
+            );
+
+            Ok(super::Connection::new(read_buffer.freeze(), io))
         }
         .boxed()
     }

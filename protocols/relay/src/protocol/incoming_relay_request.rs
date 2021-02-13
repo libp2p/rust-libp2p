@@ -20,15 +20,15 @@
 
 use super::copy_future::CopyFuture;
 use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
-use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
+use crate::protocol::Peer;
 
 use asynchronous_codec::{Framed, FramedParts};
+use bytes::BytesMut;
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
-use std::io::Cursor;
 use std::time::Duration;
 use unsigned_varint::codec::UviBytes;
 
@@ -44,7 +44,7 @@ use unsigned_varint::codec::UviBytes;
 #[must_use = "An incoming relay request should be either accepted or denied."]
 pub struct IncomingRelayRequest<TSubstream> {
     /// The stream to the source.
-    stream: TSubstream,
+    stream: Framed<TSubstream, UviBytes>,
     /// Target of the request.
     dest: Peer,
 
@@ -57,7 +57,10 @@ where
 {
     /// Creates a [`IncomingRelayRequest`] as well as a Future that resolves once the
     /// [`IncomingRelayRequest`] is dropped.
-    pub(crate) fn new(stream: TSubstream, dest: Peer) -> (Self, oneshot::Receiver<()>) {
+    pub(crate) fn new(
+        stream: Framed<TSubstream, UviBytes>,
+        dest: Peer,
+    ) -> (Self, oneshot::Receiver<()>) {
         let (tx, rx) = oneshot::channel();
         (
             IncomingRelayRequest {
@@ -81,7 +84,7 @@ where
 
     /// Accepts the request by providing a stream to the destination.
     pub fn fulfill<TDestSubstream>(
-        self,
+        mut self,
         dest_stream: TDestSubstream,
     ) -> BoxFuture<'static, Result<(), IncomingRelayRequestError>>
     where
@@ -93,22 +96,29 @@ where
             dst_peer: None,
             code: Some(circuit_relay::Status::Success.into()),
         };
-        let mut msg_bytes = Vec::new();
+        let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(self.stream, codec);
-
         async move {
-            substream.send(Cursor::new(msg_bytes)).await?;
+            self.stream.send(msg_bytes.freeze()).await?;
 
-            // TODO: When releasing, one should make sure that all buffers are empty.
-            //
-            // TODO: Move timeout into constant or configuration option.
-            let copy_future =
-                CopyFuture::new(substream.release().0, dest_stream, Duration::from_secs(2));
+            let FramedParts {
+                io,
+                read_buffer,
+                write_buffer,
+                ..
+            } = self.stream.into_parts();
+            assert!(
+                read_buffer.is_empty(),
+                "Expect a Framed, that was never actively read from, not to read."
+            );
+            assert!(
+                write_buffer.is_empty(),
+                "Expect a flushed Framed to have empty write buffer."
+            );
+
+            let copy_future = CopyFuture::new(io, dest_stream, Duration::from_secs(2));
 
             copy_future.await.map_err(Into::into)
         }
@@ -118,7 +128,7 @@ where
     /// Refuses the request.
     ///
     /// The returned `Future` gracefully shuts down the request.
-    pub fn deny(self) -> BoxFuture<'static, Result<(), std::io::Error>> {
+    pub fn deny(mut self) -> BoxFuture<'static, Result<(), std::io::Error>> {
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             // TODO: Consider to be more specific, e.g. when connection succeeds, but creating a
@@ -127,16 +137,12 @@ where
             src_peer: None,
             dst_peer: None,
         };
-        let mut msg_bytes = Vec::new();
+        let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(self.stream, codec);
-
         async move {
-            substream.send(Cursor::new(msg_bytes)).await?;
+            self.stream.send(msg_bytes.freeze()).await?;
             Ok(())
         }
         .boxed()

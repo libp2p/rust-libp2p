@@ -21,15 +21,14 @@
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::incoming_destination_request::IncomingDestinationRequest;
 use crate::protocol::incoming_relay_request::IncomingRelayRequest;
-use crate::protocol::{Peer, PeerParseError, PROTOCOL_NAME, MAX_ACCEPTED_MESSAGE_LEN};
-use futures::{future::BoxFuture, prelude::*};
+use crate::protocol::{Peer, PeerParseError, MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use asynchronous_codec::Framed;
 use futures::channel::oneshot;
+use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade;
 use prost::Message;
 
-
-use std::{convert::TryFrom, error, fmt, iter};
+use std::{convert::TryFrom, iter};
 use unsigned_varint::codec::UviBytes;
 
 /// Configuration for an inbound upgrade that handles requests from the remote for the relay
@@ -76,7 +75,7 @@ where
             let mut substream = Framed::<TSubstream, _>::new(substream, codec);
 
             let msg: bytes::BytesMut = substream.next().await.unwrap().unwrap();
-            let msg =std::io::Cursor::new(msg);
+            let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
                 src_peer,
@@ -88,15 +87,13 @@ where
                 circuit_relay::Type::Hop => {
                     // TODO Handle
                     let peer = Peer::try_from(dst_peer.unwrap())?;
-                    // TODO: Handle additional data when calling `into_inner`.
-                    let (rq, notifyee) = IncomingRelayRequest::new(substream.into_inner(), peer);
+                    let (rq, notifyee) = IncomingRelayRequest::new(substream, peer);
                     Ok(RelayRemoteRequest::RelayRequest((rq, notifyee)))
                 }
                 circuit_relay::Type::Stop => {
                     // TODO Handle
                     let peer = Peer::try_from(src_peer.unwrap())?;
-                    // TODO: Handle additional data when calling `into_inner`.
-                    let rq = IncomingDestinationRequest::new(substream.into_inner(), peer);
+                    let rq = IncomingDestinationRequest::new(substream, peer);
                     Ok(RelayRemoteRequest::DestinationRequest(rq))
                 }
                 _ => Err(RelayListenError::InvalidMessageTy),
@@ -109,8 +106,6 @@ where
 /// Error while upgrading with a `RelayListen`.
 #[derive(Debug)]
 pub enum RelayListenError {
-    /// Error while reading the message that the remote is expected to send.
-    ReadError(upgrade::ReadOneError),
     /// Failed to parse the protobuf handshake message.
     // TODO: Rename to DecodeError
     ParseError(prost::DecodeError),
@@ -118,44 +113,6 @@ pub enum RelayListenError {
     PeerParseError(PeerParseError),
     /// Received a message invalid in this context.
     InvalidMessageTy,
-}
-
-impl fmt::Display for RelayListenError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RelayListenError::ReadError(ref err) => {
-                write!(f, "Error while reading the handshake message: {}", err)
-            }
-            RelayListenError::ParseError(ref err) => {
-                write!(f, "Error while parsing the handshake message: {}", err)
-            }
-            RelayListenError::PeerParseError(ref err) => write!(
-                f,
-                "Error while parsing a peer in the handshake message: {}",
-                err
-            ),
-            RelayListenError::InvalidMessageTy => {
-                write!(f, "Received a message invalid in this context.")
-            }
-        }
-    }
-}
-
-impl error::Error for RelayListenError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            RelayListenError::ReadError(ref err) => Some(err),
-            RelayListenError::ParseError(ref err) => Some(err),
-            RelayListenError::PeerParseError(ref err) => Some(err),
-            RelayListenError::InvalidMessageTy => None,
-        }
-    }
-}
-
-impl From<upgrade::ReadOneError> for RelayListenError {
-    fn from(err: upgrade::ReadOneError) -> Self {
-        RelayListenError::ReadError(err)
-    }
 }
 
 impl From<prost::DecodeError> for RelayListenError {

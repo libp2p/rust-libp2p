@@ -84,7 +84,7 @@ pub struct RelayHandler {
     accept_destination_futures: FuturesUnordered<
         BoxFuture<
             'static,
-            Result<(PeerId, NegotiatedSubstream), protocol::IncomingDestinationRequestError>,
+            Result<(PeerId, protocol::Connection<NegotiatedSubstream>), protocol::IncomingDestinationRequestError>,
         >,
     >,
 
@@ -108,6 +108,8 @@ pub struct RelayHandler {
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
 
+    // TODO: We need to do the same for substreams passend to the transport (source and
+    // destination), no?
     /// Tracks substreams lend out to other [`Relayandler`]s.
     ///
     /// For each substream between a source and oneself, there is a future in here that resolves
@@ -149,7 +151,7 @@ pub enum RelayHandlerEvent {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    OutgoingRelayRequestSuccess(PeerId, RequestId, NegotiatedSubstream),
+    OutgoingRelayRequestSuccess(PeerId, RequestId, protocol::Connection<NegotiatedSubstream>),
 
     /// The local node has accepted an incoming destination request. Contains a substream that
     /// communicates with the source.
@@ -158,7 +160,7 @@ pub enum RelayHandlerEvent {
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
     IncomingRelayRequestSuccess {
-        stream: NegotiatedSubstream,
+        stream: protocol::Connection<NegotiatedSubstream>,
         source: PeerId,
     },
 

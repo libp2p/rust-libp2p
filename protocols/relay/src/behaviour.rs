@@ -77,11 +77,11 @@ struct OutgoingDialingRelayRequest {
     relay_addr: Multiaddr,
     destination_addr: Multiaddr,
     destination_peer_id: PeerId,
-    send_back: oneshot::Sender<Result<NegotiatedSubstream, OutgoingRelayRequestError>>,
+    send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>>,
 }
 
 struct OutgoingUpgradingRelayRequest {
-    send_back: oneshot::Sender<Result<NegotiatedSubstream, OutgoingRelayRequestError>>,
+    send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>>,
 }
 
 enum IncomingRelayRequest {
@@ -445,7 +445,7 @@ impl NetworkBehaviour for Relay {
 
 pub enum BehaviourToTransportMsg {
     IncomingRelayedConnection {
-        stream: NegotiatedSubstream,
+        stream: protocol::Connection<NegotiatedSubstream>,
         source: PeerId,
     },
 }

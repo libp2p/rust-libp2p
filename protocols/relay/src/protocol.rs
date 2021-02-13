@@ -20,8 +20,13 @@
 
 use crate::message_proto::circuit_relay;
 
+use bytes::Bytes;
+use futures::io::{AsyncRead, AsyncWrite};
 use libp2p_core::{multiaddr::Error as MultiaddrError, Multiaddr, PeerId};
 use smallvec::SmallVec;
+use std::io::{Error, IoSlice};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::{convert::TryFrom, error, fmt};
 
 /// Any message received on the wire whose length is superior to that will be refused and will
@@ -54,6 +59,8 @@ pub mod copy_future;
 /// Strong typed version of a `CircuitRelay_Peer`.
 ///
 /// Can be parsed from a `CircuitRelay_Peer` using the `TryFrom` trait.
+//
+// TODO: Is this used anywhere?
 #[derive(Clone)]
 pub(crate) struct Peer {
     pub(crate) peer_id: PeerId,
@@ -104,5 +111,68 @@ impl error::Error for PeerParseError {
             PeerParseError::PeerIdParseError => None,
             PeerParseError::MultiaddrParseError(ref err) => Some(err),
         }
+    }
+}
+
+/// A [`NegotiatedSubstream`] acting as a relayed [`Connection`].
+//
+// Might at first return data, that was already read during relay negotiation.
+//
+// TODO: Being generic over TSubstream needed here? Wouldn't NegotiatedSubstream do as well?
+#[derive(Debug)]
+pub struct Connection<TSubstream> {
+    initial_data: Bytes,
+    stream: TSubstream,
+}
+
+impl<TSubstream> Unpin for Connection<TSubstream> {}
+
+impl<TSubstream> Connection<TSubstream> {
+    fn new(initial_data: Bytes, stream: TSubstream) -> Self {
+        Connection {
+            initial_data,
+            stream,
+        }
+    }
+}
+
+impl<TSubstream: AsyncWrite + Unpin> AsyncWrite for Connection<TSubstream> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &[u8],
+    ) -> Poll<Result<usize, Error>> {
+        Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
+        Pin::new(&mut self.stream).poll_close(cx)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        bufs: &[IoSlice],
+    ) -> Poll<Result<usize, Error>> {
+        Pin::new(&mut self.stream).poll_write_vectored(cx, bufs)
+    }
+}
+
+impl<TSubstream: AsyncRead + Unpin> AsyncRead for Connection<TSubstream> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, Error>> {
+        if !self.initial_data.is_empty() {
+            let n = std::cmp::min(self.initial_data.len(), buf.len());
+            buf[0..n].copy_from_slice(&self.initial_data.as_ref()[..n]);
+            let _ = self.initial_data.split_to(n);
+            return Poll::Ready(Ok(n));
+        }
+
+        Pin::new(&mut self.stream).poll_read(cx, buf)
     }
 }

@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
+use crate::protocol::Peer;
 
+use asynchronous_codec::{Framed, FramedParts};
+use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
-use asynchronous_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
 use std::io;
-use std::io::Cursor;
 use unsigned_varint::codec::UviBytes;
 
 /// Request from a remote for us to become a destination.
@@ -41,7 +41,7 @@ use unsigned_varint::codec::UviBytes;
 #[must_use = "A destination request should be either accepted or denied"]
 pub struct IncomingDestinationRequest<TSubstream> {
     /// The stream to the source.
-    stream: TSubstream,
+    stream: Framed<TSubstream, UviBytes>,
     /// Source of the request.
     from: Peer,
 }
@@ -51,7 +51,7 @@ where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     /// Creates a `IncomingDestinationRequest`.
-    pub(crate) fn new(stream: TSubstream, from: Peer) -> Self {
+    pub(crate) fn new(stream: Framed<TSubstream, UviBytes>, from: Peer) -> Self {
         IncomingDestinationRequest {
             stream: stream,
             from,
@@ -74,25 +74,33 @@ where
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
     pub fn accept(
         self,
-    ) -> BoxFuture<'static, Result<(PeerId, TSubstream), IncomingDestinationRequestError>> {
-        let IncomingDestinationRequest { stream, from } = self;
+    ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>), IncomingDestinationRequestError>> {
+        let IncomingDestinationRequest { mut stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
             dst_peer: None,
             code: Some(circuit_relay::Status::Success.into()),
         };
-        let mut msg_bytes = Vec::new();
+        let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(stream, codec);
-
         async move {
-            substream.send(Cursor::new(msg_bytes)).await?;
-            Ok((from.peer_id, substream.into_inner()))
+            stream.send(msg_bytes.freeze()).await?;
+
+            let FramedParts {
+                io,
+                read_buffer,
+                write_buffer,
+                ..
+            } = stream.into_parts();
+            assert!(
+                write_buffer.is_empty(),
+                "Expect a flushed Framed to have empty write buffer."
+            );
+
+            Ok((from.peer_id, super::Connection::new(read_buffer.freeze(), io)))
         }
         .boxed()
     }
@@ -100,23 +108,19 @@ where
     /// Refuses the request.
     ///
     /// The returned `Future` gracefully shuts down the request.
-    pub fn deny(self) -> BoxFuture<'static, Result<(), io::Error>> {
+    pub fn deny(mut self) -> BoxFuture<'static, Result<(), io::Error>> {
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
             dst_peer: None,
             code: Some(circuit_relay::Status::StopRelayRefused.into()),
         };
-        let mut msg_bytes = Vec::new();
+        let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
             .expect("all the mandatory fields are always filled; QED");
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-        let mut substream = Framed::new(self.stream, codec);
-
         async move {
-            substream.send(Cursor::new(msg_bytes)).await?;
+            self.stream.send(msg_bytes.freeze()).await?;
             Ok(())
         }
         .boxed()

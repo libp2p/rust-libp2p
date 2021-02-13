@@ -20,6 +20,7 @@
 
 use crate::behaviour::{BehaviourToTransportMsg, OutgoingRelayRequestError};
 use crate::RequestId;
+use crate::protocol;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
@@ -42,7 +43,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<NegotiatedSubstream, OutgoingRelayRequestError>>,
+        send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>>,
     },
     ListenRequest {
         address: Multiaddr,
@@ -97,7 +98,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
 }
 
 impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
-    type Output = EitherOutput<<T as Transport>::Output, NegotiatedSubstream>;
+    type Output = EitherOutput<<T as Transport>::Output, protocol::Connection<NegotiatedSubstream>>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
@@ -325,17 +326,17 @@ impl<T: Transport> Stream for RelayListener<T> {
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<NegotiatedSubstream, RelayError>>;
+pub type RelayedDial = BoxFuture<'static, Result<protocol::Connection<NegotiatedSubstream>, RelayError>>;
 
 #[pin_project(project = RelayedListenerUpgradeProj)]
 pub enum RelayedListenerUpgrade<T: Transport> {
     Inner(#[pin] <T as Transport>::ListenerUpgrade),
-    Relayed(Option<NegotiatedSubstream>),
+    Relayed(Option<protocol::Connection<NegotiatedSubstream>>),
 }
 
 impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     type Output = Result<
-        EitherOutput<<T as Transport>::Output, NegotiatedSubstream>,
+        EitherOutput<<T as Transport>::Output, protocol::Connection<NegotiatedSubstream>>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
