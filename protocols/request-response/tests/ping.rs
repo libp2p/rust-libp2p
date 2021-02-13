@@ -38,6 +38,34 @@ use rand::{self, Rng};
 use std::{io, iter};
 use std::{collections::HashSet, num::NonZeroU16};
 
+#[test]
+fn is_response_outbound() {
+    let ping = Ping("ping".to_string().into_bytes());
+    let offline_peer = PeerId::random();
+
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
+
+    let (peer1_id, trans) = mk_transport();
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
+
+    let request_id1 = swarm1.send_request(&offline_peer, ping.clone());
+
+    match futures::executor::block_on(swarm1.next()) {
+        RequestResponseEvent::OutboundFailure{peer, request_id: req_id, error: _error} => {
+            assert_eq!(&offline_peer, &peer);
+            assert_eq!(req_id, request_id1);
+        },
+        e => panic!("Peer: Unexpected event: {:?}", e),
+    }
+
+    let request_id2 = swarm1.send_request(&offline_peer, ping.clone());
+
+    assert!(!swarm1.is_pending_outbound(&offline_peer, &request_id1));
+    assert!(swarm1.is_pending_outbound(&offline_peer, &request_id2));
+}
+
 /// Exercises a simple ping protocol.
 #[test]
 fn ping_protocol() {
