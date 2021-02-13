@@ -66,38 +66,36 @@ where
         let mut reset_timer = false;
 
         loop {
-            let mut progress = false;
-
-            match forward_data(&mut this.source, &mut this.destination, cx) {
-                Poll::Ready(Ok(done)) => {
-                    if done {
-                        // TODO: In the ideal case we would also make properly empty buffer from
-                        // destination to source.
-                        return Poll::Ready(Ok(()));
-                    }
-                    progress = true;
-                }
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Pending => {}
+            enum Status {
+                Pending,
+                Done,
+                Progressed,
             }
 
-            match forward_data(&mut this.destination, &mut this.source, cx) {
-                Poll::Ready(Ok(done)) => {
-                    if done {
-                        // TODO: In the ideal case we would also make properly empty buffer from
-                        // source to destination.
-                        return Poll::Ready(Ok(()));
-                    }
-                    progress = true;
-                }
+            let source_status = match forward_data(&mut this.source, &mut this.destination, cx) {
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Pending => {}
-            }
+                Poll::Ready(Ok(true)) => Status::Done,
+                Poll::Ready(Ok(false)) => Status::Progressed,
+                Poll::Pending => Status::Pending,
+            };
 
-            if progress {
-                reset_timer = true;
-            } else {
-                break;
+            let destination_status = match forward_data(&mut this.destination, &mut this.source, cx) {
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Ready(Ok(true)) => Status::Done,
+                Poll::Ready(Ok(false)) => Status::Progressed,
+                Poll::Pending => Status::Pending,
+            };
+
+            match (source_status, destination_status) {
+                // Both source and destination are done sending data.
+                (Status::Done, Status::Done) => return Poll::Ready(Ok(())),
+                // Either source or destination made progress, thus reset timer.
+                (Status::Progressed, _) | (_, Status::Progressed) => reset_timer = true,
+                // Both are pending. Check if timer fired, otherwise return Poll::Pending.
+                (Status::Pending, Status::Pending) => break,
+                // One is done sending data, the other is pending. Check if timer fired, otherwise
+                // return Poll::Pending.
+                (Status::Pending, Status::Done) | (Status::Done, Status::Pending) => break,
             }
         }
 
@@ -125,6 +123,7 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     let buffer = ready!(Pin::new(&mut source).poll_fill_buf(cx))?;
     if buffer.is_empty() {
         ready!(Pin::new(&mut destination).poll_flush(cx))?;
+        // TODO: Is it safe to call `poll_close` on a closed AsyncWrite?
         ready!(Pin::new(&mut destination).poll_close(cx))?;
         return Poll::Ready(Ok(true));
     }

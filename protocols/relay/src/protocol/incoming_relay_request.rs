@@ -23,7 +23,6 @@ use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
 use futures::future::BoxFuture;
-use futures::io::ErrorKind;
 use futures::channel::oneshot;
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -104,12 +103,7 @@ where
             let copy_future =
                 CopyFuture::new(substream.release().0, dest_stream, Duration::from_secs(2));
 
-            match copy_future.await {
-                Err(e) if e.kind() != ErrorKind::TimedOut => panic!(e),
-                _ => {}
-            }
-
-            Ok(())
+            copy_future.await.map_err(Into::into)
         }
         .boxed()
     }

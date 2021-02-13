@@ -609,8 +609,8 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
             loop {
                 match node_b_swarm.next_event().await {
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                        assert_eq!(peer_id, node_a_peer_id);
+                    SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {}
+                    SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == node_a_peer_id => {
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Kad(_)) => {}
