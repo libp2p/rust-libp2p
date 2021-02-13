@@ -22,7 +22,7 @@ use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
 use futures::{future::BoxFuture, prelude::*};
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
 use std::io;

@@ -22,10 +22,10 @@ use super::copy_future::CopyFuture;
 use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN};
 
-use futures::future::BoxFuture;
+use asynchronous_codec::{Framed, FramedParts};
 use futures::channel::oneshot;
+use futures::future::BoxFuture;
 use futures::prelude::*;
-use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
 use std::io::Cursor;
@@ -59,7 +59,14 @@ where
     /// [`IncomingRelayRequest`] is dropped.
     pub(crate) fn new(stream: TSubstream, dest: Peer) -> (Self, oneshot::Receiver<()>) {
         let (tx, rx) = oneshot::channel();
-        (IncomingRelayRequest { stream, dest, _notifier: tx }, rx)
+        (
+            IncomingRelayRequest {
+                stream,
+                dest,
+                _notifier: tx,
+            },
+            rx,
+        )
     }
 
     /// Peer id of the node we should relay communications to.

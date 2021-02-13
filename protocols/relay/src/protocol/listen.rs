@@ -23,7 +23,7 @@ use crate::protocol::incoming_destination_request::IncomingDestinationRequest;
 use crate::protocol::incoming_relay_request::IncomingRelayRequest;
 use crate::protocol::{Peer, PeerParseError, PROTOCOL_NAME, MAX_ACCEPTED_MESSAGE_LEN};
 use futures::{future::BoxFuture, prelude::*};
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use futures::channel::oneshot;
 use libp2p_core::upgrade;
 use prost::Message;
@@ -88,6 +88,7 @@ where
                 circuit_relay::Type::Hop => {
                     // TODO Handle
                     let peer = Peer::try_from(dst_peer.unwrap())?;
+                    // TODO: Handle additional data when calling `into_inner`.
                     let (rq, notifyee) = IncomingRelayRequest::new(substream.into_inner(), peer);
                     Ok(RelayRemoteRequest::RelayRequest((rq, notifyee)))
                 }
