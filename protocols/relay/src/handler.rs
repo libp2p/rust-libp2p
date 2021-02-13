@@ -25,10 +25,10 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::{upgrade, Multiaddr, PeerId, ConnectedPoint};
+use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    KeepAlive, IntoProtocolsHandler, NegotiatedSubstream, ProtocolsHandler,
-    ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -168,7 +168,7 @@ pub enum RelayHandlerEvent {
 
 /// Event that can be sent to the relay handler.
 pub enum RelayHandlerIn {
-    /// Denies a hop request sent by the node we talk to.
+    /// Denies a relay request sent by the node we talk to acting as a source.
     DenyIncomingRelayRequest(protocol::IncomingRelayRequest<NegotiatedSubstream>),
 
     /// Denies a destination request sent by the node we talk to.
@@ -243,7 +243,7 @@ impl ProtocolsHandler for RelayHandler {
             protocol::RelayRemoteRequest::RelayRequest((incoming_relay_request, notifyee)) => {
                 self.alive_lend_out_substreams.push(notifyee);
                 self.queued_events
-                    .push(RelayHandlerEvent::IncomingRelayRequest{
+                    .push(RelayHandlerEvent::IncomingRelayRequest {
                         request_id,
                         source_addr: self.remote_address.clone(),
                         request: incoming_relay_request,
@@ -348,9 +348,7 @@ impl ProtocolsHandler for RelayHandler {
         >,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::A(
-                protocol::OutgoingRelayRequestError::Io(_),
-            ))) => {
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::A(_))) => {
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayRequestError(
                         peer_id, request_id,
@@ -358,7 +356,7 @@ impl ProtocolsHandler for RelayHandler {
             }
             // TODO: When the outbound destination request fails, send a status update back to the
             // source.
-            _ => todo!(),
+            e => panic!("{:?}", e),
         }
     }
 

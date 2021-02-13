@@ -102,7 +102,7 @@ where
     /// The returned `Future` gracefully shuts down the request.
     pub fn deny(self) -> BoxFuture<'static, Result<(), io::Error>> {
         let msg = CircuitRelay {
-            r#type: None,
+            r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
             dst_peer: None,
             code: Some(circuit_relay::Status::StopRelayRefused.into()),

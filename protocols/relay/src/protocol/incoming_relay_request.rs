@@ -119,8 +119,10 @@ where
     /// The returned `Future` gracefully shuts down the request.
     pub fn deny(self) -> BoxFuture<'static, Result<(), std::io::Error>> {
         let msg = CircuitRelay {
-            r#type: None,
-            code: Some(Status::StopRelayRefused.into()),
+            r#type: Some(circuit_relay::Type::Status.into()),
+            // TODO: Consider to be more specific, e.g. when connection succeeds, but creating a
+            // stream fails.
+            code: Some(Status::HopCantDialDst.into()),
             src_peer: None,
             dst_peer: None,
         };
@@ -134,7 +136,6 @@ where
 
         async move {
             substream.send(Cursor::new(msg_bytes)).await?;
-
             Ok(())
         }
         .boxed()

@@ -228,8 +228,19 @@ impl NetworkBehaviour for Relay {
             }
         }
 
-        // TODO: Send an error back to the source.
-        self.incoming_relay_requests.remove(peer_id);
+        if let Some(reqs) = self.incoming_relay_requests.remove(peer_id) {
+            for req in reqs {
+                let IncomingRelayRequest::DialingDestination { source_id, request, .. } = req;
+                self.outbox_to_swarm.push_back(
+                    NetworkBehaviourAction::NotifyHandler {
+                        peer_id: source_id,
+                        handler: NotifyHandler::Any,
+                        event: RelayHandlerIn::DenyIncomingRelayRequest(request),
+                    }
+                )
+            }
+
+        }
     }
 
     fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}

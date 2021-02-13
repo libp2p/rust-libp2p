@@ -109,9 +109,9 @@ where
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
-                // TODO: check that this is the local id.
+                // TODO: Check that this is None.
                 src_peer: _,
-                // TODO: check that this is the destination id.
+                // TODO: Check that this is None.
                 dst_peer: _,
                 code,
             } = CircuitRelay::decode(msg)?;
@@ -126,13 +126,13 @@ where
                 return Err(OutgoingRelayRequestError::ExpectedStatusType);
             }
 
-            if !matches!(
-                code.map(circuit_relay::Status::from_i32)
-                    .flatten()
-                    .ok_or(OutgoingRelayRequestError::ParseStatusField)?,
-                circuit_relay::Status::Success
-            ) {
-                return Err(OutgoingRelayRequestError::ExpectedSuccessStatus);
+            match code
+                .map(circuit_relay::Status::from_i32)
+                .flatten()
+                .ok_or(OutgoingRelayRequestError::ParseStatusField)?
+            {
+                circuit_relay::Status::Success => {}
+                e => return Err(OutgoingRelayRequestError::ReceivedErrorStatus(e)),
             }
 
             Ok(substream.into_inner())
@@ -141,13 +141,14 @@ where
     }
 }
 
+#[derive(Debug)]
 pub enum OutgoingRelayRequestError {
     DecodeError(prost::DecodeError),
     Io(std::io::Error),
     ParseTypeField,
     ParseStatusField,
     ExpectedStatusType,
-    ExpectedSuccessStatus,
+    ReceivedErrorStatus(circuit_relay::Status),
 }
 
 impl From<std::io::Error> for OutgoingRelayRequestError {

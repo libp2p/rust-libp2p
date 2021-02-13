@@ -148,6 +148,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub enum OutgoingDestinationRequestError {
     DecodeError(prost::DecodeError),
     Io(std::io::Error),
