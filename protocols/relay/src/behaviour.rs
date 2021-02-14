@@ -394,7 +394,6 @@ impl NetworkBehaviour for Relay {
                         });
                 }
             }
-
             // Remote wants us to become a destination.
             RelayHandlerEvent::IncomingDestinationRequest(source, request_id) => {
                 let send_back = RelayHandlerIn::AcceptDestinationRequest(source, request_id);
@@ -405,7 +404,6 @@ impl NetworkBehaviour for Relay {
                         event: send_back,
                     });
             }
-
             RelayHandlerEvent::OutgoingRelayRequestError(_destination_peer_id, request_id) => {
                 self.outgoing_relay_requests
                     .upgrading

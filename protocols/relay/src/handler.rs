@@ -88,7 +88,7 @@ pub struct RelayHandler {
         BoxFuture<
             'static,
             Result<
-                (PeerId, protocol::Connection<NegotiatedSubstream>),
+                (PeerId, protocol::Connection<NegotiatedSubstream>, oneshot::Receiver<()>),
                 protocol::IncomingDestinationRequestError,
             >,
         >,
@@ -114,12 +114,12 @@ pub struct RelayHandler {
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
 
-    // TODO: We need to do the same for substreams passend to the transport (source and
-    // destination), no?
-    /// Tracks substreams lend out to other [`Relayandler`]s.
+    /// Tracks substreams lend out to other [`Relayandler`]s or as
+    /// [`Connection`](protocol::Connection) to the
+    /// [`RelayTransportWrapper`](crate::RelayTransportWrapper).
     ///
-    /// For each substream between a source and oneself, there is a future in here that resolves
-    /// once the given substream is dropped.
+    /// For each substream to the peer of this handler, there is a future in here that resolves once
+    /// the given substream is dropped.
     ///
     /// Once all substreams are dropped and this handler has no other work, [`KeepAlive::Until`] can
     /// be set eventually allowing the connection to be closed.
@@ -281,7 +281,8 @@ impl ProtocolsHandler for RelayHandler {
     ) {
         match protocol {
             // We have successfully negotiated a substream towards a relay.
-            EitherOutput::First(substream_to_dest) => {
+            EitherOutput::First((substream_to_dest, notifyee)) => {
+                self.alive_lend_out_substreams.push(notifyee);
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayRequestSuccess(
                         destination_peer_id,
@@ -425,7 +426,8 @@ impl ProtocolsHandler for RelayHandler {
         }
 
         match self.accept_destination_futures.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok((source, substream)))) => {
+            Poll::Ready(Some(Ok((source, substream, notifyee)))) => {
+                self.alive_lend_out_substreams.push(notifyee);
                 let event = RelayHandlerEvent::IncomingRelayRequestSuccess {
                     stream: substream,
                     source,

@@ -24,6 +24,7 @@ use crate::protocol::Peer;
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
+use futures::channel::oneshot;
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
 use std::io;
@@ -74,7 +75,7 @@ where
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
     pub fn accept(
         self,
-    ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>), IncomingDestinationRequestError>> {
+    ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>, oneshot::Receiver<()>), IncomingDestinationRequestError>> {
         let IncomingDestinationRequest { mut stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
@@ -100,7 +101,9 @@ where
                 "Expect a flushed Framed to have empty write buffer."
             );
 
-            Ok((from.peer_id, super::Connection::new(read_buffer.freeze(), io)))
+            let (tx, rx) = oneshot::channel();
+
+            Ok((from.peer_id, super::Connection::new(read_buffer.freeze(), io, tx), rx))
         }
         .boxed()
     }

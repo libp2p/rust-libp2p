@@ -22,6 +22,7 @@ use crate::message_proto::circuit_relay;
 
 use bytes::Bytes;
 use futures::io::{AsyncRead, AsyncWrite};
+use futures::channel::oneshot;
 use libp2p_core::{multiaddr::Error as MultiaddrError, Multiaddr, PeerId};
 use smallvec::SmallVec;
 use std::io::{Error, IoSlice};
@@ -123,15 +124,20 @@ impl error::Error for PeerParseError {
 pub struct Connection<TSubstream> {
     initial_data: Bytes,
     stream: TSubstream,
+
+    /// Notifies the other side of the channel of this [`Connection`] being dropped.
+    _notifier: oneshot::Sender<()>,
 }
 
 impl<TSubstream> Unpin for Connection<TSubstream> {}
 
 impl<TSubstream> Connection<TSubstream> {
-    fn new(initial_data: Bytes, stream: TSubstream) -> Self {
+    fn new(initial_data: Bytes, stream: TSubstream, notifier: oneshot::Sender<()>) -> Self {
         Connection {
             initial_data,
             stream,
+
+            _notifier: notifier,
         }
     }
 }
