@@ -37,23 +37,23 @@ const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
 const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/relay/circuit/0.1.0";
 
 // Source -> Relay
-mod incoming_relay_request;
-mod outgoing_relay_request;
-pub use self::incoming_relay_request::{IncomingRelayRequest, IncomingRelayRequestError};
-pub use self::outgoing_relay_request::{OutgoingRelayRequest, OutgoingRelayRequestError};
+mod incoming_relay_req;
+mod outgoing_relay_req;
+pub use self::incoming_relay_req::{IncomingRelayReq, IncomingRelayReqError};
+pub use self::outgoing_relay_req::{OutgoingRelayReq, OutgoingRelayReqError};
 
 // Relay -> Destination
-mod incoming_destination_request;
-mod outgoing_destination_request;
-pub use self::incoming_destination_request::{
-    IncomingDestinationRequest, IncomingDestinationRequestError,
+mod incoming_destination_req;
+mod outgoing_destination_req;
+pub use self::incoming_destination_req::{
+    IncomingDestinationReq, IncomingDestinationReqError,
 };
-pub use self::outgoing_destination_request::{
-    OutgoingDestinationRequest, OutgoingDestinationRequestError,
+pub use self::outgoing_destination_req::{
+    OutgoingDestinationReq, OutgoingDestinationReqError,
 };
 
 mod listen;
-pub use self::listen::{RelayListen, RelayListenError, RelayRemoteRequest};
+pub use self::listen::{RelayListen, RelayListenError, RelayRemoteReq};
 
 pub mod copy_future;
 

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{BehaviourToTransportMsg, OutgoingRelayRequestError};
+use crate::behaviour::{BehaviourToTransportMsg, OutgoingRelayReqError};
 use crate::RequestId;
 use crate::protocol;
 use futures::channel::mpsc;
@@ -37,15 +37,15 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 pub enum TransportToBehaviourMsg {
-    DialRequest {
+    DialReq {
         request_id: RequestId,
         relay_addr: Multiaddr,
         relay_peer_id: PeerId,
         destination_addr: Multiaddr,
         destination_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>>,
+        send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
     },
-    ListenRequest {
+    ListenReq {
         address: Multiaddr,
         peer_id: PeerId,
     },
@@ -133,7 +133,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
         let msg_to_behaviour = Some(
             async move {
                 to_behaviour
-                    .send(TransportToBehaviourMsg::ListenRequest {
+                    .send(TransportToBehaviourMsg::ListenReq {
                         address: addr,
                         peer_id,
                     })
@@ -172,7 +172,7 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             async move {
                 let (tx, rx) = oneshot::channel();
                 to_behaviour
-                    .send(TransportToBehaviourMsg::DialRequest {
+                    .send(TransportToBehaviourMsg::DialReq {
                         request_id: RequestId::new(),
                         relay_addr,
                         relay_peer_id,
@@ -382,10 +382,10 @@ impl From<oneshot::Canceled> for RelayError {
     }
 }
 
-impl From<OutgoingRelayRequestError> for RelayError {
-    fn from(error: OutgoingRelayRequestError) -> Self {
+impl From<OutgoingRelayReqError> for RelayError {
+    fn from(error: OutgoingRelayReqError) -> Self {
         match error {
-            OutgoingRelayRequestError::DialingRelay => RelayError::DialingRelay,
+            OutgoingRelayReqError::DialingRelay => RelayError::DialingRelay,
         }
     }
 }

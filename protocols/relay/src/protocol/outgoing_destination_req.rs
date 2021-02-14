@@ -33,7 +33,7 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*,
 /// this struct is the message that the *relay* sends to the *destination* at initialization. The
-/// parameters passed to `OutgoingDestinationRequest::new()` are the information of the *source* and the
+/// parameters passed to `OutgoingDestinationReq::new()` are the information of the *source* and the
 /// *destination* (not the information of the *relay*).
 ///
 /// The upgrade should be performed on a substream to the *destination*.
@@ -41,15 +41,15 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and we must link it with the data sent from
 /// the source.
 #[derive(Debug, Clone)] // TODO: better Debug
-pub struct OutgoingDestinationRequest<TUserData> {
+pub struct OutgoingDestinationReq<TUserData> {
     /// The message to send to the destination. Pre-computed.
     message: Vec<u8>,
     /// User data, passed back on success or error.
     user_data: TUserData,
 }
 
-impl<TUserData> OutgoingDestinationRequest<TUserData> {
-    /// Creates a `OutgoingDestinationRequest`. Must pass the parameters of the message.
+impl<TUserData> OutgoingDestinationReq<TUserData> {
+    /// Creates a `OutgoingDestinationReq`. Must pass the parameters of the message.
     ///
     /// The `user_data` is passed back in the result.
     // TODO: change parameters?
@@ -73,14 +73,14 @@ impl<TUserData> OutgoingDestinationRequest<TUserData> {
             .encode(&mut encoded_msg)
             .expect("all the mandatory fields are always filled; QED");
 
-        OutgoingDestinationRequest {
+        OutgoingDestinationReq {
             message: encoded_msg,
             user_data,
         }
     }
 }
 
-impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationRequest<TUserData> {
+impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationReq<TUserData> {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -90,13 +90,13 @@ impl<TUserData> upgrade::UpgradeInfo for OutgoingDestinationRequest<TUserData> {
 }
 
 impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream>
-    for OutgoingDestinationRequest<TUserData>
+    for OutgoingDestinationReq<TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     TUserData: Send + 'static,
 {
     type Output = (TSubstream, TUserData);
-    type Error = OutgoingDestinationRequestError;
+    type Error = OutgoingDestinationReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
@@ -110,7 +110,7 @@ where
             let msg = substream
                 .next()
                 .await
-                .ok_or(OutgoingDestinationRequestError::Io(std::io::Error::new(
+                .ok_or(OutgoingDestinationReqError::Io(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "",
                 )))??;
@@ -127,19 +127,19 @@ where
                 r#type
                     .map(circuit_relay::Type::from_i32)
                     .flatten()
-                    .ok_or(OutgoingDestinationRequestError::ParseTypeField)?,
+                    .ok_or(OutgoingDestinationReqError::ParseTypeField)?,
                 circuit_relay::Type::Status
             ) {
-                return Err(OutgoingDestinationRequestError::ExpectedStatusType);
+                return Err(OutgoingDestinationReqError::ExpectedStatusType);
             }
 
             if !matches!(
                 code.map(circuit_relay::Status::from_i32)
                     .flatten()
-                    .ok_or(OutgoingDestinationRequestError::ParseStatusField)?,
+                    .ok_or(OutgoingDestinationReqError::ParseStatusField)?,
                 circuit_relay::Status::Success
             ) {
-                return Err(OutgoingDestinationRequestError::ExpectedSuccessStatus);
+                return Err(OutgoingDestinationReqError::ExpectedSuccessStatus);
             }
 
             Ok((substream.into_inner(), self.user_data))
@@ -149,7 +149,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum OutgoingDestinationRequestError {
+pub enum OutgoingDestinationReqError {
     DecodeError(prost::DecodeError),
     Io(std::io::Error),
     ParseTypeField,
@@ -158,14 +158,14 @@ pub enum OutgoingDestinationRequestError {
     ExpectedSuccessStatus,
 }
 
-impl From<std::io::Error> for OutgoingDestinationRequestError {
+impl From<std::io::Error> for OutgoingDestinationReqError {
     fn from(e: std::io::Error) -> Self {
-        OutgoingDestinationRequestError::Io(e)
+        OutgoingDestinationReqError::Io(e)
     }
 }
 
-impl From<prost::DecodeError> for OutgoingDestinationRequestError {
+impl From<prost::DecodeError> for OutgoingDestinationReqError {
     fn from(e: prost::DecodeError) -> Self {
-        OutgoingDestinationRequestError::DecodeError(e)
+        OutgoingDestinationReqError::DecodeError(e)
     }
 }

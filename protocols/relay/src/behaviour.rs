@@ -54,45 +54,45 @@ pub struct Relay {
 
     /// Requests by the local node to a relay to relay a connection for the local node to a
     /// destination.
-    outgoing_relay_requests: OutgoingRelayRequests,
+    outgoing_relay_reqs: OutgoingRelayReqs,
 
     /// Requests for the local node to act as a relay from a source to a destination indexed by
     /// destination [`PeerId`].
-    incoming_relay_requests: HashMap<PeerId, Vec<IncomingRelayRequest>>,
+    incoming_relay_reqs: HashMap<PeerId, Vec<IncomingRelayReq>>,
 
     /// List of relay nodes that act as a listener for the local node being a destination.
     listeners: HashMap<PeerId, RelayListener>,
 }
 
 #[derive(Default)]
-struct OutgoingRelayRequests {
+struct OutgoingRelayReqs {
     /// Indexed by relay peer id.
-    dialing: HashMap<PeerId, Vec<OutgoingDialingRelayRequest>>,
-    upgrading: HashMap<RequestId, OutgoingUpgradingRelayRequest>,
+    dialing: HashMap<PeerId, Vec<OutgoingDialingRelayReq>>,
+    upgrading: HashMap<RequestId, OutgoingUpgradingRelayReq>,
 }
 
-struct OutgoingDialingRelayRequest {
+struct OutgoingDialingRelayReq {
     request_id: RequestId,
     relay_addr: Multiaddr,
     destination_addr: Multiaddr,
     destination_peer_id: PeerId,
     send_back: oneshot::Sender<
-        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>,
+        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
     >,
 }
 
-struct OutgoingUpgradingRelayRequest {
+struct OutgoingUpgradingRelayReq {
     send_back: oneshot::Sender<
-        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>,
+        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
     >,
 }
 
-enum IncomingRelayRequest {
+enum IncomingRelayReq {
     DialingDestination {
         source_id: PeerId,
         source_addr: Multiaddr,
         request_id: RequestId,
-        request: protocol::IncomingRelayRequest<NegotiatedSubstream>,
+        req: protocol::IncomingRelayReq<NegotiatedSubstream>,
     },
 }
 
@@ -112,8 +112,8 @@ impl Relay {
             outbox_to_transport: Default::default(),
             outbox_to_swarm: Default::default(),
             connected_peers: Default::default(),
-            incoming_relay_requests: Default::default(),
-            outgoing_relay_requests: Default::default(),
+            incoming_relay_reqs: Default::default(),
+            outgoing_relay_reqs: Default::default(),
             listeners: Default::default(),
         }
     }
@@ -140,21 +140,21 @@ impl NetworkBehaviour for Relay {
         }));
 
         addresses.extend(
-            self.outgoing_relay_requests
+            self.outgoing_relay_reqs
                 .dialing
                 .get(remote_peer_id)
                 .into_iter()
                 .flatten()
-                .map(|OutgoingDialingRelayRequest { relay_addr, .. }| relay_addr.clone()),
+                .map(|OutgoingDialingRelayReq { relay_addr, .. }| relay_addr.clone()),
         );
 
         addresses.extend(
-            self.incoming_relay_requests
+            self.incoming_relay_reqs
                 .get(remote_peer_id)
                 .into_iter()
                 .flatten()
-                .map(|IncomingRelayRequest::DialingDestination { request, .. }| {
-                    request.destination_addresses().cloned()
+                .map(|IncomingRelayReq::DialingDestination { req, .. }| {
+                    req.destination_addresses().cloned()
                 })
                 .flatten(),
         );
@@ -199,9 +199,9 @@ impl NetworkBehaviour for Relay {
             "Expect to be connected to peer with at least one connection."
         );
 
-        if let Some(reqs) = self.outgoing_relay_requests.dialing.remove(id) {
+        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(id) {
             for req in reqs {
-                let OutgoingDialingRelayRequest {
+                let OutgoingDialingRelayReq {
                     request_id,
                     relay_addr: _,
                     destination_addr,
@@ -212,33 +212,33 @@ impl NetworkBehaviour for Relay {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: id.clone(),
                         handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::OutgoingRelayRequest {
+                        event: RelayHandlerIn::OutgoingRelayReq {
                             request_id,
                             destination_peer_id,
                             destination_address: destination_addr.clone(),
                         },
                     });
 
-                self.outgoing_relay_requests
+                self.outgoing_relay_reqs
                     .upgrading
-                    .insert(request_id, OutgoingUpgradingRelayRequest { send_back });
+                    .insert(request_id, OutgoingUpgradingRelayReq { send_back });
             }
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
-        if let Some(reqs) = self.incoming_relay_requests.remove(id) {
+        if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
             for req in reqs {
-                let IncomingRelayRequest::DialingDestination {
+                let IncomingRelayReq::DialingDestination {
                     source_id,
                     source_addr,
                     request_id,
-                    request,
+                    req,
                 } = req;
-                let event = RelayHandlerIn::OutgoingDestinationRequest {
+                let event = RelayHandlerIn::OutgoingDestinationReq {
                     source: source_id,
                     request_id,
                     source_addr,
-                    substream: request,
+                    substream: req,
                 };
 
                 self.outbox_to_swarm
@@ -260,24 +260,24 @@ impl NetworkBehaviour for Relay {
             }
         }
 
-        if let Some(reqs) = self.outgoing_relay_requests.dialing.remove(peer_id) {
+        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer_id) {
             for req in reqs {
                 let _ = req
                     .send_back
-                    .send(Err(OutgoingRelayRequestError::DialingRelay));
+                    .send(Err(OutgoingRelayReqError::DialingRelay));
             }
         }
 
-        if let Some(reqs) = self.incoming_relay_requests.remove(peer_id) {
+        if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
             for req in reqs {
-                let IncomingRelayRequest::DialingDestination {
-                    source_id, request, ..
+                let IncomingRelayReq::DialingDestination {
+                    source_id, req, ..
                 } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: source_id,
                         handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::DenyIncomingRelayRequest(request),
+                        event: RelayHandlerIn::DenyIncomingRelayReq(req),
                     })
             }
         }
@@ -346,7 +346,7 @@ impl NetworkBehaviour for Relay {
         self.connected_peers.remove(id);
 
         // TODO: send back proper refusal message to the source
-        self.incoming_relay_requests.remove(id);
+        self.incoming_relay_reqs.remove(id);
     }
 
     fn inject_event(
@@ -357,18 +357,18 @@ impl NetworkBehaviour for Relay {
     ) {
         match event {
             // Remote wants us to become a relay.
-            RelayHandlerEvent::IncomingRelayRequest {
+            RelayHandlerEvent::IncomingRelayReq {
                 request_id,
                 source_addr,
-                request,
+                req,
             } => {
-                if self.connected_peers.get(request.destination_id()).is_some() {
-                    let dest_id = request.destination_id().clone();
-                    let event = RelayHandlerIn::OutgoingDestinationRequest {
+                if self.connected_peers.get(req.destination_id()).is_some() {
+                    let dest_id = req.destination_id().clone();
+                    let event = RelayHandlerIn::OutgoingDestinationReq {
                         source: event_source,
                         request_id,
                         source_addr,
-                        substream: request,
+                        substream: req,
                     };
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -377,13 +377,13 @@ impl NetworkBehaviour for Relay {
                             event,
                         });
                 } else {
-                    let dest_id = request.destination_id().clone();
-                    self.incoming_relay_requests
+                    let dest_id = req.destination_id().clone();
+                    self.incoming_relay_reqs
                         .entry(dest_id)
                         .or_default()
-                        .push(IncomingRelayRequest::DialingDestination {
+                        .push(IncomingRelayReq::DialingDestination {
                             request_id,
-                            request,
+                            req,
                             source_id: event_source,
                             source_addr,
                         });
@@ -395,8 +395,8 @@ impl NetworkBehaviour for Relay {
                 }
             }
             // Remote wants us to become a destination.
-            RelayHandlerEvent::IncomingDestinationRequest(source, request_id) => {
-                let send_back = RelayHandlerIn::AcceptDestinationRequest(source, request_id);
+            RelayHandlerEvent::IncomingDestinationReq(source, request_id) => {
+                let send_back = RelayHandlerIn::AcceptDestinationReq(source, request_id);
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -404,22 +404,22 @@ impl NetworkBehaviour for Relay {
                         event: send_back,
                     });
             }
-            RelayHandlerEvent::OutgoingRelayRequestError(_destination_peer_id, request_id) => {
-                self.outgoing_relay_requests
+            RelayHandlerEvent::OutgoingRelayReqError(_destination_peer_id, request_id) => {
+                self.outgoing_relay_reqs
                     .upgrading
                     .remove(&request_id)
                     .unwrap();
             }
-            RelayHandlerEvent::OutgoingRelayRequestSuccess(_destination, request_id, stream) => {
+            RelayHandlerEvent::OutgoingRelayReqSuccess(_destination, request_id, stream) => {
                 let send_back = self
-                    .outgoing_relay_requests
+                    .outgoing_relay_reqs
                     .upgrading
                     .remove(&request_id)
-                    .map(|OutgoingUpgradingRelayRequest { send_back, .. }| send_back)
+                    .map(|OutgoingUpgradingRelayReq { send_back, .. }| send_back)
                     .unwrap();
                 send_back.send(Ok(stream)).unwrap();
             }
-            RelayHandlerEvent::IncomingRelayRequestSuccess { stream, source } => self
+            RelayHandlerEvent::IncomingRelayReqSuccess { stream, source } => self
                 .outbox_to_transport
                 .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, source }),
         }
@@ -444,7 +444,7 @@ impl NetworkBehaviour for Relay {
 
         loop {
             match self.from_transport.poll_next_unpin(cx) {
-                Poll::Ready(Some(TransportToBehaviourMsg::DialRequest {
+                Poll::Ready(Some(TransportToBehaviourMsg::DialReq {
                     request_id,
                     relay_addr,
                     relay_peer_id,
@@ -470,22 +470,22 @@ impl NetworkBehaviour for Relay {
                             .push_back(NetworkBehaviourAction::NotifyHandler {
                                 peer_id: relay_peer_id,
                                 handler,
-                                event: RelayHandlerIn::OutgoingRelayRequest {
+                                event: RelayHandlerIn::OutgoingRelayReq {
                                     request_id,
                                     destination_peer_id: destination_peer_id.clone(),
                                     destination_address: destination_addr.clone(),
                                 },
                             });
 
-                        self.outgoing_relay_requests
+                        self.outgoing_relay_reqs
                             .upgrading
-                            .insert(request_id, OutgoingUpgradingRelayRequest { send_back });
+                            .insert(request_id, OutgoingUpgradingRelayReq { send_back });
                     } else {
-                        self.outgoing_relay_requests
+                        self.outgoing_relay_reqs
                             .dialing
                             .entry(relay_peer_id)
                             .or_default()
-                            .push(OutgoingDialingRelayRequest {
+                            .push(OutgoingDialingRelayReq {
                                 request_id,
                                 relay_addr,
                                 destination_addr,
@@ -498,7 +498,7 @@ impl NetworkBehaviour for Relay {
                         });
                     }
                 }
-                Poll::Ready(Some(TransportToBehaviourMsg::ListenRequest { address, peer_id })) => {
+                Poll::Ready(Some(TransportToBehaviourMsg::ListenReq { address, peer_id })) => {
                     if let Some(connections) = self.connected_peers.get(&peer_id) {
                         let primary_connection =
                             connections.iter().next().expect("At least one connection.");
@@ -556,6 +556,6 @@ enum RelayListener {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum OutgoingRelayRequestError {
+pub enum OutgoingRelayReqError {
     DialingRelay,
 }

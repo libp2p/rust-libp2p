@@ -36,13 +36,13 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*, and
 /// we are the *relay*, this struct is a message that the *source* sent to us. The parameters
-/// passed to `IncomingRelayRequest::new()` are the information of the *destination*.
+/// passed to `IncomingRelayReq::new()` are the information of the *destination*.
 ///
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it. This data must be transmitted to the destination.
 // TODO: debug
 #[must_use = "An incoming relay request should be either accepted or denied."]
-pub struct IncomingRelayRequest<TSubstream> {
+pub struct IncomingRelayReq<TSubstream> {
     /// The stream to the source.
     stream: Framed<TSubstream, UviBytes>,
     /// Target of the request.
@@ -51,19 +51,19 @@ pub struct IncomingRelayRequest<TSubstream> {
     _notifier: oneshot::Sender<()>,
 }
 
-impl<TSubstream> IncomingRelayRequest<TSubstream>
+impl<TSubstream> IncomingRelayReq<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    /// Creates a [`IncomingRelayRequest`] as well as a Future that resolves once the
-    /// [`IncomingRelayRequest`] is dropped.
+    /// Creates a [`IncomingRelayReq`] as well as a Future that resolves once the
+    /// [`IncomingRelayReq`] is dropped.
     pub(crate) fn new(
         stream: Framed<TSubstream, UviBytes>,
         dest: Peer,
     ) -> (Self, oneshot::Receiver<()>) {
         let (tx, rx) = oneshot::channel();
         (
-            IncomingRelayRequest {
+            IncomingRelayReq {
                 stream,
                 dest,
                 _notifier: tx,
@@ -86,7 +86,7 @@ where
     pub fn fulfill<TDestSubstream>(
         mut self,
         dest_stream: TDestSubstream,
-    ) -> BoxFuture<'static, Result<(), IncomingRelayRequestError>>
+    ) -> BoxFuture<'static, Result<(), IncomingRelayReqError>>
     where
         TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -150,12 +150,12 @@ where
 }
 
 #[derive(Debug)]
-pub enum IncomingRelayRequestError {
+pub enum IncomingRelayReqError {
     Io(std::io::Error),
 }
 
-impl From<std::io::Error> for IncomingRelayRequestError {
+impl From<std::io::Error> for IncomingRelayReqError {
     fn from(e: std::io::Error) -> Self {
-        IncomingRelayRequestError::Io(e)
+        IncomingRelayReqError::Io(e)
     }
 }

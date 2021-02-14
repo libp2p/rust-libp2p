@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::incoming_destination_request::IncomingDestinationRequest;
-use crate::protocol::incoming_relay_request::IncomingRelayRequest;
+use crate::protocol::incoming_destination_req::IncomingDestinationReq;
+use crate::protocol::incoming_relay_req::IncomingRelayReq;
 use crate::protocol::{Peer, PeerParseError, MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use asynchronous_codec::Framed;
 use futures::channel::oneshot;
@@ -37,11 +37,11 @@ use unsigned_varint::codec::UviBytes;
 pub struct RelayListen {}
 
 /// Outcome of the listening.
-pub enum RelayRemoteRequest<TSubstream> {
+pub enum RelayRemoteReq<TSubstream> {
     /// We have been asked to become a destination.
-    DestinationRequest(IncomingDestinationRequest<TSubstream>),
+    DestinationReq(IncomingDestinationReq<TSubstream>),
     /// We have been asked to relay communications to another node.
-    RelayRequest((IncomingRelayRequest<TSubstream>, oneshot::Receiver<()>)),
+    RelayReq((IncomingRelayReq<TSubstream>, oneshot::Receiver<()>)),
 }
 
 impl RelayListen {
@@ -64,9 +64,9 @@ impl<TSubstream> upgrade::InboundUpgrade<TSubstream> for RelayListen
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = RelayRemoteRequest<TSubstream>;
+    type Output = RelayRemoteReq<TSubstream>;
     type Error = RelayListenError;
-    type Future = BoxFuture<'static, Result<RelayRemoteRequest<TSubstream>, RelayListenError>>;
+    type Future = BoxFuture<'static, Result<RelayRemoteReq<TSubstream>, RelayListenError>>;
 
     fn upgrade_inbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
         async move {
@@ -87,14 +87,14 @@ where
                 circuit_relay::Type::Hop => {
                     // TODO Handle
                     let peer = Peer::try_from(dst_peer.unwrap())?;
-                    let (rq, notifyee) = IncomingRelayRequest::new(substream, peer);
-                    Ok(RelayRemoteRequest::RelayRequest((rq, notifyee)))
+                    let (rq, notifyee) = IncomingRelayReq::new(substream, peer);
+                    Ok(RelayRemoteReq::RelayReq((rq, notifyee)))
                 }
                 circuit_relay::Type::Stop => {
                     // TODO Handle
                     let peer = Peer::try_from(src_peer.unwrap())?;
-                    let rq = IncomingDestinationRequest::new(substream, peer);
-                    Ok(RelayRemoteRequest::DestinationRequest(rq))
+                    let rq = IncomingDestinationReq::new(substream, peer);
+                    Ok(RelayRemoteReq::DestinationReq(rq))
                 }
                 _ => Err(RelayListenError::InvalidMessageTy),
             }

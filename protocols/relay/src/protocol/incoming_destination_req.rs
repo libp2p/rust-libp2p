@@ -34,26 +34,26 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*, and
 /// we are the *destination*, this struct is a message that the *relay* sent to us. The
-/// parameters passed to `IncomingDestinationRequest::new()` are the information of the *source*.
+/// parameters passed to `IncomingDestinationReq::new()` are the information of the *source*.
 ///
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it.
 // TODO: debug
 #[must_use = "A destination request should be either accepted or denied"]
-pub struct IncomingDestinationRequest<TSubstream> {
+pub struct IncomingDestinationReq<TSubstream> {
     /// The stream to the source.
     stream: Framed<TSubstream, UviBytes>,
     /// Source of the request.
     from: Peer,
 }
 
-impl<TSubstream> IncomingDestinationRequest<TSubstream>
+impl<TSubstream> IncomingDestinationReq<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    /// Creates a `IncomingDestinationRequest`.
+    /// Creates a `IncomingDestinationReq`.
     pub(crate) fn new(stream: Framed<TSubstream, UviBytes>, from: Peer) -> Self {
-        IncomingDestinationRequest {
+        IncomingDestinationReq {
             stream: stream,
             from,
         }
@@ -75,8 +75,8 @@ where
     /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
     pub fn accept(
         self,
-    ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>, oneshot::Receiver<()>), IncomingDestinationRequestError>> {
-        let IncomingDestinationRequest { mut stream, from } = self;
+    ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>, oneshot::Receiver<()>), IncomingDestinationReqError>> {
+        let IncomingDestinationReq { mut stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
@@ -131,12 +131,12 @@ where
 }
 
 #[derive(Debug)]
-pub enum IncomingDestinationRequestError {
+pub enum IncomingDestinationReqError {
     Io(std::io::Error),
 }
 
-impl From<std::io::Error> for IncomingDestinationRequestError {
+impl From<std::io::Error> for IncomingDestinationReqError {
     fn from(e: std::io::Error) -> Self {
-        IncomingDestinationRequestError::Io(e)
+        IncomingDestinationReqError::Io(e)
     }
 }

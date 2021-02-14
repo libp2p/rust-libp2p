@@ -33,29 +33,29 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If we take a situation where a *source* wants to talk to a *destination* through a *relay*,
 /// this struct is the message that the *source* sends to the *relay* at initialization. The
-/// parameters passed to `OutgoingRelayRequest::new()` are the information of the *destination*
+/// parameters passed to `OutgoingRelayReq::new()` are the information of the *destination*
 /// (not the information of the *relay*).
 ///
 /// The upgrade should be performed on a substream to the *relay*.
 ///
 /// If the upgrade succeeds, the substream is returned and is now a brand new connection pointing
 /// to the *destination*.
-pub struct OutgoingRelayRequest {
+pub struct OutgoingRelayReq {
     dest_id: PeerId,
     dest_address: Multiaddr,
 }
 
-impl OutgoingRelayRequest {
+impl OutgoingRelayReq {
     /// Builds a request for the target to act as a relay to a third party.
     pub fn new(dest_id: PeerId, dest_address: Multiaddr) -> Self {
-        OutgoingRelayRequest {
+        OutgoingRelayReq {
             dest_id,
             dest_address,
         }
     }
 }
 
-impl upgrade::UpgradeInfo for OutgoingRelayRequest {
+impl upgrade::UpgradeInfo for OutgoingRelayReq {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -64,16 +64,16 @@ impl upgrade::UpgradeInfo for OutgoingRelayRequest {
     }
 }
 
-impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayRequest
+impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayReq
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = (super::Connection<TSubstream>, oneshot::Receiver<()>);
-    type Error = OutgoingRelayRequestError;
+    type Error = OutgoingRelayReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
-        let OutgoingRelayRequest {
+        let OutgoingRelayReq {
             dest_id,
             dest_address,
         } = self;
@@ -102,7 +102,7 @@ where
             let msg = substream
                 .next()
                 .await
-                .ok_or(OutgoingRelayRequestError::Io(std::io::Error::new(
+                .ok_or(OutgoingRelayReqError::Io(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "",
                 )))??;
@@ -121,19 +121,19 @@ where
                 r#type
                     .map(circuit_relay::Type::from_i32)
                     .flatten()
-                    .ok_or(OutgoingRelayRequestError::ParseTypeField)?,
+                    .ok_or(OutgoingRelayReqError::ParseTypeField)?,
                 circuit_relay::Type::Status
             ) {
-                return Err(OutgoingRelayRequestError::ExpectedStatusType);
+                return Err(OutgoingRelayReqError::ExpectedStatusType);
             }
 
             match code
                 .map(circuit_relay::Status::from_i32)
                 .flatten()
-                .ok_or(OutgoingRelayRequestError::ParseStatusField)?
+                .ok_or(OutgoingRelayReqError::ParseStatusField)?
             {
                 circuit_relay::Status::Success => {}
-                e => return Err(OutgoingRelayRequestError::ReceivedErrorStatus(e)),
+                e => return Err(OutgoingRelayReqError::ReceivedErrorStatus(e)),
             }
 
             let FramedParts {
@@ -156,7 +156,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum OutgoingRelayRequestError {
+pub enum OutgoingRelayReqError {
     DecodeError(prost::DecodeError),
     Io(std::io::Error),
     ParseTypeField,
@@ -165,14 +165,14 @@ pub enum OutgoingRelayRequestError {
     ReceivedErrorStatus(circuit_relay::Status),
 }
 
-impl From<std::io::Error> for OutgoingRelayRequestError {
+impl From<std::io::Error> for OutgoingRelayReqError {
     fn from(e: std::io::Error) -> Self {
-        OutgoingRelayRequestError::Io(e)
+        OutgoingRelayReqError::Io(e)
     }
 }
 
-impl From<prost::DecodeError> for OutgoingRelayRequestError {
+impl From<prost::DecodeError> for OutgoingRelayReqError {
     fn from(e: prost::DecodeError) -> Self {
-        OutgoingRelayRequestError::DecodeError(e)
+        OutgoingRelayReqError::DecodeError(e)
     }
 }
