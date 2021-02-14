@@ -837,6 +837,12 @@ fn concurrent_connection_same_relay_same_destination() {
     });
 }
 
+// TODO: When A is connected via R to B and either A or B drop the connection, make sure A disconnects from R and B disconnects from A.
+//
+// TODO: But keep connected to R in case one previously called `listen_on` for that relay.
+//
+// TODO: Document that in the best case B would disconnect from R when `Swarm::remove_listener` is called.
+
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "CombinedEvent", poll_method = "poll")]
 struct CombinedBehaviour {

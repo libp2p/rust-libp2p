@@ -73,6 +73,9 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 ///   or denied.
 ///
 pub struct RelayHandler {
+    /// Specifies whether the connection handled by this Handler is used to listen for incoming
+    /// relayed connections.
+    used_for_listening: bool,
     remote_address: Multiaddr,
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
@@ -84,7 +87,10 @@ pub struct RelayHandler {
     accept_destination_futures: FuturesUnordered<
         BoxFuture<
             'static,
-            Result<(PeerId, protocol::Connection<NegotiatedSubstream>), protocol::IncomingDestinationRequestError>,
+            Result<
+                (PeerId, protocol::Connection<NegotiatedSubstream>),
+                protocol::IncomingDestinationRequestError,
+            >,
         >,
     >,
 
@@ -170,6 +176,9 @@ pub enum RelayHandlerEvent {
 
 /// Event that can be sent to the relay handler.
 pub enum RelayHandlerIn {
+    /// Tell the handler whether it is handling a connection used to listen for incoming relayed
+    /// connections.
+    UsedForListening(bool),
     /// Denies a relay request sent by the node we talk to acting as a source.
     DenyIncomingRelayRequest(protocol::IncomingRelayRequest<NegotiatedSubstream>),
 
@@ -205,6 +214,7 @@ impl RelayHandler {
     /// Builds a new `RelayHandler`.
     pub fn new(remote_address: Multiaddr) -> Self {
         RelayHandler {
+            used_for_listening: false,
             remote_address,
             deny_futures: Default::default(),
             incoming_destination_request_pending_approval: Default::default(),
@@ -288,6 +298,7 @@ impl ProtocolsHandler for RelayHandler {
 
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
+            RelayHandlerIn::UsedForListening(s) => self.used_for_listening = s,
             // Deny a relay request from the node we handle.
             RelayHandlerIn::DenyIncomingRelayRequest(rq) => {
                 let fut = rq.deny();
@@ -448,7 +459,8 @@ impl ProtocolsHandler for RelayHandler {
             self.alive_lend_out_substreams.poll_next_unpin(cx)
         {}
 
-        if !self.deny_futures.is_empty()
+        if self.used_for_listening
+            || !self.deny_futures.is_empty()
             || !self.accept_destination_futures.is_empty()
             || !self.copy_futures.is_empty()
             || !self.alive_lend_out_substreams.is_empty()
