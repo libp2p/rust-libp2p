@@ -74,8 +74,8 @@ struct OutgoingRelayReqs {
 struct OutgoingDialingRelayReq {
     request_id: RequestId,
     relay_addr: Multiaddr,
-    destination_addr: Multiaddr,
-    destination_peer_id: PeerId,
+    dst_addr: Multiaddr,
+    dst_peer_id: PeerId,
     send_back: oneshot::Sender<
         Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
     >,
@@ -88,7 +88,7 @@ struct OutgoingUpgradingRelayReq {
 }
 
 enum IncomingRelayReq {
-    DialingDestination {
+    DialingDst {
         source_id: PeerId,
         source_addr: Multiaddr,
         request_id: RequestId,
@@ -153,8 +153,8 @@ impl NetworkBehaviour for Relay {
                 .get(remote_peer_id)
                 .into_iter()
                 .flatten()
-                .map(|IncomingRelayReq::DialingDestination { req, .. }| {
-                    req.destination_addresses().cloned()
+                .map(|IncomingRelayReq::DialingDst { req, .. }| {
+                    req.dst_addrs().cloned()
                 })
                 .flatten(),
         );
@@ -204,8 +204,8 @@ impl NetworkBehaviour for Relay {
                 let OutgoingDialingRelayReq {
                     request_id,
                     relay_addr: _,
-                    destination_addr,
-                    destination_peer_id,
+                    dst_addr,
+                    dst_peer_id,
                     send_back,
                 } = req;
                 self.outbox_to_swarm
@@ -214,8 +214,8 @@ impl NetworkBehaviour for Relay {
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::OutgoingRelayReq {
                             request_id,
-                            destination_peer_id,
-                            destination_address: destination_addr.clone(),
+                            dst_peer_id,
+                            dst_addr: dst_addr.clone(),
                         },
                     });
 
@@ -228,13 +228,13 @@ impl NetworkBehaviour for Relay {
         // Ask the newly-opened connection to be used as destination if relevant.
         if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
             for req in reqs {
-                let IncomingRelayReq::DialingDestination {
+                let IncomingRelayReq::DialingDst {
                     source_id,
                     source_addr,
                     request_id,
                     req,
                 } = req;
-                let event = RelayHandlerIn::OutgoingDestinationReq {
+                let event = RelayHandlerIn::OutgoingDstReq {
                     source: source_id,
                     request_id,
                     source_addr,
@@ -270,7 +270,7 @@ impl NetworkBehaviour for Relay {
 
         if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
             for req in reqs {
-                let IncomingRelayReq::DialingDestination {
+                let IncomingRelayReq::DialingDst {
                     source_id, req, ..
                 } = req;
                 self.outbox_to_swarm
@@ -362,9 +362,9 @@ impl NetworkBehaviour for Relay {
                 source_addr,
                 req,
             } => {
-                if self.connected_peers.get(req.destination_id()).is_some() {
-                    let dest_id = req.destination_id().clone();
-                    let event = RelayHandlerIn::OutgoingDestinationReq {
+                if self.connected_peers.get(req.dst_id()).is_some() {
+                    let dest_id = req.dst_id().clone();
+                    let event = RelayHandlerIn::OutgoingDstReq {
                         source: event_source,
                         request_id,
                         source_addr,
@@ -377,11 +377,11 @@ impl NetworkBehaviour for Relay {
                             event,
                         });
                 } else {
-                    let dest_id = req.destination_id().clone();
+                    let dest_id = req.dst_id().clone();
                     self.incoming_relay_reqs
                         .entry(dest_id)
                         .or_default()
-                        .push(IncomingRelayReq::DialingDestination {
+                        .push(IncomingRelayReq::DialingDst {
                             request_id,
                             req,
                             source_id: event_source,
@@ -395,8 +395,8 @@ impl NetworkBehaviour for Relay {
                 }
             }
             // Remote wants us to become a destination.
-            RelayHandlerEvent::IncomingDestinationReq(source, request_id) => {
-                let send_back = RelayHandlerIn::AcceptDestinationReq(source, request_id);
+            RelayHandlerEvent::IncomingDstReq(source, request_id) => {
+                let send_back = RelayHandlerIn::AcceptDstReq(source, request_id);
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -404,13 +404,13 @@ impl NetworkBehaviour for Relay {
                         event: send_back,
                     });
             }
-            RelayHandlerEvent::OutgoingRelayReqError(_destination_peer_id, request_id) => {
+            RelayHandlerEvent::OutgoingRelayReqError(_dst_peer_id, request_id) => {
                 self.outgoing_relay_reqs
                     .upgrading
                     .remove(&request_id)
                     .unwrap();
             }
-            RelayHandlerEvent::OutgoingRelayReqSuccess(_destination, request_id, stream) => {
+            RelayHandlerEvent::OutgoingRelayReqSuccess(_dst, request_id, stream) => {
                 let send_back = self
                     .outgoing_relay_reqs
                     .upgrading
@@ -448,8 +448,8 @@ impl NetworkBehaviour for Relay {
                     request_id,
                     relay_addr,
                     relay_peer_id,
-                    destination_addr,
-                    destination_peer_id,
+                    dst_addr,
+                    dst_peer_id,
                     send_back,
                 })) => {
                     if let Some(_) = self.connected_peers.get(&relay_peer_id) {
@@ -472,8 +472,8 @@ impl NetworkBehaviour for Relay {
                                 handler,
                                 event: RelayHandlerIn::OutgoingRelayReq {
                                     request_id,
-                                    destination_peer_id: destination_peer_id.clone(),
-                                    destination_address: destination_addr.clone(),
+                                    dst_peer_id: dst_peer_id.clone(),
+                                    dst_addr: dst_addr.clone(),
                                 },
                             });
 
@@ -488,8 +488,8 @@ impl NetworkBehaviour for Relay {
                             .push(OutgoingDialingRelayReq {
                                 request_id,
                                 relay_addr,
-                                destination_addr,
-                                destination_peer_id,
+                                dst_addr,
+                                dst_peer_id,
                                 send_back,
                             });
                         return Poll::Ready(NetworkBehaviourAction::DialPeer {

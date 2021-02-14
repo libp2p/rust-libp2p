@@ -57,18 +57,18 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 /// There are four possible situations in play here:
 ///
 /// - The handler emits `RelayHandlerEvent::IncomingRelayReq` if the node we handle asks us to
-///   act as a relay. You must send a `RelayHandlerIn::OutgoingDestinationReq` to another
+///   act as a relay. You must send a `RelayHandlerIn::OutgoingDstReq` to another
 ///   handler, or send back a `DenyIncomingRelayReq`.
 ///
-/// - The handler emits `RelayHandlerEvent::IncomingDestinationReq` if the node we handle asks
+/// - The handler emits `RelayHandlerEvent::IncomingDstReq` if the node we handle asks
 ///   us to act as a destination. You must either call `accept` on the produced object, or send back
-///   a `DenyDestinationReq`.
+///   a `DenyDstReq`.
 ///
 /// - Send a `RelayHandlerIn::OutgoingRelayReq` if the node we handle must act as a relay to a
 ///   destination. The handler will either send back a `RelayReqSuccess` containing the stream
 ///   to the destination, or a `OutgoingRelayReqDenied`.
 ///
-/// - Send a `RelayHandlerIn::OutgoingDestinationReq` if the node we handle must act as a
+/// - Send a `RelayHandlerIn::OutgoingDstReq` if the node we handle must act as a
 ///   destination. The handler will automatically notify the source whether the request was accepted
 ///   or denied.
 ///
@@ -80,16 +80,16 @@ pub struct RelayHandler {
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
 
-    incoming_destination_req_pending_approval:
-        HashMap<RequestId, protocol::IncomingDestinationReq<NegotiatedSubstream>>,
+    incoming_dst_req_pending_approval:
+        HashMap<RequestId, protocol::IncomingDstReq<NegotiatedSubstream>>,
 
     /// Futures that send back an accept response to a relay.
-    accept_destination_futures: FuturesUnordered<
+    accept_dst_futures: FuturesUnordered<
         BoxFuture<
             'static,
             Result<
                 (PeerId, protocol::Connection<NegotiatedSubstream>, oneshot::Receiver<()>),
-                protocol::IncomingDestinationReqError,
+                protocol::IncomingDstReqError,
             >,
         >,
     >,
@@ -102,7 +102,7 @@ pub struct RelayHandler {
     outgoing_relay_reqs: Vec<OutgoingRelayReq>,
 
     /// Requests asking the remote to become a destination.
-    outgoing_destination_reqs: SmallVec<
+    outgoing_dst_reqs: SmallVec<
         [(
             PeerId,
             RequestId,
@@ -129,16 +129,16 @@ pub struct RelayHandler {
 }
 
 struct OutgoingRelayReq {
-    destination_peer_id: PeerId,
+    dst_peer_id: PeerId,
     request_id: RequestId,
     /// Addresses of the destination.
-    destination_address: Multiaddr,
+    dst_addr: Multiaddr,
 }
 
 /// Event produced by the relay handler.
 pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back a
-    /// `DenyIncomingRelayReq`, or send a `OutgoingDestinationReq` to a different handler containing
+    /// `DenyIncomingRelayReq`, or send a `OutgoingDstReq` to a different handler containing
     /// this object.
     IncomingRelayReq {
         request_id: RequestId,
@@ -147,9 +147,9 @@ pub enum RelayHandlerEvent {
     },
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
-    /// destination. The behaviour can accept or deny the request via [`AcceptDestinationReq`]
-    /// or [`DenyDestinationReq`].
-    IncomingDestinationReq(PeerId, RequestId),
+    /// destination. The behaviour can accept or deny the request via [`AcceptDstReq`]
+    /// or [`DenyDstReq`].
+    IncomingDstReq(PeerId, RequestId),
 
     /// A `RelayReq` that has previously been sent has been accepted by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -183,23 +183,23 @@ pub enum RelayHandlerIn {
     DenyIncomingRelayReq(protocol::IncomingRelayReq<NegotiatedSubstream>),
 
     /// Denies a destination request sent by the node we talk to.
-    DenyDestinationReq(PeerId, RequestId),
+    DenyDstReq(PeerId, RequestId),
 
     /// Accepts a destination request sent by the node we talk to.
-    AcceptDestinationReq(PeerId, RequestId),
+    AcceptDstReq(PeerId, RequestId),
 
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     OutgoingRelayReq {
-        destination_peer_id: PeerId,
+        dst_peer_id: PeerId,
         request_id: RequestId,
         /// Addresses known for this peer to transmit to the remote.
-        destination_address: Multiaddr,
+        dst_addr: Multiaddr,
     },
 
     /// Asks the node to be used as a destination for a relayed connection.
     ///
     /// The positive or negative response will be written to `substream`.
-    OutgoingDestinationReq {
+    OutgoingDstReq {
         /// Peer id of the node whose communications are being relayed.
         source: PeerId,
         request_id: RequestId,
@@ -217,11 +217,11 @@ impl RelayHandler {
             used_for_listening: false,
             remote_address,
             deny_futures: Default::default(),
-            incoming_destination_req_pending_approval: Default::default(),
-            accept_destination_futures: Default::default(),
+            incoming_dst_req_pending_approval: Default::default(),
+            accept_dst_futures: Default::default(),
             copy_futures: Default::default(),
             outgoing_relay_reqs: Default::default(),
-            outgoing_destination_reqs: Default::default(),
+            outgoing_dst_reqs: Default::default(),
             queued_events: Default::default(),
             alive_lend_out_substreams: Default::default(),
             keep_alive: KeepAlive::Yes,
@@ -236,7 +236,7 @@ impl ProtocolsHandler for RelayHandler {
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol = upgrade::EitherUpgrade<
         protocol::OutgoingRelayReq,
-        protocol::OutgoingDestinationReq<protocol::IncomingRelayReq<NegotiatedSubstream>>,
+        protocol::OutgoingDstReq<protocol::IncomingRelayReq<NegotiatedSubstream>>,
     >;
     type OutboundOpenInfo = (PeerId, RequestId);
     type InboundOpenInfo = RequestId;
@@ -262,12 +262,12 @@ impl ProtocolsHandler for RelayHandler {
                     });
             }
             // We have been asked to become a destination.
-            protocol::RelayRemoteReq::DestinationReq(dest_request) => {
+            protocol::RelayRemoteReq::DstReq(dest_request) => {
                 let source = dest_request.source_id().clone();
-                self.incoming_destination_req_pending_approval
+                self.incoming_dst_req_pending_approval
                     .insert(request_id, dest_request);
                 self.queued_events
-                    .push(RelayHandlerEvent::IncomingDestinationReq(
+                    .push(RelayHandlerEvent::IncomingDstReq(
                         source, request_id,
                     ));
             }
@@ -277,7 +277,7 @@ impl ProtocolsHandler for RelayHandler {
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
-        (destination_peer_id, request_id): Self::OutboundOpenInfo,
+        (dst_peer_id, request_id): Self::OutboundOpenInfo,
     ) {
         match protocol {
             // We have successfully negotiated a substream towards a relay.
@@ -285,7 +285,7 @@ impl ProtocolsHandler for RelayHandler {
                 self.alive_lend_out_substreams.push(notifyee);
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayReqSuccess(
-                        destination_peer_id,
+                        dst_peer_id,
                         request_id,
                         substream_to_dest,
                     ));
@@ -305,18 +305,18 @@ impl ProtocolsHandler for RelayHandler {
                 let fut = rq.deny();
                 self.deny_futures.push(fut);
             }
-            RelayHandlerIn::AcceptDestinationReq(_source, request_id) => {
+            RelayHandlerIn::AcceptDstReq(_source, request_id) => {
                 let rq = self
-                    .incoming_destination_req_pending_approval
+                    .incoming_dst_req_pending_approval
                     .remove(&request_id)
                     .unwrap();
                 let fut = rq.accept();
-                self.accept_destination_futures.push(fut);
+                self.accept_dst_futures.push(fut);
             }
             // Deny a destination request from the node we handle.
-            RelayHandlerIn::DenyDestinationReq(_source, request_id) => {
+            RelayHandlerIn::DenyDstReq(_source, request_id) => {
                 let rq = self
-                    .incoming_destination_req_pending_approval
+                    .incoming_dst_req_pending_approval
                     .remove(&request_id)
                     .unwrap();
                 let fut = rq.deny();
@@ -324,24 +324,24 @@ impl ProtocolsHandler for RelayHandler {
             }
             // Ask the node we handle to act as a relay.
             RelayHandlerIn::OutgoingRelayReq {
-                destination_peer_id,
+                dst_peer_id,
                 request_id,
-                destination_address,
+                dst_addr,
             } => {
                 self.outgoing_relay_reqs.push(OutgoingRelayReq {
-                    destination_peer_id,
+                    dst_peer_id,
                     request_id,
-                    destination_address,
+                    dst_addr,
                 });
             }
             // Ask the node we handle to act as a destination.
-            RelayHandlerIn::OutgoingDestinationReq {
+            RelayHandlerIn::OutgoingDstReq {
                 source,
                 request_id,
                 source_addr,
                 substream,
             } => {
-                self.outgoing_destination_reqs.push((
+                self.outgoing_dst_reqs.push((
                     source,
                     request_id,
                     source_addr,
@@ -357,7 +357,7 @@ impl ProtocolsHandler for RelayHandler {
         error: ProtocolsHandlerUpgrErr<
             EitherError<
                 protocol::OutgoingRelayReqError,
-                protocol::OutgoingDestinationReqError,
+                protocol::OutgoingDstReqError,
             >,
         >,
     ) {
@@ -392,30 +392,30 @@ impl ProtocolsHandler for RelayHandler {
         // Request the remote to act as a relay.
         if !self.outgoing_relay_reqs.is_empty() {
             let OutgoingRelayReq {
-                destination_peer_id,
+                dst_peer_id,
                 request_id,
-                destination_address,
+                dst_addr,
             } = self.outgoing_relay_reqs.remove(0);
             self.outgoing_relay_reqs.shrink_to_fit();
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::A(protocol::OutgoingRelayReq::new(
-                        destination_peer_id,
-                        destination_address,
+                        dst_peer_id,
+                        dst_addr,
                     )),
-                    (destination_peer_id, request_id),
+                    (dst_peer_id, request_id),
                 ),
             });
         }
 
         // Request the remote to act as destination.
-        if !self.outgoing_destination_reqs.is_empty() {
+        if !self.outgoing_dst_reqs.is_empty() {
             let (source, request_id, source_addr, substream) =
-                self.outgoing_destination_reqs.remove(0);
-            self.outgoing_destination_reqs.shrink_to_fit();
+                self.outgoing_dst_reqs.remove(0);
+            self.outgoing_dst_reqs.shrink_to_fit();
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
-                    upgrade::EitherUpgrade::B(protocol::OutgoingDestinationReq::new(
+                    upgrade::EitherUpgrade::B(protocol::OutgoingDstReq::new(
                         source.clone(),
                         source_addr,
                         substream,
@@ -425,7 +425,7 @@ impl ProtocolsHandler for RelayHandler {
             });
         }
 
-        match self.accept_destination_futures.poll_next_unpin(cx) {
+        match self.accept_dst_futures.poll_next_unpin(cx) {
             Poll::Ready(Some(Ok((source, substream, notifyee)))) => {
                 self.alive_lend_out_substreams.push(notifyee);
                 let event = RelayHandlerEvent::IncomingRelayReqSuccess {
@@ -463,7 +463,7 @@ impl ProtocolsHandler for RelayHandler {
 
         if self.used_for_listening
             || !self.deny_futures.is_empty()
-            || !self.accept_destination_futures.is_empty()
+            || !self.accept_dst_futures.is_empty()
             || !self.copy_futures.is_empty()
             || !self.alive_lend_out_substreams.is_empty()
         {

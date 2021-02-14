@@ -36,17 +36,17 @@ use std::time::Duration;
 
 pub struct CopyFuture<S, D> {
     source: BufReader<S>,
-    destination: BufReader<D>,
+    dst: BufReader<D>,
 
     active_timeout: Delay,
     configured_timeout: Duration,
 }
 
 impl<S: AsyncRead, D: AsyncRead> CopyFuture<S, D> {
-    pub fn new(source: S, destination: D, timeout: Duration) -> Self {
+    pub fn new(source: S, dst: D, timeout: Duration) -> Self {
         CopyFuture {
             source: BufReader::new(source),
-            destination: BufReader::new(destination),
+            dst: BufReader::new(dst),
             active_timeout: Delay::new(timeout),
             configured_timeout: timeout,
         }
@@ -72,21 +72,21 @@ where
                 Progressed,
             }
 
-            let source_status = match forward_data(&mut this.source, &mut this.destination, cx) {
+            let source_status = match forward_data(&mut this.source, &mut this.dst, cx) {
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Ready(Ok(true)) => Status::Done,
                 Poll::Ready(Ok(false)) => Status::Progressed,
                 Poll::Pending => Status::Pending,
             };
 
-            let destination_status = match forward_data(&mut this.destination, &mut this.source, cx) {
+            let dst_status = match forward_data(&mut this.dst, &mut this.source, cx) {
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Ready(Ok(true)) => Status::Done,
                 Poll::Ready(Ok(false)) => Status::Progressed,
                 Poll::Pending => Status::Pending,
             };
 
-            match (source_status, destination_status) {
+            match (source_status, dst_status) {
                 // Both source and destination are done sending data.
                 (Status::Done, Status::Done) => return Poll::Ready(Ok(())),
                 // Either source or destination made progress, thus reset timer.
@@ -117,18 +117,18 @@ where
 /// indicating progress.
 fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     mut source: &mut S,
-    mut destination: &mut D,
+    mut dst: &mut D,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<bool>> {
     let buffer = ready!(Pin::new(&mut source).poll_fill_buf(cx))?;
     if buffer.is_empty() {
-        ready!(Pin::new(&mut destination).poll_flush(cx))?;
+        ready!(Pin::new(&mut dst).poll_flush(cx))?;
         // TODO: Is it safe to call `poll_close` on a closed AsyncWrite?
-        ready!(Pin::new(&mut destination).poll_close(cx))?;
+        ready!(Pin::new(&mut dst).poll_close(cx))?;
         return Poll::Ready(Ok(true));
     }
 
-    let i = ready!(Pin::new(destination).poll_write(cx, buffer))?;
+    let i = ready!(Pin::new(dst).poll_write(cx, buffer))?;
     if i == 0 {
         return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
     }

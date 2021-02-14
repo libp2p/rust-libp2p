@@ -43,13 +43,13 @@ pub use self::incoming_relay_req::{IncomingRelayReq, IncomingRelayReqError};
 pub use self::outgoing_relay_req::{OutgoingRelayReq, OutgoingRelayReqError};
 
 // Relay -> Destination
-mod incoming_destination_req;
-mod outgoing_destination_req;
-pub use self::incoming_destination_req::{
-    IncomingDestinationReq, IncomingDestinationReqError,
+mod incoming_dst_req;
+mod outgoing_dst_req;
+pub use self::incoming_dst_req::{
+    IncomingDstReq, IncomingDstReqError,
 };
-pub use self::outgoing_destination_req::{
-    OutgoingDestinationReq, OutgoingDestinationReqError,
+pub use self::outgoing_dst_req::{
+    OutgoingDstReq, OutgoingDstReqError,
 };
 
 mod listen;

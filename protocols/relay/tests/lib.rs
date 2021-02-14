@@ -771,7 +771,7 @@ fn inactive_connection_timeout() {
 }
 
 #[test]
-fn concurrent_connection_same_relay_same_destination() {
+fn concurrent_connection_same_relay_same_dst() {
     let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();

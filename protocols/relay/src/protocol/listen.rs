@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::incoming_destination_req::IncomingDestinationReq;
+use crate::protocol::incoming_dst_req::IncomingDstReq;
 use crate::protocol::incoming_relay_req::IncomingRelayReq;
 use crate::protocol::{Peer, PeerParseError, MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use asynchronous_codec::Framed;
@@ -39,7 +39,7 @@ pub struct RelayListen {}
 /// Outcome of the listening.
 pub enum RelayRemoteReq<TSubstream> {
     /// We have been asked to become a destination.
-    DestinationReq(IncomingDestinationReq<TSubstream>),
+    DstReq(IncomingDstReq<TSubstream>),
     /// We have been asked to relay communications to another node.
     RelayReq((IncomingRelayReq<TSubstream>, oneshot::Receiver<()>)),
 }
@@ -93,8 +93,8 @@ where
                 circuit_relay::Type::Stop => {
                     // TODO Handle
                     let peer = Peer::try_from(src_peer.unwrap())?;
-                    let rq = IncomingDestinationReq::new(substream, peer);
-                    Ok(RelayRemoteReq::DestinationReq(rq))
+                    let rq = IncomingDstReq::new(substream, peer);
+                    Ok(RelayRemoteReq::DstReq(rq))
                 }
                 _ => Err(RelayListenError::InvalidMessageTy),
             }

@@ -41,8 +41,8 @@ pub enum TransportToBehaviourMsg {
         request_id: RequestId,
         relay_addr: Multiaddr,
         relay_peer_id: PeerId,
-        destination_addr: Multiaddr,
-        destination_peer_id: PeerId,
+        dst_addr: Multiaddr,
+        dst_peer_id: PeerId,
         send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
     },
     ListenReq {
@@ -163,9 +163,9 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             };
         }
 
-        let (relay, destination) = split_relay_and_destination(addr);
+        let (relay, dst) = split_relay_and_dst(addr);
         let (relay_addr, relay_peer_id) = split_off_peer_id(relay)?;
-        let (destination_addr, destination_peer_id) = split_off_peer_id(destination)?;
+        let (dst_addr, dst_peer_id) = split_off_peer_id(dst)?;
 
         let mut to_behaviour = self.to_behaviour.clone();
         Ok(EitherFuture::Second(
@@ -176,8 +176,8 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
                         request_id: RequestId::new(),
                         relay_addr,
                         relay_peer_id,
-                        destination_addr,
-                        destination_peer_id,
+                        dst_addr,
+                        dst_peer_id,
                         send_back: tx,
                     })
                     .await?;
@@ -208,9 +208,9 @@ fn is_relay_listen_address(addr: Multiaddr) -> (bool, Multiaddr) {
     (new_addr.len() != original_len, new_addr)
 }
 
-fn split_relay_and_destination(addr: Multiaddr) -> (Multiaddr, Multiaddr) {
+fn split_relay_and_dst(addr: Multiaddr) -> (Multiaddr, Multiaddr) {
     let mut relay = Vec::new();
-    let mut destination = Vec::new();
+    let mut dst = Vec::new();
     let mut passed_circuit = false;
 
     for protocol in addr.into_iter() {
@@ -222,13 +222,13 @@ fn split_relay_and_destination(addr: Multiaddr) -> (Multiaddr, Multiaddr) {
         if !passed_circuit {
             relay.push(protocol);
         } else {
-            destination.push(protocol);
+            dst.push(protocol);
         }
     }
 
     (
         relay.into_iter().collect(),
-        destination.into_iter().collect(),
+        dst.into_iter().collect(),
     )
 }
 
@@ -403,11 +403,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_split_relay_and_destination() {
+    fn test_split_relay_and_dst() {
         let addr: Multiaddr = "/ip6/::1/tcp/40425/p2p/12D3KooWSy38eUdLNqhmVQZYFy2tzpi9u5Zt3bYuqdh9vKzAvg42/p2p-circuit/p2p/12D3KooWSSCJLCSaSaxTzyajn2yDoybUKsPXdoc47LjjB9196Zbv".parse().unwrap();
-        let (_relay, destination) = split_relay_and_destination(addr);
+        let (_relay, dst) = split_relay_and_dst(addr);
 
-        assert!(!destination.is_empty());
+        assert!(!dst.is_empty());
     }
 
     #[test]
