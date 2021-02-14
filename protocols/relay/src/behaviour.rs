@@ -89,8 +89,8 @@ struct OutgoingUpgradingRelayReq {
 
 enum IncomingRelayReq {
     DialingDst {
-        source_id: PeerId,
-        source_addr: Multiaddr,
+        src_id: PeerId,
+        src_addr: Multiaddr,
         request_id: RequestId,
         req: protocol::IncomingRelayReq<NegotiatedSubstream>,
     },
@@ -229,15 +229,15 @@ impl NetworkBehaviour for Relay {
         if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
             for req in reqs {
                 let IncomingRelayReq::DialingDst {
-                    source_id,
-                    source_addr,
+                    src_id,
+                    src_addr,
                     request_id,
                     req,
                 } = req;
                 let event = RelayHandlerIn::OutgoingDstReq {
-                    source: source_id,
+                    src: src_id,
                     request_id,
-                    source_addr,
+                    src_addr,
                     substream: req,
                 };
 
@@ -271,11 +271,11 @@ impl NetworkBehaviour for Relay {
         if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
             for req in reqs {
                 let IncomingRelayReq::DialingDst {
-                    source_id, req, ..
+                    src_id, req, ..
                 } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source_id,
+                        peer_id: src_id,
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::DenyIncomingRelayReq(req),
                     })
@@ -359,15 +359,15 @@ impl NetworkBehaviour for Relay {
             // Remote wants us to become a relay.
             RelayHandlerEvent::IncomingRelayReq {
                 request_id,
-                source_addr,
+                src_addr,
                 req,
             } => {
                 if self.connected_peers.get(req.dst_id()).is_some() {
                     let dest_id = req.dst_id().clone();
                     let event = RelayHandlerIn::OutgoingDstReq {
-                        source: event_source,
+                        src: event_source,
                         request_id,
-                        source_addr,
+                        src_addr,
                         substream: req,
                     };
                     self.outbox_to_swarm
@@ -384,8 +384,8 @@ impl NetworkBehaviour for Relay {
                         .push(IncomingRelayReq::DialingDst {
                             request_id,
                             req,
-                            source_id: event_source,
-                            source_addr,
+                            src_id: event_source,
+                            src_addr,
                         });
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::DialPeer {
@@ -395,8 +395,8 @@ impl NetworkBehaviour for Relay {
                 }
             }
             // Remote wants us to become a destination.
-            RelayHandlerEvent::IncomingDstReq(source, request_id) => {
-                let send_back = RelayHandlerIn::AcceptDstReq(source, request_id);
+            RelayHandlerEvent::IncomingDstReq(src, request_id) => {
+                let send_back = RelayHandlerIn::AcceptDstReq(src, request_id);
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -419,9 +419,9 @@ impl NetworkBehaviour for Relay {
                     .unwrap();
                 send_back.send(Ok(stream)).unwrap();
             }
-            RelayHandlerEvent::IncomingRelayReqSuccess { stream, source } => self
+            RelayHandlerEvent::IncomingRelayReqSuccess { stream, src } => self
                 .outbox_to_transport
-                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, source }),
+                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, src }),
         }
     }
 
@@ -546,7 +546,7 @@ impl NetworkBehaviour for Relay {
 pub enum BehaviourToTransportMsg {
     IncomingRelayedConnection {
         stream: protocol::Connection<NegotiatedSubstream>,
-        source: PeerId,
+        src: PeerId,
     },
 }
 

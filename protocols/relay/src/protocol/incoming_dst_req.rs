@@ -60,19 +60,19 @@ where
     }
 
     /// Returns the peer id of the source that is being relayed.
-    pub fn source_id(&self) -> &PeerId {
+    pub fn src_id(&self) -> &PeerId {
         &self.from.peer_id
     }
 
     /// Returns the addresses of the source that is being relayed.
-    pub fn source_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
+    pub fn src_addrs(&self) -> impl Iterator<Item = &Multiaddr> {
         self.from.addrs.iter()
     }
 
     /// Accepts the request.
     ///
     /// The returned `Future` sends back a success message then returns the raw stream. This raw
-    /// stream then points to the source (as retreived with `source_id()` and `source_addresses()`).
+    /// stream then points to the source (as retreived with `src_id()` and `src_addrs()`).
     pub fn accept(
         self,
     ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>, oneshot::Receiver<()>), IncomingDstReqError>> {

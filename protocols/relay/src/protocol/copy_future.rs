@@ -35,7 +35,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 pub struct CopyFuture<S, D> {
-    source: BufReader<S>,
+    src: BufReader<S>,
     dst: BufReader<D>,
 
     active_timeout: Delay,
@@ -43,9 +43,9 @@ pub struct CopyFuture<S, D> {
 }
 
 impl<S: AsyncRead, D: AsyncRead> CopyFuture<S, D> {
-    pub fn new(source: S, dst: D, timeout: Duration) -> Self {
+    pub fn new(src: S, dst: D, timeout: Duration) -> Self {
         CopyFuture {
-            source: BufReader::new(source),
+            src: BufReader::new(src),
             dst: BufReader::new(dst),
             active_timeout: Delay::new(timeout),
             configured_timeout: timeout,
@@ -72,21 +72,21 @@ where
                 Progressed,
             }
 
-            let source_status = match forward_data(&mut this.source, &mut this.dst, cx) {
+            let src_status = match forward_data(&mut this.src, &mut this.dst, cx) {
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Ready(Ok(true)) => Status::Done,
                 Poll::Ready(Ok(false)) => Status::Progressed,
                 Poll::Pending => Status::Pending,
             };
 
-            let dst_status = match forward_data(&mut this.dst, &mut this.source, cx) {
+            let dst_status = match forward_data(&mut this.dst, &mut this.src, cx) {
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Ready(Ok(true)) => Status::Done,
                 Poll::Ready(Ok(false)) => Status::Progressed,
                 Poll::Pending => Status::Pending,
             };
 
-            match (source_status, dst_status) {
+            match (src_status, dst_status) {
                 // Both source and destination are done sending data.
                 (Status::Done, Status::Done) => return Poll::Ready(Ok(())),
                 // Either source or destination made progress, thus reset timer.
@@ -116,11 +116,11 @@ where
 /// Returns `true` when done, i.e. `source` having reached EOF, returns false otherwise, thus
 /// indicating progress.
 fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
-    mut source: &mut S,
+    mut src: &mut S,
     mut dst: &mut D,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<bool>> {
-    let buffer = ready!(Pin::new(&mut source).poll_fill_buf(cx))?;
+    let buffer = ready!(Pin::new(&mut src).poll_fill_buf(cx))?;
     if buffer.is_empty() {
         ready!(Pin::new(&mut dst).poll_flush(cx))?;
         // TODO: Is it safe to call `poll_close` on a closed AsyncWrite?
@@ -132,7 +132,7 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     if i == 0 {
         return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
     }
-    Pin::new(source).consume(i);
+    Pin::new(src).consume(i);
 
     Poll::Ready(Ok(false))
 }

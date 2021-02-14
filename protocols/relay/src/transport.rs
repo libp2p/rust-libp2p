@@ -301,7 +301,7 @@ impl<T: Transport> Stream for RelayListener<T> {
         match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {
             Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
                 stream,
-                source,
+                src,
             })) => {
                 return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                     upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
@@ -309,7 +309,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                     // be mentioned here?
                     // Could one do this via IntoProtoHandler trait?
                     local_addr: Multiaddr::empty(),
-                    remote_addr: Protocol::P2p(source.into()).into(),
+                    remote_addr: Protocol::P2p(src.into()).into(),
                 })));
             }
             Poll::Ready(None) => unimplemented!(),
