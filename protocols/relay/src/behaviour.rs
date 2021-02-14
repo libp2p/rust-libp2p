@@ -77,11 +77,15 @@ struct OutgoingDialingRelayRequest {
     relay_addr: Multiaddr,
     destination_addr: Multiaddr,
     destination_peer_id: PeerId,
-    send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>>,
+    send_back: oneshot::Sender<
+        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>,
+    >,
 }
 
 struct OutgoingUpgradingRelayRequest {
-    send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>>,
+    send_back: oneshot::Sender<
+        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayRequestError>,
+    >,
 }
 
 enum IncomingRelayRequest {
@@ -164,10 +168,8 @@ impl NetworkBehaviour for Relay {
     fn inject_connected(&mut self, id: &PeerId) {
         self.connected_peers.insert(id.clone());
 
-        if let Some(RelayListener::Connecting(addr)) = self.relay_listeners.remove(id) {
-            self.relay_listeners
-                .insert(id.clone(), RelayListener::Connected(addr.clone()));
-        }
+        self.relay_listeners
+            .insert(id.clone(), RelayListener::Connected(addr.clone()));
 
         if let Some(reqs) = self.outgoing_relay_requests.dialing.remove(id) {
             for req in reqs {
@@ -224,22 +226,24 @@ impl NetworkBehaviour for Relay {
     fn inject_dial_failure(&mut self, peer_id: &PeerId) {
         if let Some(reqs) = self.outgoing_relay_requests.dialing.remove(peer_id) {
             for req in reqs {
-                let _ = req.send_back.send(Err(OutgoingRelayRequestError::DialingRelay));
+                let _ = req
+                    .send_back
+                    .send(Err(OutgoingRelayRequestError::DialingRelay));
             }
         }
 
         if let Some(reqs) = self.incoming_relay_requests.remove(peer_id) {
             for req in reqs {
-                let IncomingRelayRequest::DialingDestination { source_id, request, .. } = req;
-                self.outbox_to_swarm.push_back(
-                    NetworkBehaviourAction::NotifyHandler {
+                let IncomingRelayRequest::DialingDestination {
+                    source_id, request, ..
+                } = req;
+                self.outbox_to_swarm
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: source_id,
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::DenyIncomingRelayRequest(request),
-                    }
-                )
+                    })
             }
-
         }
     }
 
