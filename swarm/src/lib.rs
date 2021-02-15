@@ -407,7 +407,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Returns the peer ID of the swarm passed as parameter.
-    pub fn local_peer_id(me: &Self) -> PeerId {
+    pub fn local_peer_id(me: &Self) -> &PeerId {
         me.network.local_peer_id()
     }
 

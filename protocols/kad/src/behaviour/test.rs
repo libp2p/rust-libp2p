@@ -167,8 +167,10 @@ fn bootstrap() {
         ).into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
+
         let swarm_ids: Vec<_> = swarms.iter()
             .map(Swarm::local_peer_id)
+            .cloned()
             .collect();
 
         let qid = swarms[0].bootstrap().unwrap();
@@ -233,7 +235,7 @@ fn query_iter() {
         let mut swarms = build_connected_nodes(num_total, 1).into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
-        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).collect();
+        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
@@ -393,6 +395,7 @@ fn get_record_not_found() {
 
     let swarm_ids: Vec<_> = swarms.iter()
         .map(|(_addr, swarm)| Swarm::local_peer_id(swarm))
+        .cloned()
         .collect();
 
     let (second, third) = (swarms[1].0.clone(), swarms[2].0.clone());
@@ -559,12 +562,13 @@ fn put_record() {
                     assert_eq!(r.key, expected.key);
                     assert_eq!(r.value, expected.value);
                     assert_eq!(r.expires, expected.expires);
-                    assert_eq!(r.publisher, Some(Swarm::local_peer_id(&swarms[0])));
+                    assert_eq!(r.publisher.as_ref(), Some(Swarm::local_peer_id(&swarms[0])));
 
                     let key = kbucket::Key::new(r.key.clone());
                     let mut expected = swarms.iter()
                         .skip(1)
                         .map(Swarm::local_peer_id)
+                        .cloned()
                         .collect::<Vec<_>>();
                     expected.sort_by(|id1, id2|
                         kbucket::Key::from(*id1).distance(&key).cmp(
@@ -831,6 +835,7 @@ fn add_provider() {
                     let mut expected = swarms.iter()
                         .skip(1)
                         .map(Swarm::local_peer_id)
+                        .cloned()
                         .collect::<Vec<_>>();
                     let kbucket_key = kbucket::Key::new(key);
                     expected.sort_by(|id1, id2|

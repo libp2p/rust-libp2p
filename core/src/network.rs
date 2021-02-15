@@ -205,8 +205,8 @@ where
     }
 
     /// Returns the peer id of the local node.
-    pub fn local_peer_id(&self) -> PeerId {
-        self.local_peer_id
+    pub fn local_peer_id(&self) -> &PeerId {
+        &self.local_peer_id
     }
 
     /// Dials a multiaddress without expecting a particular remote peer ID.
