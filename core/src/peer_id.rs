@@ -23,6 +23,7 @@ use multihash::{Code, Error, Multihash, MultihashDigest};
 use rand::Rng;
 use std::{convert::TryFrom, fmt, str::FromStr};
 use thiserror::Error;
+use crate::identity::Keypair;
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -84,6 +85,11 @@ impl PeerId {
                 => Ok(PeerId { multihash }),
             _ => Err(multihash)
         }
+    }
+
+    /// Generates a peerId with a public key in it
+    pub fn random_with_pk() -> PeerId {
+        PeerId::from_public_key(Keypair::generate_ed25519().public())
     }
 
     /// Generates a random peer ID from a cryptographically secure PRNG.

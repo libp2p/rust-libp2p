@@ -1941,10 +1941,27 @@ where
                     .find_map(|q| q.inner.contacts.get(&source))
                     .cloned()
                     .and_then(|mut c|
-                        new_address.map(|addr| {
-                            c.insert(addr);
+                        new_address.as_ref().map(|addr| {
+                            c.insert(addr.clone());
                             c
                         }));
+
+                let contact = contact.or({
+                    let pk = source.as_public_key()
+                        .and_then(|pk| {
+                            match pk {
+                                libp2p_core::identity::PublicKey::Ed25519(pk) => {
+                                    Some(pk)
+                                }
+                                _ => {
+                                    log::warn!("Cannot create contact with non-ed25519 key.");
+                                    None
+                                }
+                            }
+                        });
+                    let address = new_address.map(Addresses::new);
+                    address.zip(pk).map(|(addr, pk)| Contact::new(addr, pk))
+                });
 
                 self.connection_updated(source, contact, NodeStatus::Connected);
             }

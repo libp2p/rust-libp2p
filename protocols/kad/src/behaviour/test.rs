@@ -1119,7 +1119,7 @@ fn manual_bucket_inserts() {
 fn network_behaviour_inject_address_change() {
     let (_, _, mut kademlia) = build_node();
 
-    let remote_peer_id = PeerId::random();
+    let remote_peer_id = PeerId::random_with_pk();
     let connection_id = ConnectionId::new(1);
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
