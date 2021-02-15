@@ -241,7 +241,7 @@ where
                 .expect("Can't receive an inbound substream if disabled; QED")
                 .inject_fully_negotiated_inbound(out, info)
         } else {
-            panic!("Unpexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
+            panic!("Unexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
         }
     }
 

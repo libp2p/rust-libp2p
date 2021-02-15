@@ -69,7 +69,7 @@ fn deny_incoming_connec() {
                 multiaddr,
                 error: PendingConnectionError::Transport(_)
             }) => {
-                assert_eq!(peer_id, *swarm1.local_peer_id());
+                assert_eq!(&peer_id, swarm1.local_peer_id());
                 assert_eq!(multiaddr, address);
                 return Poll::Ready(Ok(()));
             },

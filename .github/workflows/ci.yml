@@ -138,7 +138,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: -- -A clippy::mutable_key_type -A clippy::type_complexity
+        args: -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style
 
   run-benchmarks:
     runs-on: ubuntu-latest

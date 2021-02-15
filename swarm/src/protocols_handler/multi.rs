@@ -106,11 +106,11 @@ where
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         let (upgrade, info, timeout, version) = self.handlers.iter()
-            .map(|(k, h)| {
-                let p = h.listen_protocol();
-                let t = *p.timeout();
-                let (v, u, i) = p.into_upgrade();
-                (k.clone(), (v, u, i, t))
+            .map(|(key, handler)| {
+                let proto = handler.listen_protocol();
+                let timeout = *proto.timeout();
+                let (version, upgrade, info) = proto.into_upgrade();
+                (key.clone(), (version, upgrade, info, timeout))
             })
             .fold((Upgrade::new(), Info::new(), Duration::from_secs(0), None),
                 |(mut upg, mut inf, mut timeout, mut version), (k, (v, u, i, t))| {
