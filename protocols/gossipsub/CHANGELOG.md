@@ -3,6 +3,8 @@
 - Prevent non-published messages being added to caches.
   [PR 1930](https://github.com/libp2p/rust-libp2p/pull/1930)
 
+- Update dependencies.
+
 # 0.27.0 [2021-01-12]
 
 - Update dependencies.

@@ -1,3 +1,7 @@
+# 0.27.1 [unreleased]
+
+- Update dependencies.
+
 # 0.27.0 [2021-01-12]
 
 - (Re)add `Transport::address_translation` to permit transport-specific

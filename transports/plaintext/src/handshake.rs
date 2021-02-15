@@ -24,7 +24,7 @@ use crate::structs_proto::Exchange;
 
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use asynchronous_codec::Framed;
+use asynchronous_codec::{Framed, FramedParts};
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
 use prost::Message;
@@ -134,12 +134,9 @@ where
         }
     };
 
-    // The `Framed` wrapper may have buffered additional data that
-    // was already received but is no longer part of the plaintext
-    // handshake. We need to capture that data before dropping
-    // the `Framed` wrapper via `Framed::into_inner()`.
-    let read_buffer = framed_socket.read_buffer().clone().freeze();
-
     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-    Ok((framed_socket.into_inner(), context.state, read_buffer))
+
+    let FramedParts { io, read_buffer, write_buffer, .. } = framed_socket.into_parts();
+    assert!(write_buffer.is_empty());
+    Ok((io, context.state, read_buffer.freeze()))
 }
