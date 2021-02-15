@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
-use serde::export::Formatter;
 use std::fmt;
 
 /// Represents an Onion v3 address
@@ -45,7 +44,7 @@ impl<'a> From<(&'a [u8; 35], u16)> for Onion3Addr<'a> {
 }
 
 impl Debug for Onion3Addr<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
        f.debug_tuple("Onion3Addr")
            .field(&format!("{:02x?}", &self.0[..]))
            .field(&self.1)

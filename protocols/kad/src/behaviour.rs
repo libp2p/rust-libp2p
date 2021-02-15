@@ -589,6 +589,14 @@ where
         self.queries.add_iter_closest(target.clone(), peers, inner)
     }
 
+    /// Returns closest peers to the given key; takes peers from local routing table
+    pub fn local_closest_peers<K>(&mut self, key: K) -> Vec<WeightedPeer>
+        where
+            K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone {
+        let target: kbucket::Key<K> = key.into();
+        Self::closest_keys(&mut self.kbuckets, &target).collect()
+    }
+
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a

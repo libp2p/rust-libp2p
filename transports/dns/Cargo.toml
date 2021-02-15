@@ -2,7 +2,7 @@
 name = "fluence-fork-libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
-version = "0.26.0"
+version = "0.26.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 name = "libp2p_dns"
 
 [dependencies]
-libp2p-core = { version = "0.26.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-core = { version = "0.26.1", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4.1"
 futures = "0.3.1"
 

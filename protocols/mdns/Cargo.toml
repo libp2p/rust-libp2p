@@ -1,7 +1,7 @@
 [package]
 name = "fluence-fork-libp2p-mdns"
 edition = "2018"
-version = "0.27.0"
+version = "0.27.1"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -19,8 +19,8 @@ dns-parser = "0.8.0"
 futures = "0.3.8"
 if-watch = "0.1.6"
 lazy_static = "1.4.0"
-libp2p-core = { version = "0.26.0", path = "../../core", package = "fluence-fork-libp2p-core" }
-libp2p-swarm = { version = "0.26.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
+libp2p-core = { version = "0.26.1", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.26.1", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 log = "0.4.11"
 rand = "0.7.3"
 smallvec = "1.5.0"
