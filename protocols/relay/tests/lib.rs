@@ -128,27 +128,15 @@ fn node_a_connect_to_node_b_listening_via_relay() {
         Swarm::dial_addr(&mut node_a_swarm, node_b_address).unwrap();
         let node_a = async move {
             // Node A dialing Relay to connect to Node B.
-            loop {
-                match node_a_swarm.next_event().await {
-                    SwarmEvent::Dialing(peer_id) => {
-                        assert_eq!(peer_id, relay_peer_id);
-                        break;
-                    }
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    e => panic!("{:?}", e),
-                }
+            match node_a_swarm.next_event().await {
+                SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+                e => panic!("{:?}", e),
             }
 
             // Node A establishing connection to Relay to connect to Node B.
-            loop {
-                match node_a_swarm.next_event().await {
-                    SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                        assert_eq!(peer_id, relay_peer_id);
-                        break;
-                    }
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    e => panic!("{:?}", e),
-                }
+            match node_a_swarm.next_event().await {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+                e => panic!("{:?}", e),
             }
 
             // Node A establishing connection to node B via Relay.
@@ -229,27 +217,15 @@ fn node_a_connect_to_node_b_not_listening_via_relay() {
     Swarm::dial_addr(&mut node_a_swarm, node_b_address_via_relay).unwrap();
     pool.run_until(async move {
         // Node A dialing Relay to connect to Node B.
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::Dialing(peer_id) => {
-                    assert_eq!(peer_id, relay_peer_id);
-                    break;
-                }
-                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                e => panic!("{:?}", e),
-            }
+        match node_a_swarm.next_event().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
         }
 
         // Node A establishing connection to Relay to connect to Node B.
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    assert_eq!(peer_id, relay_peer_id);
-                    break;
-                }
-                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                e => panic!("{:?}", e),
-            }
+        match node_a_swarm.next_event().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
         }
 
         // Node A establishing connection to node B via Relay.
@@ -324,16 +300,15 @@ fn node_a_connect_to_node_b_via_established_connection_to_relay() {
 
     pool.run_until(async move {
         Swarm::dial_addr(&mut node_a_swarm, relay_address).unwrap();
-        // Node A dialing Relay.
+
+        // Node A establishing connection to Relay.
         loop {
             match node_a_swarm.next_event().await {
-                SwarmEvent::Dialing(peer_id) => {
-                    assert_eq!(peer_id, relay_peer_id);
+                SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
+                    break
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    assert_eq!(peer_id, relay_peer_id);
-                    break;
-                }
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
         }
@@ -402,27 +377,15 @@ fn node_a_try_connect_to_offline_node_b() {
     Swarm::dial_addr(&mut node_a_swarm, node_b_address_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Node A dialing Relay to connect to Node B.
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::Dialing(peer_id) => {
-                    assert_eq!(peer_id, relay_peer_id);
-                    break;
-                }
-                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                e => panic!("{:?}", e),
-            }
+        match node_a_swarm.next_event().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
         }
 
         // Node A establishing connection to Relay to connect to Node B.
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    assert_eq!(peer_id, relay_peer_id);
-                    break;
-                }
-                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                e => panic!("{:?}", e),
-            }
+        match node_a_swarm.next_event().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
         }
 
         loop {
@@ -432,11 +395,6 @@ fn node_a_try_connect_to_offline_node_b() {
                 {
                     break;
                 }
-                // SwarmEvent::UnreachableAddr { peer_id, .. } => {
-                //     if peer_id == node_b_peer_id {
-                //         break;
-                //     }
-                // }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
@@ -731,11 +689,8 @@ fn inactive_connection_timeout() {
         // Node A dialing Relay.
         loop {
             match node_a_swarm.next_event().await {
-                SwarmEvent::Dialing(peer_id) => {
-                    assert_eq!(peer_id, relay_peer_id);
-                }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    assert_eq!(peer_id, relay_peer_id);
+                SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
                     break;
                 }
                 e => panic!("{:?}", e),
@@ -745,13 +700,9 @@ fn inactive_connection_timeout() {
         Swarm::dial_addr(&mut node_a_swarm, node_b_address_via_relay).unwrap();
 
         // Node A establishing connection to node B via Relay.
-        loop {
-            match node_a_swarm.next_event().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == node_b_peer_id => {
-                    break
-                }
-                e => panic!("{:?}", e),
-            }
+        match node_a_swarm.next_event().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == node_b_peer_id => {}
+            e => panic!("{:?}", e),
         }
 
         // Relay should notice connection between Node A and B to be idle. It should then close the
