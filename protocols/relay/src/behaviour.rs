@@ -362,8 +362,17 @@ impl NetworkBehaviour for Relay {
     fn inject_disconnected(&mut self, id: &PeerId) {
         self.connected_peers.remove(id);
 
-        // TODO: send back proper refusal message to the source
-        self.incoming_relay_reqs.remove(id);
+        if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
+            for req in reqs {
+                let IncomingRelayReq::DialingDst { src_id, req, .. } = req;
+                self.outbox_to_swarm
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: src_id,
+                        handler: NotifyHandler::Any,
+                        event: RelayHandlerIn::DenyIncomingRelayReq(req),
+                    })
+            }
+        }
     }
 
     fn inject_event(
