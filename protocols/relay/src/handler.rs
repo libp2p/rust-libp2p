@@ -37,14 +37,19 @@ use std::io;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
-#[derive(Default)]
-pub struct RelayHandlerProto {}
+pub struct RelayHandlerConfig {
+    pub connection_idle_timeout: Duration,
+}
+
+pub struct RelayHandlerProto {
+    pub config: RelayHandlerConfig,
+}
 
 impl IntoProtocolsHandler for RelayHandlerProto {
     type Handler = RelayHandler;
 
     fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        RelayHandler::new(endpoint.get_remote_address().clone())
+        RelayHandler::new(self.config, endpoint.get_remote_address().clone())
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
@@ -73,6 +78,7 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 ///   or denied.
 ///
 pub struct RelayHandler {
+    config: RelayHandlerConfig,
     /// Specifies whether the connection handled by this Handler is used to listen for incoming
     /// relayed connections.
     used_for_listening: bool,
@@ -212,8 +218,9 @@ pub enum RelayHandlerIn {
 
 impl RelayHandler {
     /// Builds a new `RelayHandler`.
-    pub fn new(remote_address: Multiaddr) -> Self {
+    pub fn new(config: RelayHandlerConfig, remote_address: Multiaddr) -> Self {
         RelayHandler {
+            config,
             used_for_listening: false,
             remote_address,
             deny_futures: Default::default(),
@@ -472,7 +479,7 @@ impl ProtocolsHandler for RelayHandler {
         } else {
             // Protocol handler is idle.
             if matches!(self.keep_alive, KeepAlive::Yes) {
-                self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(2));
+                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.connection_idle_timeout);
             }
         }
 

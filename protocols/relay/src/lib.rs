@@ -57,8 +57,21 @@ mod handler;
 mod protocol;
 mod transport;
 
-pub use behaviour::Relay;
+pub use behaviour::{Relay, RelayConfig};
+use libp2p_core::Transport;
 pub use transport::{RelayError, RelayTransportWrapper};
+
+/// Create both a [`RelayTransportWrapper`] wrapping the provided [`Transport`]
+/// as well as a [`Relay`] [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
+pub fn new_transport_and_behaviour<T: Transport + Clone>(
+    config: RelayConfig,
+    transport: T,
+) -> (RelayTransportWrapper<T>, Relay) {
+    let (transport, (to_transport, from_transport)) =
+        RelayTransportWrapper::new(transport);
+    let behaviour = Relay::new(config, to_transport, from_transport);
+    (transport, behaviour)
+}
 
 // TODO: No need to be public.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

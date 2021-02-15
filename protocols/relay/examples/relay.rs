@@ -22,12 +22,13 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
 use libp2p::noise;
-use libp2p::relay::{Relay, RelayTransportWrapper};
+use libp2p::relay::{RelayConfig};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -38,8 +39,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     let tcp_transport = TcpConfig::new();
-    let (relay_wrapped_transport, (to_transport, from_transport)) =
-        RelayTransportWrapper::new(tcp_transport);
+
+    let relay_config = RelayConfig {
+        connection_idle_timeout: Duration::from_secs(10 * 60),
+    };
+    let (relay_wrapped_transport, relay_behaviour) =
+        libp2p_relay::new_transport_and_behaviour(relay_config, tcp_transport);
+
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&local_key)
         .expect("Signing libp2p-noise static DH keypair failed.");
@@ -49,11 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    let mut swarm = Swarm::new(
-        transport,
-        Relay::new(to_transport, from_transport),
-        local_peer_id,
-    );
+    let mut swarm = Swarm::new(transport, relay_behaviour, local_peer_id);
 
     // Listen on all interfaces and whatever port the OS assigns
     Swarm::listen_on(&mut swarm, "/ip6/::/tcp/0".parse()?)?;

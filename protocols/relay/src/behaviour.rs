@@ -18,26 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{RelayHandlerEvent, RelayHandlerIn, RelayHandlerProto};
+use crate::handler::{RelayHandlerConfig, RelayHandlerEvent, RelayHandlerIn, RelayHandlerProto};
 use crate::protocol;
 use crate::transport::TransportToBehaviourMsg;
 use crate::RequestId;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
-use libp2p_core::{
-    connection::{ConnectedPoint, ConnectionId, ListenerId},
-    multiaddr::Multiaddr,
-    PeerId,
-};
+use libp2p_core::connection::{ConnectedPoint, ConnectionId, ListenerId};
+use libp2p_core::multiaddr::Multiaddr;
+use libp2p_core::PeerId;
 use libp2p_swarm::{
     DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 /// Network behaviour that allows the local node to act as a source, a relay and as a destination.
 pub struct Relay {
+    config: RelayConfig,
     /// Channel sender to [`crate::RelayTransportWrapper`].
     to_transport: mpsc::Sender<BehaviourToTransportMsg>,
     /// Channel receiver from [`crate::RelayTransportWrapper`].
@@ -76,15 +76,13 @@ struct OutgoingDialingRelayReq {
     relay_addr: Multiaddr,
     dst_addr: Multiaddr,
     dst_peer_id: PeerId,
-    send_back: oneshot::Sender<
-        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
-    >,
+    send_back:
+        oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
 }
 
 struct OutgoingUpgradingRelayReq {
-    send_back: oneshot::Sender<
-        Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
-    >,
+    send_back:
+        oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
 }
 
 enum IncomingRelayReq {
@@ -96,17 +94,36 @@ enum IncomingRelayReq {
     },
 }
 
+pub struct RelayConfig {
+    /// How long to keep connections alive when they're idle.
+    ///
+    /// For a server, acting as a relay, allowing other nodes to listen for
+    /// incoming connections via oneself, this should likely be increased in
+    /// order not to force the peer to reconnect too regularly.
+    pub connection_idle_timeout: Duration,
+}
+
+impl Default for RelayConfig {
+    fn default() -> Self {
+        RelayConfig {
+            connection_idle_timeout: Duration::from_secs(10),
+        }
+    }
+}
+
 // TODO: Should one be able to only specify relay servers via
 // Swarm::listen_on(Multiaddress(<realy_server>/p2p-circuit/)) or should one also be able to add
 // them via the Relay behaviour? The latter would allow other behaviours to manage ones relay
 // servers.
 impl Relay {
     /// Builds a new `Relay` behaviour.
-    pub fn new(
+    pub(crate) fn new(
+        config: RelayConfig,
         to_transport: mpsc::Sender<BehaviourToTransportMsg>,
         from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
     ) -> Self {
         Relay {
+            config,
             to_transport,
             from_transport,
             outbox_to_transport: Default::default(),
@@ -124,7 +141,11 @@ impl NetworkBehaviour for Relay {
     type OutEvent = ();
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        RelayHandlerProto::default()
+        RelayHandlerProto {
+            config: RelayHandlerConfig {
+                connection_idle_timeout: self.config.connection_idle_timeout,
+            },
+        }
     }
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -153,9 +174,7 @@ impl NetworkBehaviour for Relay {
                 .get(remote_peer_id)
                 .into_iter()
                 .flatten()
-                .map(|IncomingRelayReq::DialingDst { req, .. }| {
-                    req.dst_addrs().cloned()
-                })
+                .map(|IncomingRelayReq::DialingDst { req, .. }| req.dst_addrs().cloned())
                 .flatten(),
         );
 
@@ -262,17 +281,13 @@ impl NetworkBehaviour for Relay {
 
         if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer_id) {
             for req in reqs {
-                let _ = req
-                    .send_back
-                    .send(Err(OutgoingRelayReqError::DialingRelay));
+                let _ = req.send_back.send(Err(OutgoingRelayReqError::DialingRelay));
             }
         }
 
         if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
             for req in reqs {
-                let IncomingRelayReq::DialingDst {
-                    src_id, req, ..
-                } = req;
+                let IncomingRelayReq::DialingDst { src_id, req, .. } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: src_id,
@@ -317,9 +332,11 @@ impl NetworkBehaviour for Relay {
                             event: RelayHandlerIn::UsedForListening(true),
                         });
                 } else {
-                    self.listeners.remove(peer);
-                    // TODO: Should one retry? Should this be logged? Should this be returned to the
-                    // listener created by transport.rs?
+                    // There are no more connections to the relay left that
+                    // could be promoted as primary.
+
+                    // TODO: Should one retry? Should this be logged? Should
+                    // this be returned to the listener created by transport.rs?
                 }
             }
         }
@@ -378,15 +395,14 @@ impl NetworkBehaviour for Relay {
                         });
                 } else {
                     let dest_id = req.dst_id().clone();
-                    self.incoming_relay_reqs
-                        .entry(dest_id)
-                        .or_default()
-                        .push(IncomingRelayReq::DialingDst {
+                    self.incoming_relay_reqs.entry(dest_id).or_default().push(
+                        IncomingRelayReq::DialingDst {
                             request_id,
                             req,
                             src_id: event_source,
                             src_addr,
-                        });
+                        },
+                    );
                     self.outbox_to_swarm
                         .push_back(NetworkBehaviourAction::DialPeer {
                             peer_id: dest_id,

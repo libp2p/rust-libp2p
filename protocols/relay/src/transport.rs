@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{BehaviourToTransportMsg, OutgoingRelayReqError};
-use crate::RequestId;
 use crate::protocol;
+use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
@@ -43,7 +43,9 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Multiaddr,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<
+            Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
+        >,
     },
     ListenReq {
         address: Multiaddr,
@@ -66,15 +68,15 @@ impl<T: Clone> RelayTransportWrapper<T> {
     ///
     ///```
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_relay::{Relay, RelayTransportWrapper};
+    /// # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
     ///
     /// let inner_transport = DummyTransport::<()>::new();
-    /// let (wrapper_transport, (channels)) = RelayTransportWrapper::new(inner_transport);
-    /// let (to_transport, from_transport) = channels;
-    ///
-    /// let behaviour = Relay::new(to_transport, from_transport);
+    /// let (wrapped_transport, relay_behaviour) = new_transport_and_behaviour(
+    ///     RelayConfig::default(),
+    ///     inner_transport,
+    /// );
     ///```
-    pub fn new(
+    pub(crate) fn new(
         t: T,
     ) -> (
         Self,
@@ -226,10 +228,7 @@ fn split_relay_and_dst(addr: Multiaddr) -> (Multiaddr, Multiaddr) {
         }
     }
 
-    (
-        relay.into_iter().collect(),
-        dst.into_iter().collect(),
-    )
+    (relay.into_iter().collect(), dst.into_iter().collect())
 }
 
 fn split_off_peer_id(mut addr: Multiaddr) -> Result<(Multiaddr, PeerId), RelayError> {
@@ -326,7 +325,8 @@ impl<T: Transport> Stream for RelayListener<T> {
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<protocol::Connection<NegotiatedSubstream>, RelayError>>;
+pub type RelayedDial =
+    BoxFuture<'static, Result<protocol::Connection<NegotiatedSubstream>, RelayError>>;
 
 #[pin_project(project = RelayedListenerUpgradeProj)]
 pub enum RelayedListenerUpgrade<T: Transport> {

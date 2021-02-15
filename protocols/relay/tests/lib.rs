@@ -14,7 +14,7 @@ use libp2p_identify::{Identify, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::{Relay, RelayTransportWrapper};
+use libp2p_relay::{Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
@@ -920,7 +920,8 @@ fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
         Reachability::Routable => EitherTransport::Right(transport),
     };
 
-    let (transport, (to_transport, from_transport)) = RelayTransportWrapper::new(transport);
+    let (transport, relay_behaviour) =
+        libp2p_relay::new_transport_and_behaviour(RelayConfig::default(), transport);
 
     let transport = transport
         .upgrade(upgrade::Version::V1)
@@ -929,7 +930,7 @@ fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
         .boxed();
 
     let combined_behaviour = CombinedBehaviour {
-        relay: Relay::new(to_transport, from_transport),
+        relay: relay_behaviour,
         ping: Ping::new(PingConfig::new().with_interval(Duration::from_millis(10))),
         kad: Kademlia::new(
             local_peer_id.clone(),
@@ -956,7 +957,8 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
 
     let transport = MemoryTransport::default();
 
-    let (transport, (to_transport, from_transport)) = RelayTransportWrapper::new(transport);
+    let (transport, relay_behaviour) =
+        libp2p_relay::new_transport_and_behaviour(RelayConfig::default(), transport);
 
     let transport = transport
         .upgrade(upgrade::Version::V1)
@@ -965,7 +967,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
         .boxed();
 
     let combined_behaviour = CombinedKeepAliveBehaviour {
-        relay: Relay::new(to_transport, from_transport),
+        relay: relay_behaviour,
         keep_alive: KeepAliveBehaviour::default(),
     };
 
