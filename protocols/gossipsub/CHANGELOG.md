@@ -1,4 +1,4 @@
-# 0.28.0 [unreleased]
+# 0.28.0 [2021-02-15]
 
 - Prevent non-published messages being added to caches.
   [PR 1930](https://github.com/libp2p/rust-libp2p/pull/1930)
