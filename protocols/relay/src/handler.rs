@@ -94,15 +94,18 @@ pub struct RelayHandler {
         BoxFuture<
             'static,
             Result<
-                (PeerId, protocol::Connection<NegotiatedSubstream>, oneshot::Receiver<()>),
+                (
+                    PeerId,
+                    protocol::Connection<NegotiatedSubstream>,
+                    oneshot::Receiver<()>,
+                ),
                 protocol::IncomingDstReqError,
             >,
         >,
     >,
 
     /// Futures that copy from a source to a destination.
-    copy_futures:
-        FuturesUnordered<BoxFuture<'static, Result<(), protocol::IncomingRelayReqError>>>,
+    copy_futures: FuturesUnordered<BoxFuture<'static, Result<(), protocol::IncomingRelayReqError>>>,
 
     /// Requests asking the remote to become a relay.
     outgoing_relay_reqs: Vec<OutgoingRelayReq>,
@@ -241,11 +244,9 @@ impl ProtocolsHandler for RelayHandler {
     type OutEvent = RelayHandlerEvent;
     type Error = io::Error;
     type InboundProtocol = protocol::RelayListen;
-    type OutboundProtocol = upgrade::EitherUpgrade<
-        protocol::OutgoingRelayReq,
-        protocol::OutgoingDstReq<protocol::IncomingRelayReq<NegotiatedSubstream>>,
-    >;
-    type OutboundOpenInfo = (PeerId, RequestId);
+    type OutboundProtocol =
+        upgrade::EitherUpgrade<protocol::OutgoingRelayReq, protocol::OutgoingDstReq>;
+    type OutboundOpenInfo = RelayOutboundOpenInfo;
     type InboundOpenInfo = RequestId;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -274,9 +275,7 @@ impl ProtocolsHandler for RelayHandler {
                 self.incoming_dst_req_pending_approval
                     .insert(request_id, dest_request);
                 self.queued_events
-                    .push(RelayHandlerEvent::IncomingDstReq(
-                        src, request_id,
-                    ));
+                    .push(RelayHandlerEvent::IncomingDstReq(src, request_id));
             }
         }
     }
@@ -284,11 +283,21 @@ impl ProtocolsHandler for RelayHandler {
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
-        (dst_peer_id, request_id): Self::OutboundOpenInfo,
+        open_info: Self::OutboundOpenInfo,
     ) {
         match protocol {
             // We have successfully negotiated a substream towards a relay.
             EitherOutput::First((substream_to_dest, notifyee)) => {
+                let (dst_peer_id, request_id) = match open_info {
+                    RelayOutboundOpenInfo::Relay {
+                        dst_peer_id,
+                        request_id,
+                    } => (dst_peer_id, request_id),
+                    RelayOutboundOpenInfo::Destination { .. } => unreachable!(
+                        "Can not successfully dial a relay when actually dialing a destination."
+                    ),
+                };
+
                 self.alive_lend_out_substreams.push(notifyee);
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayReqSuccess(
@@ -298,8 +307,17 @@ impl ProtocolsHandler for RelayHandler {
                     ));
             }
             // We have successfully asked the node to be a destination.
-            EitherOutput::Second((to_dest_substream, request)) => {
-                self.copy_futures.push(request.fulfill(to_dest_substream));
+            EitherOutput::Second(to_dest_substream) => {
+                let incoming_relay_req = match open_info {
+                    RelayOutboundOpenInfo::Destination {
+                        incoming_relay_req, ..
+                    } => incoming_relay_req,
+                    RelayOutboundOpenInfo::Relay { .. } => unreachable!(
+                        "Can not successfully dial a destination when actually dialing a relay."
+                    ),
+                };
+                self.copy_futures
+                    .push(incoming_relay_req.fulfill(to_dest_substream));
             }
         }
     }
@@ -348,35 +366,56 @@ impl ProtocolsHandler for RelayHandler {
                 src_addr,
                 substream,
             } => {
-                self.outgoing_dst_reqs.push((
-                    src,
-                    request_id,
-                    src_addr,
-                    substream,
-                ));
+                self.outgoing_dst_reqs
+                    .push((src, request_id, src_addr, substream));
             }
         }
     }
 
     fn inject_dial_upgrade_error(
         &mut self,
-        (peer_id, request_id): Self::OutboundOpenInfo,
+        open_info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
-            EitherError<
-                protocol::OutgoingRelayReqError,
-                protocol::OutgoingDstReqError,
-            >,
+            EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
         >,
     ) {
         match error {
+            // Outgoing relay request failed.
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::A(_))) => {
+                let (dst_peer_id, request_id) = match open_info {
+                    RelayOutboundOpenInfo::Relay {
+                        dst_peer_id,
+                        request_id,
+                    } => (dst_peer_id, request_id),
+                    RelayOutboundOpenInfo::Destination { .. } => unreachable!(
+                        "Can not receive an OutgoingRelayReqError when dialing a destination."
+                    ),
+                };
+
                 self.queued_events
                     .push(RelayHandlerEvent::OutgoingRelayReqError(
-                        peer_id, request_id,
+                        dst_peer_id,
+                        request_id,
                     ));
             }
-            // TODO: When the outbound destination request fails, send a status update back to the
-            // source.
+            // Outgoing destination request failed.
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::B(_))) => {
+                let incoming_relay_req = match open_info {
+                    RelayOutboundOpenInfo::Relay { .. } => {
+                        unreachable!("Can not receive an OutgoingDstReqError when dialing a relay.")
+                    }
+                    RelayOutboundOpenInfo::Destination {
+                        incoming_relay_req, ..
+                    } => incoming_relay_req,
+                };
+
+                // Deny the incoming relay request.
+                //
+                // Note: The denial is driven by the handler of the destination, not the handler of
+                // the source. The latter would likely be more ideal.
+                self.deny_futures.push(incoming_relay_req.deny());
+            }
+            // TODO: Should we handle the other cases?
             e => panic!("{:?}", e),
         }
     }
@@ -410,24 +449,30 @@ impl ProtocolsHandler for RelayHandler {
                         dst_peer_id,
                         dst_addr,
                     )),
-                    (dst_peer_id, request_id),
+                    RelayOutboundOpenInfo::Relay {
+                        dst_peer_id,
+                        request_id,
+                    },
                 ),
             });
         }
 
         // Request the remote to act as destination.
         if !self.outgoing_dst_reqs.is_empty() {
-            let (src, request_id, src_addr, substream) =
+            let (src_peer_id, request_id, src_addr, incoming_relay_req) =
                 self.outgoing_dst_reqs.remove(0);
             self.outgoing_dst_reqs.shrink_to_fit();
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::B(protocol::OutgoingDstReq::new(
-                        src.clone(),
+                        src_peer_id.clone(),
                         src_addr,
-                        substream,
                     )),
-                    (src, request_id),
+                    RelayOutboundOpenInfo::Destination {
+                        src_peer_id,
+                        request_id,
+                        incoming_relay_req,
+                    },
                 ),
             });
         }
@@ -479,10 +524,23 @@ impl ProtocolsHandler for RelayHandler {
         } else {
             // Protocol handler is idle.
             if matches!(self.keep_alive, KeepAlive::Yes) {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.connection_idle_timeout);
+                self.keep_alive =
+                    KeepAlive::Until(Instant::now() + self.config.connection_idle_timeout);
             }
         }
 
         Poll::Pending
     }
+}
+
+pub enum RelayOutboundOpenInfo {
+    Relay {
+        dst_peer_id: PeerId,
+        request_id: RequestId,
+    },
+    Destination {
+        src_peer_id: PeerId,
+        request_id: RequestId,
+        incoming_relay_req: protocol::IncomingRelayReq<NegotiatedSubstream>,
+    },
 }

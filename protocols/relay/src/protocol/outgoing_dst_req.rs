@@ -20,9 +20,9 @@
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
+use asynchronous_codec::Framed;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use asynchronous_codec::Framed;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
 use std::iter;
@@ -41,23 +41,17 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and we must link it with the data sent from
 /// the source.
 #[derive(Debug, Clone)] // TODO: better Debug
-pub struct OutgoingDstReq<TUserData> {
+pub struct OutgoingDstReq {
     /// The message to send to the destination. Pre-computed.
     message: Vec<u8>,
-    /// User data, passed back on success or error.
-    user_data: TUserData,
 }
 
-impl<TUserData> OutgoingDstReq<TUserData> {
+impl OutgoingDstReq {
     /// Creates a `OutgoingDstReq`. Must pass the parameters of the message.
     ///
     /// The `user_data` is passed back in the result.
     // TODO: change parameters?
-    pub(crate) fn new(
-        src_id: PeerId,
-        src_addr: Multiaddr,
-        user_data: TUserData,
-    ) -> Self {
+    pub(crate) fn new(src_id: PeerId, src_addr: Multiaddr) -> Self {
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Stop.into()),
             src_peer: Some(circuit_relay::Peer {
@@ -75,12 +69,11 @@ impl<TUserData> OutgoingDstReq<TUserData> {
 
         OutgoingDstReq {
             message: encoded_msg,
-            user_data,
         }
     }
 }
 
-impl<TUserData> upgrade::UpgradeInfo for OutgoingDstReq<TUserData> {
+impl upgrade::UpgradeInfo for OutgoingDstReq {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -89,13 +82,11 @@ impl<TUserData> upgrade::UpgradeInfo for OutgoingDstReq<TUserData> {
     }
 }
 
-impl<TSubstream, TUserData> upgrade::OutboundUpgrade<TSubstream>
-    for OutgoingDstReq<TUserData>
+impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingDstReq
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    TUserData: Send + 'static,
 {
-    type Output = (TSubstream, TUserData);
+    type Output = TSubstream;
     type Error = OutgoingDstReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -107,13 +98,14 @@ where
 
         async move {
             substream.send(std::io::Cursor::new(self.message)).await?;
-            let msg = substream
-                .next()
-                .await
-                .ok_or(OutgoingDstReqError::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "",
-                )))??;
+            let msg =
+                substream
+                    .next()
+                    .await
+                    .ok_or(OutgoingDstReqError::Io(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "",
+                    )))??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
@@ -142,7 +134,7 @@ where
                 return Err(OutgoingDstReqError::ExpectedSuccessStatus);
             }
 
-            Ok((substream.into_inner(), self.user_data))
+            Ok(substream.into_inner())
         }
         .boxed()
     }
