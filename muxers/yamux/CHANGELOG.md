@@ -1,3 +1,7 @@
+# 0.30.1 [unreleased]
+
+- Update `yamux` to `0.8.1`.
+
 # 0.30.0 [2021-01-12]
 
 - Update dependencies.
