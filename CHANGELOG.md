@@ -41,7 +41,7 @@
 
 # `libp2p` facade crate
 
-## Version 0.35.1 [unreleased]
+## Version 0.35.1 [2021-02-17]
 
 - Update `libp2p-yamux` to latest patch version.
 
