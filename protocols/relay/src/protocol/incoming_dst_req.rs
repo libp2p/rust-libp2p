@@ -38,8 +38,7 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it.
-// TODO: debug
-#[must_use = "A destination request should be either accepted or denied"]
+#[must_use = "An incoming destination request should be either accepted or denied"]
 pub struct IncomingDstReq<TSubstream> {
     /// The stream to the source.
     stream: Framed<TSubstream, UviBytes>,

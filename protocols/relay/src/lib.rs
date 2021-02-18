@@ -73,7 +73,6 @@ pub fn new_transport_and_behaviour<T: Transport + Clone>(
     (transport, behaviour)
 }
 
-// TODO: No need to be public.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 

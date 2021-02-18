@@ -56,7 +56,6 @@ pub enum TransportToBehaviourMsg {
 #[derive(Clone)]
 pub struct RelayTransportWrapper<T: Clone> {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
-    // TODO: Can we get around the arc mutex?
     from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
 
     inner_transport: T,
@@ -122,8 +121,6 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
             };
             return Ok(RelayListener {
                 inner_listener: Some(inner_listener),
-                // TODO: Do we want a listener for inner incoming connections to also yield relayed
-                // connections?
                 from_behaviour: self.from_behaviour.clone(),
                 msg_to_behaviour: None,
                 report_listen_addr: None,

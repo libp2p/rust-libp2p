@@ -123,7 +123,6 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     let buffer = ready!(Pin::new(&mut src).poll_fill_buf(cx))?;
     if buffer.is_empty() {
         ready!(Pin::new(&mut dst).poll_flush(cx))?;
-        // TODO: Is it safe to call `poll_close` on a closed AsyncWrite?
         ready!(Pin::new(&mut dst).poll_close(cx))?;
         return Poll::Ready(Ok(true));
     }

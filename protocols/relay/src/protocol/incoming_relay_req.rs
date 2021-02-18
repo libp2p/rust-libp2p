@@ -40,7 +40,6 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it. This data must be transmitted to the destination.
-// TODO: debug
 #[must_use = "An incoming relay request should be either accepted or denied."]
 pub struct IncomingRelayReq<TSubstream> {
     /// The stream to the source.

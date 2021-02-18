@@ -21,9 +21,9 @@
 use crate::message_proto::{circuit_relay, CircuitRelay};
 use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
+use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use futures::channel::oneshot;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use prost::Message;
 use std::iter;
@@ -99,21 +99,20 @@ where
 
         async move {
             substream.send(std::io::Cursor::new(encoded)).await?;
-            let msg = substream
-                .next()
-                .await
-                .ok_or(OutgoingRelayReqError::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "",
-                )))??;
+            let msg =
+                substream
+                    .next()
+                    .await
+                    .ok_or(OutgoingRelayReqError::Io(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "",
+                    )))??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
-                // TODO: Check that this is None.
-                src_peer: _,
-                // TODO: Check that this is None.
-                dst_peer: _,
+                src_peer,
+                dst_peer,
                 code,
             } = CircuitRelay::decode(msg)?;
 
@@ -134,6 +133,13 @@ where
             {
                 circuit_relay::Status::Success => {}
                 e => return Err(OutgoingRelayReqError::ReceivedErrorStatus(e)),
+            }
+
+            if src_peer.is_some() {
+                return Err(OutgoingRelayReqError::UnexpectedSrcPeerWithStatusType);
+            }
+            if dst_peer.is_some() {
+                return Err(OutgoingRelayReqError::UnexpectedDstPeerWithStatusType);
             }
 
             let FramedParts {
@@ -162,6 +168,8 @@ pub enum OutgoingRelayReqError {
     ParseTypeField,
     ParseStatusField,
     ExpectedStatusType,
+    UnexpectedSrcPeerWithStatusType,
+    UnexpectedDstPeerWithStatusType,
     ReceivedErrorStatus(circuit_relay::Status),
 }
 

@@ -85,14 +85,12 @@ where
 
             match circuit_relay::Type::from_i32(r#type.unwrap()).unwrap() {
                 circuit_relay::Type::Hop => {
-                    // TODO Handle
-                    let peer = Peer::try_from(dst_peer.unwrap())?;
+                    let peer = Peer::try_from(dst_peer.ok_or(RelayListenError::NoDstPeer)?)?;
                     let (rq, notifyee) = IncomingRelayReq::new(substream, peer);
                     Ok(RelayRemoteReq::RelayReq((rq, notifyee)))
                 }
                 circuit_relay::Type::Stop => {
-                    // TODO Handle
-                    let peer = Peer::try_from(src_peer.unwrap())?;
+                    let peer = Peer::try_from(src_peer.ok_or(RelayListenError::NoSrcPeer)?)?;
                     let rq = IncomingDstReq::new(substream, peer);
                     Ok(RelayRemoteReq::DstReq(rq))
                 }
@@ -107,22 +105,25 @@ where
 #[derive(Debug)]
 pub enum RelayListenError {
     /// Failed to parse the protobuf handshake message.
-    // TODO: Rename to DecodeError
-    ParseError(prost::DecodeError),
+    Decode(prost::DecodeError),
+    /// No source peer provided.
+    NoSrcPeer,
+    /// No destination peer provided.
+    NoDstPeer,
     /// Failed to parse one of the peer information in the handshake message.
-    PeerParseError(PeerParseError),
+    ParsePeer(PeerParseError),
     /// Received a message invalid in this context.
     InvalidMessageTy,
 }
 
 impl From<prost::DecodeError> for RelayListenError {
     fn from(err: prost::DecodeError) -> Self {
-        RelayListenError::ParseError(err)
+        RelayListenError::Decode(err)
     }
 }
 
 impl From<PeerParseError> for RelayListenError {
     fn from(err: PeerParseError) -> Self {
-        RelayListenError::PeerParseError(err)
+        RelayListenError::ParsePeer(err)
     }
 }

@@ -40,7 +40,7 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// If the upgrade succeeds, the substream is returned and we must link it with the data sent from
 /// the source.
-#[derive(Debug, Clone)] // TODO: better Debug
+#[derive(Debug, Clone)]
 pub struct OutgoingDstReq {
     /// The message to send to the destination. Pre-computed.
     message: Vec<u8>,
@@ -48,9 +48,6 @@ pub struct OutgoingDstReq {
 
 impl OutgoingDstReq {
     /// Creates a `OutgoingDstReq`. Must pass the parameters of the message.
-    ///
-    /// The `user_data` is passed back in the result.
-    // TODO: change parameters?
     pub(crate) fn new(src_id: PeerId, src_addr: Multiaddr) -> Self {
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Stop.into()),
@@ -62,7 +59,6 @@ impl OutgoingDstReq {
             code: None,
         };
         let mut encoded_msg = Vec::new();
-        // TODO: handle error?
         message
             .encode(&mut encoded_msg)
             .expect("all the mandatory fields are always filled; QED");
@@ -110,8 +106,8 @@ where
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
                 r#type,
-                src_peer: _,
-                dst_peer: _,
+                src_peer,
+                dst_peer,
                 code,
             } = CircuitRelay::decode(msg)?;
 
@@ -123,6 +119,13 @@ where
                 circuit_relay::Type::Status
             ) {
                 return Err(OutgoingDstReqError::ExpectedStatusType);
+            }
+
+            if src_peer.is_some() {
+                return Err(OutgoingDstReqError::UnexpectedSrcPeerWithStatusType);
+            }
+            if dst_peer.is_some() {
+                return Err(OutgoingDstReqError::UnexpectedDstPeerWithStatusType);
             }
 
             if !matches!(
@@ -148,6 +151,8 @@ pub enum OutgoingDstReqError {
     ParseStatusField,
     ExpectedStatusType,
     ExpectedSuccessStatus,
+    UnexpectedSrcPeerWithStatusType,
+    UnexpectedDstPeerWithStatusType,
 }
 
 impl From<std::io::Error> for OutgoingDstReqError {

@@ -60,8 +60,6 @@ pub mod copy_future;
 /// Strong typed version of a `CircuitRelay_Peer`.
 ///
 /// Can be parsed from a `CircuitRelay_Peer` using the `TryFrom` trait.
-//
-// TODO: Is this used anywhere?
 #[derive(Clone)]
 pub(crate) struct Peer {
     pub(crate) peer_id: PeerId,
