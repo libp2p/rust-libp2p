@@ -86,9 +86,7 @@ pub struct RelayHandler {
     remote_address: Multiaddr,
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
-
     incoming_dst_req_pending_approval: HashMap<RequestId, protocol::IncomingDstReq>,
-
     /// Futures that send back an accept response to a relay.
     accept_dst_futures: FuturesUnordered<
         BoxFuture<
@@ -99,19 +97,14 @@ pub struct RelayHandler {
             >,
         >,
     >,
-
     /// Futures that copy from a source to a destination.
     copy_futures: FuturesUnordered<BoxFuture<'static, Result<(), protocol::IncomingRelayReqError>>>,
-
     /// Requests asking the remote to become a relay.
     outgoing_relay_reqs: Vec<OutgoingRelayReq>,
-
     /// Requests asking the remote to become a destination.
     outgoing_dst_reqs: SmallVec<[(PeerId, RequestId, Multiaddr, protocol::IncomingRelayReq); 4]>,
-
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
-
     /// Tracks substreams lend out to other [`Relayandler`]s or as
     /// [`Connection`](protocol::Connection) to the
     /// [`RelayTransportWrapper`](crate::RelayTransportWrapper).
@@ -122,7 +115,7 @@ pub struct RelayHandler {
     /// Once all substreams are dropped and this handler has no other work, [`KeepAlive::Until`] can
     /// be set eventually allowing the connection to be closed.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
-
+    /// The current connection keep-alive.
     keep_alive: KeepAlive,
 }
 
@@ -361,6 +354,9 @@ impl ProtocolsHandler for RelayHandler {
         }
     }
 
+    // TODO: Implement inject_listen_upgrade_error, at least for debug logging.
+
+    // TODO: Consider closing the handler on certain errors.
     fn inject_dial_upgrade_error(
         &mut self,
         open_info: Self::OutboundOpenInfo,
@@ -368,67 +364,52 @@ impl ProtocolsHandler for RelayHandler {
             EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
         >,
     ) {
-        match error {
-            // Outgoing relay request failed.
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::A(_))) => {
-                let (dst_peer_id, request_id) = match open_info {
-                    RelayOutboundOpenInfo::Relay {
-                        dst_peer_id,
-                        request_id,
-                    } => (dst_peer_id, request_id),
-                    RelayOutboundOpenInfo::Destination { .. } => unreachable!(
+        match open_info {
+            RelayOutboundOpenInfo::Relay {
+                dst_peer_id,
+                request_id,
+            } => match error {
+                ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::B(
+                    _,
+                ))) => unreachable!("Can not receive an OutgoingDstReqError when dialing a relay."),
+                _ => {
+                    self.queued_events
+                        .push(RelayHandlerEvent::OutgoingRelayReqError(
+                            dst_peer_id,
+                            request_id,
+                        ));
+                }
+            },
+            RelayOutboundOpenInfo::Destination {
+                incoming_relay_req, ..
+            } => {
+                let err_code = match error {
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                        EitherError::A(_),
+                    )) => unreachable!(
                         "Can not receive an OutgoingRelayReqError when dialing a destination."
                     ),
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                        EitherError::B(_),
+                    )) => Status::HopCantOpenDstStream,
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )) => Status::HopCantSpeakRelay,
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::ProtocolError(_),
+                    )) => Status::HopCantOpenDstStream,
+                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
+                        Status::HopCantOpenDstStream
+                    }
                 };
 
-                self.queued_events
-                    .push(RelayHandlerEvent::OutgoingRelayReqError(
-                        dst_peer_id,
-                        request_id,
-                    ));
+                // Note: The denial is driven by the handler of the destination, not the
+                // handler of the source. The latter would likely be more ideal.
+                //
+                // TODO: In case one closes this handler due to an error, the deny future needs to
+                // be polled by the src handler.
+                self.deny_futures.push(incoming_relay_req.deny(err_code));
             }
-            // Outgoing destination request failed.
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::B(_))) => {
-                let incoming_relay_req = match open_info {
-                    RelayOutboundOpenInfo::Relay { .. } => {
-                        unreachable!("Can not receive an OutgoingDstReqError when dialing a relay.",)
-                    }
-                    RelayOutboundOpenInfo::Destination {
-                        incoming_relay_req, ..
-                    } => incoming_relay_req,
-                };
-
-                // Note: The denial is driven by the handler of the destination, not the handler of
-                // the source. The latter would likely be more ideal.
-                self.deny_futures
-                    .push(incoming_relay_req.deny(Status::HopCantOpenDstStream));
-            }
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )) => {
-                match open_info {
-                    RelayOutboundOpenInfo::Relay {
-                        dst_peer_id,
-                        request_id,
-                    } => {
-                        self.queued_events
-                            .push(RelayHandlerEvent::OutgoingRelayReqError(
-                                dst_peer_id,
-                                request_id,
-                            ));
-                    }
-                    RelayOutboundOpenInfo::Destination {
-                        incoming_relay_req, ..
-                    } => {
-                        // Note: The denial is driven by the handler of the destination, not the
-                        // handler of the source. The latter would likely be more ideal.
-                        self.deny_futures
-                            .push(incoming_relay_req.deny(Status::HopCantSpeakRelay));
-                    }
-                }
-            }
-            // TODO: Should we handle the other cases?
-            e => panic!("{:?}", e),
         }
     }
 

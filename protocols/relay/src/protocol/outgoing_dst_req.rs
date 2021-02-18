@@ -126,13 +126,13 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
                 return Err(OutgoingDstReqError::UnexpectedDstPeerWithStatusType);
             }
 
-            if !matches!(
-                code.map(circuit_relay::Status::from_i32)
-                    .flatten()
-                    .ok_or(OutgoingDstReqError::ParseStatusField)?,
-                circuit_relay::Status::Success
-            ) {
-                return Err(OutgoingDstReqError::ExpectedSuccessStatus);
+            match code
+                .map(circuit_relay::Status::from_i32)
+                .flatten()
+                .ok_or(OutgoingDstReqError::ParseStatusField)?
+            {
+                circuit_relay::Status::Success => {}
+                s => return Err(OutgoingDstReqError::ExpectedSuccessStatus(s)),
             }
 
             Ok(substream.into_inner())
@@ -148,7 +148,7 @@ pub enum OutgoingDstReqError {
     ParseTypeField,
     ParseStatusField,
     ExpectedStatusType,
-    ExpectedSuccessStatus,
+    ExpectedSuccessStatus(circuit_relay::Status),
     UnexpectedSrcPeerWithStatusType,
     UnexpectedDstPeerWithStatusType,
 }
