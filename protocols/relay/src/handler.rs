@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::message_proto::circuit_relay::Status;
 use crate::protocol;
 use crate::RequestId;
 use futures::channel::oneshot::{self, Canceled};
@@ -315,7 +316,7 @@ impl ProtocolsHandler for RelayHandler {
             RelayHandlerIn::UsedForListening(s) => self.used_for_listening = s,
             // Deny a relay request from the node we handle.
             RelayHandlerIn::DenyIncomingRelayReq(rq) => {
-                let fut = rq.deny();
+                let fut = rq.deny(Status::HopCantDialDst);
                 self.deny_futures.push(fut);
             }
             RelayHandlerIn::AcceptDstReq(_src, request_id) => {
@@ -397,11 +398,34 @@ impl ProtocolsHandler for RelayHandler {
                     } => incoming_relay_req,
                 };
 
-                // Deny the incoming relay request.
-                //
                 // Note: The denial is driven by the handler of the destination, not the handler of
                 // the source. The latter would likely be more ideal.
-                self.deny_futures.push(incoming_relay_req.deny());
+                self.deny_futures
+                    .push(incoming_relay_req.deny(Status::HopCantOpenDstStream));
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::Failed,
+            )) => {
+                match open_info {
+                    RelayOutboundOpenInfo::Relay {
+                        dst_peer_id,
+                        request_id,
+                    } => {
+                        self.queued_events
+                            .push(RelayHandlerEvent::OutgoingRelayReqError(
+                                dst_peer_id,
+                                request_id,
+                            ));
+                    }
+                    RelayOutboundOpenInfo::Destination {
+                        incoming_relay_req, ..
+                    } => {
+                        // Note: The denial is driven by the handler of the destination, not the
+                        // handler of the source. The latter would likely be more ideal.
+                        self.deny_futures
+                            .push(incoming_relay_req.deny(Status::HopCantSpeakRelay));
+                    }
+                }
             }
             // TODO: Should we handle the other cases?
             e => panic!("{:?}", e),

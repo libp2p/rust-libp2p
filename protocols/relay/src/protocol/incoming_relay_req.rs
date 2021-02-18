@@ -126,12 +126,10 @@ impl IncomingRelayReq
     /// Refuses the request.
     ///
     /// The returned `Future` gracefully shuts down the request.
-    pub fn deny(mut self) -> BoxFuture<'static, Result<(), std::io::Error>> {
+    pub fn deny(mut self, err_code: Status) -> BoxFuture<'static, Result<(), std::io::Error>> {
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
-            // TODO: Consider to be more specific, e.g. when connection succeeds, but creating a
-            // stream fails.
-            code: Some(Status::HopCantDialDst.into()),
+            code: Some(err_code.into()),
             src_peer: None,
             dst_peer: None,
         };
