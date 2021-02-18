@@ -24,6 +24,7 @@ use asynchronous_codec::Framed;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
+use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::iter;
 use unsigned_varint::codec::UviBytes;
@@ -78,15 +79,12 @@ impl upgrade::UpgradeInfo for OutgoingDstReq {
     }
 }
 
-impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingDstReq
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = TSubstream;
+impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
+    type Output = NegotiatedSubstream;
     type Error = OutgoingDstReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
 

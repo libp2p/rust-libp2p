@@ -86,19 +86,14 @@ pub struct RelayHandler {
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
 
-    incoming_dst_req_pending_approval:
-        HashMap<RequestId, protocol::IncomingDstReq<NegotiatedSubstream>>,
+    incoming_dst_req_pending_approval: HashMap<RequestId, protocol::IncomingDstReq>,
 
     /// Futures that send back an accept response to a relay.
     accept_dst_futures: FuturesUnordered<
         BoxFuture<
             'static,
             Result<
-                (
-                    PeerId,
-                    protocol::Connection<NegotiatedSubstream>,
-                    oneshot::Receiver<()>,
-                ),
+                (PeerId, protocol::Connection, oneshot::Receiver<()>),
                 protocol::IncomingDstReqError,
             >,
         >,
@@ -111,14 +106,7 @@ pub struct RelayHandler {
     outgoing_relay_reqs: Vec<OutgoingRelayReq>,
 
     /// Requests asking the remote to become a destination.
-    outgoing_dst_reqs: SmallVec<
-        [(
-            PeerId,
-            RequestId,
-            Multiaddr,
-            protocol::IncomingRelayReq<NegotiatedSubstream>,
-        ); 4],
-    >,
+    outgoing_dst_reqs: SmallVec<[(PeerId, RequestId, Multiaddr, protocol::IncomingRelayReq); 4]>,
 
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
@@ -152,7 +140,7 @@ pub enum RelayHandlerEvent {
     IncomingRelayReq {
         request_id: RequestId,
         src_addr: Multiaddr,
-        req: protocol::IncomingRelayReq<NegotiatedSubstream>,
+        req: protocol::IncomingRelayReq,
     },
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
@@ -166,7 +154,7 @@ pub enum RelayHandlerEvent {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    OutgoingRelayReqSuccess(PeerId, RequestId, protocol::Connection<NegotiatedSubstream>),
+    OutgoingRelayReqSuccess(PeerId, RequestId, protocol::Connection),
 
     /// The local node has accepted an incoming destination request. Contains a substream that
     /// communicates with the source.
@@ -175,7 +163,7 @@ pub enum RelayHandlerEvent {
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
     IncomingRelayReqSuccess {
-        stream: protocol::Connection<NegotiatedSubstream>,
+        stream: protocol::Connection,
         src: PeerId,
     },
 
@@ -189,7 +177,7 @@ pub enum RelayHandlerIn {
     /// connections.
     UsedForListening(bool),
     /// Denies a relay request sent by the node we talk to acting as a source.
-    DenyIncomingRelayReq(protocol::IncomingRelayReq<NegotiatedSubstream>),
+    DenyIncomingRelayReq(protocol::IncomingRelayReq),
 
     /// Denies a destination request sent by the node we talk to.
     DenyDstReq(PeerId, RequestId),
@@ -215,7 +203,7 @@ pub enum RelayHandlerIn {
         /// Address of the node whose communications are being relayed.
         src_addr: Multiaddr,
         /// Substream to the source.
-        substream: protocol::IncomingRelayReq<NegotiatedSubstream>,
+        substream: protocol::IncomingRelayReq,
     },
 }
 
@@ -402,7 +390,7 @@ impl ProtocolsHandler for RelayHandler {
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::B(_))) => {
                 let incoming_relay_req = match open_info {
                     RelayOutboundOpenInfo::Relay { .. } => {
-                        unreachable!("Can not receive an OutgoingDstReqError when dialing a relay.")
+                        unreachable!("Can not receive an OutgoingDstReqError when dialing a relay.",)
                     }
                     RelayOutboundOpenInfo::Destination {
                         incoming_relay_req, ..
@@ -541,6 +529,6 @@ pub enum RelayOutboundOpenInfo {
     Destination {
         src_peer_id: PeerId,
         request_id: RequestId,
-        incoming_relay_req: protocol::IncomingRelayReq<NegotiatedSubstream>,
+        incoming_relay_req: protocol::IncomingRelayReq,
     },
 }

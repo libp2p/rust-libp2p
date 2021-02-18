@@ -24,6 +24,7 @@ use bytes::Bytes;
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::channel::oneshot;
 use libp2p_core::{multiaddr::Error as MultiaddrError, Multiaddr, PeerId};
+use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
 use std::io::{Error, IoSlice};
 use std::pin::Pin;
@@ -116,21 +117,19 @@ impl error::Error for PeerParseError {
 /// A [`NegotiatedSubstream`] acting as a relayed [`Connection`].
 //
 // Might at first return data, that was already read during relay negotiation.
-//
-// TODO: Being generic over TSubstream needed here? Wouldn't NegotiatedSubstream do as well?
 #[derive(Debug)]
-pub struct Connection<TSubstream> {
+pub struct Connection {
     initial_data: Bytes,
-    stream: TSubstream,
+    stream: NegotiatedSubstream,
 
     /// Notifies the other side of the channel of this [`Connection`] being dropped.
     _notifier: oneshot::Sender<()>,
 }
 
-impl<TSubstream> Unpin for Connection<TSubstream> {}
+impl Unpin for Connection {}
 
-impl<TSubstream> Connection<TSubstream> {
-    fn new(initial_data: Bytes, stream: TSubstream, notifier: oneshot::Sender<()>) -> Self {
+impl Connection {
+    fn new(initial_data: Bytes, stream: NegotiatedSubstream, notifier: oneshot::Sender<()>) -> Self {
         Connection {
             initial_data,
             stream,
@@ -140,7 +139,7 @@ impl<TSubstream> Connection<TSubstream> {
     }
 }
 
-impl<TSubstream: AsyncWrite + Unpin> AsyncWrite for Connection<TSubstream> {
+impl AsyncWrite for Connection {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
@@ -164,7 +163,7 @@ impl<TSubstream: AsyncWrite + Unpin> AsyncWrite for Connection<TSubstream> {
     }
 }
 
-impl<TSubstream: AsyncRead + Unpin> AsyncRead for Connection<TSubstream> {
+impl AsyncRead for Connection {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

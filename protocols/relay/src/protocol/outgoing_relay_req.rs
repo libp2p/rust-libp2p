@@ -25,6 +25,7 @@ use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
+use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::iter;
 use unsigned_varint::codec::UviBytes;
@@ -64,15 +65,13 @@ impl upgrade::UpgradeInfo for OutgoingRelayReq {
     }
 }
 
-impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for OutgoingRelayReq
-where
-    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq
 {
-    type Output = (super::Connection<TSubstream>, oneshot::Receiver<()>);
+    type Output = (super::Connection, oneshot::Receiver<()>);
     type Error = OutgoingRelayReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let OutgoingRelayReq {
             dest_id,
             dest_address,

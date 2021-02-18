@@ -26,6 +26,7 @@ use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
 use futures::channel::oneshot;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::io;
 use unsigned_varint::codec::UviBytes;
@@ -39,19 +40,17 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it.
 #[must_use = "An incoming destination request should be either accepted or denied"]
-pub struct IncomingDstReq<TSubstream> {
+pub struct IncomingDstReq {
     /// The stream to the source.
-    stream: Framed<TSubstream, UviBytes>,
+    stream: Framed<NegotiatedSubstream, UviBytes>,
     /// Source of the request.
     from: Peer,
 }
 
-impl<TSubstream> IncomingDstReq<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+impl IncomingDstReq
 {
     /// Creates a `IncomingDstReq`.
-    pub(crate) fn new(stream: Framed<TSubstream, UviBytes>, from: Peer) -> Self {
+    pub(crate) fn new(stream: Framed<NegotiatedSubstream, UviBytes>, from: Peer) -> Self {
         IncomingDstReq {
             stream: stream,
             from,
@@ -74,7 +73,7 @@ where
     /// stream then points to the source (as retreived with `src_id()` and `src_addrs()`).
     pub fn accept(
         self,
-    ) -> BoxFuture<'static, Result<(PeerId, super::Connection<TSubstream>, oneshot::Receiver<()>), IncomingDstReqError>> {
+    ) -> BoxFuture<'static, Result<(PeerId, super::Connection, oneshot::Receiver<()>), IncomingDstReqError>> {
         let IncomingDstReq { mut stream, from } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),

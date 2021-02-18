@@ -28,8 +28,7 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId, ListenerId};
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::PeerId;
 use libp2p_swarm::{
-    DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -76,13 +75,11 @@ struct OutgoingDialingRelayReq {
     relay_addr: Multiaddr,
     dst_addr: Multiaddr,
     dst_peer_id: PeerId,
-    send_back:
-        oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
+    send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
 }
 
 struct OutgoingUpgradingRelayReq {
-    send_back:
-        oneshot::Sender<Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>>,
+    send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
 }
 
 enum IncomingRelayReq {
@@ -90,7 +87,7 @@ enum IncomingRelayReq {
         src_id: PeerId,
         src_addr: Multiaddr,
         request_id: RequestId,
-        req: protocol::IncomingRelayReq<NegotiatedSubstream>,
+        req: protocol::IncomingRelayReq,
     },
 }
 
@@ -352,12 +349,9 @@ impl NetworkBehaviour for Relay {
     }
 
     fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
-        unimplemented!();
     }
 
-    fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {
-        unimplemented!();
-    }
+    fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {}
 
     fn inject_disconnected(&mut self, id: &PeerId) {
         self.connected_peers.remove(id);
@@ -570,7 +564,7 @@ impl NetworkBehaviour for Relay {
 
 pub enum BehaviourToTransportMsg {
     IncomingRelayedConnection {
-        stream: protocol::Connection<NegotiatedSubstream>,
+        stream: protocol::Connection,
         src: PeerId,
     },
 }

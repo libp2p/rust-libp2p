@@ -28,6 +28,7 @@ use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::time::Duration;
 use unsigned_varint::codec::UviBytes;
@@ -41,23 +42,21 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and we will receive data sent from the
 /// source on it. This data must be transmitted to the destination.
 #[must_use = "An incoming relay request should be either accepted or denied."]
-pub struct IncomingRelayReq<TSubstream> {
+pub struct IncomingRelayReq {
     /// The stream to the source.
-    stream: Framed<TSubstream, UviBytes>,
+    stream: Framed<NegotiatedSubstream, UviBytes>,
     /// Target of the request.
     dest: Peer,
 
     _notifier: oneshot::Sender<()>,
 }
 
-impl<TSubstream> IncomingRelayReq<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+impl IncomingRelayReq
 {
     /// Creates a [`IncomingRelayReq`] as well as a Future that resolves once the
     /// [`IncomingRelayReq`] is dropped.
     pub(crate) fn new(
-        stream: Framed<TSubstream, UviBytes>,
+        stream: Framed<NegotiatedSubstream, UviBytes>,
         dest: Peer,
     ) -> (Self, oneshot::Receiver<()>) {
         let (tx, rx) = oneshot::channel();

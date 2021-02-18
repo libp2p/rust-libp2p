@@ -30,7 +30,6 @@ use libp2p_core::either::{EitherError, EitherFuture, EitherOutput};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{ListenerEvent, TransportError};
 use libp2p_core::{PeerId, Transport};
-use libp2p_swarm::NegotiatedSubstream;
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -44,7 +43,7 @@ pub enum TransportToBehaviourMsg {
         dst_addr: Multiaddr,
         dst_peer_id: PeerId,
         send_back: oneshot::Sender<
-            Result<protocol::Connection<NegotiatedSubstream>, OutgoingRelayReqError>,
+            Result<protocol::Connection, OutgoingRelayReqError>,
         >,
     },
     ListenReq {
@@ -99,7 +98,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
 }
 
 impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
-    type Output = EitherOutput<<T as Transport>::Output, protocol::Connection<NegotiatedSubstream>>;
+    type Output = EitherOutput<<T as Transport>::Output, protocol::Connection>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
@@ -322,18 +321,17 @@ impl<T: Transport> Stream for RelayListener<T> {
     }
 }
 
-pub type RelayedDial =
-    BoxFuture<'static, Result<protocol::Connection<NegotiatedSubstream>, RelayError>>;
+pub type RelayedDial = BoxFuture<'static, Result<protocol::Connection, RelayError>>;
 
 #[pin_project(project = RelayedListenerUpgradeProj)]
 pub enum RelayedListenerUpgrade<T: Transport> {
     Inner(#[pin] <T as Transport>::ListenerUpgrade),
-    Relayed(Option<protocol::Connection<NegotiatedSubstream>>),
+    Relayed(Option<protocol::Connection>),
 }
 
 impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     type Output = Result<
-        EitherOutput<<T as Transport>::Output, protocol::Connection<NegotiatedSubstream>>,
+        EitherOutput<<T as Transport>::Output, protocol::Connection>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

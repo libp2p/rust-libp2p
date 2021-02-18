@@ -26,6 +26,7 @@ use asynchronous_codec::Framed;
 use futures::channel::oneshot;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade;
+use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 
 use std::{convert::TryFrom, iter};
@@ -37,11 +38,11 @@ use unsigned_varint::codec::UviBytes;
 pub struct RelayListen {}
 
 /// Outcome of the listening.
-pub enum RelayRemoteReq<TSubstream> {
+pub enum RelayRemoteReq {
     /// We have been asked to become a destination.
-    DstReq(IncomingDstReq<TSubstream>),
+    DstReq(IncomingDstReq),
     /// We have been asked to relay communications to another node.
-    RelayReq((IncomingRelayReq<TSubstream>, oneshot::Receiver<()>)),
+    RelayReq((IncomingRelayReq, oneshot::Receiver<()>)),
 }
 
 impl RelayListen {
@@ -60,19 +61,17 @@ impl upgrade::UpgradeInfo for RelayListen {
     }
 }
 
-impl<TSubstream> upgrade::InboundUpgrade<TSubstream> for RelayListen
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+impl upgrade::InboundUpgrade<NegotiatedSubstream> for RelayListen
 {
-    type Output = RelayRemoteReq<TSubstream>;
+    type Output = RelayRemoteReq;
     type Error = RelayListenError;
-    type Future = BoxFuture<'static, Result<RelayRemoteReq<TSubstream>, RelayListenError>>;
+    type Future = BoxFuture<'static, Result<RelayRemoteReq, RelayListenError>>;
 
-    fn upgrade_inbound(self, substream: TSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         async move {
             let mut codec = UviBytes::<bytes::Bytes>::default();
             codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
-            let mut substream = Framed::<TSubstream, _>::new(substream, codec);
+            let mut substream = Framed::new(substream, codec);
 
             let msg: bytes::BytesMut = substream.next().await.unwrap().unwrap();
             let msg = std::io::Cursor::new(msg);
