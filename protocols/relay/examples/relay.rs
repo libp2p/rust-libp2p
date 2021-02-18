@@ -21,7 +21,7 @@
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
-use libp2p::noise;
+use libp2p::plaintext;
 use libp2p::relay::{RelayConfig};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
@@ -40,18 +40,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let tcp_transport = TcpConfig::new();
 
-    let relay_config = RelayConfig {
-        connection_idle_timeout: Duration::from_secs(10 * 60),
-    };
+    let relay_config = RelayConfig::default();
     let (relay_wrapped_transport, relay_behaviour) =
         libp2p_relay::new_transport_and_behaviour(relay_config, tcp_transport);
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&local_key)
-        .expect("Signing libp2p-noise static DH keypair failed.");
+    let plaintext = plaintext::PlainText2Config {
+        local_public_key: local_key.public(),
+    };
+
     let transport = relay_wrapped_transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
