@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
-use asynchronous_codec::Framed;
+use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME, Peer};
+use asynchronous_codec::{Framed, FramedParts};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
@@ -49,14 +49,17 @@ pub struct OutgoingDstReq {
 
 impl OutgoingDstReq {
     /// Creates a `OutgoingDstReq`. Must pass the parameters of the message.
-    pub(crate) fn new(src_id: PeerId, src_addr: Multiaddr) -> Self {
+    pub(crate) fn new(src_id: PeerId, src_addr: Multiaddr, dst_peer: Peer) -> Self {
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Stop.into()),
             src_peer: Some(circuit_relay::Peer {
                 id: src_id.to_bytes(),
                 addrs: vec![src_addr.to_vec()],
             }),
-            dst_peer: None,
+            dst_peer: Some(circuit_relay::Peer {
+                id: dst_peer.peer_id.to_bytes(),
+                addrs: dst_peer.addrs.into_iter().map(|a| a.to_vec()).collect(),
+            }),
             code: None,
         };
         let mut encoded_msg = Vec::new();

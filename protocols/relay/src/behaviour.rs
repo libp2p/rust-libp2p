@@ -171,7 +171,7 @@ impl NetworkBehaviour for Relay {
                 .get(remote_peer_id)
                 .into_iter()
                 .flatten()
-                .map(|IncomingRelayReq::DialingDst { req, .. }| req.dst_addrs().cloned())
+                .map(|IncomingRelayReq::DialingDst { req, .. }| req.dst_peer().addrs.clone())
                 .flatten(),
         );
 
@@ -382,8 +382,8 @@ impl NetworkBehaviour for Relay {
                 src_addr,
                 req,
             } => {
-                if self.connected_peers.get(req.dst_id()).is_some() {
-                    let dest_id = req.dst_id().clone();
+                if self.connected_peers.get(&req.dst_peer().peer_id).is_some() {
+                    let dest_id = req.dst_peer().peer_id;
                     let event = RelayHandlerIn::OutgoingDstReq {
                         src: event_source,
                         request_id,
@@ -397,7 +397,7 @@ impl NetworkBehaviour for Relay {
                             event,
                         });
                 } else {
-                    let dest_id = req.dst_id().clone();
+                    let dest_id = req.dst_peer().peer_id;
                     self.incoming_relay_reqs.entry(dest_id).or_default().push(
                         IncomingRelayReq::DialingDst {
                             request_id,

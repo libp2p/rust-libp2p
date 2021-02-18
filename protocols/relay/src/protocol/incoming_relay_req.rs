@@ -71,13 +71,8 @@ impl IncomingRelayReq
     }
 
     /// Peer id of the node we should relay communications to.
-    pub fn dst_id(&self) -> &PeerId {
-        &self.dest.peer_id
-    }
-
-    /// Returns the addresses of the target, as reported by the requester.
-    pub fn dst_addrs(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.dest.addrs.iter()
+    pub(crate) fn dst_peer(&self) -> &Peer {
+        &self.dest
     }
 
     /// Accepts the request by providing a stream to the destination.

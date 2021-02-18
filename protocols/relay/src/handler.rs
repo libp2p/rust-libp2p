@@ -459,8 +459,9 @@ impl ProtocolsHandler for RelayHandler {
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::B(protocol::OutgoingDstReq::new(
-                        src_peer_id.clone(),
+                        src_peer_id,
                         src_addr,
+                        incoming_relay_req.dst_peer().clone(),
                     )),
                     RelayOutboundOpenInfo::Destination {
                         src_peer_id,
