@@ -44,27 +44,27 @@ pub struct IncomingDstReq {
     /// The stream to the source.
     stream: Framed<NegotiatedSubstream, UviBytes>,
     /// Source of the request.
-    from: Peer,
+    src: Peer,
 }
 
 impl IncomingDstReq
 {
     /// Creates a `IncomingDstReq`.
-    pub(crate) fn new(stream: Framed<NegotiatedSubstream, UviBytes>, from: Peer) -> Self {
+    pub(crate) fn new(stream: Framed<NegotiatedSubstream, UviBytes>, src: Peer) -> Self {
         IncomingDstReq {
             stream: stream,
-            from,
+            src,
         }
     }
 
     /// Returns the peer id of the source that is being relayed.
     pub fn src_id(&self) -> &PeerId {
-        &self.from.peer_id
+        &self.src.peer_id
     }
 
     /// Returns the addresses of the source that is being relayed.
     pub fn src_addrs(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.from.addrs.iter()
+        self.src.addrs.iter()
     }
 
     /// Accepts the request.
@@ -74,7 +74,7 @@ impl IncomingDstReq
     pub fn accept(
         self,
     ) -> BoxFuture<'static, Result<(PeerId, super::Connection, oneshot::Receiver<()>), IncomingDstReqError>> {
-        let IncomingDstReq { mut stream, from } = self;
+        let IncomingDstReq { mut stream, src } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),
             src_peer: None,
@@ -101,7 +101,7 @@ impl IncomingDstReq
 
             let (tx, rx) = oneshot::channel();
 
-            Ok((from.peer_id, super::Connection::new(read_buffer.freeze(), io, tx), rx))
+            Ok((src.peer_id, super::Connection::new(read_buffer.freeze(), io, tx), rx))
         }
         .boxed()
     }

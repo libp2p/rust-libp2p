@@ -156,9 +156,10 @@ pub enum RelayHandlerEvent {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    IncomingRelayReqSuccess {
+    IncomingDstReqSuccess {
         stream: protocol::Connection,
-        src: PeerId,
+        src_peer_id: PeerId,
+        relay_addr: Multiaddr,
     },
 
     /// A `RelayReq` that has previously been sent by the local node has failed.
@@ -252,10 +253,10 @@ impl ProtocolsHandler for RelayHandler {
                     });
             }
             // We have been asked to become a destination.
-            protocol::RelayRemoteReq::DstReq(dest_request) => {
-                let src = dest_request.src_id().clone();
+            protocol::RelayRemoteReq::DstReq(dst_request) => {
+                let src = dst_request.src_id().clone();
                 self.incoming_dst_req_pending_approval
-                    .insert(request_id, dest_request);
+                    .insert(request_id, dst_request);
                 self.queued_events
                     .push(RelayHandlerEvent::IncomingDstReq(src, request_id));
             }
@@ -471,11 +472,12 @@ impl ProtocolsHandler for RelayHandler {
         }
 
         match self.accept_dst_futures.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok((src, substream, notifyee)))) => {
+            Poll::Ready(Some(Ok((src_peer_id, substream, notifyee)))) => {
                 self.alive_lend_out_substreams.push(notifyee);
-                let event = RelayHandlerEvent::IncomingRelayReqSuccess {
+                let event = RelayHandlerEvent::IncomingDstReqSuccess {
                     stream: substream,
-                    src,
+                    src_peer_id,
+                    relay_addr: self.remote_address.clone(),
                 };
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
             }

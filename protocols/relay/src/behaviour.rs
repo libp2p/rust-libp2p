@@ -438,9 +438,9 @@ impl NetworkBehaviour for Relay {
                     .unwrap();
                 send_back.send(Ok(stream)).unwrap();
             }
-            RelayHandlerEvent::IncomingRelayReqSuccess { stream, src } => self
+            RelayHandlerEvent::IncomingDstReqSuccess { stream, src_peer_id, relay_addr } => self
                 .outbox_to_transport
-                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, src }),
+                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, src_peer_id, relay_addr }),
         }
     }
 
@@ -565,7 +565,8 @@ impl NetworkBehaviour for Relay {
 pub enum BehaviourToTransportMsg {
     IncomingRelayedConnection {
         stream: protocol::Connection,
-        src: PeerId,
+        src_peer_id: PeerId,
+        relay_addr: Multiaddr,
     },
 }
 

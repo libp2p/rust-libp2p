@@ -296,15 +296,13 @@ impl<T: Transport> Stream for RelayListener<T> {
         match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {
             Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
                 stream,
-                src,
+                src_peer_id,
+                relay_addr,
             })) => {
                 return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                     upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
-                    // TODO: Fix. Empty is not the right thing here. Should the address of the relay
-                    // be mentioned here?
-                    // Could one do this via IntoProtoHandler trait?
-                    local_addr: Multiaddr::empty(),
-                    remote_addr: Protocol::P2p(src.into()).into(),
+                    local_addr: relay_addr.with(Protocol::P2pCircuit),
+                    remote_addr: Protocol::P2p(src_peer_id.into()).into(),
                 })));
             }
             Poll::Ready(None) => unimplemented!(),
