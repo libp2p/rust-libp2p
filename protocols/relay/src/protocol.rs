@@ -35,7 +35,7 @@ use std::{convert::TryFrom, error, fmt};
 /// trigger an error.
 const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
 
-const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/relay/circuit/0.1.0";
+const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/circuit/relay/0.1.0";
 
 // Source -> Relay
 mod incoming_relay_req;
