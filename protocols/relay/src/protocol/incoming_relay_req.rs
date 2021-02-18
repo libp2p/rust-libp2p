@@ -23,11 +23,10 @@ use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::Peer;
 
 use asynchronous_codec::{Framed, FramedParts};
-use bytes::BytesMut;
+use bytes::{BytesMut, Bytes};
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::time::Duration;
@@ -78,7 +77,8 @@ impl IncomingRelayReq
     /// Accepts the request by providing a stream to the destination.
     pub fn fulfill<TDestSubstream>(
         mut self,
-        dest_stream: TDestSubstream,
+        dst_stream: TDestSubstream,
+        dst_read_buffer: Bytes,
     ) -> BoxFuture<'static, Result<(), IncomingRelayReqError>>
     where
         TDestSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -97,7 +97,7 @@ impl IncomingRelayReq
             self.stream.send(msg_bytes.freeze()).await?;
 
             let FramedParts {
-                io,
+                mut io,
                 read_buffer,
                 write_buffer,
                 ..
@@ -111,7 +111,11 @@ impl IncomingRelayReq
                 "Expect a flushed Framed to have empty write buffer."
             );
 
-            let copy_future = CopyFuture::new(io, dest_stream, Duration::from_secs(2));
+            if !dst_read_buffer.is_empty() {
+                io.write_all(&dst_read_buffer).await?;
+            }
+
+            let copy_future = CopyFuture::new(io, dst_stream, Duration::from_secs(5));
 
             copy_future.await.map_err(Into::into)
         }

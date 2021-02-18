@@ -290,7 +290,7 @@ impl ProtocolsHandler for RelayHandler {
                     ));
             }
             // We have successfully asked the node to be a destination.
-            EitherOutput::Second(to_dest_substream) => {
+            EitherOutput::Second((to_dest_substream, from_dst_read_buffer)) => {
                 let incoming_relay_req = match open_info {
                     RelayOutboundOpenInfo::Destination {
                         incoming_relay_req, ..
@@ -300,7 +300,7 @@ impl ProtocolsHandler for RelayHandler {
                     ),
                 };
                 self.copy_futures
-                    .push(incoming_relay_req.fulfill(to_dest_substream));
+                    .push(incoming_relay_req.fulfill(to_dest_substream, from_dst_read_buffer));
             }
         }
     }

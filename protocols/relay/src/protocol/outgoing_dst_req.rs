@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME, Peer};
+use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
+use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
@@ -83,7 +84,7 @@ impl upgrade::UpgradeInfo for OutgoingDstReq {
 }
 
 impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
-    type Output = NegotiatedSubstream;
+    type Output = (NegotiatedSubstream, Bytes);
     type Error = OutgoingDstReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -138,7 +139,18 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
                 s => return Err(OutgoingDstReqError::ExpectedSuccessStatus(s)),
             }
 
-            Ok(substream.into_inner())
+            let FramedParts {
+                io,
+                read_buffer,
+                write_buffer,
+                ..
+            } = substream.into_parts();
+            assert!(
+                write_buffer.is_empty(),
+                "Expect a flushed Framed to have an empty write buffer."
+            );
+
+            Ok((io, read_buffer.freeze()))
         }
         .boxed()
     }
