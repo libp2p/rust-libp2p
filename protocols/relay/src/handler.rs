@@ -36,7 +36,8 @@ use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::io;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wasm_timer::Instant;
 
 pub struct RelayHandlerConfig {
     pub connection_idle_timeout: Duration,
