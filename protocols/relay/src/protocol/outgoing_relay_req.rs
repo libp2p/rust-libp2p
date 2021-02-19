@@ -42,16 +42,18 @@ use unsigned_varint::codec::UviBytes;
 /// If the upgrade succeeds, the substream is returned and is now a brand new connection pointing
 /// to the *destination*.
 pub struct OutgoingRelayReq {
-    dest_id: PeerId,
-    dest_address: Multiaddr,
+    src_id: PeerId,
+    dst_id: PeerId,
+    dst_address: Multiaddr,
 }
 
 impl OutgoingRelayReq {
     /// Builds a request for the target to act as a relay to a third party.
-    pub fn new(dest_id: PeerId, dest_address: Multiaddr) -> Self {
+    pub fn new(src_id: PeerId, dst_id: PeerId, dst_address: Multiaddr) -> Self {
         OutgoingRelayReq {
-            dest_id,
-            dest_address,
+            src_id,
+            dst_id,
+            dst_address,
         }
     }
 }
@@ -73,16 +75,20 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let OutgoingRelayReq {
-            dest_id,
-            dest_address,
+            src_id,
+            dst_id,
+            dst_address,
         } = self;
 
         let message = CircuitRelay {
             r#type: Some(circuit_relay::Type::Hop.into()),
-            src_peer: None,
+            src_peer: Some(circuit_relay::Peer {
+                id: src_id.to_bytes(),
+                addrs: vec![],
+            }),
             dst_peer: Some(circuit_relay::Peer {
-                id: dest_id.to_bytes(),
-                addrs: vec![dest_address.to_vec()],
+                id: dst_id.to_bytes(),
+                addrs: vec![dst_address.to_vec()],
             }),
             code: None,
         };

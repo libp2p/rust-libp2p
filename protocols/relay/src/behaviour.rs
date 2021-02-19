@@ -72,6 +72,7 @@ struct OutgoingRelayReqs {
 
 struct OutgoingDialingRelayReq {
     request_id: RequestId,
+    src_peer_id: PeerId,
     relay_addr: Multiaddr,
     dst_addr: Multiaddr,
     dst_peer_id: PeerId,
@@ -219,6 +220,7 @@ impl NetworkBehaviour for Relay {
             for req in reqs {
                 let OutgoingDialingRelayReq {
                     request_id,
+                    src_peer_id,
                     relay_addr: _,
                     dst_addr,
                     dst_peer_id,
@@ -229,6 +231,7 @@ impl NetworkBehaviour for Relay {
                         peer_id: id.clone(),
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::OutgoingRelayReq {
+                            src_peer_id,
                             request_id,
                             dst_peer_id,
                             dst_addr: dst_addr.clone(),
@@ -447,7 +450,7 @@ impl NetworkBehaviour for Relay {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
+        poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<RelayHandlerIn, Self::OutEvent>> {
         if !self.outbox_to_transport.is_empty() {
             match self.to_transport.poll_ready(cx) {
@@ -491,6 +494,7 @@ impl NetworkBehaviour for Relay {
                                 handler,
                                 event: RelayHandlerIn::OutgoingRelayReq {
                                     request_id,
+                                    src_peer_id: *poll_parameters.local_peer_id(),
                                     dst_peer_id: dst_peer_id.clone(),
                                     dst_addr: dst_addr.clone(),
                                 },
@@ -505,6 +509,7 @@ impl NetworkBehaviour for Relay {
                             .entry(relay_peer_id)
                             .or_default()
                             .push(OutgoingDialingRelayReq {
+                                src_peer_id: *poll_parameters.local_peer_id(),
                                 request_id,
                                 relay_addr,
                                 dst_addr,

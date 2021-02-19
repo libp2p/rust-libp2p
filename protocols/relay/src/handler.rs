@@ -120,6 +120,7 @@ pub struct RelayHandler {
 }
 
 struct OutgoingRelayReq {
+    src_peer_id: PeerId,
     dst_peer_id: PeerId,
     request_id: RequestId,
     /// Addresses of the destination.
@@ -182,6 +183,7 @@ pub enum RelayHandlerIn {
 
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     OutgoingRelayReq {
+        src_peer_id: PeerId,
         dst_peer_id: PeerId,
         request_id: RequestId,
         /// Addresses known for this peer to transmit to the remote.
@@ -332,11 +334,13 @@ impl ProtocolsHandler for RelayHandler {
             }
             // Ask the node we handle to act as a relay.
             RelayHandlerIn::OutgoingRelayReq {
+                src_peer_id,
                 dst_peer_id,
                 request_id,
                 dst_addr,
             } => {
                 self.outgoing_relay_reqs.push(OutgoingRelayReq {
+                    src_peer_id,
                     dst_peer_id,
                     request_id,
                     dst_addr,
@@ -432,6 +436,7 @@ impl ProtocolsHandler for RelayHandler {
         // Request the remote to act as a relay.
         if !self.outgoing_relay_reqs.is_empty() {
             let OutgoingRelayReq {
+                src_peer_id,
                 dst_peer_id,
                 request_id,
                 dst_addr,
@@ -440,6 +445,7 @@ impl ProtocolsHandler for RelayHandler {
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::A(protocol::OutgoingRelayReq::new(
+                        src_peer_id,
                         dst_peer_id,
                         dst_addr,
                     )),
