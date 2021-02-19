@@ -22,7 +22,7 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
 use libp2p::plaintext;
-use libp2p::relay::{RelayConfig};
+use libp2p::relay::RelayConfig;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, PeerId, Swarm};
@@ -40,7 +40,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let tcp_transport = TcpConfig::new();
 
-    let relay_config = RelayConfig::default();
+    let relay_config = RelayConfig {
+        connection_idle_timeout: Duration::from_secs(10 * 60),
+    };
     let (relay_wrapped_transport, relay_behaviour) =
         libp2p_relay::new_transport_and_behaviour(relay_config, tcp_transport);
 
