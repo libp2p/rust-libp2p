@@ -52,6 +52,14 @@ pub enum TransportToBehaviourMsg {
     },
 }
 
+/// A [`Transport`] wrapping another [`Transport`] enabling relay capabilities.
+///
+/// Allows the local node to:
+///
+/// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
+/// 2. Accept incoming relayed connections.
+/// 3. Connecting to relay nodes in order for them to listen for incoming
+///    connections for the local node.
 #[derive(Clone)]
 pub struct RelayTransportWrapper<T: Clone> {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
@@ -348,6 +356,7 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     }
 }
 
+/// Error that occurred during relay connection setup.
 #[derive(Debug, Eq, PartialEq)]
 pub enum RelayError {
     MissingPeerId,

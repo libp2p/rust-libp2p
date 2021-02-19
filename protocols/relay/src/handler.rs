@@ -105,7 +105,7 @@ pub struct RelayHandler {
     outgoing_dst_reqs: SmallVec<[(PeerId, RequestId, Multiaddr, protocol::IncomingRelayReq); 4]>,
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
-    /// Tracks substreams lend out to other [`Relayandler`]s or as
+    /// Tracks substreams lend out to other [`RelayHandler`]s or as
     /// [`Connection`](protocol::Connection) to the
     /// [`RelayTransportWrapper`](crate::RelayTransportWrapper).
     ///
@@ -139,8 +139,9 @@ pub enum RelayHandlerEvent {
     },
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
-    /// destination. The behaviour can accept or deny the request via [`AcceptDstReq`]
-    /// or [`DenyDstReq`].
+    /// destination. The behaviour can accept or deny the request via
+    /// [`AcceptDstReq`](RelayHandlerIn::AcceptDstReq) or
+    /// [`DenyDstReq`](RelayHandlerIn::DenyDstReq).
     IncomingDstReq(PeerId, RequestId),
 
     /// A `RelayReq` that has previously been sent has been accepted by the remote. Contains

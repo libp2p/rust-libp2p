@@ -34,7 +34,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-/// Network behaviour that allows the local node to act as a source, a relay and as a destination.
+/// Network behaviour allowing the local node to act as a source, a relay and a destination.
 pub struct Relay {
     config: RelayConfig,
     /// Channel sender to [`crate::RelayTransportWrapper`].
@@ -42,8 +42,8 @@ pub struct Relay {
     /// Channel receiver from [`crate::RelayTransportWrapper`].
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
-    /// Events that need to be send to the [`Crate::RelayTransportWrapper`] via
-    /// [`Self::to_transport`].
+    /// Events that need to be send to the [`RelayTransportWrapper`](crate::RelayTransportWrapper)
+    /// via [`Self::to_transport`].
     outbox_to_transport: Vec<BehaviourToTransportMsg>,
     /// Events that need to be yielded to the outside when polling.
     outbox_to_swarm: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
@@ -441,9 +441,18 @@ impl NetworkBehaviour for Relay {
                     .unwrap();
                 send_back.send(Ok(stream)).unwrap();
             }
-            RelayHandlerEvent::IncomingDstReqSuccess { stream, src_peer_id, relay_addr } => self
-                .outbox_to_transport
-                .push(BehaviourToTransportMsg::IncomingRelayedConnection { stream, src_peer_id, relay_addr }),
+            RelayHandlerEvent::IncomingDstReqSuccess {
+                stream,
+                src_peer_id,
+                relay_addr,
+            } => {
+                self.outbox_to_transport
+                    .push(BehaviourToTransportMsg::IncomingRelayedConnection {
+                        stream,
+                        src_peer_id,
+                        relay_addr,
+                    })
+            }
         }
     }
 

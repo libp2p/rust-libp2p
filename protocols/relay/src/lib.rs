@@ -40,12 +40,6 @@
 //! - **Outgoing destination request**: The request send by a *relay* to a *destination*.
 //!
 //! - **Incoming destination request**: The request received by a *destination* from a *relay*.
-//!
-//! - **Outgoing listen request**: The request send by a *destination* to a *relay* asking the
-//!   *relay* to listen for incoming connections on the behalf of the *destination*.
-//!
-//! - **Incoming listen request**: The request received by a *relay* from a *destination* asking the
-//!   *relay* to listen for incoming connections on the behalf of the *destination*.
 
 mod behaviour;
 
@@ -63,6 +57,8 @@ pub use transport::{RelayError, RelayTransportWrapper};
 
 /// Create both a [`RelayTransportWrapper`] wrapping the provided [`Transport`]
 /// as well as a [`Relay`] [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
+///
+/// Interconnects the returned [`RelayTransportWrapper`] and [`Relay`].
 pub fn new_transport_and_behaviour<T: Transport + Clone>(
     config: RelayConfig,
     transport: T,
@@ -73,6 +69,7 @@ pub fn new_transport_and_behaviour<T: Transport + Clone>(
     (transport, behaviour)
 }
 
+/// The ID of an outgoing / incoming, relay / destination request.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 
