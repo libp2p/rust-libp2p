@@ -117,7 +117,7 @@ impl NetworkBehaviour for Identify {
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
         };
 
-        self.observed_addresses.entry(peer_id.clone()).or_default().insert(*conn, addr);
+        self.observed_addresses.entry(*peer_id).or_default().insert(*conn, addr);
     }
 
     fn inject_connection_closed(&mut self, peer_id: &PeerId, conn: &ConnectionId, _: &ConnectedPoint) {

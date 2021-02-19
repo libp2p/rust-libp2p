@@ -41,11 +41,16 @@
 
 # `libp2p` facade crate
 
-## Version 0.35.0 [unreleased]
+## Version 0.35.1 [2021-02-17]
+
+- Update `libp2p-yamux` to latest patch version.
+
+## Version 0.35.0 [2021-02-15]
 
 - Use `libp2p-swarm-derive`, the former `libp2p-core-derive`.
 
-- Update `libp2p-gossipsub`, `libp2p-request-response` and `libp2p-swarm`.
+- Update `libp2p-deflate`, `libp2p-gossipsub`, `libp2p-mdns`, `libp2p-request-response`,
+  `libp2p-swarm` and `libp2p-tcp`.
 
 ## Version 0.34.0 [2021-01-12]
 

@@ -245,7 +245,7 @@ where
         match endpoint {
             SubstreamEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
-                let timeout = protocol.timeout().clone();
+                let timeout = *protocol.timeout();
                 let (_, upgrade, user_data) = protocol.into_upgrade();
                 let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
                 let timeout = Delay::new(timeout);
@@ -334,7 +334,7 @@ where
             }
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 let id = self.unique_dial_upgrade_id;
-                let timeout = protocol.timeout().clone();
+                let timeout = *protocol.timeout();
                 self.unique_dial_upgrade_id += 1;
                 let (version, upgrade, info) = protocol.into_upgrade();
                 self.queued_dial_upgrades.push((id, (version, SendWrapper(upgrade))));

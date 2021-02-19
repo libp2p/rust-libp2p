@@ -331,7 +331,7 @@ impl MdnsPacket {
                             from,
                             query_id: packet.header.id,
                         });
-                        return Some(query);
+                        Some(query)
                     } else if packet
                         .questions
                         .iter()
@@ -344,21 +344,21 @@ impl MdnsPacket {
                                 query_id: packet.header.id,
                             },
                         );
-                        return Some(discovery);
+                        Some(discovery)
                     } else {
-                        return None;
+                        None
                     }
                 } else {
                     let resp = MdnsPacket::Response(MdnsResponse::new (
                         packet,
                         from,
                     ));
-                    return Some(resp);
+                    Some(resp)
                 }
             }
             Err(err) => {
                 warn!("Parsing mdns packet failed: {:?}", err);
-                return None;
+                None
             }
         }
     }

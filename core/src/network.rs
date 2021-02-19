@@ -144,11 +144,10 @@ where
         local_peer_id: PeerId,
         config: NetworkConfig,
     ) -> Self {
-        let pool_local_id = local_peer_id.clone();
         Network {
             local_peer_id,
             listeners: ListenersStream::new(transport),
-            pool: Pool::new(pool_local_id, config.manager_config, config.limits),
+            pool: Pool::new(local_peer_id, config.manager_config, config.limits),
             dialing: Default::default(),
         }
     }
@@ -380,7 +379,7 @@ where
         let event = match self.pool.poll(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(PoolEvent::ConnectionEstablished { connection, num_established }) => {
-                if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id().clone()) {
+                if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id()) {
                     e.get_mut().retain(|s| s.current.0 != connection.id());
                     if e.get().is_empty() {
                         e.remove();
@@ -526,7 +525,7 @@ where
             if let Some(pos) = attempts.iter().position(|s| s.current.0 == id) {
                 let attempt = attempts.remove(pos);
                 let last = attempts.is_empty();
-                Some((peer.clone(), attempt, last))
+                Some((*peer, attempt, last))
             } else {
                 None
             }
@@ -545,7 +544,7 @@ where
                 if let Some(handler) = handler {
                     let next_attempt = attempt.remaining.remove(0);
                     let opts = DialingOpts {
-                        peer: peer_id.clone(),
+                        peer: peer_id,
                         handler,
                         address: next_attempt,
                         remaining: attempt.remaining

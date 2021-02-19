@@ -1,4 +1,4 @@
-# 0.9.1 [unreleased]
+# 0.9.1 [2021-02-15]
 
 - Make `is_pending_outbound` return true on pending connection.
   [PR 1928](https://github.com/libp2p/rust-libp2p/pull/1928).
