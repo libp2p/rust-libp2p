@@ -76,9 +76,6 @@ where
     /// Create and populate a `MultiHandler` from the given handler iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
-    ///
-    /// > **Note**: All handlers should use the same [`upgrade::Version`] for
-    /// > the inbound and outbound [`SubstreamProtocol`]s.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
@@ -303,9 +300,6 @@ where
     /// Create and populate an `IntoMultiHandler` from the given iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
-    ///
-    /// > **Note**: All handlers should use the same [`upgrade::Version`] for
-    /// > the inbound and outbound [`SubstreamProtocol`]s.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
