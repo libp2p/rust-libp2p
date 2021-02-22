@@ -111,8 +111,8 @@ where
         let proto1 = self.proto1.listen_protocol();
         let proto2 = self.proto2.listen_protocol();
         let timeout = *std::cmp::max(proto1.timeout(), proto2.timeout());
-        let (_, u1, i1) = proto1.into_upgrade();
-        let (_, u2, i2) = proto2.into_upgrade();
+        let (u1, i1) = proto1.into_upgrade();
+        let (u2, i2) = proto2.into_upgrade();
         let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
