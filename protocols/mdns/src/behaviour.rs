@@ -277,7 +277,7 @@ impl NetworkBehaviour for Mdns {
             Self::OutEvent,
         >,
     > {
-        while let Some(event) = self.if_watch.next().now_or_never() {
+        while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
             let multicast = From::from([224, 0, 0, 251]);
             let socket = self.recv_socket.get_ref();
             match event {
