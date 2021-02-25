@@ -1,3 +1,7 @@
+# 0.10.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
 # 0.9.1 [2021-02-15]
 
 - Make `is_pending_outbound` return true on pending connection.
