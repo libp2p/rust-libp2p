@@ -57,14 +57,14 @@ pub struct MdnsConfig {
     /// initial packet was lost and not discovering any peers until a new
     /// peer joins the network. Receiving an mdns packet resets the timer
     /// preventing unnecessary traffic.
-    pub interval: Duration,
+    pub query_interval: Duration,
 }
 
 impl Default for MdnsConfig {
     fn default() -> Self {
         Self {
-            ttl: Duration::from_secs(5 * 60),
-            interval: Duration::from_secs(5 * 60),
+            ttl: Duration::from_secs(6 * 60),
+            query_interval: Duration::from_secs(5 * 60),
         }
     }
 }
@@ -108,7 +108,7 @@ pub struct Mdns {
     events: VecDeque<MdnsEvent>,
 
     /// Discovery interval.
-    interval: Duration,
+    query_interval: Duration,
 
     /// Record ttl.
     ttl: Duration,
@@ -149,9 +149,9 @@ impl Mdns {
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
             events: Default::default(),
-            interval: config.interval,
+            query_interval: config.query_interval,
             ttl: config.ttl,
-            timeout: Timer::interval(config.interval),
+            timeout: Timer::interval(config.query_interval),
         })
     }
 
@@ -166,7 +166,7 @@ impl Mdns {
     }
 
     fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
-        self.timeout.set_interval(self.interval);
+        self.timeout.set_interval(self.query_interval);
         match packet {
             MdnsPacket::Query(query) => {
                 for packet in build_query_response(
