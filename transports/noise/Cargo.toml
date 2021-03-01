@@ -15,7 +15,7 @@ lazy_static = "1.2"
 libp2p-core = { version = "0.27.0", path = "../../core" }
 log = "0.4"
 prost = "0.7"
-rand = "0.7.2"
+rand = "0.8.3"
 sha2 = "0.9.1"
 static_assertions = "1"
 x25519-dalek = "1.1.0"
