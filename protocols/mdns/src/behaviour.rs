@@ -302,8 +302,6 @@ impl NetworkBehaviour for Mdns {
                         log::trace!("leaving multicast on iface {}", addr);
                         if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
                             log::error!("leave multicast failed: {}", err);
-                        } else {
-                            self.send_buffer.clear();
                         }
                     }
                 }
@@ -323,7 +321,7 @@ impl NetworkBehaviour for Mdns {
                         self.inject_mdns_packet(packet, params);
                     }
                 }
-                Some(Err(err)) => log::error!("{}", err),
+                Some(Err(err)) => log::error!("Failed reading datagram: {}", err),
                 _ => {}
             }
         }

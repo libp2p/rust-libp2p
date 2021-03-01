@@ -72,7 +72,7 @@ impl MdnsPacket {
                 }
             }
             Err(err) => {
-                log::warn!("Parsing mdns packet failed: {:?}", err);
+                log::debug!("Parsing mdns packet failed: {:?}", err);
                 None
             }
         }

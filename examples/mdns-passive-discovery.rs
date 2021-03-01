@@ -33,15 +33,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a transport.
     let transport = libp2p::build_development_transport(id_keys)?;
 
-    // Create a ping network behaviour.
-    //
-    // For illustrative purposes, the ping protocol is configured to
-    // keep the connection alive, so a continuous sequence of pings
-    // can be observed.
+    // Create an MDNS network behaviour.
     let behaviour = Mdns::new(MdnsConfig::default()).await?;
 
-    // Create a Swarm that establishes connections through the given transport
-    // and applies the ping behaviour on each connection.
+    // Create a Swarm that establishes connections through the given transport.
+    // Note that the MDNS behaviour itself will not actually inititiate any connections,
+    // as it only uses UDP.
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
     Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 
