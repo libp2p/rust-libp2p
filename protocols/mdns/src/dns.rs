@@ -114,7 +114,7 @@ pub fn build_query_response(
     let ttl = duration_to_secs(ttl);
 
     // Add a limit to 2^16-1 addresses, as the protocol limits to this number.
-    let mut addresses = addresses.take(65535);
+    let addresses = addresses.take(65535);
 
     let peer_id_bytes = encode_peer_id(&peer_id);
     debug_assert!(peer_id_bytes.len() <= 0xffff);
@@ -127,7 +127,7 @@ pub fn build_query_response(
 
     // Encode the addresses as TXT records, and multiple TXT records into a
     // response packet.
-    while let Some(addr) = addresses.next() {
+    for addr in addresses {
         let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
         let mut txt_record = Vec::with_capacity(txt_to_send.len());
         match append_txt_record(&mut txt_record, &peer_id_bytes, ttl, &txt_to_send) {
@@ -203,7 +203,7 @@ pub fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPacket {
 }
 
 /// Constructs an MDNS query response packet for an address lookup.
-fn query_response_packet(id: u16, peer_id: &Vec<u8>, records: &Vec<Vec<u8>>, ttl: u32) -> MdnsPacket {
+fn query_response_packet(id: u16, peer_id: &[u8], records: &[Vec<u8>], ttl: u32) -> MdnsPacket {
     let mut out = Vec::with_capacity(records.len() * MAX_TXT_RECORD_SIZE);
 
     append_u16(&mut out, id);
@@ -347,7 +347,7 @@ fn append_character_string(out: &mut Vec<u8>, ascii_str: &str) -> Result<(), Mdn
 }
 
 /// Appends a TXT record to `out`.
-fn append_txt_record<'a>(
+fn append_txt_record(
     out: &mut Vec<u8>,
     name: &[u8],
     ttl_secs: u32,

@@ -25,7 +25,7 @@ use futures::{prelude::*, select};
 use if_watch::{IfEvent, IfWatcher};
 use lazy_static::lazy_static;
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
-use log::warn;
+use log::debug;
 use socket2::{Socket, Domain, Type};
 use std::{convert::TryFrom, fmt, io, net::{IpAddr, Ipv4Addr, UdpSocket, SocketAddr}, str, time::{Duration, Instant}};
 
@@ -331,7 +331,7 @@ impl MdnsPacket {
                             from,
                             query_id: packet.header.id,
                         });
-                        return Some(query);
+                        Some(query)
                     } else if packet
                         .questions
                         .iter()
@@ -344,21 +344,21 @@ impl MdnsPacket {
                                 query_id: packet.header.id,
                             },
                         );
-                        return Some(discovery);
+                        Some(discovery)
                     } else {
-                        return None;
+                        None
                     }
                 } else {
                     let resp = MdnsPacket::Response(MdnsResponse::new (
                         packet,
                         from,
                     ));
-                    return Some(resp);
+                    Some(resp)
                 }
             }
             Err(err) => {
-                warn!("Parsing mdns packet failed: {:?}", err);
-                return None;
+                debug!("Parsing mdns packet failed: {:?}", err);
+                None
             }
         }
     }

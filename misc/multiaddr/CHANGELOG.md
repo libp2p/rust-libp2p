@@ -1,3 +1,7 @@
+# 0.11.1 [2021-02-15]
+
+- Update dependencies
+
 # 0.11.0 [2021-01-12]
 
 - Update dependencies

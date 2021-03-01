@@ -35,13 +35,12 @@ use std::{fmt, io, iter, pin::Pin};
 pub struct IdentifyProtocolConfig;
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct RemoteInfo {
     /// Information about the remote.
     pub info: IdentifyInfo,
     /// Address the remote sees for us.
     pub observed_addr: Multiaddr,
-
-    _priv: ()
 }
 
 /// The substream on which a reply is expected to be sent.
@@ -80,7 +79,7 @@ where
             agent_version: Some(info.agent_version),
             protocol_version: Some(info.protocol_version),
             public_key: Some(pubkey_bytes),
-            listen_addrs: listen_addrs,
+            listen_addrs,
             observed_addr: Some(observed_addr.to_vec()),
             protocols: info.protocols
         };
@@ -158,8 +157,7 @@ where
 
             Ok(RemoteInfo {
                 info,
-                observed_addr: observed_addr.clone(),
-                _priv: ()
+                observed_addr,
             })
         })
     }

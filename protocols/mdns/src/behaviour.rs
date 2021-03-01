@@ -201,8 +201,8 @@ impl NetworkBehaviour for Mdns {
                     if let MdnsBusyWrapper::Free(ref mut service) = self.service {
                         for packet in build_query_response(
                             query.query_id(),
-                            params.local_peer_id().clone(),
-                            params.listened_addresses().into_iter(),
+                            *params.local_peer_id(),
+                            params.listened_addresses(),
                             MDNS_RESPONSE_TTL,
                         ) {
                             service.enqueue_response(packet)
@@ -240,10 +240,10 @@ impl NetworkBehaviour for Mdns {
                             {
                                 *cur_expires = cmp::max(*cur_expires, new_expiration);
                             } else {
-                                self.discovered_nodes.push((peer.id().clone(), addr.clone(), new_expiration));
+                                self.discovered_nodes.push((*peer.id(), addr.clone(), new_expiration));
                             }
 
-                            discovered.push((peer.id().clone(), addr));
+                            discovered.push((*peer.id(), addr));
                         }
                     }
 

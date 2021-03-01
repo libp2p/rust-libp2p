@@ -386,7 +386,7 @@ where
         };
         log::debug!("listening on {}", socket_addr);
         self.do_listen(socket_addr)
-            .map_err(|e| TransportError::Other(e))
+            .map_err(TransportError::Other)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -582,24 +582,20 @@ where
                         match ev {
                             Ok(IfEvent::Up(inet)) => {
                                 let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                                    if addrs.insert(ip) {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        log::debug!("New listen address: {}", ma);
-                                        me.port_reuse.register(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
-                                    }
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.insert(ip) {
+                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                    log::debug!("New listen address: {}", ma);
+                                    me.port_reuse.register(ip, me.listen_addr.port());
+                                    return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
                                 }
                             }
                             Ok(IfEvent::Down(inet)) => {
                                 let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                                    if addrs.remove(&ip) {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        log::debug!("Expired listen address: {}", ma);
-                                        me.port_reuse.unregister(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(ma))));
-                                    }
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.remove(&ip) {
+                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                    log::debug!("Expired listen address: {}", ma);
+                                    me.port_reuse.unregister(ip, me.listen_addr.port());
+                                    return Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(ma))));
                                 }
                             }
                             Err(err) => {
