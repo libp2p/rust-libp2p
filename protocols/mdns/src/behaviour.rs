@@ -332,12 +332,14 @@ impl NetworkBehaviour for Mdns {
         if !self.send_buffer.is_empty() {
             while self.send_socket.poll_writable(cx).is_ready() {
                 if let Some(packet) = self.send_buffer.pop_front() {
-                    if let Some(Err(err)) = self
+                    match self
                         .send_socket
                         .send_to(&packet, *IPV4_MDNS_MULTICAST_ADDRESS)
                         .now_or_never()
                     {
-                        log::error!("{}", err);
+                        Some(Ok(_)) => {}
+                        Some(Err(err)) => log::error!("{}", err),
+                        None => self.send_buffer.push_front(packet),
                     }
                 } else {
                     break;
