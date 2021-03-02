@@ -375,7 +375,7 @@ impl NetworkBehaviour for Relay {
     fn inject_event(
         &mut self,
         event_source: PeerId,
-        _connection: ConnectionId,
+        connection: ConnectionId,
         event: RelayHandlerEvent,
     ) {
         match event {
@@ -422,7 +422,7 @@ impl NetworkBehaviour for Relay {
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
-                        handler: NotifyHandler::Any,
+                        handler: NotifyHandler::One(connection),
                         event: send_back,
                     });
             }
