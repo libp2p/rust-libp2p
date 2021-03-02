@@ -18,7 +18,7 @@ fnv = "1.0"
 futures = { version = "0.3.1", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 lazy_static = "1.2"
-libsecp256k1 = { git = "https://github.com/paritytech/libsecp256k1" rev = "613752c41e2e80f94738614a2acec48c1bd63003" version = "*", optional = true }
+libsecp256k1 = { git = "https://github.com/paritytech/libsecp256k1", rev = "613752c41e2e80f94738614a2acec48c1bd63003", version = "*", optional = true }
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.11", path = "../misc/multiaddr" }
 multihash = { version = "0.13", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
