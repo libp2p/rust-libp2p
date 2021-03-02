@@ -264,7 +264,9 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
 /// be compatible with RFC 1035.
 fn segment_peer_id(peer_id: String) -> String {
     // Guard for the most common case
-    if peer_id.len() <= MAX_LABEL_LENGTH { return peer_id }
+    if peer_id.len() <= MAX_LABEL_LENGTH {
+        return peer_id;
+    }
 
     // This will only perform one allocation except in extreme circumstances.
     let mut out = String::with_capacity(peer_id.len() + 8);
@@ -391,8 +393,10 @@ impl fmt::Display for MdnsResponseError {
             MdnsResponseError::TxtRecordTooLong => {
                 write!(f, "TXT record invalid because it is too long")
             }
-            MdnsResponseError::NonAsciiMultiaddr =>
-                write!(f, "A multiaddr contains non-ASCII characters when serialized"),
+            MdnsResponseError::NonAsciiMultiaddr => write!(
+                f,
+                "A multiaddr contains non-ASCII characters when serialized"
+            ),
         }
     }
 }
@@ -414,7 +418,9 @@ mod tests {
 
     #[test]
     fn build_query_response_correct() {
-        let my_peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let my_peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
         let packets = build_query_response(
@@ -446,7 +452,10 @@ mod tests {
         assert_eq!(segment_peer_id(str_63.clone()), str_63);
 
         assert_eq!(segment_peer_id(str_64), [&str_63, "x"].join("."));
-        assert_eq!(segment_peer_id(str_126), [&str_63, str_63.as_str()].join("."));
+        assert_eq!(
+            segment_peer_id(str_126),
+            [&str_63, str_63.as_str()].join(".")
+        );
         assert_eq!(segment_peer_id(str_127), [&str_63, &str_63, "x"].join("."));
     }
 
