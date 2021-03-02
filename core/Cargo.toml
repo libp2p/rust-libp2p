@@ -18,7 +18,9 @@ fnv = "1.0"
 futures = { version = "0.3.1", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 lazy_static = "1.2"
-libsecp256k1 = { git = "https://github.com/paritytech/libsecp256k1", rev = "613752c41e2e80f94738614a2acec48c1bd63003", version = "*", optional = true }
+# This is a hacky workaround to use the git revision and allow for publishing to crates.io. 
+# Note: 0.4.0 is NOT released yet
+libsecp256k1 =  { git = "https://github.com/paritytech/libsecp256k1", rev = "12e3829d6cd2d6459c2c920d7cf222f3a930b955", optional = true, version = "0.4.0" }
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.11", path = "../misc/multiaddr" }
 multihash = { version = "0.13", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
