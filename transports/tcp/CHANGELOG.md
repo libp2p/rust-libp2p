@@ -1,3 +1,7 @@
+# 0.27.2 [unreleased]
+
+- Update to `if-watch-0.2`.
+
 # 0.27.1 [2021-02-15]
 
 - Update dependencies.
