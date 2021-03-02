@@ -151,8 +151,18 @@ impl SecretKey {
 }
 
 /// A Secp256k1 public key.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct PublicKey(secp256k1::PublicKey);
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PublicKey(compressed): ")?;
+        for byte in &self.encode() {
+            write!(f, "{:x}", byte)?;
+        }
+        Ok(())
+    }
+}
 
 impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.
