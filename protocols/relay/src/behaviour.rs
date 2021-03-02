@@ -430,7 +430,7 @@ impl NetworkBehaviour for Relay {
                 self.outgoing_relay_reqs
                     .upgrading
                     .remove(&request_id)
-                    .unwrap();
+                    .expect("Outgoing relay request error for unknown request.");
             }
             RelayHandlerEvent::OutgoingRelayReqSuccess(_dst, request_id, stream) => {
                 let send_back = self
@@ -438,7 +438,7 @@ impl NetworkBehaviour for Relay {
                     .upgrading
                     .remove(&request_id)
                     .map(|OutgoingUpgradingRelayReq { send_back, .. }| send_back)
-                    .unwrap();
+                    .expect("Outgoing relay request success for unknown request.");
                 send_back.send(Ok(stream)).unwrap();
             }
             RelayHandlerEvent::IncomingDstReqSuccess {
@@ -465,10 +465,22 @@ impl NetworkBehaviour for Relay {
             match self.to_transport.poll_ready(cx) {
                 Poll::Ready(Ok(())) => {
                     self.to_transport
-                        .start_send(self.outbox_to_transport.pop().unwrap())
-                        .unwrap();
+                        .start_send(
+                            self.outbox_to_transport
+                                .pop()
+                                .expect("Outbox is empty despite !is_empty()."),
+                        )
+                        .expect(
+                            "Failed to send message from behaviour to transport \
+                             despite previous poll_ready call.",
+                        );
                 }
-                Poll::Ready(Err(_)) => unimplemented!(),
+                Poll::Ready(Err(mpsc::SendError { .. })) => {
+                    panic!(
+                        "The Relay NetworkBehaviour was polled after the \
+                         RelayTransportWrapper was dropped.",
+                    );
+                }
                 Poll::Pending => {}
             }
         }
@@ -504,7 +516,7 @@ impl NetworkBehaviour for Relay {
                                 event: RelayHandlerIn::OutgoingRelayReq {
                                     request_id,
                                     src_peer_id: *poll_parameters.local_peer_id(),
-                                    dst_peer_id: dst_peer_id.clone(),
+                                    dst_peer_id,
                                     dst_addr: dst_addr.clone(),
                                 },
                             });

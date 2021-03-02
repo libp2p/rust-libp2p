@@ -31,8 +31,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{convert::TryFrom, error, fmt};
 
-/// Any message received on the wire whose length is superior to that will be refused and will
-/// trigger an error.
+/// Any message received on the wire whose length exceeds this value is refused.
 const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
 
 const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/circuit/relay/0.1.0";
@@ -58,7 +57,7 @@ pub use self::listen::{RelayListen, RelayListenError, RelayRemoteReq};
 
 pub mod copy_future;
 
-/// Strong typed version of a `CircuitRelay_Peer`.
+/// Representation of a `CircuitRelay_Peer` protobuf message with refined field types.
 ///
 /// Can be parsed from a `CircuitRelay_Peer` using the `TryFrom` trait.
 #[derive(Clone)]
@@ -115,10 +114,9 @@ impl error::Error for PeerParseError {
 }
 
 /// A [`NegotiatedSubstream`] acting as a relayed [`Connection`].
-//
-// Might at first return data, that was already read during relay negotiation.
 #[derive(Debug)]
 pub struct Connection {
+    /// [`Connection`] might at first return data, that was already read during relay negotiation.
     initial_data: Bytes,
     stream: NegotiatedSubstream,
 

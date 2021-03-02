@@ -77,11 +77,11 @@
 //!
 //! ### Messages
 //!
-//! - **Outgoing relay request**: The request send by a *source* to a *relay*.
+//! - **Outgoing relay request**: The request sent by a *source* to a *relay*.
 //!
 //! - **Incoming relay request**: The request received by a *relay* from a *source*.
 //!
-//! - **Outgoing destination request**: The request send by a *relay* to a *destination*.
+//! - **Outgoing destination request**: The request sent by a *relay* to a *destination*.
 //!
 //! - **Incoming destination request**: The request received by a *destination* from a *relay*.
 

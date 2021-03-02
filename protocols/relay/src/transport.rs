@@ -42,9 +42,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Multiaddr,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<
-            Result<protocol::Connection, OutgoingRelayReqError>,
-        >,
+        send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
     },
     ListenReq {
         address: Multiaddr,
@@ -70,7 +68,7 @@ pub struct RelayTransportWrapper<T: Clone> {
 
 impl<T: Clone> RelayTransportWrapper<T> {
     /// Wrap an existing [`Transport`] into a [`RelayTransportWrapper`] allowing dialing and
-    /// listening for both relayed as well as native connections.
+    /// listening for both relayed as well as direct connections.
     ///
     ///```
     /// # use libp2p_core::transport::dummy::DummyTransport;
@@ -348,7 +346,9 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
                 Poll::Pending => {}
             },
             RelayedListenerUpgradeProj::Relayed(substream) => {
-                return Poll::Ready(Ok(EitherOutput::Second(substream.take().unwrap())))
+                return Poll::Ready(Ok(EitherOutput::Second(
+                    substream.take().expect("Future polled after completion."),
+                )))
             }
         }
 

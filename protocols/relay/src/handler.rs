@@ -81,8 +81,7 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 ///
 pub struct RelayHandler {
     config: RelayHandlerConfig,
-    /// Specifies whether the connection handled by this Handler is used to listen for incoming
-    /// relayed connections.
+    /// Specifies whether the handled connection is used to listen for incoming relayed connections.
     used_for_listening: bool,
     remote_address: Multiaddr,
     /// Futures that send back negative responses.
@@ -131,8 +130,8 @@ struct OutgoingRelayReq {
 /// Event produced by the relay handler.
 pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back a
-    /// `DenyIncomingRelayReq`, or send a `OutgoingDstReq` to a different handler containing
-    /// this object.
+    /// `DenyIncomingRelayReq`, or a `OutgoingDstReq` to any connection handler for the same peer,
+    /// providing the [`protocol::IncomingRelayReq`].
     IncomingRelayReq {
         request_id: RequestId,
         src_addr: Multiaddr,
@@ -178,6 +177,12 @@ pub enum RelayHandlerIn {
     DenyIncomingRelayReq(protocol::IncomingRelayReq),
 
     /// Denies a destination request sent by the node we talk to.
+    //
+    // TODO: While the basic logic triggered by this event denying an incoming destination request
+    // is in place, this event is never constructed by an upper layer. Should there be a mechanism
+    // for users to deny incoming destination requests other than simply dropping the incoming
+    // connection? One would likely want to enforce limits as a relay, but is this needed as a
+    // destination?
     DenyDstReq(PeerId, RequestId),
 
     /// Accepts a destination request sent by the node we talk to.
