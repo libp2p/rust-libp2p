@@ -116,6 +116,12 @@ pub struct RelayHandler {
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
+    /// A pending fatal error that results in the connection being closed.
+    pending_error: Option<
+        ProtocolsHandlerUpgrErr<
+            EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
+        >,
+    >,
 }
 
 struct OutgoingRelayReq {
@@ -243,6 +249,7 @@ impl RelayHandler {
             queued_events: Default::default(),
             alive_lend_out_substreams: Default::default(),
             keep_alive: KeepAlive::Yes,
+            pending_error: None,
         }
     }
 }
@@ -250,7 +257,9 @@ impl RelayHandler {
 impl ProtocolsHandler for RelayHandler {
     type InEvent = RelayHandlerIn;
     type OutEvent = RelayHandlerEvent;
-    type Error = io::Error;
+    type Error = ProtocolsHandlerUpgrErr<
+        EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
+    >;
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol =
         upgrade::EitherUpgrade<protocol::OutgoingRelayReq, protocol::OutgoingDstReq>;
@@ -402,47 +411,179 @@ impl ProtocolsHandler for RelayHandler {
             RelayOutboundOpenInfo::Relay {
                 dst_peer_id,
                 request_id,
-            } => match error {
-                ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(EitherError::B(
-                    _,
-                ))) => unreachable!("Can not receive an OutgoingDstReqError when dialing a relay."),
-                _ => {
-                    self.queued_events
-                        .push(RelayHandlerEvent::OutgoingRelayReqError(
-                            dst_peer_id,
-                            request_id,
+            } => {
+                match error {
+                    ProtocolsHandlerUpgrErr::Timeout => {
+                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Timeout);
+                    }
+                    ProtocolsHandlerUpgrErr::Timer => {}
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )) => {}
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::ProtocolError(e),
+                    )) => {
+                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                            upgrade::UpgradeError::Select(
+                                upgrade::NegotiationError::ProtocolError(e),
+                            ),
                         ));
+                    }
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                        EitherError::A(error),
+                    )) => match error {
+                        protocol::OutgoingRelayReqError::DecodeError(_)
+                        | protocol::OutgoingRelayReqError::Io(_)
+                        | protocol::OutgoingRelayReqError::ParseTypeField
+                        | protocol::OutgoingRelayReqError::ParseStatusField
+                        | protocol::OutgoingRelayReqError::UnexpectedSrcPeerWithStatusType
+                        | protocol::OutgoingRelayReqError::UnexpectedDstPeerWithStatusType
+                        | protocol::OutgoingRelayReqError::ExpectedStatusType(_) => {
+                            self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                upgrade::UpgradeError::Apply(EitherError::A(error)),
+                            ));
+                        }
+                        protocol::OutgoingRelayReqError::ExpectedSuccessStatus(status) => {
+                            match status {
+                                circuit_relay::Status::Success => {
+                                    unreachable!("Status success was explicitly expected earlier.")
+                                }
+                                // With either status below there is no reason to stay connected.
+                                // Thus terminate the connection.
+                                circuit_relay::Status::HopSrcAddrTooLong
+                                | circuit_relay::Status::HopSrcMultiaddrInvalid
+                                | circuit_relay::Status::MalformedMessage => {
+                                    self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                        upgrade::UpgradeError::Apply(EitherError::A(error)),
+                                    ));
+                                }
+                                // While useless for reaching this particular destination, the
+                                // connection to the relay might still proof helpful for other
+                                // destinations. Thus do not terminate the connection.
+                                circuit_relay::Status::StopSrcAddrTooLong
+                                | circuit_relay::Status::StopDstAddrTooLong
+                                | circuit_relay::Status::StopSrcMultiaddrInvalid
+                                | circuit_relay::Status::StopDstMultiaddrInvalid
+                                | circuit_relay::Status::StopRelayRefused
+                                | circuit_relay::Status::HopDstAddrTooLong
+                                | circuit_relay::Status::HopDstMultiaddrInvalid
+                                | circuit_relay::Status::HopNoConnToDst
+                                | circuit_relay::Status::HopCantDialDst
+                                | circuit_relay::Status::HopCantOpenDstStream
+                                | circuit_relay::Status::HopCantSpeakRelay
+                                | circuit_relay::Status::HopCantRelayToSelf => {}
+                            }
+                        }
+                    },
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                        EitherError::B(_),
+                    )) => {
+                        unreachable!("Can not receive an OutgoingDstReqError when dialing a relay.")
+                    }
                 }
-            },
+
+                self.queued_events
+                    .push(RelayHandlerEvent::OutgoingRelayReqError(
+                        dst_peer_id,
+                        request_id,
+                    ));
+            }
             RelayOutboundOpenInfo::Destination {
-                incoming_relay_req, ..
+                src_connection_id,
+                incoming_relay_req,
+                ..
             } => {
                 let err_code = match error {
+                    ProtocolsHandlerUpgrErr::Timeout => {
+                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Timeout);
+                        circuit_relay::Status::HopCantOpenDstStream
+                    }
+                    ProtocolsHandlerUpgrErr::Timer => circuit_relay::Status::HopCantOpenDstStream,
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )) => circuit_relay::Status::HopCantSpeakRelay,
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::ProtocolError(e),
+                    )) => {
+                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                            upgrade::UpgradeError::Select(
+                                upgrade::NegotiationError::ProtocolError(e),
+                            ),
+                        ));
+                        circuit_relay::Status::HopCantSpeakRelay
+                    }
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                         EitherError::A(_),
                     )) => unreachable!(
                         "Can not receive an OutgoingRelayReqError when dialing a destination."
                     ),
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                        EitherError::B(_),
-                    )) => Status::HopCantOpenDstStream,
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::Failed,
-                    )) => Status::HopCantSpeakRelay,
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::ProtocolError(_),
-                    )) => Status::HopCantOpenDstStream,
-                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
-                        Status::HopCantOpenDstStream
+                        EitherError::B(error),
+                    )) => {
+                        match error {
+                            protocol::OutgoingDstReqError::DecodeError(_)
+                            | protocol::OutgoingDstReqError::Io(_)
+                            | protocol::OutgoingDstReqError::ParseTypeField
+                            | protocol::OutgoingDstReqError::ParseStatusField
+                            | protocol::OutgoingDstReqError::UnexpectedSrcPeerWithStatusType
+                            | protocol::OutgoingDstReqError::UnexpectedDstPeerWithStatusType
+                            | protocol::OutgoingDstReqError::ExpectedStatusType(_) => {
+                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                ));
+                                circuit_relay::Status::HopCantOpenDstStream
+                            }
+                            protocol::OutgoingDstReqError::ExpectedSuccessStatus(status) => {
+                                match status {
+                                    circuit_relay::Status::Success => {
+                                        unreachable!(
+                                            "Status success was explicitly expected earlier."
+                                        )
+                                    }
+                                    // A destination node returning `Hop.*` status is a protocol
+                                    // violation. Thus terminate the connection.
+                                    circuit_relay::Status::HopDstAddrTooLong
+                                    | circuit_relay::Status::HopDstMultiaddrInvalid
+                                    | circuit_relay::Status::HopNoConnToDst
+                                    | circuit_relay::Status::HopCantDialDst
+                                    | circuit_relay::Status::HopCantOpenDstStream
+                                    | circuit_relay::Status::HopCantSpeakRelay
+                                    | circuit_relay::Status::HopCantRelayToSelf
+                                    | circuit_relay::Status::HopSrcAddrTooLong
+                                    | circuit_relay::Status::HopSrcMultiaddrInvalid => {
+                                        self.pending_error =
+                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                            ));
+                                    }
+                                    // With either status below there is no reason to stay connected.
+                                    // Thus terminate the connection.
+                                    circuit_relay::Status::StopDstAddrTooLong
+                                    | circuit_relay::Status::StopDstMultiaddrInvalid
+                                    | circuit_relay::Status::MalformedMessage => {
+                                        self.pending_error =
+                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                            ));
+                                    }
+                                    // While useless for reaching this particular destination, the
+                                    // connection to the relay might still proof helpful for other
+                                    // destinations. Thus do not terminate the connection.
+                                    circuit_relay::Status::StopSrcAddrTooLong
+                                    | circuit_relay::Status::StopSrcMultiaddrInvalid
+                                    | circuit_relay::Status::StopRelayRefused => {}
+                                }
+                                status
+                            }
+                        }
                     }
                 };
 
-                // Note: The denial is driven by the handler of the destination, not the
-                // handler of the source. The latter would likely be more ideal.
-                //
-                // TODO: In case one closes this handler due to an error, the deny future needs to
-                // be polled by the src handler.
-                self.deny_futures.push(incoming_relay_req.deny(err_code));
+                self.queued_events
+                    .push(RelayHandlerEvent::OutgoingDstReqError {
+                        src_connection_id,
+                        incoming_relay_req_deny_fut: incoming_relay_req.deny(err_code),
+                    });
             }
         }
     }
@@ -462,6 +603,12 @@ impl ProtocolsHandler for RelayHandler {
             Self::Error,
         >,
     > {
+        // Check for a pending (fatal) error.
+        if let Some(err) = self.pending_error.take() {
+            // The handler will not be polled again by the `Swarm`.
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
+        }
+
         // Request the remote to act as a relay.
         if !self.outgoing_relay_reqs.is_empty() {
             let OutgoingRelayReq {

@@ -27,7 +27,7 @@ use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::iter;
+use std::{fmt, error, iter};
 use unsigned_varint::codec::UviBytes;
 
 /// Ask the remote to become a destination. The upgrade succeeds if the remote accepts, and fails
@@ -113,14 +113,13 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
                 code,
             } = CircuitRelay::decode(msg)?;
 
-            if !matches!(
-                r#type
-                    .map(circuit_relay::Type::from_i32)
-                    .flatten()
-                    .ok_or(OutgoingDstReqError::ParseTypeField)?,
-                circuit_relay::Type::Status
-            ) {
-                return Err(OutgoingDstReqError::ExpectedStatusType);
+            match r#type
+                .map(circuit_relay::Type::from_i32)
+                .flatten()
+                .ok_or(OutgoingDstReqError::ParseTypeField)?
+            {
+                circuit_relay::Type::Status => {}
+                s => return Err(OutgoingDstReqError::ExpectedStatusType(s)),
             }
 
             if src_peer.is_some() {
@@ -162,7 +161,7 @@ pub enum OutgoingDstReqError {
     Io(std::io::Error),
     ParseTypeField,
     ParseStatusField,
-    ExpectedStatusType,
+    ExpectedStatusType(circuit_relay::Type),
     ExpectedSuccessStatus(circuit_relay::Status),
     UnexpectedSrcPeerWithStatusType,
     UnexpectedDstPeerWithStatusType,
@@ -177,5 +176,51 @@ impl From<std::io::Error> for OutgoingDstReqError {
 impl From<prost::DecodeError> for OutgoingDstReqError {
     fn from(e: prost::DecodeError) -> Self {
         OutgoingDstReqError::DecodeError(e)
+    }
+}
+
+impl fmt::Display for OutgoingDstReqError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OutgoingDstReqError::DecodeError(e) => {
+                write!(f, "Failed to decode response: {}.", e)
+            }
+            OutgoingDstReqError::Io(e) => {
+                write!(f, "Io error {}", e)
+            }
+            OutgoingDstReqError::ParseTypeField => {
+                write!(f, "Failed to parse response type field.")
+            }
+            OutgoingDstReqError::ParseStatusField => {
+                write!(f, "Failed to parse response status field.")
+            }
+            OutgoingDstReqError::ExpectedStatusType(t) => {
+                write!(f, "Expected status message type, but got {:?}", t)
+            }
+            OutgoingDstReqError::UnexpectedSrcPeerWithStatusType => {
+                write!(f, "Unexpected source peer with status type.")
+            }
+            OutgoingDstReqError::UnexpectedDstPeerWithStatusType => {
+                write!(f, "Unexpected destination peer with status type.")
+            }
+            OutgoingDstReqError::ExpectedSuccessStatus(s) => {
+                write!(f, "Expected success status but got {:?}", s)
+            }
+        }
+    }
+}
+
+impl error::Error for OutgoingDstReqError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            OutgoingDstReqError::DecodeError(e) => Some(e),
+            OutgoingDstReqError::Io(e) => Some(e),
+            OutgoingDstReqError::ParseTypeField => None,
+            OutgoingDstReqError::ParseStatusField => None,
+            OutgoingDstReqError::ExpectedStatusType(_) => None,
+            OutgoingDstReqError::UnexpectedSrcPeerWithStatusType => None,
+            OutgoingDstReqError::UnexpectedDstPeerWithStatusType => None,
+            OutgoingDstReqError::ExpectedSuccessStatus(_) => None,
+        }
     }
 }

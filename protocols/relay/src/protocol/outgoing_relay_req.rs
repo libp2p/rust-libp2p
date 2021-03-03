@@ -27,7 +27,7 @@ use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::iter;
+use std::{error, fmt, iter};
 use unsigned_varint::codec::UviBytes;
 
 /// Ask a remote to act as a relay.
@@ -67,8 +67,7 @@ impl upgrade::UpgradeInfo for OutgoingRelayReq {
     }
 }
 
-impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq
-{
+impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
     type Output = (super::Connection, oneshot::Receiver<()>);
     type Error = OutgoingRelayReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -121,14 +120,13 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq
                 code,
             } = CircuitRelay::decode(msg)?;
 
-            if !matches!(
-                r#type
-                    .map(circuit_relay::Type::from_i32)
-                    .flatten()
-                    .ok_or(OutgoingRelayReqError::ParseTypeField)?,
-                circuit_relay::Type::Status
-            ) {
-                return Err(OutgoingRelayReqError::ExpectedStatusType);
+            match r#type
+                .map(circuit_relay::Type::from_i32)
+                .flatten()
+                .ok_or(OutgoingRelayReqError::ParseTypeField)?
+            {
+                circuit_relay::Type::Status => {}
+                s => return Err(OutgoingRelayReqError::ExpectedStatusType(s)),
             }
 
             match code
@@ -137,7 +135,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq
                 .ok_or(OutgoingRelayReqError::ParseStatusField)?
             {
                 circuit_relay::Status::Success => {}
-                e => return Err(OutgoingRelayReqError::ReceivedErrorStatus(e)),
+                e => return Err(OutgoingRelayReqError::ExpectedSuccessStatus(e)),
             }
 
             if src_peer.is_some() {
@@ -172,10 +170,10 @@ pub enum OutgoingRelayReqError {
     Io(std::io::Error),
     ParseTypeField,
     ParseStatusField,
-    ExpectedStatusType,
+    ExpectedStatusType(circuit_relay::Type),
     UnexpectedSrcPeerWithStatusType,
     UnexpectedDstPeerWithStatusType,
-    ReceivedErrorStatus(circuit_relay::Status),
+    ExpectedSuccessStatus(circuit_relay::Status),
 }
 
 impl From<std::io::Error> for OutgoingRelayReqError {
@@ -187,5 +185,51 @@ impl From<std::io::Error> for OutgoingRelayReqError {
 impl From<prost::DecodeError> for OutgoingRelayReqError {
     fn from(e: prost::DecodeError) -> Self {
         OutgoingRelayReqError::DecodeError(e)
+    }
+}
+
+impl fmt::Display for OutgoingRelayReqError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OutgoingRelayReqError::DecodeError(e) => {
+                write!(f, "Failed to decode response: {}.", e)
+            }
+            OutgoingRelayReqError::Io(e) => {
+                write!(f, "Io error {}", e)
+            }
+            OutgoingRelayReqError::ParseTypeField => {
+                write!(f, "Failed to parse response type field.")
+            }
+            OutgoingRelayReqError::ParseStatusField => {
+                write!(f, "Failed to parse response status field.")
+            }
+            OutgoingRelayReqError::ExpectedStatusType(t) => {
+                write!(f, "Expected status message type, but got {:?}", t)
+            }
+            OutgoingRelayReqError::UnexpectedSrcPeerWithStatusType => {
+                write!(f, "Unexpected source peer with status type.")
+            }
+            OutgoingRelayReqError::UnexpectedDstPeerWithStatusType => {
+                write!(f, "Unexpected destination peer with status type.")
+            }
+            OutgoingRelayReqError::ExpectedSuccessStatus(s) => {
+                write!(f, "Expected success status but got {:?}", s)
+            }
+        }
+    }
+}
+
+impl error::Error for OutgoingRelayReqError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            OutgoingRelayReqError::DecodeError(e) => Some(e),
+            OutgoingRelayReqError::Io(e) => Some(e),
+            OutgoingRelayReqError::ParseTypeField => None,
+            OutgoingRelayReqError::ParseStatusField => None,
+            OutgoingRelayReqError::ExpectedStatusType(_) => None,
+            OutgoingRelayReqError::UnexpectedSrcPeerWithStatusType => None,
+            OutgoingRelayReqError::UnexpectedDstPeerWithStatusType => None,
+            OutgoingRelayReqError::ExpectedSuccessStatus(_) => None,
+        }
     }
 }
