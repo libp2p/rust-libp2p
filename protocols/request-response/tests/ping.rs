@@ -202,6 +202,62 @@ fn emits_inbound_connection_closed_failure() {
 }
 
 #[test]
+fn emits_inbound_connection_closed_if_channel_is_dropped() {
+    let ping = Ping("ping".to_string().into_bytes());
+
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
+
+    let (peer1_id, trans) = mk_transport();
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
+
+    let (peer2_id, trans) = mk_transport();
+    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id.clone());
+
+    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+    Swarm::listen_on(&mut swarm1, addr).unwrap();
+
+    futures::executor::block_on(async move {
+        while let Some(_) = swarm1.next().now_or_never() {}
+        let addr1 = Swarm::listeners(&swarm1).next().unwrap();
+
+        swarm2.add_address(&peer1_id, addr1.clone());
+        swarm2.send_request(&peer1_id, ping.clone());
+
+        // Wait for swarm 1 to receive request by swarm 2.
+        let event = loop {
+            futures::select!(
+                event = swarm1.next().fuse() => match event {
+                    RequestResponseEvent::Message {
+                        peer,
+                        message: RequestResponseMessage::Request { request, channel, .. }
+                    } => {
+                        assert_eq!(&request, &ping);
+                        assert_eq!(&peer, &peer2_id);
+
+                        drop(channel);
+                        continue;
+                    },
+                    _ => {}
+                },
+                event = swarm2.next().fuse() => {
+                    break event;
+                },
+            )
+        };
+
+        let error = match event {
+            RequestResponseEvent::OutboundFailure { error, .. } => error,
+            e => panic!("unexpected event from peer 2: {:?}", e)
+        };
+
+        assert_eq!(error, OutboundFailure::ConnectionClosed);
+    });
+}
+
+#[test]
 fn ping_protocol_throttled() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());

@@ -106,6 +106,7 @@ where
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
                 } else {
+                    io.close().await?;
                     return Ok(false)
                 }
             }
