@@ -403,6 +403,76 @@ fn node_a_try_connect_to_offline_node_b() {
 }
 
 #[test]
+fn node_a_try_connect_to_unsupported_node_b() {
+    let _ = env_logger::try_init();
+
+    let mut pool = LocalPool::new();
+
+    let mut node_a_swarm = build_swarm(Reachability::Firewalled);
+    let mut relay_swarm = build_swarm(Reachability::Routable);
+    let mut node_b_swarm = build_keep_alive_only_swarm();
+
+    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
+    let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
+
+    let relay_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
+    let node_b_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
+    let node_b_address_via_relay = relay_address
+        .clone()
+        .with(Protocol::P2p(relay_peer_id.clone().into()))
+        .with(Protocol::P2pCircuit)
+        .with(node_b_address.into_iter().next().unwrap())
+        .with(Protocol::P2p(node_b_peer_id.clone().into()));
+
+    Swarm::listen_on(&mut relay_swarm, relay_address.clone()).unwrap();
+    pool.spawner()
+        .spawn_obj(
+            StreamExt::collect::<Vec<_>>(relay_swarm)
+                .map(|_| ())
+                .boxed()
+                .into(),
+        )
+        .unwrap();
+
+    Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    pool.spawner()
+        .spawn_obj(
+            StreamExt::collect::<Vec<_>>(node_b_swarm)
+                .map(|_| ())
+                .boxed()
+                .into(),
+        )
+        .unwrap();
+
+    Swarm::dial_addr(&mut node_a_swarm, node_b_address_via_relay.clone()).unwrap();
+    pool.run_until(async move {
+        // Node A dialing Relay to connect to Node B.
+        match node_a_swarm.next_event().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
+        }
+
+        // Node A establishing connection to Relay to connect to Node B.
+        match node_a_swarm.next_event().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
+        }
+
+        loop {
+            match node_a_swarm.next_event().await {
+                SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
+                if address == node_b_address_via_relay =>
+                {
+                    break;
+                }
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                e => panic!("{:?}", e),
+            }
+        }
+    });
+}
+
+#[test]
 fn node_a_try_connect_to_offline_node_b_via_offline_relay() {
     let _ = env_logger::try_init();
 
@@ -972,6 +1042,25 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
     };
 
     Swarm::new(transport, combined_behaviour, local_peer_id)
+}
+
+fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_public_key = local_key.public();
+    let plaintext = PlainText2Config {
+        local_public_key: local_public_key.clone(),
+    };
+    let local_peer_id = local_public_key.clone().into_peer_id();
+
+    let transport = MemoryTransport::default();
+
+    let transport = transport
+        .upgrade(upgrade::Version::V1)
+        .authenticate(plaintext)
+        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .boxed();
+
+    Swarm::new(transport, KeepAliveBehaviour::default(), local_peer_id)
 }
 
 #[derive(Clone)]

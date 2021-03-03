@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::circuit_relay::Status;
+use crate::message_proto::circuit_relay;
 use crate::protocol;
 use crate::RequestId;
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
@@ -32,9 +33,7 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use log::warn;
-use smallvec::SmallVec;
 use std::collections::HashMap;
-use std::io;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use wasm_timer::Instant;
@@ -102,7 +101,7 @@ pub struct RelayHandler {
     /// Requests asking the remote to become a relay.
     outgoing_relay_reqs: Vec<OutgoingRelayReq>,
     /// Requests asking the remote to become a destination.
-    outgoing_dst_reqs: SmallVec<[(PeerId, RequestId, Multiaddr, protocol::IncomingRelayReq); 4]>,
+    outgoing_dst_reqs: Vec<OutgoingDstReq>,
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
     /// Tracks substreams lend out to other [`RelayHandler`]s or as
@@ -125,6 +124,14 @@ struct OutgoingRelayReq {
     request_id: RequestId,
     /// Addresses of the destination.
     dst_addr: Multiaddr,
+}
+
+struct OutgoingDstReq {
+    src_peer_id: PeerId,
+    src_addr: Multiaddr,
+    src_connection_id: ConnectionId,
+    request_id: RequestId,
+    incoming_relay_req: protocol::IncomingRelayReq,
 }
 
 /// Event produced by the relay handler.
@@ -166,6 +173,14 @@ pub enum RelayHandlerEvent {
 
     /// A `RelayReq` that has previously been sent by the local node has failed.
     OutgoingRelayReqError(PeerId, RequestId),
+
+    /// A destination request that has previously been sent by the local node has failed.
+    ///
+    /// Includes the incoming relay request, which is yet to be denied due to the failure.
+    OutgoingDstReqError {
+        src_connection_id: ConnectionId,
+        incoming_relay_req_deny_fut: BoxFuture<'static, Result<(), std::io::Error>>
+    },
 }
 
 /// Event that can be sent to the relay handler.
@@ -174,7 +189,7 @@ pub enum RelayHandlerIn {
     /// connections.
     UsedForListening(bool),
     /// Denies a relay request sent by the node we talk to acting as a source.
-    DenyIncomingRelayReq(protocol::IncomingRelayReq),
+    DenyIncomingRelayReq(BoxFuture<'static, Result<(), std::io::Error>>),
 
     /// Denies a destination request sent by the node we talk to.
     //
@@ -202,10 +217,11 @@ pub enum RelayHandlerIn {
     /// The positive or negative response will be written to `substream`.
     OutgoingDstReq {
         /// Peer id of the node whose communications are being relayed.
-        src: PeerId,
-        request_id: RequestId,
+        src_peer_id: PeerId,
         /// Address of the node whose communications are being relayed.
         src_addr: Multiaddr,
+        src_connection_id: ConnectionId,
+        request_id: RequestId,
         /// Substream to the source.
         substream: protocol::IncomingRelayReq,
     },
@@ -318,9 +334,8 @@ impl ProtocolsHandler for RelayHandler {
         match event {
             RelayHandlerIn::UsedForListening(s) => self.used_for_listening = s,
             // Deny a relay request from the node we handle.
-            RelayHandlerIn::DenyIncomingRelayReq(rq) => {
-                let fut = rq.deny(Status::HopCantDialDst);
-                self.deny_futures.push(fut);
+            RelayHandlerIn::DenyIncomingRelayReq(req) => {
+                self.deny_futures.push(req);
             }
             RelayHandlerIn::AcceptDstReq(_src, request_id) => {
                 let rq = self
@@ -355,13 +370,20 @@ impl ProtocolsHandler for RelayHandler {
             }
             // Ask the node we handle to act as a destination.
             RelayHandlerIn::OutgoingDstReq {
-                src,
-                request_id,
+                src_peer_id,
                 src_addr,
+                src_connection_id,
+                request_id,
+                // TODO: This is called `incoming_relay_req` in all other places.
                 substream,
             } => {
-                self.outgoing_dst_reqs
-                    .push((src, request_id, src_addr, substream));
+                self.outgoing_dst_reqs.push(OutgoingDstReq {
+                    src_peer_id,
+                    src_addr,
+                    src_connection_id,
+                    request_id,
+                    incoming_relay_req: substream,
+                });
             }
         }
     }
@@ -466,8 +488,13 @@ impl ProtocolsHandler for RelayHandler {
 
         // Request the remote to act as destination.
         if !self.outgoing_dst_reqs.is_empty() {
-            let (src_peer_id, request_id, src_addr, incoming_relay_req) =
-                self.outgoing_dst_reqs.remove(0);
+            let OutgoingDstReq {
+                src_peer_id,
+                src_addr,
+                src_connection_id,
+                request_id,
+                incoming_relay_req,
+            } = self.outgoing_dst_reqs.remove(0);
             self.outgoing_dst_reqs.shrink_to_fit();
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
@@ -479,6 +506,7 @@ impl ProtocolsHandler for RelayHandler {
                     RelayOutboundOpenInfo::Destination {
                         src_peer_id,
                         request_id,
+                        src_connection_id,
                         incoming_relay_req,
                     },
                 ),
@@ -549,6 +577,7 @@ pub enum RelayOutboundOpenInfo {
     },
     Destination {
         src_peer_id: PeerId,
+        src_connection_id: ConnectionId,
         request_id: RequestId,
         incoming_relay_req: protocol::IncomingRelayReq,
     },

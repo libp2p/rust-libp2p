@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{RelayHandlerConfig, RelayHandlerEvent, RelayHandlerIn, RelayHandlerProto};
+use crate::message_proto::circuit_relay;
 use crate::protocol;
 use crate::transport::TransportToBehaviourMsg;
 use crate::RequestId;
@@ -85,8 +86,9 @@ struct OutgoingUpgradingRelayReq {
 
 enum IncomingRelayReq {
     DialingDst {
-        src_id: PeerId,
+        src_peer_id: PeerId,
         src_addr: Multiaddr,
+        src_connection_id: ConnectionId,
         request_id: RequestId,
         req: protocol::IncomingRelayReq,
     },
@@ -248,15 +250,17 @@ impl NetworkBehaviour for Relay {
         if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
             for req in reqs {
                 let IncomingRelayReq::DialingDst {
-                    src_id,
+                    src_peer_id,
                     src_addr,
+                    src_connection_id,
                     request_id,
                     req,
                 } = req;
                 let event = RelayHandlerIn::OutgoingDstReq {
-                    src: src_id,
-                    request_id,
+                    src_peer_id,
                     src_addr,
+                    src_connection_id,
+                    request_id,
                     substream: req,
                 };
 
@@ -287,12 +291,16 @@ impl NetworkBehaviour for Relay {
 
         if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
             for req in reqs {
-                let IncomingRelayReq::DialingDst { src_id, req, .. } = req;
+                let IncomingRelayReq::DialingDst {
+                    src_peer_id, req, ..
+                } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: src_id,
+                        peer_id: src_peer_id,
                         handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::DenyIncomingRelayReq(req),
+                        event: RelayHandlerIn::DenyIncomingRelayReq(
+                            req.deny(circuit_relay::Status::HopCantDialDst),
+                        ),
                     })
             }
         }
@@ -361,12 +369,16 @@ impl NetworkBehaviour for Relay {
 
         if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
             for req in reqs {
-                let IncomingRelayReq::DialingDst { src_id, req, .. } = req;
+                let IncomingRelayReq::DialingDst {
+                    src_peer_id, req, ..
+                } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: src_id,
+                        peer_id: src_peer_id,
                         handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::DenyIncomingRelayReq(req),
+                        event: RelayHandlerIn::DenyIncomingRelayReq(
+                            req.deny(circuit_relay::Status::HopCantDialDst),
+                        ),
                     })
             }
         }
@@ -388,9 +400,10 @@ impl NetworkBehaviour for Relay {
                 if self.connected_peers.get(&req.dst_peer().peer_id).is_some() {
                     let dest_id = req.dst_peer().peer_id;
                     let event = RelayHandlerIn::OutgoingDstReq {
-                        src: event_source,
-                        request_id,
+                        src_peer_id: event_source,
                         src_addr,
+                        src_connection_id: connection,
+                        request_id,
                         substream: req,
                     };
                     self.outbox_to_swarm
@@ -405,8 +418,9 @@ impl NetworkBehaviour for Relay {
                         IncomingRelayReq::DialingDst {
                             request_id,
                             req,
-                            src_id: event_source,
+                            src_peer_id: event_source,
                             src_addr,
+                            src_connection_id: connection,
                         },
                     );
                     self.outbox_to_swarm
@@ -452,6 +466,17 @@ impl NetworkBehaviour for Relay {
                         src_peer_id,
                         relay_addr,
                     })
+            }
+            RelayHandlerEvent::OutgoingDstReqError {
+                src_connection_id,
+                incoming_relay_req_deny_fut,
+            } => {
+                self.outbox_to_swarm
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: event_source,
+                        handler: NotifyHandler::One(src_connection_id),
+                        event: RelayHandlerIn::DenyIncomingRelayReq(incoming_relay_req_deny_fut),
+                    });
             }
         }
     }
