@@ -61,7 +61,7 @@ atomic = "0.5.0"
 bytes = "1"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.27.1", path = "core" }
+libp2p-core = { version = "0.27.1", path = "core",  default-features = false }
 libp2p-floodsub = { version = "0.28.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.29.0", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.28.0", path = "protocols/identify", optional = true }
@@ -75,7 +75,7 @@ libp2p-request-response = { version = "0.10.0", path = "protocols/request-respon
 libp2p-swarm = { version = "0.28.0", path = "swarm" }
 libp2p-swarm-derive = { version = "0.22.0", path = "swarm-derive" }
 libp2p-uds = { version = "0.27.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.27.0", path = "transports/wasm-ext", optional = true }
+libp2p-wasm-ext = { version = "0.27.0", path = "transports/wasm-ext", default-features = false, optional = true }
 libp2p-yamux = { version = "0.30.1", path = "muxers/yamux", optional = true }
 multiaddr = { package = "parity-multiaddr", version = "0.11.1", path = "misc/multiaddr" }
 parking_lot = "0.11.0"
@@ -87,7 +87,7 @@ wasm-timer = "0.2.4"
 libp2p-deflate = { version = "0.27.1", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.27.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.29.0", path = "protocols/mdns", optional = true }
-libp2p-tcp = { version = "0.27.1", path = "transports/tcp", optional = true }
+libp2p-tcp = { version = "0.27.1", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.28.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
