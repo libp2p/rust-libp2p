@@ -201,6 +201,11 @@ fn emits_inbound_connection_closed_failure() {
     });
 }
 
+/// We expect the substream to be properly closed when response channel is dropped.
+/// Since the ping protocol used here expects a response, the sender considers this
+/// early close as a protocol violation which results in the connection being closed.
+/// If the substream were not properly closed when dropped, the sender would instead
+/// run into a timeout waiting for the response.
 #[test]
 fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
