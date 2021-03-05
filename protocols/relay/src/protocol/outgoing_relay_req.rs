@@ -44,12 +44,12 @@ use unsigned_varint::codec::UviBytes;
 pub struct OutgoingRelayReq {
     src_id: PeerId,
     dst_id: PeerId,
-    dst_address: Multiaddr,
+    dst_address: Option<Multiaddr>,
 }
 
 impl OutgoingRelayReq {
     /// Builds a request for the target to act as a relay to a third party.
-    pub fn new(src_id: PeerId, dst_id: PeerId, dst_address: Multiaddr) -> Self {
+    pub fn new(src_id: PeerId, dst_id: PeerId, dst_address: Option<Multiaddr>) -> Self {
         OutgoingRelayReq {
             src_id,
             dst_id,
@@ -87,7 +87,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
             }),
             dst_peer: Some(circuit_relay::Peer {
                 id: dst_id.to_bytes(),
-                addrs: vec![dst_address.to_vec()],
+                addrs: vec![dst_address.unwrap_or(Multiaddr::empty()).to_vec()],
             }),
             code: None,
         };

@@ -41,25 +41,21 @@ fn node_a_connect_to_node_b_listening_via_relay() {
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
 
-    let relay_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
-    let node_b_address = relay_address
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let node_b_listen_addr_via_relay = relay_addr
         .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
-        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2pCircuit);
+    let node_b_addr_via_relay = node_b_listen_addr_via_relay
+        .clone()
         .with(Protocol::P2p(node_b_peer_id.into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_address.clone()).unwrap();
+    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    Swarm::listen_on(&mut node_b_swarm, node_b_listen_addr_via_relay.clone()).unwrap();
 
     pool.run_until(async {
-        // Node B reporting listen address via relay.
-        assert!(matches!(
-            node_b_swarm.next_event().await,
-            SwarmEvent::NewListenAddr(_)
-        ));
-
         // Node B dialing Relay.
         match node_b_swarm.next_event().await {
             SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id),
@@ -72,6 +68,18 @@ fn node_a_connect_to_node_b_listening_via_relay() {
                 assert_eq!(peer_id, relay_peer_id);
             }
             e => panic!("{:?}", e),
+        }
+
+        // Node B reporting listen address via relay.
+        loop {
+            match node_b_swarm.next_event().await {
+                SwarmEvent::NewListenAddr(addr) if addr == node_b_listen_addr_via_relay => break,
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
+                e => panic!("{:?}", e),
+            }
         }
 
         let node_b = async move {
@@ -116,7 +124,7 @@ fn node_a_connect_to_node_b_listening_via_relay() {
             }
         };
 
-        Swarm::dial_addr(&mut node_a_swarm, node_b_address).unwrap();
+        Swarm::dial_addr(&mut node_a_swarm, node_b_addr_via_relay).unwrap();
         let node_a = async move {
             // Node A dialing Relay to connect to Node B.
             match node_a_swarm.next_event().await {
@@ -189,6 +197,8 @@ fn node_a_connect_to_node_b_not_listening_via_relay() {
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    // Instruct node b to listen for incoming relayed connections from unknown relay nodes.
+    Swarm::listen_on(&mut node_b_swarm, Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, node_b_swarm);
 
     Swarm::dial_addr(&mut node_a_swarm, node_b_address_via_relay).unwrap();
@@ -259,6 +269,8 @@ fn node_a_connect_to_node_b_via_established_connection_to_relay() {
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    // Instruct node b to listen for incoming relayed connections from unknown relay nodes.
+    Swarm::listen_on(&mut node_b_swarm, Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, node_b_swarm);
 
     pool.run_until(async move {
@@ -471,8 +483,8 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
     let node_b_peer_id = Swarm::local_peer_id(&node_b_swarm).clone();
     let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
 
-    let relay_address: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
-    let node_b_address = relay_address
+    let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
+    let node_b_addr_via_relay = relay_addr
         .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
@@ -480,24 +492,18 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
 
     node_a_swarm
         .kad
-        .add_address(&relay_peer_id, relay_address.clone());
+        .add_address(&relay_peer_id, relay_addr.clone());
     node_b_swarm
         .kad
-        .add_address(&relay_peer_id, relay_address.clone());
+        .add_address(&relay_peer_id, relay_addr.clone());
 
-    Swarm::listen_on(&mut relay_swarm, relay_address.clone()).unwrap();
+    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     // Node B listen via Relay.
-    Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    Swarm::listen_on(&mut node_b_swarm, node_b_addr_via_relay.clone()).unwrap();
 
     pool.run_until(async {
-        // Node B reporting listen address via relay.
-        assert!(matches!(
-            node_b_swarm.next_event().await,
-            SwarmEvent::NewListenAddr(_)
-        ));
-
         // Node B dialing Relay.
         match node_b_swarm.next_event().await {
             SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id),
@@ -513,6 +519,18 @@ fn firewalled_node_a_discover_firewalled_node_b_via_kad_and_connect_to_node_b_vi
                 }
                 SwarmEvent::Behaviour(CombinedEvent::Kad(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                e => panic!("{:?}", e),
+            }
+        }
+
+        // Node B reporting listen address via relay.
+        loop {
+            match node_b_swarm.next_event().await {
+                SwarmEvent::NewListenAddr(addr) if addr == node_b_addr_via_relay => break,
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
                 e => panic!("{:?}", e),
             }
         }
@@ -666,6 +684,8 @@ fn inactive_connection_timeout() {
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    // Instruct node b to listen for incoming relayed connections from unknown relay nodes.
+    Swarm::listen_on(&mut node_b_swarm, Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, node_b_swarm);
 
     pool.run_until(async move {
@@ -731,6 +751,8 @@ fn concurrent_connection_same_relay_same_dst() {
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     Swarm::listen_on(&mut node_b_swarm, node_b_address.clone()).unwrap();
+    // Instruct node b to listen for incoming relayed connections from unknown relay nodes.
+    Swarm::listen_on(&mut node_b_swarm, Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, node_b_swarm);
 
     pool.run_until(async move {
@@ -833,10 +855,6 @@ fn yield_incoming_connection_through_correct_listener() {
         let mut established = 0;
         loop {
             match local_swarm.next_event().await {
-                SwarmEvent::NewListenAddr(addr)
-                    if addr == relay_1_addr_incl_circuit
-                        || addr == relay_2_addr_incl_circuit
-                        || addr == local_addr => {}
                 SwarmEvent::Dialing(peer_id)
                     if peer_id == relay_1_peer_id || peer_id == relay_2_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. }
@@ -847,6 +865,11 @@ fn yield_incoming_connection_through_correct_listener() {
                         break;
                     }
                 }
+                SwarmEvent::NewListenAddr(addr)
+                    if addr == relay_1_addr_incl_circuit
+                        || addr == relay_2_addr_incl_circuit
+                        || addr == local_addr => {}
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
         }
@@ -859,6 +882,7 @@ fn yield_incoming_connection_through_correct_listener() {
 
     pool.run_until(async {
         let mut incoming_connections = 0;
+        let mut established_connections = 0;
         loop {
             match local_swarm.next_event().await {
                 SwarmEvent::IncomingConnection {
@@ -877,18 +901,10 @@ fn yield_incoming_connection_through_correct_listener() {
                     }
 
                     incoming_connections += 1;
-                    if incoming_connections == 2 {
+                    if incoming_connections == 2 && established_connections == 2 {
                         break;
                     }
                 }
-                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                e => panic!("{:?}", e),
-            }
-        }
-
-        let mut established_connections = 0;
-        loop {
-            match local_swarm.next_event().await {
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
@@ -906,11 +922,18 @@ fn yield_incoming_connection_through_correct_listener() {
                     }
 
                     established_connections += 1;
-                    if established_connections == 2 {
+                    if incoming_connections == 2 && established_connections == 2 {
                         break;
                     }
                 }
+                SwarmEvent::NewListenAddr(addr)
+                    if addr == relay_1_addr_incl_circuit
+                        || addr == relay_2_addr_incl_circuit
+                        || addr == local_addr => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
                 e => panic!("{:?}", e),
             }
         }
@@ -974,6 +997,41 @@ fn yield_incoming_connection_through_correct_listener() {
 
         Poll::Pending
     }));
+
+    // Instruct local node to listen for incoming relayed connections from unknown relay nodes.
+    Swarm::listen_on(&mut local_swarm, Protocol::P2pCircuit.into()).unwrap();
+    pool.run_until(async {
+        loop {
+            match local_swarm.next_event().await {
+                SwarmEvent::NewListenAddr(addr) if addr == Protocol::P2pCircuit.into() => break,
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
+                e => panic!("{:?}", e),
+            }
+        }
+    });
+    spawn_swarm_on_pool(&pool, local_swarm);
+
+    // Expect local node to reject incoming connection from unknown relay without a catch-all
+    // listener.
+    Swarm::dial_addr(&mut src_3_swarm, local_addr_via_relay_3.clone()).unwrap();
+    pool.run_until(async move {
+        loop {
+            match src_3_swarm.next_event().await {
+                SwarmEvent::Dialing(peer_id) => {
+                    println!("{:?}", peer_id);
+                }
+                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == local_peer_id => break,
+                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
+                e => panic!("{:?}", e),
+            }
+        }
+    });
 }
 
 #[derive(NetworkBehaviour)]
@@ -1119,7 +1177,7 @@ fn build_swarm(reachability: Reachability) -> Swarm<CombinedBehaviour> {
 
     let combined_behaviour = CombinedBehaviour {
         relay: relay_behaviour,
-        ping: Ping::new(PingConfig::new().with_interval(Duration::from_millis(10))),
+        ping: Ping::new(PingConfig::new().with_interval(Duration::from_millis(100))),
         kad: Kademlia::new(
             local_peer_id.clone(),
             MemoryStore::new(local_peer_id.clone()),

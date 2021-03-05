@@ -108,8 +108,8 @@ pub fn new_transport_and_behaviour<T: Transport + Clone>(
     config: RelayConfig,
     transport: T,
 ) -> (RelayTransportWrapper<T>, Relay) {
-    let (transport, (to_transport, from_transport)) = RelayTransportWrapper::new(transport);
-    let behaviour = Relay::new(config, to_transport, from_transport);
+    let (transport, from_transport) = RelayTransportWrapper::new(transport);
+    let behaviour = Relay::new(config, from_transport);
     (transport, behaviour)
 }
 

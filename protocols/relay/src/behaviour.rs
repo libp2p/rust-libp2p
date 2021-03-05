@@ -38,14 +38,14 @@ use std::time::Duration;
 /// Network behaviour allowing the local node to act as a source, a relay and a destination.
 pub struct Relay {
     config: RelayConfig,
-    /// Channel sender to [`crate::RelayTransportWrapper`].
-    to_transport: mpsc::Sender<BehaviourToTransportMsg>,
     /// Channel receiver from [`crate::RelayTransportWrapper`].
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
     /// Events that need to be send to the [`RelayTransportWrapper`](crate::RelayTransportWrapper)
     /// via [`Self::to_transport`].
-    outbox_to_transport: Vec<BehaviourToTransportMsg>,
+    //
+    // TODO: Update comment.
+    outbox_to_transport: VecDeque<(PeerId, BehaviourToTransportMsg)>,
     /// Events that need to be yielded to the outside when polling.
     outbox_to_swarm: VecDeque<NetworkBehaviourAction<RelayHandlerIn, ()>>,
 
@@ -60,8 +60,15 @@ pub struct Relay {
     /// destination [`PeerId`].
     incoming_relay_reqs: HashMap<PeerId, Vec<IncomingRelayReq>>,
 
-    /// List of relay nodes that act as a listener for the local node being a destination.
+    /// List of relay nodes via which the local node is explicitly listening for incoming relayed
+    /// connections.
+    ///
+    /// Indexed by relay [`PeerId`]. Contains channel sender to listener.
     listeners: HashMap<PeerId, RelayListener>,
+
+    /// Channel sender to listener listening for incoming relayed connections from relay nodes via
+    /// which the local node is not explicitly listening.
+    listener_any_relay: Option<mpsc::Sender<BehaviourToTransportMsg>>,
 }
 
 #[derive(Default)]
@@ -75,7 +82,7 @@ struct OutgoingDialingRelayReq {
     request_id: RequestId,
     src_peer_id: PeerId,
     relay_addr: Multiaddr,
-    dst_addr: Multiaddr,
+    dst_addr: Option<Multiaddr>,
     dst_peer_id: PeerId,
     send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
 }
@@ -119,12 +126,10 @@ impl Relay {
     /// Builds a new `Relay` behaviour.
     pub(crate) fn new(
         config: RelayConfig,
-        to_transport: mpsc::Sender<BehaviourToTransportMsg>,
         from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
     ) -> Self {
         Relay {
             config,
-            to_transport,
             from_transport,
             outbox_to_transport: Default::default(),
             outbox_to_swarm: Default::default(),
@@ -132,6 +137,7 @@ impl Relay {
             incoming_relay_reqs: Default::default(),
             outgoing_relay_reqs: Default::default(),
             listeners: Default::default(),
+            listener_any_relay: Default::default(),
         }
     }
 }
@@ -152,9 +158,9 @@ impl NetworkBehaviour for Relay {
         let mut addresses = Vec::new();
 
         addresses.extend(self.listeners.iter().filter_map(|(peer_id, r)| {
-            if let RelayListener::Connecting(address) = r {
+            if let RelayListener::Connecting { relay_addr, .. } = r {
                 if peer_id == remote_peer_id {
-                    return Some(address.clone());
+                    return Some(relay_addr.clone());
                 }
             }
             None
@@ -197,15 +203,27 @@ impl NetworkBehaviour for Relay {
             "`inject_connection_established` called with known connection id"
         );
 
-        if let Some(RelayListener::Connecting(_)) = self.listeners.get_mut(peer) {
+        if let Some(RelayListener::Connecting { .. }) = self.listeners.get(peer) {
             self.outbox_to_swarm
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: *peer,
                     handler: NotifyHandler::One(*connection_id),
                     event: RelayHandlerIn::UsedForListening(true),
                 });
-            self.listeners
-                .insert(*peer, RelayListener::Connected(*connection_id));
+            let mut to_listener = match self.listeners.remove(peer) {
+                None | Some(RelayListener::Connected { .. }) => unreachable!("See outer match."),
+                Some(RelayListener::Connecting { to_listener, .. }) => to_listener,
+            };
+            to_listener
+                .start_send(BehaviourToTransportMsg::ConnectionToRelayEstablished)
+                .expect("Channel to have at least capacity of 1.");
+            self.listeners.insert(
+                *peer,
+                RelayListener::Connected {
+                    connection_id: *connection_id,
+                    to_listener,
+                },
+            );
         }
     }
 
@@ -276,9 +294,9 @@ impl NetworkBehaviour for Relay {
 
     fn inject_dial_failure(&mut self, peer_id: &PeerId) {
         if let Entry::Occupied(o) = self.listeners.entry(*peer_id) {
-            if matches!(o.get(), RelayListener::Connecting(_)) {
-                // TODO: Should one retry? Should this be logged? Should this be returned to the
-                // listener created by transport.rs?
+            if matches!(o.get(), RelayListener::Connecting{ .. }) {
+                // By removing the entry, the channel to the listener is dropped and thus the
+                // listener is notified that dialing the relay failed.
                 o.remove_entry();
             }
         }
@@ -324,28 +342,38 @@ impl NetworkBehaviour for Relay {
             "`inject_connection_closed` called for known connection"
         );
 
-        if let Some(RelayListener::Connected(primary_connection)) = self.listeners.get(peer) {
-            if primary_connection == connection {
-                if let Some(new_primary) = self
-                    .connected_peers
-                    .get(peer)
-                    .and_then(|cs| cs.iter().next())
-                {
-                    self.listeners
-                        .insert(*peer, RelayListener::Connected(*new_primary));
-                    self.outbox_to_swarm
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: *peer,
-                            handler: NotifyHandler::One(*new_primary),
-                            event: RelayHandlerIn::UsedForListening(true),
-                        });
-                } else {
-                    // There are no more connections to the relay left that
-                    // could be promoted as primary.
-
-                    // TODO: Should one retry? Should this be logged? Should
-                    // this be returned to the listener created by transport.rs?
+        match self.listeners.get(peer) {
+            None => {},
+            Some(RelayListener::Connecting {..}) =>
+                // TODO: Break.
+                unreachable!("State mismatch. Listener waiting for connection while connection previously established."),
+            Some(RelayListener::Connected { connection_id, .. }) => {
+                if connection_id == connection {
+                    if let Some(new_primary) = self
+                        .connected_peers
+                        .get(peer)
+                        .and_then(|cs| cs.iter().next())
+                    {
+                        let to_listener = match self.listeners.remove(peer) {
+                            None | Some(RelayListener::Connecting{..}) => unreachable!("Due to outer match."),
+                            Some(RelayListener::Connected { to_listener, .. }) => to_listener,
+                        };
+                        self.listeners
+                            .insert(*peer, RelayListener::Connected{connection_id: *new_primary, to_listener });
+                        self.outbox_to_swarm
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id: *peer,
+                                handler: NotifyHandler::One(*new_primary),
+                                event: RelayHandlerIn::UsedForListening(true),
+                            });
+                    } else {
+                        // There are no more connections to the relay left that could be promoted as
+                        // primary. Remove the listener, notifying the listener by dropping the channel
+                        // to it.
+                        self.listeners.remove(peer);
+                    }
                 }
+
             }
         }
     }
@@ -432,6 +460,7 @@ impl NetworkBehaviour for Relay {
             }
             // Remote wants us to become a destination.
             RelayHandlerEvent::IncomingDstReq(src, request_id) => {
+                // TODO: Check if we have a listener for the request. If not, deny it.
                 let send_back = RelayHandlerIn::AcceptDstReq(src, request_id);
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -460,15 +489,15 @@ impl NetworkBehaviour for Relay {
                 src_peer_id,
                 relay_peer_id,
                 relay_addr,
-            } => {
-                self.outbox_to_transport
-                    .push(BehaviourToTransportMsg::IncomingRelayedConnection {
-                        stream,
-                        src_peer_id,
-                        relay_peer_id,
-                        relay_addr,
-                    })
-            }
+            } => self.outbox_to_transport.push_back((
+                relay_peer_id,
+                BehaviourToTransportMsg::IncomingRelayedConnection {
+                    stream,
+                    src_peer_id,
+                    relay_peer_id,
+                    relay_addr,
+                },
+            )),
             RelayHandlerEvent::OutgoingDstReqError {
                 src_connection_id,
                 incoming_relay_req_deny_fut,
@@ -488,27 +517,61 @@ impl NetworkBehaviour for Relay {
         cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<RelayHandlerIn, Self::OutEvent>> {
+        // TODO: rename outbox to listeners
         if !self.outbox_to_transport.is_empty() {
-            match self.to_transport.poll_ready(cx) {
-                Poll::Ready(Ok(())) => {
-                    self.to_transport
-                        .start_send(
+            println!("new item in outbox");
+            let relay_peer_id = self.outbox_to_transport[0].0;
+
+            let to_listener = match (
+                self.listeners.get_mut(&relay_peer_id),
+                self.listener_any_relay.as_mut(),
+            ) {
+                (
+                    Some(RelayListener::Connected {
+                        ref mut to_listener,
+                        ..
+                    }),
+                    _,
+                ) => {
+                    println!("Lets take specific listener");
+                    Some(to_listener)},
+                (Some(RelayListener::Connecting { .. }), None) => {
+                    // State mismatch. Got relayed connection via relay, but local node is not
+                    // connected to relay.
+                    println!("state mismatch");
+                    None
+                }
+                (_, Some(to_listener)) => {
+                    // Don't have a listener to yield the relayed connection. Dropping connection
+                    // instead.
+                    println!("Lets take catch-all listener");
+                    Some(to_listener)
+                }
+                (None, None) => None,
+            };
+
+            match to_listener {
+                Some(to_listener) => match to_listener.poll_ready(cx) {
+                    Poll::Ready(Ok(())) => {
+                        println!("to_listener is ready");
+                        if let Err(mpsc::SendError { .. }) = to_listener.start_send(
                             self.outbox_to_transport
-                                .pop()
-                                .expect("Outbox is empty despite !is_empty()."),
-                        )
-                        .expect(
-                            "Failed to send message from behaviour to transport \
-                             despite previous poll_ready call.",
-                        );
+                                .pop_front()
+                                .expect("Outbox is empty despite !is_empty().")
+                                .1,
+                        ) {
+                            self.listeners.remove(&relay_peer_id);
+                        }
+                    }
+                    Poll::Ready(Err(mpsc::SendError { .. })) => {
+                        self.outbox_to_transport.pop_front();
+                        self.listeners.remove(&relay_peer_id);
+                    }
+                    Poll::Pending => {}
+                },
+                None => {
+                    self.outbox_to_transport.pop_front();
                 }
-                Poll::Ready(Err(mpsc::SendError { .. })) => {
-                    panic!(
-                        "The Relay NetworkBehaviour was polled after the \
-                         RelayTransportWrapper was dropped.",
-                    );
-                }
-                Poll::Pending => {}
             }
         }
 
@@ -529,8 +592,8 @@ impl NetworkBehaviour for Relay {
                             .listeners
                             .get(&relay_peer_id)
                             .and_then(|s| {
-                                if let RelayListener::Connected(id) = s {
-                                    Some(NotifyHandler::One(*id))
+                                if let RelayListener::Connected { connection_id, .. } = s {
+                                    Some(NotifyHandler::One(*connection_id))
                                 } else {
                                     None
                                 }
@@ -570,36 +633,70 @@ impl NetworkBehaviour for Relay {
                         });
                     }
                 }
-                Poll::Ready(Some(TransportToBehaviourMsg::ListenReq { address, peer_id })) => {
-                    if let Some(connections) = self.connected_peers.get(&peer_id) {
-                        let primary_connection =
-                            connections.iter().next().expect("At least one connection.");
-                        let prev = self
-                            .listeners
-                            .insert(peer_id, RelayListener::Connected(*primary_connection));
-                        assert!(
-                            prev.is_none(),
-                            "Not to attempt to listen via same relay twice."
-                        );
+                Poll::Ready(Some(TransportToBehaviourMsg::ListenReq {
+                    relay_peer_id_and_addr,
+                    mut to_listener,
+                })) => {
+                    match relay_peer_id_and_addr {
+                        // Listener is listening for all incoming relayed connections from any relay
+                        // node.
+                        None => {
+                            match self.listener_any_relay.as_mut() {
+                                Some(sender) if !sender.is_closed() => {
+                                    // Already got listener listening for all incoming relayed
+                                    // connections. Signal to listener by dropping the channel sender to
+                                    // the listener.
+                                }
+                                _ => {
+                                    to_listener
+                                        .start_send(
+                                            BehaviourToTransportMsg::ConnectionToRelayEstablished,
+                                        )
+                                        .expect("Channel to have at least capacity of 1.");
+                                    self.listener_any_relay = Some(to_listener);
+                                }
+                            }
+                        }
+                        // Listener is listening for incoming relayed connections from this relay
+                        // only.
+                        Some((relay_peer_id, relay_addr)) => {
+                            if let Some(connections) = self.connected_peers.get(&relay_peer_id) {
+                                to_listener
+                                    .start_send(
+                                        BehaviourToTransportMsg::ConnectionToRelayEstablished,
+                                    )
+                                    .expect("Channel to have at least capacity of 1.");
+                                let primary_connection =
+                                    connections.iter().next().expect("At least one connection.");
+                                self.listeners.insert(
+                                    relay_peer_id,
+                                    RelayListener::Connected {
+                                        connection_id: *primary_connection,
+                                        to_listener,
+                                    },
+                                );
 
-                        self.outbox_to_swarm
-                            .push_back(NetworkBehaviourAction::NotifyHandler {
-                                peer_id: peer_id,
-                                handler: NotifyHandler::One(*primary_connection),
-                                event: RelayHandlerIn::UsedForListening(true),
-                            });
-                    } else {
-                        let prev = self
-                            .listeners
-                            .insert(peer_id.clone(), RelayListener::Connecting(address));
-                        assert!(
-                            prev.is_none(),
-                            "Not to attempt to listen via same relay twice."
-                        );
-                        return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                            peer_id,
-                            condition: DialPeerCondition::Disconnected,
-                        });
+                                self.outbox_to_swarm.push_back(
+                                    NetworkBehaviourAction::NotifyHandler {
+                                        peer_id: relay_peer_id,
+                                        handler: NotifyHandler::One(*primary_connection),
+                                        event: RelayHandlerIn::UsedForListening(true),
+                                    },
+                                );
+                            } else {
+                                self.listeners.insert(
+                                    relay_peer_id,
+                                    RelayListener::Connecting {
+                                        relay_addr,
+                                        to_listener,
+                                    },
+                                );
+                                return Poll::Ready(NetworkBehaviourAction::DialPeer {
+                                    peer_id: relay_peer_id,
+                                    condition: DialPeerCondition::Disconnected,
+                                });
+                            }
+                        }
                     }
                 }
                 Poll::Ready(None) => panic!("Channel to transport wrapper is closed"),
@@ -615,7 +712,9 @@ impl NetworkBehaviour for Relay {
     }
 }
 
+// TODO: Rename. This needs to be BehaviourToListenerMsg.
 pub enum BehaviourToTransportMsg {
+    ConnectionToRelayEstablished,
     IncomingRelayedConnection {
         stream: protocol::Connection,
         src_peer_id: PeerId,
@@ -625,8 +724,14 @@ pub enum BehaviourToTransportMsg {
 }
 
 enum RelayListener {
-    Connecting(Multiaddr),
-    Connected(ConnectionId),
+    Connecting {
+        relay_addr: Multiaddr,
+        to_listener: mpsc::Sender<BehaviourToTransportMsg>,
+    },
+    Connected {
+        connection_id: ConnectionId,
+        to_listener: mpsc::Sender<BehaviourToTransportMsg>,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq)]

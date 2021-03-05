@@ -130,7 +130,7 @@ struct OutgoingRelayReq {
     dst_peer_id: PeerId,
     request_id: RequestId,
     /// Addresses of the destination.
-    dst_addr: Multiaddr,
+    dst_addr: Option<Multiaddr>,
 }
 
 struct OutgoingDstReq {
@@ -217,7 +217,7 @@ pub enum RelayHandlerIn {
         dst_peer_id: PeerId,
         request_id: RequestId,
         /// Addresses known for this peer to transmit to the remote.
-        dst_addr: Multiaddr,
+        dst_addr: Option<Multiaddr>,
     },
 
     /// Asks the node to be used as a destination for a relayed connection.

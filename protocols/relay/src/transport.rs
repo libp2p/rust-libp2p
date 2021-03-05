@@ -32,7 +32,6 @@ use libp2p_core::transport::{ListenerEvent, TransportError};
 use libp2p_core::{PeerId, Transport};
 use pin_project::pin_project;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 pub enum TransportToBehaviourMsg {
@@ -40,13 +39,15 @@ pub enum TransportToBehaviourMsg {
         request_id: RequestId,
         relay_addr: Multiaddr,
         relay_peer_id: PeerId,
-        dst_addr: Multiaddr,
+        dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
         send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
     },
     ListenReq {
-        address: Multiaddr,
-        peer_id: PeerId,
+        /// [`PeerId`] and [`Multiaddr`] of relay node. When [`None`] listen for connections from
+        /// any relay node.
+        relay_peer_id_and_addr: Option<(PeerId, Multiaddr)>,
+        to_listener: mpsc::Sender<BehaviourToTransportMsg>,
     },
 }
 
@@ -58,10 +59,11 @@ pub enum TransportToBehaviourMsg {
 /// 2. Accept incoming relayed connections.
 /// 3. Connecting to relay nodes in order for them to listen for incoming
 ///    connections for the local node.
+//
+// TODO: Document how listen_on can be used to listen via specific relay and via all relays.
 #[derive(Clone)]
 pub struct RelayTransportWrapper<T: Clone> {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
-    from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
 
     inner_transport: T,
 }
@@ -80,26 +82,16 @@ impl<T: Clone> RelayTransportWrapper<T> {
     ///     inner_transport,
     /// );
     ///```
-    pub(crate) fn new(
-        t: T,
-    ) -> (
-        Self,
-        (
-            mpsc::Sender<BehaviourToTransportMsg>,
-            mpsc::Receiver<TransportToBehaviourMsg>,
-        ),
-    ) {
+    pub(crate) fn new(t: T) -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
         let (to_behaviour, from_transport) = mpsc::channel(0);
-        let (to_transport, from_behaviour) = mpsc::channel(0);
 
         let transport = RelayTransportWrapper {
             to_behaviour,
-            from_behaviour: Arc::new(Mutex::new(from_behaviour)),
 
             inner_transport: t,
         };
 
-        (transport, (to_transport, from_transport))
+        (transport, from_transport)
     }
 }
 
@@ -111,85 +103,114 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        println!("RelayTransportWrapper::listen_on");
         let orig_addr = addr.clone();
 
-        let (is_relay, addr) = is_relay_listen_address(addr);
-        if !is_relay {
-            let inner_listener = match self.inner_transport.listen_on(addr) {
-                Ok(listener) => listener,
-                Err(TransportError::MultiaddrNotSupported(addr)) => {
-                    return Err(TransportError::MultiaddrNotSupported(addr))
-                }
-                Err(TransportError::Other(err)) => {
-                    return Err(TransportError::Other(EitherError::A(err)))
-                }
-            };
-            return Ok(RelayListener {
-                inner_listener: Some(inner_listener),
-                from_behaviour: self.from_behaviour.clone(),
-                msg_to_behaviour: None,
-                report_listen_addr: None,
-            });
-        }
-
-        let mut to_behaviour = self.to_behaviour.clone();
-        let (addr, peer_id) = split_off_peer_id(addr)?;
-        let msg_to_behaviour = Some(
-            async move {
-                to_behaviour
-                    .send(TransportToBehaviourMsg::ListenReq {
-                        address: addr,
-                        peer_id,
-                    })
-                    .await
+        match parse_relayed_multiaddr(addr)? {
+            // Address does not contain circuit relay protocol. Use inner transport.
+            Err(addr) => {
+                let inner_listener = match self.inner_transport.listen_on(addr) {
+                    Ok(listener) => listener,
+                    Err(TransportError::MultiaddrNotSupported(addr)) => {
+                        return Err(TransportError::MultiaddrNotSupported(addr))
+                    }
+                    Err(TransportError::Other(err)) => {
+                        return Err(TransportError::Other(EitherError::A(err)))
+                    }
+                };
+                Ok(RelayListener::Inner(inner_listener))
             }
-            .boxed(),
-        );
+            Ok(relayed_addr) => {
+                let relay_peer_id_and_addr = match relayed_addr {
+                    // TODO: In the future we might want to support listening via a relay by its address only.
+                    RelayedMultiaddr {
+                        relay_peer_id: None,
+                        relay_addr: Some(_),
+                        ..
+                    } => return Err(RelayError::MissingRelayPeerId.into()),
+                    // TODO: In the future we might want to support listening via a relay by its peer_id only.
+                    RelayedMultiaddr {
+                        relay_peer_id: Some(_),
+                        relay_addr: None,
+                        ..
+                    } => return Err(RelayError::MissingRelayAddr.into()),
+                    RelayedMultiaddr {
+                        relay_peer_id: Some(peer_id),
+                        relay_addr: Some(addr),
+                        ..
+                    } => Some((peer_id, addr)),
+                    RelayedMultiaddr {
+                        relay_peer_id: None,
+                        relay_addr: None,
+                        ..
+                    } => None,
+                };
 
-        Ok(RelayListener {
-            inner_listener: None,
-            from_behaviour: self.from_behaviour.clone(),
-            msg_to_behaviour,
-            report_listen_addr: Some(orig_addr),
-        })
+                let (to_listener, from_behaviour) = mpsc::channel(0);
+                let mut to_behaviour = self.to_behaviour.clone();
+                let msg_to_behaviour = Some(
+                    async move {
+                        to_behaviour
+                            .send(TransportToBehaviourMsg::ListenReq {
+                                relay_peer_id_and_addr,
+                                to_listener,
+                            })
+                            .await
+                    }
+                    .boxed(),
+                );
+
+                Ok(RelayListener::Relayed {
+                    from_behaviour,
+                    msg_to_behaviour,
+                    report_listen_addr: Some(orig_addr),
+                })
+            }
+        }
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if !contains_circuit_protocol(&addr) {
-            match self.inner_transport.dial(addr) {
-                Ok(dialer) => return Ok(EitherFuture::First(dialer)),
+        println!("RelayTransportWrapper::dial");
+        match parse_relayed_multiaddr(addr)? {
+            // Address does not contain circuit relay protocol. Use inner transport.
+            Err(addr) => match self.inner_transport.dial(addr) {
+                Ok(dialer) => Ok(EitherFuture::First(dialer)),
                 Err(TransportError::MultiaddrNotSupported(addr)) => {
-                    return Err(TransportError::MultiaddrNotSupported(addr))
+                    Err(TransportError::MultiaddrNotSupported(addr))
                 }
-                Err(TransportError::Other(err)) => {
-                    return Err(TransportError::Other(EitherError::A(err)))
-                }
-            };
-        }
+                Err(TransportError::Other(err)) => Err(TransportError::Other(EitherError::A(err))),
+            },
+            Ok(RelayedMultiaddr {
+                relay_peer_id,
+                relay_addr,
+                dst_peer_id,
+                dst_addr,
+            }) => {
+                let relay_peer_id = relay_peer_id.ok_or(RelayError::MissingRelayPeerId)?;
+                let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
+                let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
 
-        let (relay, dst) = split_relay_and_dst(addr);
-        let (relay_addr, relay_peer_id) = split_off_peer_id(relay)?;
-        let (dst_addr, dst_peer_id) = split_off_peer_id(dst)?;
-
-        let mut to_behaviour = self.to_behaviour.clone();
-        Ok(EitherFuture::Second(
-            async move {
-                let (tx, rx) = oneshot::channel();
-                to_behaviour
-                    .send(TransportToBehaviourMsg::DialReq {
-                        request_id: RequestId::new(),
-                        relay_addr,
-                        relay_peer_id,
-                        dst_addr,
-                        dst_peer_id,
-                        send_back: tx,
-                    })
-                    .await?;
-                let stream = rx.await??;
-                Ok(stream)
+                let mut to_behaviour = self.to_behaviour.clone();
+                Ok(EitherFuture::Second(
+                    async move {
+                        let (tx, rx) = oneshot::channel();
+                        to_behaviour
+                            .send(TransportToBehaviourMsg::DialReq {
+                                request_id: RequestId::new(),
+                                relay_addr,
+                                relay_peer_id,
+                                dst_addr,
+                                dst_peer_id,
+                                send_back: tx,
+                            })
+                            .await?;
+                        let stream = rx.await??;
+                        Ok(stream)
+                    }
+                    .boxed(),
+                ))
             }
-            .boxed(),
-        ))
+        }
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -197,61 +218,80 @@ impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
     }
 }
 
+#[derive(Default)]
+struct RelayedMultiaddr {
+    relay_peer_id: Option<PeerId>,
+    relay_addr: Option<Multiaddr>,
+    dst_peer_id: Option<PeerId>,
+    dst_addr: Option<Multiaddr>,
+}
+
+fn parse_relayed_multiaddr(
+    addr: Multiaddr,
+) -> Result<Result<RelayedMultiaddr, Multiaddr>, RelayError> {
+    if !contains_circuit_protocol(&addr) {
+        return Ok(Err(addr));
+    }
+
+    let mut relayed_multiaddr = RelayedMultiaddr::default();
+
+    let mut before_circuit = true;
+    for protocol in addr.into_iter() {
+        match protocol {
+            Protocol::P2pCircuit => {
+                if before_circuit {
+                    before_circuit = false;
+                } else {
+                    return Err(RelayError::MultipleCircuitRelayProtocolsUnsupported);
+                }
+            }
+            Protocol::P2p(hash) => {
+                let peer_id = PeerId::from_multihash(hash).map_err(|_| RelayError::InvalidHash)?;
+
+                if before_circuit {
+                    if relayed_multiaddr.relay_peer_id.is_some() {
+                        return Err(RelayError::MalformedMultiaddr);
+                    }
+                    relayed_multiaddr.relay_peer_id = Some(peer_id)
+                } else {
+                    if relayed_multiaddr.dst_peer_id.is_some() {
+                        return Err(RelayError::MalformedMultiaddr);
+                    }
+                    relayed_multiaddr.dst_peer_id = Some(peer_id)
+                }
+            }
+            p => {
+                if before_circuit {
+                    relayed_multiaddr
+                        .relay_addr
+                        .get_or_insert(Multiaddr::empty())
+                        .push(p);
+                } else {
+                    relayed_multiaddr
+                        .dst_addr
+                        .get_or_insert(Multiaddr::empty())
+                        .push(p);
+                }
+            }
+        }
+    }
+
+    Ok(Ok(relayed_multiaddr))
+}
+
 fn contains_circuit_protocol(addr: &Multiaddr) -> bool {
     addr.iter().any(|p| matches!(p, Protocol::P2pCircuit))
 }
 
-fn is_relay_listen_address(addr: Multiaddr) -> (bool, Multiaddr) {
-    let original_len = addr.len();
+#[pin_project(project = RelayListenerProj)]
+pub enum RelayListener<T: Transport> {
+    Inner(#[pin] <T as Transport>::Listener),
+    Relayed {
+        from_behaviour: mpsc::Receiver<BehaviourToTransportMsg>,
 
-    let new_addr: Multiaddr = addr
-        .into_iter()
-        .take_while(|p| !matches!(p, Protocol::P2pCircuit))
-        .collect();
-
-    (new_addr.len() != original_len, new_addr)
-}
-
-fn split_relay_and_dst(addr: Multiaddr) -> (Multiaddr, Multiaddr) {
-    let mut relay = Vec::new();
-    let mut dst = Vec::new();
-    let mut passed_circuit = false;
-
-    for protocol in addr.into_iter() {
-        if matches!(protocol, Protocol::P2pCircuit) {
-            passed_circuit = true;
-            continue;
-        }
-
-        if !passed_circuit {
-            relay.push(protocol);
-        } else {
-            dst.push(protocol);
-        }
-    }
-
-    (relay.into_iter().collect(), dst.into_iter().collect())
-}
-
-fn split_off_peer_id(mut addr: Multiaddr) -> Result<(Multiaddr, PeerId), RelayError> {
-    if let Some(Protocol::P2p(hash)) = addr.pop() {
-        Ok((
-            addr,
-            PeerId::from_multihash(hash).map_err(|_| RelayError::InvalidHash)?,
-        ))
-    } else {
-        Err(RelayError::MissingPeerId)
-    }
-}
-
-#[pin_project]
-pub struct RelayListener<T: Transport> {
-    #[pin]
-    inner_listener: Option<<T as Transport>::Listener>,
-    from_behaviour: Arc<Mutex<mpsc::Receiver<BehaviourToTransportMsg>>>,
-
-    msg_to_behaviour: Option<BoxFuture<'static, Result<(), mpsc::SendError>>>,
-    report_listen_addr: Option<Multiaddr>,
+        msg_to_behaviour: Option<BoxFuture<'static, Result<(), mpsc::SendError>>>,
+        report_listen_addr: Option<Multiaddr>,
+    },
 }
 
 impl<T: Transport> Stream for RelayListener<T> {
@@ -263,16 +303,8 @@ impl<T: Transport> Stream for RelayListener<T> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
-        if let Some(msg) = this.msg_to_behaviour {
-            match Future::poll(msg.as_mut(), cx) {
-                Poll::Ready(Ok(())) => *this.msg_to_behaviour = None,
-                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(EitherError::B(e.into())))),
-                Poll::Pending => {}
-            }
-        }
-
-        if let Some(listener) = this.inner_listener.as_pin_mut() {
-            match listener.poll_next(cx) {
+        match this {
+            RelayListenerProj::Inner(listener) => match listener.poll_next(cx) {
                 Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(EitherError::A(e)))),
                 Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                     upgrade,
@@ -296,30 +328,50 @@ impl<T: Transport> Stream for RelayListener<T> {
                 }
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => {}
-            }
-        }
+            },
+            RelayListenerProj::Relayed {
+                from_behaviour,
+                msg_to_behaviour,
+                report_listen_addr,
+            } => {
+                if let Some(msg) = msg_to_behaviour {
+                    match Future::poll(msg.as_mut(), cx) {
+                        Poll::Ready(Ok(())) => *msg_to_behaviour = None,
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(Some(Err(EitherError::B(e.into()))))
+                        }
+                        Poll::Pending => {}
+                    }
+                }
 
-        match this.from_behaviour.lock().unwrap().poll_next_unpin(cx) {
-            Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
-                stream,
-                src_peer_id,
-                relay_peer_id,
-                relay_addr,
-            })) => {
-                return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                    upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
-                    local_addr: relay_addr.with(Protocol::P2p(relay_peer_id.into())).with(Protocol::P2pCircuit),
-                    remote_addr: Protocol::P2p(src_peer_id.into()).into(),
-                })));
+                match from_behaviour.poll_next_unpin(cx) {
+                    Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
+                        stream,
+                        src_peer_id,
+                        relay_peer_id,
+                        relay_addr,
+                    })) => {
+                        println!("Listener: Got relayed connection");
+                        return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                            upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
+                            // TODO: Undo this
+                            local_addr: relay_addr
+                                .with(Protocol::P2p(relay_peer_id.into()))
+                                .with(Protocol::P2pCircuit),
+                            remote_addr: Protocol::P2p(src_peer_id.into()).into(),
+                        })));
+                    }
+                    Poll::Ready(Some(BehaviourToTransportMsg::ConnectionToRelayEstablished)) => {
+                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
+                            report_listen_addr
+                                .take()
+                                .expect("ConnectionToRelayEstablished to be send at most once"),
+                        ))));
+                    }
+                    Poll::Ready(None) => unimplemented!(),
+                    Poll::Pending => {}
+                }
             }
-            Poll::Ready(None) => unimplemented!(),
-            Poll::Pending => {}
-        }
-
-        // TODO: This should likely only be reported once the relay connection is established. But
-        // how should one know that?
-        if let Some(addr) = this.report_listen_addr.take() {
-            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
         }
 
         Poll::Pending
@@ -360,11 +412,15 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 /// Error that occurred during relay connection setup.
 #[derive(Debug, Eq, PartialEq)]
 pub enum RelayError {
-    MissingPeerId,
+    MissingRelayPeerId,
+    MissingRelayAddr,
+    MissingDstPeerId,
     InvalidHash,
     SendingMessageToBehaviour(mpsc::SendError),
     ResponseFromBehaviourCanceled,
     DialingRelay,
+    MultipleCircuitRelayProtocolsUnsupported,
+    MalformedMultiaddr,
 }
 
 impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
@@ -400,34 +456,3 @@ impl std::fmt::Display for RelayError {
 }
 
 impl std::error::Error for RelayError {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_split_relay_and_dst() {
-        let addr: Multiaddr = "/ip6/::1/tcp/40425/p2p/12D3KooWSy38eUdLNqhmVQZYFy2tzpi9u5Zt3bYuqdh9vKzAvg42/p2p-circuit/p2p/12D3KooWSSCJLCSaSaxTzyajn2yDoybUKsPXdoc47LjjB9196Zbv".parse().unwrap();
-        let (_relay, dst) = split_relay_and_dst(addr);
-
-        assert!(!dst.is_empty());
-    }
-
-    #[test]
-    fn test_split_off_peer_id() {
-        let ip_address: Multiaddr = "/ip6/2001:db8::".parse().unwrap();
-        assert_eq!(
-            split_off_peer_id(ip_address.clone()),
-            Err(RelayError::MissingPeerId)
-        );
-
-        let peer_id = PeerId::random();
-        let ip_and_peer_id_address = ip_address
-            .clone()
-            .with(Protocol::P2p(peer_id.clone().into()));
-        assert_eq!(
-            split_off_peer_id(ip_and_peer_id_address.clone()),
-            Ok((ip_address, peer_id))
-        );
-    }
-}
