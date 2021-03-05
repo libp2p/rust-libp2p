@@ -1,3 +1,7 @@
+# 0.29.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
 # 0.28.0 [2021-02-15]
 
 - Prevent non-published messages being added to caches.

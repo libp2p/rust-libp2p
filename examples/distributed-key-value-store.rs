@@ -60,7 +60,7 @@ use libp2p::{
     Swarm,
     build_development_transport,
     identity,
-    mdns::{Mdns, MdnsEvent},
+    mdns::{Mdns, MdnsConfig, MdnsEvent},
     swarm::NetworkBehaviourEventProcess
 };
 use std::{error::Error, task::{Context, Poll}};
@@ -151,7 +151,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id.clone());
         let kademlia = Kademlia::new(local_peer_id.clone(), store);
-        let mdns = task::block_on(Mdns::new())?;
+        let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
     };

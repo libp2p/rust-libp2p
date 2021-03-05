@@ -964,6 +964,9 @@ fn yield_incoming_connection_through_correct_listener() {
             Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
                 if peer_id == relay_3_peer_id =>
             {}
+            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, ..}) if peer_id == local_peer_id => {
+                panic!("Expected node to reject incoming connection from unknown relay without a catch-all listener");
+            }
             Poll::Ready(SwarmEvent::Behaviour(CombinedEvent::Ping(_))) => {}
             Poll::Pending => {}
             e => panic!("{:?}", e),

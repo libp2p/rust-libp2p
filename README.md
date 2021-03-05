@@ -57,7 +57,7 @@ The main components of this repository are structured as follows:
 - https://github.com/paritytech/substrate
 - https://github.com/sigp/lighthouse
 - https://github.com/golemfactory/golem-libp2p
-- https://github.com/comit-network/comit-rs
+- https://github.com/comit-network
 - https://github.com/rs-ipfs/rust-ipfs
 - https://github.com/marcopoloprotocol/marcopolo
 - https://github.com/ChainSafe/forest
