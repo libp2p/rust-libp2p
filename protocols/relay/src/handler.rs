@@ -49,8 +49,8 @@ pub struct RelayHandlerProto {
 impl IntoProtocolsHandler for RelayHandlerProto {
     type Handler = RelayHandler;
 
-    fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        RelayHandler::new(self.config, endpoint.get_remote_address().clone())
+    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+        RelayHandler::new(self.config, *remote_peer_id, endpoint.get_remote_address().clone())
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
@@ -83,6 +83,7 @@ pub struct RelayHandler {
     /// Specifies whether the handled connection is used to listen for incoming relayed connections.
     used_for_listening: bool,
     remote_address: Multiaddr,
+    remote_peer_id: PeerId,
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
     incoming_dst_req_pending_approval: HashMap<RequestId, protocol::IncomingDstReq>,
@@ -174,6 +175,7 @@ pub enum RelayHandlerEvent {
     IncomingDstReqSuccess {
         stream: protocol::Connection,
         src_peer_id: PeerId,
+        relay_peer_id: PeerId,
         relay_addr: Multiaddr,
     },
 
@@ -235,11 +237,12 @@ pub enum RelayHandlerIn {
 
 impl RelayHandler {
     /// Builds a new `RelayHandler`.
-    pub fn new(config: RelayHandlerConfig, remote_address: Multiaddr) -> Self {
+    pub fn new(config: RelayHandlerConfig, remote_peer_id: PeerId, remote_address: Multiaddr) -> Self {
         RelayHandler {
             config,
             used_for_listening: false,
             remote_address,
+            remote_peer_id,
             deny_futures: Default::default(),
             incoming_dst_req_pending_approval: Default::default(),
             accept_dst_futures: Default::default(),
@@ -666,6 +669,7 @@ impl ProtocolsHandler for RelayHandler {
                 let event = RelayHandlerEvent::IncomingDstReqSuccess {
                     stream: substream,
                     src_peer_id,
+                    relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_address.clone(),
                 };
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(event));

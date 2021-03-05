@@ -96,8 +96,9 @@ mod protocol;
 mod transport;
 
 pub use behaviour::{Relay, RelayConfig};
-use libp2p_core::Transport;
 pub use transport::{RelayError, RelayTransportWrapper};
+
+use libp2p_core::Transport;
 
 /// Create both a [`RelayTransportWrapper`] wrapping the provided [`Transport`]
 /// as well as a [`Relay`] [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
