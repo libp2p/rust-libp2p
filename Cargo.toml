@@ -80,7 +80,6 @@ libp2p-yamux = { version = "0.30.1", path = "muxers/yamux", optional = true }
 multiaddr = { package = "parity-multiaddr", version = "0.11.1", path = "misc/multiaddr" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
-socket2 = "0.3.19"
 smallvec = "1.0"
 wasm-timer = "0.2.4"
 
