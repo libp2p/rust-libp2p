@@ -109,15 +109,15 @@ use std::task::{Context, Poll};
 ///    relay_transport.listen_on(addr).unwrap();
 ///    ```
 #[derive(Clone)]
-pub struct RelayTransportWrapper<T: Clone> {
+pub struct RelayTransport<T: Clone> {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
 
     inner_transport: T,
 }
 
-impl<T: Clone> RelayTransportWrapper<T> {
-    /// Create a new [`RelayTransportWrapper`] by wrapping an existing [`Transport`] into a
-    /// [`RelayTransportWrapper`].
+impl<T: Clone> RelayTransport<T> {
+    /// Create a new [`RelayTransport`] by wrapping an existing [`Transport`] in a
+    /// [`RelayTransport`].
     ///
     ///```
     /// # use libp2p_core::transport::dummy::DummyTransport;
@@ -132,7 +132,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
     pub(crate) fn new(t: T) -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
         let (to_behaviour, from_transport) = mpsc::channel(0);
 
-        let transport = RelayTransportWrapper {
+        let transport = RelayTransport {
             to_behaviour,
 
             inner_transport: t,
@@ -142,7 +142,7 @@ impl<T: Clone> RelayTransportWrapper<T> {
     }
 }
 
-impl<T: Transport + Clone> Transport for RelayTransportWrapper<T> {
+impl<T: Transport + Clone> Transport for RelayTransport<T> {
     type Output = EitherOutput<<T as Transport>::Output, protocol::Connection>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
@@ -508,7 +508,7 @@ impl std::fmt::Display for RelayError {
 
 impl std::error::Error for RelayError {}
 
-/// Message from the [`RelayTransportWrapper`] to the [`Relay`]
+/// Message from the [`RelayTransport`] to the [`Relay`]
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.

@@ -38,7 +38,7 @@ use std::time::Duration;
 /// Network behaviour allowing the local node to act as a source, a relay and a destination.
 pub struct Relay {
     config: RelayConfig,
-    /// Channel receiver from [`crate::RelayTransportWrapper`].
+    /// Channel receiver from [`crate::RelayTransport`].
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
     /// Events that need to be send to a [`RelayListener`](crate::transport::RelayListener) via

@@ -107,7 +107,7 @@ pub struct RelayHandler {
     queued_events: Vec<RelayHandlerEvent>,
     /// Tracks substreams lend out to other [`RelayHandler`]s or as
     /// [`Connection`](protocol::Connection) to the
-    /// [`RelayTransportWrapper`](crate::RelayTransportWrapper).
+    /// [`RelayTransport`](crate::RelayTransport).
     ///
     /// For each substream to the peer of this handler, there is a future in here that resolves once
     /// the given substream is dropped.
