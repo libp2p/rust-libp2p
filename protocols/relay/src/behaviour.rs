@@ -42,7 +42,7 @@ pub struct Relay {
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
     /// Events that need to be send to the [`RelayTransportWrapper`](crate::RelayTransportWrapper)
-    /// via [`Self::to_transport`].
+    /// via [`Self::listeners`] or [`Self::listener_any_relay`].
     //
     // TODO: Update comment.
     outbox_to_transport: VecDeque<(PeerId, BehaviourToTransportMsg)>,
