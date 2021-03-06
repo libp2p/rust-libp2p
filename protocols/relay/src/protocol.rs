@@ -32,7 +32,11 @@ use std::task::{Context, Poll};
 use std::{convert::TryFrom, error, fmt};
 
 /// Any message received on the wire whose length exceeds this value is refused.
-const MAX_ACCEPTED_MESSAGE_LEN: usize = 1024;
+//
+// The circuit relay specification sets a maximum of 1024 bytes per multiaddr. A single message can
+// contain multiple addresses for both the source and destination node. Setting the maximum message
+// length to 10 times that limit is an unproven estimate. Feel free to refine this in the future.
+const MAX_ACCEPTED_MESSAGE_LEN: usize = 10 * 1024;
 
 const PROTOCOL_NAME: &[u8; 27] = b"/libp2p/circuit/relay/0.1.0";
 

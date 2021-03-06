@@ -147,8 +147,8 @@ struct OutgoingDstReq {
 /// Event produced by the relay handler.
 pub enum RelayHandlerEvent {
     /// The remote wants us to relay communications to a third party. You must either send back a
-    /// `DenyIncomingRelayReq`, or a `OutgoingDstReq` to any connection handler for the same peer,
-    /// providing the [`protocol::IncomingRelayReq`].
+    /// [`RelayHandlerIn::DenyIncomingRelayReq`], or an [`RelayHandlerIn::OutgoingDstReq`] to any
+    /// connection handler for the destination peer, providing the [`protocol::IncomingRelayReq`].
     IncomingRelayReq {
         request_id: RequestId,
         src_addr: Multiaddr,
