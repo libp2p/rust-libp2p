@@ -278,7 +278,7 @@ struct RelayedMultiaddr {
     dst_addr: Option<Multiaddr>,
 }
 
-/// Parse a [`Multiaddr`] containing a [`Protocol::P2p2Circuit`].
+/// Parse a [`Multiaddr`] containing a [`Protocol::P2pCircuit`].
 ///
 /// Returns `Ok(Err(provided_addr))` when passed address contains no [`Protocol::P2pCircuit`].
 ///
@@ -508,7 +508,7 @@ impl std::fmt::Display for RelayError {
 
 impl std::error::Error for RelayError {}
 
-/// Message from the [`RelayTransport`] to the [`Relay`]
+/// Message from the [`RelayTransport`] to the [`Relay`](crate::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.

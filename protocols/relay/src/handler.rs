@@ -74,8 +74,9 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 ///   a [`RelayHandlerIn::DenyDstReq`].
 ///
 /// - Send a [`RelayHandlerIn::OutgoingRelayReq`] if the node we handle must act as a relay to a
-///   destination. The handler will either send back a [`RelayHandlerEvent::RelayReqSuccess`]
-///   containing the stream to the destination, or a [`RelayHandlerEvent::OutgoingRelayReqDenied`].
+///   destination. The handler will either send back a
+///   [`RelayHandlerEvent::OutgoingRelayReqSuccess`] containing the stream to the destination, or a
+///   [`RelayHandlerEvent::OutgoingRelayReqError`].
 ///
 /// - Send a [`RelayHandlerIn::OutgoingDstReq`] if the node we handle must act as a destination. The
 ///   handler will automatically notify the source whether the request was accepted or denied.
