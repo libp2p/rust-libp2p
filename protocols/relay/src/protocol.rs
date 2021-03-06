@@ -21,8 +21,8 @@
 use crate::message_proto::circuit_relay;
 
 use bytes::Bytes;
-use futures::io::{AsyncRead, AsyncWrite};
 use futures::channel::oneshot;
+use futures::io::{AsyncRead, AsyncWrite};
 use libp2p_core::{multiaddr::Error as MultiaddrError, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
@@ -49,12 +49,8 @@ pub use self::outgoing_relay_req::{OutgoingRelayReq, OutgoingRelayReqError};
 // Relay -> Destination
 mod incoming_dst_req;
 mod outgoing_dst_req;
-pub use self::incoming_dst_req::{
-    IncomingDstReq, IncomingDstReqError,
-};
-pub use self::outgoing_dst_req::{
-    OutgoingDstReq, OutgoingDstReqError,
-};
+pub use self::incoming_dst_req::{IncomingDstReq, IncomingDstReqError};
+pub use self::outgoing_dst_req::{OutgoingDstReq, OutgoingDstReqError};
 
 mod listen;
 pub use self::listen::{RelayListen, RelayListenError, RelayRemoteReq};
@@ -123,7 +119,6 @@ pub struct Connection {
     /// [`Connection`] might at first return data, that was already read during relay negotiation.
     initial_data: Bytes,
     stream: NegotiatedSubstream,
-
     /// Notifies the other side of the channel of this [`Connection`] being dropped.
     _notifier: oneshot::Sender<()>,
 }
@@ -131,7 +126,11 @@ pub struct Connection {
 impl Unpin for Connection {}
 
 impl Connection {
-    fn new(initial_data: Bytes, stream: NegotiatedSubstream, notifier: oneshot::Sender<()>) -> Self {
+    fn new(
+        initial_data: Bytes,
+        stream: NegotiatedSubstream,
+        notifier: oneshot::Sender<()>,
+    ) -> Self {
         Connection {
             initial_data,
             stream,
@@ -173,8 +172,8 @@ impl AsyncRead for Connection {
     ) -> Poll<Result<usize, Error>> {
         if !self.initial_data.is_empty() {
             let n = std::cmp::min(self.initial_data.len(), buf.len());
-            buf[0..n].copy_from_slice(&self.initial_data.as_ref()[..n]);
-            let _ = self.initial_data.split_to(n);
+            let data = self.initial_data.split_to(n);
+            buf[0..n].copy_from_slice(&data[..]);
             return Poll::Ready(Ok(n));
         }
 
