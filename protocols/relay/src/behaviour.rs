@@ -117,9 +117,9 @@ impl Default for RelayConfig {
 }
 
 // TODO: For now one is only able to specify relay servers via
-// `Swarm::listen_on(Multiaddress(<relay_server>/p2p-circuit/))`. In the future we might want to
-// support adding them via the Relay behaviour? The latter would allow other behaviours to manage
-// ones relay listeners.
+// `Swarm::listen_on(Multiaddress(<relay_server>/p2p-circuit/))`. In the future
+// we might want to support adding them via the Relay behaviour? The latter
+// would allow other behaviours to manage ones relay listeners.
 impl Relay {
     /// Builds a new [`Relay`] [`NetworkBehaviour`].
     pub(crate) fn new(
@@ -153,36 +153,33 @@ impl NetworkBehaviour for Relay {
     }
 
     fn addresses_of_peer(&mut self, remote_peer_id: &PeerId) -> Vec<Multiaddr> {
-        let mut addresses = Vec::new();
-
-        addresses.extend(self.listeners.iter().filter_map(|(peer_id, r)| {
-            if let RelayListener::Connecting { relay_addr, .. } = r {
-                if peer_id == remote_peer_id {
-                    return Some(relay_addr.clone());
+        self.listeners
+            .iter()
+            .filter_map(|(peer_id, r)| {
+                if let RelayListener::Connecting { relay_addr, .. } = r {
+                    if peer_id == remote_peer_id {
+                        return Some(relay_addr.clone());
+                    }
                 }
-            }
-            None
-        }));
-
-        addresses.extend(
-            self.outgoing_relay_reqs
-                .dialing
-                .get(remote_peer_id)
-                .into_iter()
-                .flatten()
-                .map(|OutgoingDialingRelayReq { relay_addr, .. }| relay_addr.clone()),
-        );
-
-        addresses.extend(
-            self.incoming_relay_reqs
-                .get(remote_peer_id)
-                .into_iter()
-                .flatten()
-                .map(|IncomingRelayReq::DialingDst { req, .. }| req.dst_peer().addrs.clone())
-                .flatten(),
-        );
-
-        addresses
+                None
+            })
+            .chain(
+                self.outgoing_relay_reqs
+                    .dialing
+                    .get(remote_peer_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|OutgoingDialingRelayReq { relay_addr, .. }| relay_addr.clone()),
+            )
+            .chain(
+                self.incoming_relay_reqs
+                    .get(remote_peer_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|IncomingRelayReq::DialingDst { req, .. }| req.dst_peer().addrs.clone())
+                    .flatten(),
+            )
+            .collect()
     }
 
     fn inject_connection_established(
@@ -464,9 +461,23 @@ impl NetworkBehaviour for Relay {
                 }
             }
             // Remote wants us to become a destination.
-            RelayHandlerEvent::IncomingDstReq(src, request_id) => {
-                // TODO: Check if we have a listener for the request. If not, deny it.
-                let send_back = RelayHandlerIn::AcceptDstReq(src, request_id);
+            RelayHandlerEvent::IncomingDstReq(request) => {
+                let got_explicit_listener = self
+                    .listeners
+                    .get(&event_source)
+                    .map(|l| l.is_closed())
+                    .unwrap_or(false);
+                let got_listener_for_any_relay = self
+                    .listener_any_relay
+                    .map(|l| l.is_closed())
+                    .unwrap_or(false);
+
+                let send_back = if got_explicit_listener || got_listener_for_any_relay {
+                    RelayHandlerIn::AcceptDstReq(request)
+                } else {
+                    RelayHandlerIn::DenyDstReq(request)
+                };
+
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -737,6 +748,17 @@ enum RelayListener {
         connection_id: ConnectionId,
         to_listener: mpsc::Sender<BehaviourToListenerMsg>,
     },
+}
+
+impl RelayListener {
+    /// Returns whether the channel to the
+    /// [`RelayListener`](crate::transport::RelayListener) is closed.
+    fn is_closed(&self) -> bool {
+        match self {
+            RelayListener::Connecting { to_listener, .. }
+            | RelayListener::Connected { to_listener, .. } => to_listener.is_closed(),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

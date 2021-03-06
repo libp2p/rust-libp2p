@@ -50,7 +50,11 @@ impl IntoProtocolsHandler for RelayHandlerProto {
     type Handler = RelayHandler;
 
     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        RelayHandler::new(self.config, *remote_peer_id, endpoint.get_remote_address().clone())
+        RelayHandler::new(
+            self.config,
+            *remote_peer_id,
+            endpoint.get_remote_address().clone(),
+        )
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
@@ -86,7 +90,6 @@ pub struct RelayHandler {
     remote_peer_id: PeerId,
     /// Futures that send back negative responses.
     deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
-    incoming_dst_req_pending_approval: HashMap<RequestId, protocol::IncomingDstReq>,
     /// Futures that send back an accept response to a relay.
     accept_dst_futures: FuturesUnordered<
         BoxFuture<
@@ -153,10 +156,10 @@ pub enum RelayHandlerEvent {
     },
 
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
-    /// destination. The behaviour can accept or deny the request via
+    /// a destination. The behaviour can accept or deny the request via
     /// [`AcceptDstReq`](RelayHandlerIn::AcceptDstReq) or
     /// [`DenyDstReq`](RelayHandlerIn::DenyDstReq).
-    IncomingDstReq(PeerId, RequestId),
+    IncomingDstReq (protocol::IncomingDstReq),
 
     /// A `RelayReq` that has previously been sent has been accepted by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -187,7 +190,7 @@ pub enum RelayHandlerEvent {
     /// Includes the incoming relay request, which is yet to be denied due to the failure.
     OutgoingDstReqError {
         src_connection_id: ConnectionId,
-        incoming_relay_req_deny_fut: BoxFuture<'static, Result<(), std::io::Error>>
+        incoming_relay_req_deny_fut: BoxFuture<'static, Result<(), std::io::Error>>,
     },
 }
 
@@ -199,17 +202,11 @@ pub enum RelayHandlerIn {
     /// Denies a relay request sent by the node we talk to acting as a source.
     DenyIncomingRelayReq(BoxFuture<'static, Result<(), std::io::Error>>),
 
-    /// Denies a destination request sent by the node we talk to.
-    //
-    // TODO: While the basic logic triggered by this event denying an incoming destination request
-    // is in place, this event is never constructed by an upper layer. Should there be a mechanism
-    // for users to deny incoming destination requests other than simply dropping the incoming
-    // connection? One would likely want to enforce limits as a relay, but is this needed as a
-    // destination?
-    DenyDstReq(PeerId, RequestId),
-
     /// Accepts a destination request sent by the node we talk to.
-    AcceptDstReq(PeerId, RequestId),
+    AcceptDstReq(protocol::IncomingDstReq),
+
+    /// Denies a destination request sent by the node we talk to.
+    DenyDstReq(protocol::IncomingDstReq),
 
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     OutgoingRelayReq {
@@ -237,14 +234,17 @@ pub enum RelayHandlerIn {
 
 impl RelayHandler {
     /// Builds a new `RelayHandler`.
-    pub fn new(config: RelayHandlerConfig, remote_peer_id: PeerId, remote_address: Multiaddr) -> Self {
+    pub fn new(
+        config: RelayHandlerConfig,
+        remote_peer_id: PeerId,
+        remote_address: Multiaddr,
+    ) -> Self {
         RelayHandler {
             config,
             used_for_listening: false,
             remote_address,
             remote_peer_id,
             deny_futures: Default::default(),
-            incoming_dst_req_pending_approval: Default::default(),
             accept_dst_futures: Default::default(),
             copy_futures: Default::default(),
             outgoing_relay_reqs: Default::default(),
@@ -291,11 +291,11 @@ impl ProtocolsHandler for RelayHandler {
             }
             // We have been asked to become a destination.
             protocol::RelayRemoteReq::DstReq(dst_request) => {
-                let src = dst_request.src_id().clone();
-                self.incoming_dst_req_pending_approval
-                    .insert(request_id, dst_request);
-                self.queued_events
-                    .push(RelayHandlerEvent::IncomingDstReq(src, request_id));
+                self.queued_events.push(RelayHandlerEvent::IncomingDstReq {
+                    src_peer_id: *dst_request.src_id(),
+                    request_id,
+                    request: dst_request,
+                });
             }
         }
     }
@@ -349,23 +349,8 @@ impl ProtocolsHandler for RelayHandler {
             RelayHandlerIn::DenyIncomingRelayReq(req) => {
                 self.deny_futures.push(req);
             }
-            RelayHandlerIn::AcceptDstReq(_src, request_id) => {
-                let rq = self
-                    .incoming_dst_req_pending_approval
-                    .remove(&request_id)
-                    .unwrap();
-                let fut = rq.accept();
-                self.accept_dst_futures.push(fut);
-            }
-            // Deny a destination request from the node we handle.
-            RelayHandlerIn::DenyDstReq(_src, request_id) => {
-                let rq = self
-                    .incoming_dst_req_pending_approval
-                    .remove(&request_id)
-                    .unwrap();
-                let fut = rq.deny();
-                self.deny_futures.push(fut);
-            }
+            RelayHandlerIn::AcceptDstReq(request) => self.accept_dst_futures.push(request.accept()),
+            RelayHandlerIn::DenyDstReq ( request ) => self.deny_futures.push(request.deny()),
             // Ask the node we handle to act as a relay.
             RelayHandlerIn::OutgoingRelayReq {
                 src_peer_id,
