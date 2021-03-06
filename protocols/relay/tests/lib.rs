@@ -121,9 +121,7 @@ fn src_connect_to_dst_listening_via_relay() {
             // Destination Node establishing connection from Source Node via Relay.
             loop {
                 match dst_swarm.next_event().await {
-                    SwarmEvent::ConnectionEstablished { peer_id, .. }
-                        if peer_id == src_peer_id =>
-                    {
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == src_peer_id => {
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -161,9 +159,7 @@ fn src_connect_to_dst_listening_via_relay() {
             // Source Node establishing connection to destination node via Relay.
             loop {
                 match src_swarm.next_event().await {
-                    SwarmEvent::ConnectionEstablished { peer_id, .. }
-                        if peer_id == dst_peer_id =>
-                    {
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                         break
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -439,6 +435,7 @@ fn src_try_connect_to_unsupported_dst() {
                 {
                     break;
                 }
+                SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
@@ -589,9 +586,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
             // Destination Node establishing connection from Source Node via Relay.
             loop {
                 match dst_swarm.next_event().await {
-                    SwarmEvent::ConnectionEstablished { peer_id, .. }
-                        if peer_id == src_peer_id =>
-                    {
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == src_peer_id => {
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}

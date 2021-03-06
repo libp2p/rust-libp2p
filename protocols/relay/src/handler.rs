@@ -227,8 +227,8 @@ pub enum RelayHandlerIn {
         src_addr: Multiaddr,
         src_connection_id: ConnectionId,
         request_id: RequestId,
-        /// Substream to the source.
-        substream: protocol::IncomingRelayReq,
+        /// Incoming relay request from the source node.
+        incoming_relay_req: protocol::IncomingRelayReq,
     },
 }
 
@@ -371,15 +371,14 @@ impl ProtocolsHandler for RelayHandler {
                 src_addr,
                 src_connection_id,
                 request_id,
-                // TODO: This is called `incoming_relay_req` in all other places.
-                substream,
+                incoming_relay_req,
             } => {
                 self.outgoing_dst_reqs.push(OutgoingDstReq {
                     src_peer_id,
                     src_addr,
                     src_connection_id,
                     request_id,
-                    incoming_relay_req: substream,
+                    incoming_relay_req,
                 });
             }
         }
@@ -467,7 +466,9 @@ impl ProtocolsHandler for RelayHandler {
                                 | circuit_relay::Status::HopSrcMultiaddrInvalid
                                 | circuit_relay::Status::MalformedMessage => {
                                     self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                        upgrade::UpgradeError::Apply(EitherError::B(EitherError::A(error))),
+                                        upgrade::UpgradeError::Apply(EitherError::B(
+                                            EitherError::A(error),
+                                        )),
                                     ));
                                 }
                                 // While useless for reaching this particular destination, the
@@ -542,7 +543,9 @@ impl ProtocolsHandler for RelayHandler {
                             | protocol::OutgoingDstReqError::UnexpectedDstPeerWithStatusType
                             | protocol::OutgoingDstReqError::ExpectedStatusType(_) => {
                                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(error))),
+                                    upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(
+                                        error,
+                                    ))),
                                 ));
                                 circuit_relay::Status::HopCantOpenDstStream
                             }
@@ -566,7 +569,9 @@ impl ProtocolsHandler for RelayHandler {
                                     | circuit_relay::Status::HopSrcMultiaddrInvalid => {
                                         self.pending_error =
                                             Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                                upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(error))),
+                                                upgrade::UpgradeError::Apply(EitherError::B(
+                                                    EitherError::B(error),
+                                                )),
                                             ));
                                     }
                                     // With either status below there is no reason to stay connected.
@@ -576,7 +581,9 @@ impl ProtocolsHandler for RelayHandler {
                                     | circuit_relay::Status::MalformedMessage => {
                                         self.pending_error =
                                             Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                                upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(error))),
+                                                upgrade::UpgradeError::Apply(EitherError::B(
+                                                    EitherError::B(error),
+                                                )),
                                             ));
                                     }
                                     // While useless for reaching this particular destination, the
