@@ -1,3 +1,23 @@
+// Copyright 2021 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 use futures::executor::LocalPool;
 use futures::future::{poll_fn, FutureExt};
 use futures::stream::Stream;
@@ -781,20 +801,28 @@ fn concurrent_connection_same_relay_same_dst() {
 }
 
 /// Yield incoming connection through listener that listens via the relay node used by the
-/// connection. In case local node does not listen via relay node of the connection, yield the
-/// connection through _catch-all_ listener. In case such listener does not exist, drop the
-/// connection.
+/// connection. In case the local node does not listen via the specific relay node, but has
+/// registered a listener for all remaining incoming relayed connections, yield the connection via
+/// that _catch-all_ listener. Drop the connection in all other cases.
+///
+/// ## Nodes
+///
+/// - Destination node explicitly listening via relay node 1 and 2.
+///
+/// - 3 relay nodes
+///
+/// - Source node 1 and 2 connecting to destination node via relay 1 and 2 respectively.
+///
+/// - Source node 3 connecting to destination node via relay 3, expecting first connection attempt
+///   to fail as destination node is not listening for incoming connections from any relay node.
+///   Expecting second connection attempt to succeed after destination node registered listener for
+///   any incoming relayed connection.
 #[test]
 fn yield_incoming_connection_through_correct_listener() {
     let _ = env_logger::try_init();
     let mut pool = LocalPool::new();
 
-    // TODO: 3 incoming connections:
-    // 1. From node A via R1 the local node is listening via to listener 1.
-    // 2. From node B via R2 the local node is listening via to listener 2.
-    // 3. From node C via R3 the local node is not listening via to catch-all listener 3.
-
-    let mut local_swarm = build_swarm(Reachability::Routable);
+    let mut dst_swarm = build_swarm(Reachability::Routable);
     let mut src_1_swarm = build_swarm(Reachability::Routable);
     let mut src_2_swarm = build_swarm(Reachability::Routable);
     let mut src_3_swarm = build_swarm(Reachability::Routable);
@@ -802,7 +830,7 @@ fn yield_incoming_connection_through_correct_listener() {
     let mut relay_2_swarm = build_swarm(Reachability::Routable);
     let mut relay_3_swarm = build_swarm(Reachability::Routable);
 
-    let local_peer_id = Swarm::local_peer_id(&local_swarm).clone();
+    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
     let src_1_peer_id = Swarm::local_peer_id(&src_1_swarm).clone();
     let src_2_peer_id = Swarm::local_peer_id(&src_2_swarm).clone();
     let src_3_peer_id = Swarm::local_peer_id(&src_3_swarm).clone();
@@ -810,34 +838,34 @@ fn yield_incoming_connection_through_correct_listener() {
     let relay_2_peer_id = Swarm::local_peer_id(&relay_2_swarm).clone();
     let relay_3_peer_id = Swarm::local_peer_id(&relay_3_swarm).clone();
 
-    let local_memory_port = Protocol::Memory(rand::random::<u64>());
-    let local_addr = Multiaddr::empty().with(local_memory_port.clone());
+    let dst_memory_port = Protocol::Memory(rand::random::<u64>());
+    let dst_addr = Multiaddr::empty().with(dst_memory_port.clone());
 
     let relay_1_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let relay_1_addr_incl_circuit = relay_1_addr
         .clone()
         .with(Protocol::P2p(relay_1_peer_id.into()))
         .with(Protocol::P2pCircuit);
-    let local_addr_via_relay_1 = relay_1_addr_incl_circuit
+    let dst_addr_via_relay_1 = relay_1_addr_incl_circuit
         .clone()
-        .with(Protocol::P2p(local_peer_id.into()));
+        .with(Protocol::P2p(dst_peer_id.into()));
     let relay_2_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let relay_2_addr_incl_circuit = relay_2_addr
         .clone()
         .with(Protocol::P2p(relay_2_peer_id.into()))
         .with(Protocol::P2pCircuit);
-    let local_addr_via_relay_2 = relay_2_addr_incl_circuit
+    let dst_addr_via_relay_2 = relay_2_addr_incl_circuit
         .clone()
-        .with(Protocol::P2p(local_peer_id.into()));
+        .with(Protocol::P2p(dst_peer_id.into()));
     let relay_3_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let relay_3_addr_incl_circuit = relay_3_addr
         .clone()
         .with(Protocol::P2p(relay_3_peer_id.into()))
         .with(Protocol::P2pCircuit);
-    let local_addr_via_relay_3 = relay_3_addr_incl_circuit
+    let dst_addr_via_relay_3 = relay_3_addr_incl_circuit
         .clone()
-        .with(local_memory_port)
-        .with(Protocol::P2p(local_peer_id.into()));
+        .with(dst_memory_port)
+        .with(Protocol::P2p(dst_peer_id.into()));
 
     Swarm::listen_on(&mut relay_1_swarm, relay_1_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_1_swarm);
@@ -848,13 +876,16 @@ fn yield_incoming_connection_through_correct_listener() {
     Swarm::listen_on(&mut relay_3_swarm, relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    Swarm::listen_on(&mut local_swarm, relay_1_addr_incl_circuit.clone()).unwrap();
-    Swarm::listen_on(&mut local_swarm, relay_2_addr_incl_circuit.clone()).unwrap();
-    Swarm::listen_on(&mut local_swarm, local_addr.clone()).unwrap();
+    Swarm::listen_on(&mut dst_swarm, relay_1_addr_incl_circuit.clone()).unwrap();
+    Swarm::listen_on(&mut dst_swarm, relay_2_addr_incl_circuit.clone()).unwrap();
+    // Listen on own address in order for relay 3 to be able to connect to destination node.
+    Swarm::listen_on(&mut dst_swarm, dst_addr.clone()).unwrap();
+
+    // Wait for destination node to establish connections to relay 1 and 2.
     pool.run_until(async {
         let mut established = 0;
         loop {
-            match local_swarm.next_event().await {
+            match dst_swarm.next_event().await {
                 SwarmEvent::Dialing(peer_id)
                     if peer_id == relay_1_peer_id || peer_id == relay_2_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. }
@@ -868,43 +899,27 @@ fn yield_incoming_connection_through_correct_listener() {
                 SwarmEvent::NewListenAddr(addr)
                     if addr == relay_1_addr_incl_circuit
                         || addr == relay_2_addr_incl_circuit
-                        || addr == local_addr => {}
+                        || addr == dst_addr => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
         }
     });
 
-    Swarm::dial_addr(&mut src_1_swarm, local_addr_via_relay_1.clone()).unwrap();
-    Swarm::dial_addr(&mut src_2_swarm, local_addr_via_relay_2.clone()).unwrap();
+    Swarm::dial_addr(&mut src_1_swarm, dst_addr_via_relay_1.clone()).unwrap();
+    Swarm::dial_addr(&mut src_2_swarm, dst_addr_via_relay_2.clone()).unwrap();
     spawn_swarm_on_pool(&pool, src_1_swarm);
     spawn_swarm_on_pool(&pool, src_2_swarm);
 
+    // Expect source node 1 and 2 to reach destination node via relay 1 and 2 respectively.
     pool.run_until(async {
-        let mut incoming_connections = 0;
-        let mut established_connections = 0;
+        let mut src_1_established = false;
+        let mut src_2_established = false;
+        let mut src_1_ping = false;
+        let mut src_2_ping = false;
         loop {
-            match local_swarm.next_event().await {
-                SwarmEvent::IncomingConnection {
-                    local_addr,
-                    send_back_addr,
-                    ..
-                } => {
-                    // Expect incoming connection from source node 1 to be received via relay 1 and
-                    // incoming connection from source node 2 to be received via relay 2.
-                    if local_addr == relay_1_addr_incl_circuit {
-                        assert_eq!(send_back_addr, Protocol::P2p(src_1_peer_id.into()).into());
-                    } else if local_addr == relay_2_addr_incl_circuit {
-                        assert_eq!(send_back_addr, Protocol::P2p(src_2_peer_id.into()).into());
-                    } else {
-                        unreachable!();
-                    }
-
-                    incoming_connections += 1;
-                    if incoming_connections == 2 && established_connections == 2 {
-                        break;
-                    }
-                }
+            match dst_swarm.next_event().await {
+                SwarmEvent::IncomingConnection { .. } => {}
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
@@ -915,33 +930,18 @@ fn yield_incoming_connection_through_correct_listener() {
 
                     if peer_id == src_1_peer_id {
                         assert_eq!(local_addr, relay_1_addr_incl_circuit);
+                        src_1_established = true;
                     } else if peer_id == src_2_peer_id {
                         assert_eq!(local_addr, relay_2_addr_incl_circuit);
+                        src_2_established = true;
                     } else {
                         unreachable!();
-                    }
-
-                    established_connections += 1;
-                    if incoming_connections == 2 && established_connections == 2 {
-                        break;
                     }
                 }
                 SwarmEvent::NewListenAddr(addr)
                     if addr == relay_1_addr_incl_circuit
                         || addr == relay_2_addr_incl_circuit
-                        || addr == local_addr => {}
-                SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
-                    ..
-                })) => {}
-                e => panic!("{:?}", e),
-            }
-        }
-
-        let mut src_1_ping = false;
-        let mut src_2_ping = false;
-        loop {
-            match local_swarm.next_event().await {
+                        || addr == dst_addr => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
                     peer,
                     result: Ok(_),
@@ -951,27 +951,35 @@ fn yield_incoming_connection_through_correct_listener() {
                     } else if peer == src_2_peer_id {
                         src_2_ping = true;
                     }
-
-                    if src_1_ping && src_2_ping {
-                        break;
-                    }
                 }
-                SwarmEvent::Behaviour(CombinedEvent::Kad(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
                 e => panic!("{:?}", e),
+            }
+
+            if src_1_established && src_2_established && src_1_ping && src_2_ping {
+                break;
             }
         }
     });
 
-    // Expect local node to reject incoming connection from unknown relay without a catch-all
-    // listener.
-    Swarm::dial_addr(&mut src_3_swarm, local_addr_via_relay_3.clone()).unwrap();
+    // Expect destination node to reject incoming connection from unknown relay given that
+    // destination node is not listening for such connections.
+    Swarm::dial_addr(&mut src_3_swarm, dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(poll_fn(|cx| {
-        match local_swarm.next_event().boxed().poll_unpin(cx) {
+        match dst_swarm.next_event().boxed().poll_unpin(cx) {
             Poll::Ready(SwarmEvent::Behaviour(CombinedEvent::Ping(_))) => {}
-            Poll::Ready(SwarmEvent::IncomingConnection { ..}) => {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, ..}) if peer_id == relay_3_peer_id => {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, ..}) if peer_id == src_3_peer_id => {
-                panic!("Expected node to reject incoming connection from unknown relay without a catch-all listener");
+            Poll::Ready(SwarmEvent::IncomingConnection { .. }) => {}
+            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
+                if peer_id == relay_3_peer_id => {}
+            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
+                if peer_id == src_3_peer_id =>
+            {
+                panic!(
+                    "Expected destination node to reject incoming connection from unknown relay \
+                     without a catch-all listener",
+                );
             }
             Poll::Pending => {}
             e => panic!("{:?}", e),
@@ -979,16 +987,20 @@ fn yield_incoming_connection_through_correct_listener() {
 
         match src_3_swarm.next_event().boxed().poll_unpin(cx) {
             Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr { address, .. })
-                if address == local_addr_via_relay_3 =>
+                if address == dst_addr_via_relay_3 =>
             {
                 return Poll::Ready(());
             }
             Poll::Ready(SwarmEvent::Dialing { .. }) => {}
             Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
-                if peer_id == relay_3_peer_id =>
-            {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, ..}) if peer_id == local_peer_id => {
-                panic!("Expected node to reject incoming connection from unknown relay without a catch-all listener");
+                if peer_id == relay_3_peer_id => {}
+            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
+                if peer_id == dst_peer_id =>
+            {
+                panic!(
+                    "Expected destination node to reject incoming connection from unknown relay \
+                     without a catch-all listener",
+                );
             }
             Poll::Ready(SwarmEvent::Behaviour(CombinedEvent::Ping(_))) => {}
             Poll::Pending => {}
@@ -998,11 +1010,12 @@ fn yield_incoming_connection_through_correct_listener() {
         Poll::Pending
     }));
 
-    // Instruct local node to listen for incoming relayed connections from unknown relay nodes.
-    Swarm::listen_on(&mut local_swarm, Protocol::P2pCircuit.into()).unwrap();
+    // Instruct destination node to listen for incoming relayed connections from unknown relay nodes.
+    Swarm::listen_on(&mut dst_swarm, Protocol::P2pCircuit.into()).unwrap();
+    // Wait for destination node to report new listen address.
     pool.run_until(async {
         loop {
-            match local_swarm.next_event().await {
+            match dst_swarm.next_event().await {
                 SwarmEvent::NewListenAddr(addr) if addr == Protocol::P2pCircuit.into() => break,
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
@@ -1012,18 +1025,18 @@ fn yield_incoming_connection_through_correct_listener() {
             }
         }
     });
-    spawn_swarm_on_pool(&pool, local_swarm);
+    spawn_swarm_on_pool(&pool, dst_swarm);
 
-    // Expect local node to reject incoming connection from unknown relay without a catch-all
-    // listener.
-    Swarm::dial_addr(&mut src_3_swarm, local_addr_via_relay_3.clone()).unwrap();
+    // Expect destination node to accept incoming connection from "unknown" relay, i.e. the
+    // connection from source node 3 via relay 3.
+    Swarm::dial_addr(&mut src_3_swarm, dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(async move {
         loop {
             match src_3_swarm.next_event().await {
-                SwarmEvent::Dialing(peer_id) => {
-                    println!("{:?}", peer_id);
+                SwarmEvent::Dialing(_) => {}
+                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
+                    break
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == local_peer_id => break,
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
