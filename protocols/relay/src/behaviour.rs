@@ -505,7 +505,7 @@ impl NetworkBehaviour for Relay {
                     .remove(&request_id)
                     .map(|OutgoingUpgradingRelayReq { send_back, .. }| send_back)
                     .expect("Outgoing relay request success for unknown request.");
-                send_back.send(Ok(stream)).unwrap();
+                let _ = send_back.send(Ok(stream));
             }
             RelayHandlerEvent::IncomingDstReqSuccess {
                 stream,
