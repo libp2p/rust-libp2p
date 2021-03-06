@@ -419,7 +419,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                                 .expect("ConnectionToRelayEstablished to be send at most once"),
                         ))));
                     }
-                    Poll::Ready(None) => unimplemented!(),
+                    Poll::Ready(None) => return Poll::Ready(None),
                     Poll::Pending => {}
                 }
             }
