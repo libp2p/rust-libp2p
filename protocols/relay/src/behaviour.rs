@@ -226,16 +226,16 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn inject_connected(&mut self, id: &PeerId) {
+    fn inject_connected(&mut self, peer_id: &PeerId) {
         assert!(
             self.connected_peers
-                .get(id)
+                .get(peer_id)
                 .map(|cs| !cs.is_empty())
                 .unwrap_or(false),
             "Expect to be connected to peer with at least one connection."
         );
 
-        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(id) {
+        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer_id) {
             for req in reqs {
                 let OutgoingDialingRelayReq {
                     request_id,
@@ -247,7 +247,7 @@ impl NetworkBehaviour for Relay {
                 } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: id,
+                        peer_id: *peer_id,
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::OutgoingRelayReq {
                             src_peer_id,
@@ -264,7 +264,7 @@ impl NetworkBehaviour for Relay {
         }
 
         // Ask the newly-opened connection to be used as destination if relevant.
-        if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
+        if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
             for req in reqs {
                 let IncomingRelayReq::DialingDst {
                     src_peer_id,
@@ -283,7 +283,7 @@ impl NetworkBehaviour for Relay {
 
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: id,
+                        peer_id: *peer_id,
                         handler: NotifyHandler::Any,
                         event: event,
                     });
