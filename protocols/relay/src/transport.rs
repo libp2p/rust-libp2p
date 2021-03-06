@@ -501,8 +501,36 @@ impl From<OutgoingRelayReqError> for RelayError {
 }
 
 impl std::fmt::Display for RelayError {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!();
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RelayError::MissingRelayPeerId => {
+                write!(f, "Missing relay peer id.")
+            }
+            RelayError::MissingRelayAddr => {
+                write!(f, "Missing relay address.")
+            }
+            RelayError::MissingDstPeerId => {
+                write!(f, "Missing destination peer id.")
+            }
+            RelayError::InvalidHash => {
+                write!(f, "Invalid peer id hash.")
+            }
+            RelayError::SendingMessageToBehaviour(e) => {
+                write!(f, "Failed to send message to relay behaviour: {:?}", e)
+            }
+            RelayError::ResponseFromBehaviourCanceled => {
+                write!(f, "Response from behaviour was canceled")
+            }
+            RelayError::DialingRelay => {
+                write!(f, "Dialing relay failed")
+            }
+            RelayError::MultipleCircuitRelayProtocolsUnsupported => {
+                write!(f, "Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")
+            }
+            RelayError::MalformedMultiaddr => {
+                write!(f, "One of the provided multiaddresses is malformed.")
+            }
+        }
     }
 }
 
