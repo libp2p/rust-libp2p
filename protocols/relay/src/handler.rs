@@ -120,7 +120,10 @@ pub struct RelayHandler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ProtocolsHandlerUpgrErr<
-            EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
+            EitherError<
+                protocol::RelayListenError,
+                EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
+            >,
         >,
     >,
 }
@@ -258,7 +261,10 @@ impl ProtocolsHandler for RelayHandler {
     type InEvent = RelayHandlerIn;
     type OutEvent = RelayHandlerEvent;
     type Error = ProtocolsHandlerUpgrErr<
-        EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
+        EitherError<
+            protocol::RelayListenError,
+            EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
+        >,
     >;
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol =
@@ -379,9 +385,34 @@ impl ProtocolsHandler for RelayHandler {
         }
     }
 
-    // TODO: Implement inject_listen_upgrade_error, at least for debug logging.
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: Self::InboundOpenInfo,
+        error: ProtocolsHandlerUpgrErr<protocol::RelayListenError>,
+    ) {
+        match error {
+            ProtocolsHandlerUpgrErr::Timeout => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Timeout);
+            }
+            ProtocolsHandlerUpgrErr::Timer => {}
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::Failed,
+            )) => {}
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::ProtocolError(e),
+            )) => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
+                ));
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                    upgrade::UpgradeError::Apply(EitherError::A(error)),
+                ))
+            }
+        }
+    }
 
-    // TODO: Consider closing the handler on certain errors.
     fn inject_dial_upgrade_error(
         &mut self,
         open_info: Self::OutboundOpenInfo,
@@ -414,7 +445,7 @@ impl ProtocolsHandler for RelayHandler {
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                         EitherError::A(error),
                     )) => match error {
-                        protocol::OutgoingRelayReqError::DecodeError(_)
+                        protocol::OutgoingRelayReqError::Decode(_)
                         | protocol::OutgoingRelayReqError::Io(_)
                         | protocol::OutgoingRelayReqError::ParseTypeField
                         | protocol::OutgoingRelayReqError::ParseStatusField
@@ -422,7 +453,7 @@ impl ProtocolsHandler for RelayHandler {
                         | protocol::OutgoingRelayReqError::UnexpectedDstPeerWithStatusType
                         | protocol::OutgoingRelayReqError::ExpectedStatusType(_) => {
                             self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                upgrade::UpgradeError::Apply(EitherError::A(error)),
+                                upgrade::UpgradeError::Apply(EitherError::B(EitherError::A(error))),
                             ));
                         }
                         protocol::OutgoingRelayReqError::ExpectedSuccessStatus(status) => {
@@ -436,7 +467,7 @@ impl ProtocolsHandler for RelayHandler {
                                 | circuit_relay::Status::HopSrcMultiaddrInvalid
                                 | circuit_relay::Status::MalformedMessage => {
                                     self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                        upgrade::UpgradeError::Apply(EitherError::A(error)),
+                                        upgrade::UpgradeError::Apply(EitherError::B(EitherError::A(error))),
                                     ));
                                 }
                                 // While useless for reaching this particular destination, the
@@ -503,7 +534,7 @@ impl ProtocolsHandler for RelayHandler {
                         EitherError::B(error),
                     )) => {
                         match error {
-                            protocol::OutgoingDstReqError::DecodeError(_)
+                            protocol::OutgoingDstReqError::Decode(_)
                             | protocol::OutgoingDstReqError::Io(_)
                             | protocol::OutgoingDstReqError::ParseTypeField
                             | protocol::OutgoingDstReqError::ParseStatusField
@@ -511,7 +542,7 @@ impl ProtocolsHandler for RelayHandler {
                             | protocol::OutgoingDstReqError::UnexpectedDstPeerWithStatusType
                             | protocol::OutgoingDstReqError::ExpectedStatusType(_) => {
                                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                    upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(error))),
                                 ));
                                 circuit_relay::Status::HopCantOpenDstStream
                             }
@@ -535,7 +566,7 @@ impl ProtocolsHandler for RelayHandler {
                                     | circuit_relay::Status::HopSrcMultiaddrInvalid => {
                                         self.pending_error =
                                             Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                                upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(error))),
                                             ));
                                     }
                                     // With either status below there is no reason to stay connected.
@@ -545,7 +576,7 @@ impl ProtocolsHandler for RelayHandler {
                                     | circuit_relay::Status::MalformedMessage => {
                                         self.pending_error =
                                             Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                                upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(error))),
                                             ));
                                     }
                                     // While useless for reaching this particular destination, the

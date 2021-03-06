@@ -166,7 +166,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
 
 #[derive(Debug)]
 pub enum OutgoingRelayReqError {
-    DecodeError(prost::DecodeError),
+    Decode(prost::DecodeError),
     Io(std::io::Error),
     ParseTypeField,
     ParseStatusField,
@@ -184,14 +184,14 @@ impl From<std::io::Error> for OutgoingRelayReqError {
 
 impl From<prost::DecodeError> for OutgoingRelayReqError {
     fn from(e: prost::DecodeError) -> Self {
-        OutgoingRelayReqError::DecodeError(e)
+        OutgoingRelayReqError::Decode(e)
     }
 }
 
 impl fmt::Display for OutgoingRelayReqError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OutgoingRelayReqError::DecodeError(e) => {
+            OutgoingRelayReqError::Decode(e) => {
                 write!(f, "Failed to decode response: {}.", e)
             }
             OutgoingRelayReqError::Io(e) => {
@@ -222,7 +222,7 @@ impl fmt::Display for OutgoingRelayReqError {
 impl error::Error for OutgoingRelayReqError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            OutgoingRelayReqError::DecodeError(e) => Some(e),
+            OutgoingRelayReqError::Decode(e) => Some(e),
             OutgoingRelayReqError::Io(e) => Some(e),
             OutgoingRelayReqError::ParseTypeField => None,
             OutgoingRelayReqError::ParseStatusField => None,

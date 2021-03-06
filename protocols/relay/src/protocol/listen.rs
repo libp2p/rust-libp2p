@@ -29,7 +29,8 @@ use libp2p_core::upgrade;
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 
-use std::{convert::TryFrom, iter};
+use std::io::Cursor;
+use std::{convert::TryFrom, error, fmt, iter};
 use unsigned_varint::codec::UviBytes;
 
 /// Configuration for an inbound upgrade that handles requests from the remote for the relay
@@ -61,8 +62,7 @@ impl upgrade::UpgradeInfo for RelayListen {
     }
 }
 
-impl upgrade::InboundUpgrade<NegotiatedSubstream> for RelayListen
-{
+impl upgrade::InboundUpgrade<NegotiatedSubstream> for RelayListen {
     type Output = RelayRemoteReq;
     type Error = RelayListenError;
     type Future = BoxFuture<'static, Result<RelayRemoteReq, RelayListenError>>;
@@ -73,16 +73,20 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for RelayListen
             codec.set_max_len(MAX_ACCEPTED_MESSAGE_LEN);
             let mut substream = Framed::new(substream, codec);
 
-            let msg: bytes::BytesMut = substream.next().await.unwrap().unwrap();
-            let msg = std::io::Cursor::new(msg);
+            let msg: bytes::BytesMut = substream
+                .next()
+                .await
+                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
             let CircuitRelay {
                 r#type,
                 src_peer,
                 dst_peer,
                 code: _,
-            } = CircuitRelay::decode(msg)?;
+            } = CircuitRelay::decode(Cursor::new(msg))?;
 
-            match circuit_relay::Type::from_i32(r#type.unwrap()).unwrap() {
+            match circuit_relay::Type::from_i32(r#type.ok_or(RelayListenError::NoMessageType)?)
+                .ok_or(RelayListenError::InvalidMessageTy)?
+            {
                 circuit_relay::Type::Hop => {
                     let peer = Peer::try_from(dst_peer.ok_or(RelayListenError::NoDstPeer)?)?;
                     let (rq, notifyee) = IncomingRelayReq::new(substream, peer);
@@ -100,18 +104,15 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for RelayListen
     }
 }
 
-/// Error while upgrading with a `RelayListen`.
+/// Error while upgrading with a [`RelayListen`].
 #[derive(Debug)]
 pub enum RelayListenError {
-    /// Failed to parse the protobuf handshake message.
     Decode(prost::DecodeError),
-    /// No source peer provided.
+    Io(std::io::Error),
     NoSrcPeer,
-    /// No destination peer provided.
     NoDstPeer,
-    /// Failed to parse one of the peer information in the handshake message.
     ParsePeer(PeerParseError),
-    /// Received a message invalid in this context.
+    NoMessageType,
     InvalidMessageTy,
 }
 
@@ -121,8 +122,56 @@ impl From<prost::DecodeError> for RelayListenError {
     }
 }
 
+impl From<std::io::Error> for RelayListenError {
+    fn from(e: std::io::Error) -> Self {
+        RelayListenError::Io(e)
+    }
+}
+
 impl From<PeerParseError> for RelayListenError {
     fn from(err: PeerParseError) -> Self {
         RelayListenError::ParsePeer(err)
+    }
+}
+
+impl fmt::Display for RelayListenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RelayListenError::Decode(e) => {
+                write!(f, "Failed to decode response: {}.", e)
+            }
+            RelayListenError::Io(e) => {
+                write!(f, "Io error {}", e)
+            }
+            RelayListenError::NoSrcPeer => {
+                write!(f, "Expected source peer id")
+            }
+            RelayListenError::NoDstPeer => {
+                write!(f, "Expected destination peer id")
+            }
+            RelayListenError::ParsePeer(e) => {
+                write!(f, "Failed to parse peer field: {}", e)
+            }
+            RelayListenError::NoMessageType => {
+                write!(f, "Expected message type to be set.")
+            }
+            RelayListenError::InvalidMessageTy => {
+                write!(f, "Invalid message type")
+            }
+        }
+    }
+}
+
+impl error::Error for RelayListenError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            RelayListenError::Decode(e) => Some(e),
+            RelayListenError::Io(e) => Some(e),
+            RelayListenError::NoSrcPeer => None,
+            RelayListenError::NoDstPeer => None,
+            RelayListenError::ParsePeer(_) => None,
+            RelayListenError::NoMessageType => None,
+            RelayListenError::InvalidMessageTy => None,
+        }
     }
 }
