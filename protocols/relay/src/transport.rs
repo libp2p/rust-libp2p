@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{BehaviourToTransportMsg, OutgoingRelayReqError};
+use crate::behaviour::{BehaviourToListenerMsg, OutgoingRelayReqError};
 use crate::protocol;
 use crate::RequestId;
 use futures::channel::mpsc;
@@ -340,7 +340,7 @@ fn parse_relayed_multiaddr(
 pub enum RelayListener<T: Transport> {
     Inner(#[pin] <T as Transport>::Listener),
     Relayed {
-        from_behaviour: mpsc::Receiver<BehaviourToTransportMsg>,
+        from_behaviour: mpsc::Receiver<BehaviourToListenerMsg>,
 
         msg_to_behaviour: Option<BoxFuture<'static, Result<(), mpsc::SendError>>>,
         report_listen_addr: Option<Multiaddr>,
@@ -398,7 +398,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                 }
 
                 match from_behaviour.poll_next_unpin(cx) {
-                    Poll::Ready(Some(BehaviourToTransportMsg::IncomingRelayedConnection {
+                    Poll::Ready(Some(BehaviourToListenerMsg::IncomingRelayedConnection {
                         stream,
                         src_peer_id,
                         relay_peer_id,
@@ -412,7 +412,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                             remote_addr: Protocol::P2p(src_peer_id.into()).into(),
                         })));
                     }
-                    Poll::Ready(Some(BehaviourToTransportMsg::ConnectionToRelayEstablished)) => {
+                    Poll::Ready(Some(BehaviourToListenerMsg::ConnectionToRelayEstablished)) => {
                         return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
                             report_listen_addr
                                 .take()
@@ -526,6 +526,6 @@ pub enum TransportToBehaviourMsg {
         ///
         /// When [`None`] listen for connections from any relay node.
         relay_peer_id_and_addr: Option<(PeerId, Multiaddr)>,
-        to_listener: mpsc::Sender<BehaviourToTransportMsg>,
+        to_listener: mpsc::Sender<BehaviourToListenerMsg>,
     },
 }
