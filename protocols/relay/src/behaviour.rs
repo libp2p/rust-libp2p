@@ -465,11 +465,12 @@ impl NetworkBehaviour for Relay {
                 let got_explicit_listener = self
                     .listeners
                     .get(&event_source)
-                    .map(|l| l.is_closed())
+                    .map(|l| !l.is_closed())
                     .unwrap_or(false);
                 let got_listener_for_any_relay = self
                     .listener_any_relay
-                    .map(|l| l.is_closed())
+                    .as_mut()
+                    .map(|l| !l.is_closed())
                     .unwrap_or(false);
 
                 let send_back = if got_explicit_listener || got_listener_for_any_relay {
@@ -533,44 +534,30 @@ impl NetworkBehaviour for Relay {
         cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<RelayHandlerIn, Self::OutEvent>> {
-        // TODO: rename outbox to listeners
         if !self.outbox_to_listeners.is_empty() {
-            println!("new item in outbox");
             let relay_peer_id = self.outbox_to_listeners[0].0;
 
-            let to_listener = match (
-                self.listeners.get_mut(&relay_peer_id),
-                self.listener_any_relay.as_mut(),
-            ) {
-                (
-                    Some(RelayListener::Connected {
-                        ref mut to_listener,
-                        ..
-                    }),
-                    _,
-                ) => {
-                    println!("Lets take specific listener");
-                    Some(to_listener)
-                }
-                (Some(RelayListener::Connecting { .. }), None) => {
-                    // State mismatch. Got relayed connection via relay, but local node is not
-                    // connected to relay.
-                    println!("state mismatch");
-                    None
-                }
-                (_, Some(to_listener)) => {
-                    // Don't have a listener to yield the relayed connection. Dropping connection
-                    // instead.
-                    println!("Lets take catch-all listener");
-                    Some(to_listener)
-                }
-                (None, None) => None,
-            };
+            let listeners = &mut self.listeners;
+            let listener_any_relay = self.listener_any_relay.as_mut();
+
+            // Get channel sender to the listener that is explicitly listening
+            // via this relay node, or, if registered, channel sender to
+            // listener listening via any relay.
+            let to_listener = listeners
+                .get_mut(&relay_peer_id)
+                .filter(|l| !l.is_closed())
+                .and_then(|l| match l {
+                    RelayListener::Connected { to_listener, .. } => Some(to_listener),
+                    // State mismatch. Got relayed connection via relay, but
+                    // local node is not connected to relay.
+                    RelayListener::Connecting { .. } => None,
+                })
+                .or_else(|| listener_any_relay)
+                .filter(|l| !l.is_closed());
 
             match to_listener {
                 Some(to_listener) => match to_listener.poll_ready(cx) {
                     Poll::Ready(Ok(())) => {
-                        println!("to_listener is ready");
                         if let Err(mpsc::SendError { .. }) = to_listener.start_send(
                             self.outbox_to_listeners
                                 .pop_front()
@@ -587,6 +574,10 @@ impl NetworkBehaviour for Relay {
                     Poll::Pending => {}
                 },
                 None => {
+                    // No listener to send request to, thus dropping it. This
+                    // case should be rare, as we check whether we have a
+                    // listener before accepting an incoming destination
+                    // request.
                     self.outbox_to_listeners.pop_front();
                 }
             }
@@ -603,8 +594,8 @@ impl NetworkBehaviour for Relay {
                     send_back,
                 })) => {
                     if let Some(_) = self.connected_peers.get(&relay_peer_id) {
-                        // In case we are already listening via the relay, prefer the primary
-                        // connection.
+                        // In case we are already listening via the relay,
+                        // prefer the primary connection.
                         let handler = self
                             .listeners
                             .get(&relay_peer_id)
@@ -655,14 +646,16 @@ impl NetworkBehaviour for Relay {
                     mut to_listener,
                 })) => {
                     match relay_peer_id_and_addr {
-                        // Listener is listening for all incoming relayed connections from any relay
+                        // Listener is listening for all incoming relayed
+                        // connections from any relay
                         // node.
                         None => {
                             match self.listener_any_relay.as_mut() {
                                 Some(sender) if !sender.is_closed() => {
-                                    // Already got listener listening for all incoming relayed
-                                    // connections. Signal to listener by dropping the channel sender to
-                                    // the listener.
+                                    // Already got listener listening for all
+                                    // incoming relayed connections. Signal to
+                                    // listener by dropping the channel sender
+                                    // to the listener.
                                 }
                                 _ => {
                                     to_listener
@@ -674,8 +667,8 @@ impl NetworkBehaviour for Relay {
                                 }
                             }
                         }
-                        // Listener is listening for incoming relayed connections from this relay
-                        // only.
+                        // Listener is listening for incoming relayed
+                        // connections from this relay only.
                         Some((relay_peer_id, relay_addr)) => {
                             if let Some(connections) = self.connected_peers.get(&relay_peer_id) {
                                 to_listener
@@ -716,7 +709,10 @@ impl NetworkBehaviour for Relay {
                         }
                     }
                 }
-                Poll::Ready(None) => panic!("Channel to transport wrapper is closed"),
+                Poll::Ready(None) => unreachable!(
+                    "`Relay` `NetworkBehaviour` polled after channel from \
+                     `RelayTransport` has been closed.",
+                ),
                 Poll::Pending => break,
             }
         }

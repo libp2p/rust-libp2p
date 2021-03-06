@@ -33,7 +33,6 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use log::warn;
-use std::collections::HashMap;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use wasm_timer::Instant;
@@ -66,22 +65,20 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 ///
 /// There are four possible situations in play here:
 ///
-/// - The handler emits `RelayHandlerEvent::IncomingRelayReq` if the node we handle asks us to
-///   act as a relay. You must send a `RelayHandlerIn::OutgoingDstReq` to another
-///   handler, or send back a `DenyIncomingRelayReq`.
+/// - The handler emits [`RelayHandlerEvent::IncomingRelayReq`] if the node we handle asks us to act
+///   as a relay. You must send a [`RelayHandlerIn::OutgoingDstReq`] to another handler, or send
+///   back a [`RelayHandlerIn::DenyIncomingRelayReq`].
 ///
-/// - The handler emits `RelayHandlerEvent::IncomingDstReq` if the node we handle asks
-///   us to act as a destination. You must either call `accept` on the produced object, or send back
-///   a `DenyDstReq`.
+/// - The handler emits [`RelayHandlerEvent::IncomingDstReq`] if the node we handle asks us to act
+///   as a destination. You must either send back a [`RelayHandlerIn::AcceptDstReq`]`, or send back
+///   a [`RelayHandlerIn::DenyDstReq`].
 ///
-/// - Send a `RelayHandlerIn::OutgoingRelayReq` if the node we handle must act as a relay to a
-///   destination. The handler will either send back a `RelayReqSuccess` containing the stream
-///   to the destination, or a `OutgoingRelayReqDenied`.
+/// - Send a [`RelayHandlerIn::OutgoingRelayReq`] if the node we handle must act as a relay to a
+///   destination. The handler will either send back a [`RelayHandlerEvent::RelayReqSuccess`]
+///   containing the stream to the destination, or a [`RelayHandlerEvent::OutgoingRelayReqDenied`].
 ///
-/// - Send a `RelayHandlerIn::OutgoingDstReq` if the node we handle must act as a
-///   destination. The handler will automatically notify the source whether the request was accepted
-///   or denied.
-///
+/// - Send a [`RelayHandlerIn::OutgoingDstReq`] if the node we handle must act as a destination. The
+///   handler will automatically notify the source whether the request was accepted or denied.
 pub struct RelayHandler {
     config: RelayHandlerConfig,
     /// Specifies whether the handled connection is used to listen for incoming relayed connections.
@@ -116,7 +113,7 @@ pub struct RelayHandler {
     /// the given substream is dropped.
     ///
     /// Once all substreams are dropped and this handler has no other work, [`KeepAlive::Until`] can
-    /// be set eventually allowing the connection to be closed.
+    /// be set, allowing the connection to be closed eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
@@ -159,7 +156,7 @@ pub enum RelayHandlerEvent {
     /// a destination. The behaviour can accept or deny the request via
     /// [`AcceptDstReq`](RelayHandlerIn::AcceptDstReq) or
     /// [`DenyDstReq`](RelayHandlerIn::DenyDstReq).
-    IncomingDstReq (protocol::IncomingDstReq),
+    IncomingDstReq(protocol::IncomingDstReq),
 
     /// A `RelayReq` that has previously been sent has been accepted by the remote. Contains
     /// a substream that communicates with the requested destination.
@@ -291,11 +288,8 @@ impl ProtocolsHandler for RelayHandler {
             }
             // We have been asked to become a destination.
             protocol::RelayRemoteReq::DstReq(dst_request) => {
-                self.queued_events.push(RelayHandlerEvent::IncomingDstReq {
-                    src_peer_id: *dst_request.src_id(),
-                    request_id,
-                    request: dst_request,
-                });
+                self.queued_events
+                    .push(RelayHandlerEvent::IncomingDstReq(dst_request));
             }
         }
     }
@@ -350,7 +344,7 @@ impl ProtocolsHandler for RelayHandler {
                 self.deny_futures.push(req);
             }
             RelayHandlerIn::AcceptDstReq(request) => self.accept_dst_futures.push(request.accept()),
-            RelayHandlerIn::DenyDstReq ( request ) => self.deny_futures.push(request.deny()),
+            RelayHandlerIn::DenyDstReq(request) => self.deny_futures.push(request.deny()),
             // Ask the node we handle to act as a relay.
             RelayHandlerIn::OutgoingRelayReq {
                 src_peer_id,
