@@ -247,7 +247,7 @@ impl NetworkBehaviour for Relay {
                 } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: id.clone(),
+                        peer_id: id,
                         handler: NotifyHandler::Any,
                         event: RelayHandlerIn::OutgoingRelayReq {
                             src_peer_id,
@@ -283,7 +283,7 @@ impl NetworkBehaviour for Relay {
 
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: id.clone(),
+                        peer_id: id,
                         handler: NotifyHandler::Any,
                         event: event,
                     });

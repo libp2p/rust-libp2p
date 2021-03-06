@@ -692,7 +692,9 @@ impl ProtocolsHandler for RelayHandler {
                 };
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
             }
-            Poll::Ready(Some(Err(e))) => panic!("{:?}", e),
+            Poll::Ready(Some(Err(e))) => {
+                log::debug!("Failed to accept destination future: {:?}", e);
+            }
             Poll::Ready(None) => {}
             Poll::Pending => {}
         }
