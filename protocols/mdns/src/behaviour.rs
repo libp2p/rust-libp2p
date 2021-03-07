@@ -323,19 +323,26 @@ impl NetworkBehaviour for Mdns {
                     if inet.addr().is_loopback() {
                         continue;
                     }
-                    if let IpAddr::V4(addr) = inet.addr() {
-                        log::trace!("joining multicast on iface {}", addr);
-                        if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
-                            log::error!("join multicast failed: {}", err);
-                        } else {
-                            self.send_buffer.push_back(build_query());
+                    match self.domain {
+                        IPType::IPv4 => {
+                            if let IpAddr::V4(addr) = inet.addr() {
+                                log::trace!("joining multicast on iface {}", addr);
+                                if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
+                                    log::error!("join multicast failed: {}", err);
+                                } else {
+                                    self.send_buffer.push_back(build_query());
+                                }
+                            }
                         }
-                    } else if let IpAddr::V6(addr) = inet.addr() {
-                        log::trace!("joining multicast on iface {}", addr);
-                        if let Err(err) = socket.join_multicast_v6(&multicast_v6, 0) {
-                            log::error!("join multicast failed: {}", err);
-                        } else {
-                            self.send_buffer.push_back(build_query());
+                        IPType::IPv6 => {
+                            if let IpAddr::V6(addr) = inet.addr() {
+                                log::trace!("joining multicast on iface {}", addr);
+                                if let Err(err) = socket.join_multicast_v6(&multicast_v6, 0) {
+                                    log::error!("join multicast failed: {}", err);
+                                } else {
+                                    self.send_buffer.push_back(build_query());
+                                }
+                            }
                         }
                     }
                 }
@@ -343,15 +350,22 @@ impl NetworkBehaviour for Mdns {
                     if inet.addr().is_loopback() {
                         continue;
                     }
-                    if let IpAddr::V4(addr) = inet.addr() {
-                        log::trace!("leaving multicast on iface {}", addr);
-                        if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
-                            log::error!("leave multicast failed: {}", err);
+                    match self.domain {
+                        IPType::IPv4 => {
+                            if let IpAddr::V4(addr) = inet.addr() {
+                                log::trace!("leaving multicast on iface {}", addr);
+                                if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
+                                    log::error!("leave multicast failed: {}", err);
+                                }
+                            }
                         }
-                    } else if let IpAddr::V6(addr) = inet.addr() {
-                        log::trace!("leaving multicast on iface {}", addr);
-                        if let Err(err) = socket.leave_multicast_v6(&multicast_v6, 0) {
-                            log::error!("leave multicast failed: {}", err);
+                        IPType::IPv6 => {
+                            if let IpAddr::V6(addr) = inet.addr() {
+                                log::trace!("leaving multicast on iface {}", addr);
+                                if let Err(err) = socket.leave_multicast_v6(&multicast_v6, 0) {
+                                    log::error!("leave multicast failed: {}", err);
+                                }
+                            }
                         }
                     }
                 }
