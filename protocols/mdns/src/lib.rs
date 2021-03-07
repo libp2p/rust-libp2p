@@ -35,7 +35,7 @@ const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
 /// The meta query for looking up the `SERVICE_NAME`.
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
 
-pub use crate::behaviour::{Mdns, MdnsConfig, MdnsEvent};
+pub use crate::behaviour::{IPType, Mdns, MdnsConfig, MdnsEvent};
 
 mod behaviour;
 mod dns;
