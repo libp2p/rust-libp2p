@@ -2466,7 +2466,7 @@ pub enum QueryInfo {
         records: Vec<PeerRecord>,
         /// The number of records to look for.
         quorum: NonZeroUsize,
-        /// The peers what were queried but did not return a record for the `key`.
+        /// The peers that were queried but did not return a record for the `key`.
         no_record: Vec<PeerId>,
         /// The closest peer to `key` that did not return a record.
         ///
