@@ -1,3 +1,7 @@
+# 0.27.2 [unreleased]
+
+- Shorten and unify `Debug` impls of public keys.
+
 # 0.27.1 [2021-02-15]
 
 - Update dependencies.
