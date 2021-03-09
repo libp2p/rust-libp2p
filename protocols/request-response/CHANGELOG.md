@@ -2,6 +2,9 @@
 
 - Update `libp2p-swarm`.
 
+- Close stream even when no response has been sent.
+  [PR 1987](https://github.com/libp2p/rust-libp2p/pull/1987).
+
 # 0.9.1 [2021-02-15]
 
 - Make `is_pending_outbound` return true on pending connection.
