@@ -643,7 +643,9 @@ fn get_record() {
 
     let record = Record::new(random_multihash(), vec![4,5,6]);
 
-    swarms[1].store.put(record.clone()).unwrap();
+    let expected_cache_candidate = *Swarm::local_peer_id(&swarms[1]);
+
+    swarms[2].store.put(record.clone()).unwrap();
     let qid = swarms[0].get_record(&record.key, Quorum::One);
 
     block_on(
@@ -653,12 +655,16 @@ fn get_record() {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk {
+                                records, cache_candidates
+                            })),
                             ..
                         })) => {
                             assert_eq!(id, qid);
                             assert_eq!(records.len(), 1);
                             assert_eq!(records.first().unwrap().record, record);
+                            assert_eq!(cache_candidates.len(), 1);
+                            assert_eq!(cache_candidates.values().next(), Some(&expected_cache_candidate));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -699,7 +705,7 @@ fn get_record_many() {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { records, .. })),
                             ..
                         })) => {
                             assert_eq!(id, qid);
