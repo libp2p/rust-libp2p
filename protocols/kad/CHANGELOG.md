@@ -3,7 +3,7 @@
 - Add `Kademlia::put_record_to` for storing a record at specific nodes,
   e.g. for write-back caching after a successful read. In that context,
   peers that were queried in a successful `Kademlia::get_record` operation but
-  did not return a record are now returned in the `GetRecordOk::no_record`
+  did not return a record are now returned in the `GetRecordOk::cache_candidates`
   list of peer IDs.
 
 - Update `libp2p-swarm`.
