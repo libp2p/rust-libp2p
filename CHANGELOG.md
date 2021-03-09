@@ -41,6 +41,13 @@
 
 # `libp2p` facade crate
 
+## Version 0.36.0 [unreleased]
+
+- Update libp2p crates.
+
+- Do not leak default features from libp2p crates.
+  [PR 1986](https://github.com/libp2p/rust-libp2p/pull/1986).
+
 ## Version 0.35.1 [2021-02-17]
 
 - Update `libp2p-yamux` to latest patch version.
