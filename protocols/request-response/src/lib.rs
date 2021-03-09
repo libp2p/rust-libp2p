@@ -163,7 +163,7 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
 
 /// Possible failures occurring in the context of sending
 /// an outbound request and receiving the response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
@@ -183,7 +183,7 @@ pub enum OutboundFailure {
 
 /// Possible failures occurring in the context of receiving an
 /// inbound request and sending a response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InboundFailure {
     /// The inbound request timed out, either while reading the
     /// incoming request or before a response is sent, e.g. if
