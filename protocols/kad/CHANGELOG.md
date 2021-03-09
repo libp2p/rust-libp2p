@@ -1,10 +1,17 @@
 # 0.29.0 [unreleased]
 
+- Add `KademliaCaching` and `KademliaConfig::set_caching` to configure
+  whether Kademlia should track, in lookups, the closest nodes to a key
+  that did not return a record, via `GetRecordOk::cache_candidates`.
+  As before, if a lookup used a quorum of 1, these candidates will
+  automatically be sent the found record. Otherwise, with a lookup
+  quorum of > 1, the candidates can be used with `Kademlia::put_record_to`
+  after selecting one of the return records to cache. As is the current
+  behaviour, caching is enabled by default with a `max_peers` of 1, i.e.
+  it only tracks the closest node to the key that did not return a record.
+
 - Add `Kademlia::put_record_to` for storing a record at specific nodes,
-  e.g. for write-back caching after a successful read. In that context,
-  peers that were queried in a successful `Kademlia::get_record` operation but
-  did not return a record are now returned in the `GetRecordOk::cache_candidates`
-  list of peer IDs.
+  e.g. for write-back caching after a successful read with quorum > 1.
 
 - Update `libp2p-swarm`.
 
