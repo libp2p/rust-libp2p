@@ -391,10 +391,7 @@ impl ProtocolsHandler for RelayHandler {
         error: ProtocolsHandlerUpgrErr<protocol::RelayListenError>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timeout => {
-                self.pending_error = Some(ProtocolsHandlerUpgrErr::Timeout);
-            }
-            ProtocolsHandlerUpgrErr::Timer => {}
+            ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )) => {}
@@ -426,10 +423,7 @@ impl ProtocolsHandler for RelayHandler {
                 request_id,
             } => {
                 match error {
-                    ProtocolsHandlerUpgrErr::Timeout => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Timeout);
-                    }
-                    ProtocolsHandlerUpgrErr::Timer => {}
+                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )) => {}
@@ -509,11 +503,9 @@ impl ProtocolsHandler for RelayHandler {
                 ..
             } => {
                 let err_code = match error {
-                    ProtocolsHandlerUpgrErr::Timeout => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Timeout);
+                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
                         circuit_relay::Status::HopCantOpenDstStream
                     }
-                    ProtocolsHandlerUpgrErr::Timer => circuit_relay::Status::HopCantOpenDstStream,
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )) => circuit_relay::Status::HopCantSpeakRelay,
