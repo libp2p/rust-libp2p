@@ -106,12 +106,21 @@ pub struct RelayConfig {
     /// incoming connections via oneself, this should likely be increased in
     /// order not to force the peer to reconnect too regularly.
     pub connection_idle_timeout: Duration,
+    /// Whether to actively establish an outgoing connection to a destination
+    /// node, when being asked by a source node to relay a connection to said
+    /// destination node.
+    ///
+    /// For security reasons this behaviour is disabled by default. Instead a
+    /// destination node should establish a connection to a relay node before
+    /// advertising their relayed address via that relay node to a source node.
+    pub actively_connect_to_dst_nodes: bool,
 }
 
 impl Default for RelayConfig {
     fn default() -> Self {
         RelayConfig {
             connection_idle_timeout: Duration::from_secs(10),
+            actively_connect_to_dst_nodes: false,
         }
     }
 }
@@ -406,7 +415,9 @@ impl NetworkBehaviour for Relay {
         if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
             for req in reqs {
                 let IncomingRelayReq::DialingDst {
-                    src_peer_id, incoming_relay_req, ..
+                    src_peer_id,
+                    incoming_relay_req,
+                    ..
                 } = req;
                 self.outbox_to_swarm
                     .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -449,21 +460,32 @@ impl NetworkBehaviour for Relay {
                             event,
                         });
                 } else {
-                    let dest_id = req.dst_peer().peer_id;
-                    self.incoming_relay_reqs.entry(dest_id).or_default().push(
-                        IncomingRelayReq::DialingDst {
-                            request_id,
-                            incoming_relay_req: req,
-                            src_peer_id: event_source,
-                            src_addr,
-                            src_connection_id: connection,
-                        },
-                    );
-                    self.outbox_to_swarm
-                        .push_back(NetworkBehaviourAction::DialPeer {
-                            peer_id: dest_id,
-                            condition: DialPeerCondition::NotDialing,
-                        });
+                    if self.config.actively_connect_to_dst_nodes {
+                        let dest_id = req.dst_peer().peer_id;
+                        self.incoming_relay_reqs.entry(dest_id).or_default().push(
+                            IncomingRelayReq::DialingDst {
+                                request_id,
+                                incoming_relay_req: req,
+                                src_peer_id: event_source,
+                                src_addr,
+                                src_connection_id: connection,
+                            },
+                        );
+                        self.outbox_to_swarm
+                            .push_back(NetworkBehaviourAction::DialPeer {
+                                peer_id: dest_id,
+                                condition: DialPeerCondition::NotDialing,
+                            });
+                    } else {
+                        self.outbox_to_swarm
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id: event_source,
+                                handler: NotifyHandler::One(connection),
+                                event: RelayHandlerIn::DenyIncomingRelayReq(
+                                    req.deny(circuit_relay::Status::HopNoConnToDst),
+                                ),
+                            });
+                    }
                 }
             }
             // Remote wants us to become a destination.
@@ -585,7 +607,8 @@ impl NetworkBehaviour for Relay {
                     // listener before accepting an incoming destination
                     // request.
                     let event = self.outbox_to_listeners.pop_front();
-                    log::trace!("Dropping event for unknown listener: {:?}", event);                }
+                    log::trace!("Dropping event for unknown listener: {:?}", event);
+                }
             }
         }
 

@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let relay_config = RelayConfig {
         connection_idle_timeout: Duration::from_secs(10 * 60),
+        ..Default::default()
     };
     let (relay_wrapped_transport, relay_behaviour) =
         libp2p_relay::new_transport_and_behaviour(relay_config, tcp_transport);
