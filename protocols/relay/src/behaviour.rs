@@ -584,8 +584,8 @@ impl NetworkBehaviour for Relay {
                     // case should be rare, as we check whether we have a
                     // listener before accepting an incoming destination
                     // request.
-                    self.outbox_to_listeners.pop_front();
-                }
+                    let event = self.outbox_to_listeners.pop_front();
+                    log::trace!("Dropping event for unknown listener: {:?}", event);                }
             }
         }
 
@@ -731,6 +731,7 @@ impl NetworkBehaviour for Relay {
     }
 }
 
+#[derive(Debug)]
 pub enum BehaviourToListenerMsg {
     ConnectionToRelayEstablished,
     IncomingRelayedConnection {
