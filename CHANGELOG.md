@@ -15,6 +15,7 @@
 - [`libp2p-kad` CHANGELOG](protocols/kad/CHANGELOG.md)
 - [`libp2p-mdns` CHANGELOG](protocols/mdns/CHANGELOG.md)
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
+- [`libp2p-relay` CHANGELOG](protocols/relay/CHANGELOG.md)
 - [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
 
 ## Transport Protocols & Upgrades
@@ -47,6 +48,8 @@
 
 - Do not leak default features from libp2p crates.
   [PR 1986](https://github.com/libp2p/rust-libp2p/pull/1986).
+
+- Add `libp2p-relay` to `libp2p` facade crate.
 
 ## Version 0.35.1 [2021-02-17]
 
