@@ -668,6 +668,9 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                             break;
                         }
                     }
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                        ..
+                    })) => {}
                     e => panic!("{:?}", e),
                 }
             }
