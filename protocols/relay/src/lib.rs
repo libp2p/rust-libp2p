@@ -59,10 +59,10 @@
 //! let dst_addr = relay_addr.clone().with(Protocol::Memory(5678));
 //!
 //! // Listen for incoming connections via relay node (1234).
-//! Swarm::listen_on(&mut swarm, relay_addr).unwrap();
+//! swarm.listen_on(relay_addr).unwrap();
 //!
 //! // Dial node (5678) via relay node (1234).
-//! Swarm::dial_addr(&mut swarm, dst_addr).unwrap();
+//! swarm.dial_addr(dst_addr).unwrap();
 //! ```
 //!
 //! ## Terminology

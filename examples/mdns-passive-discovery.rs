@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Note that the MDNS behaviour itself will not actually inititiate any connections,
     // as it only uses UDP.
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     loop {
         match swarm.next().await {

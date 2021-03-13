@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = Swarm::new(transport, relay_behaviour, local_peer_id);
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(&mut swarm, "/ip6/::/tcp/0".parse()?)?;
+    swarm.listen_on("/ip6/::/tcp/0".parse()?)?;
 
     let mut listening = false;
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
