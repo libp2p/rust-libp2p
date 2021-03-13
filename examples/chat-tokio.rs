@@ -166,7 +166,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         };
         if let Some((topic, line)) = to_publish {
-            swarm.floodsub.publish(topic, line.as_bytes());
+            swarm.behaviour_mut().floodsub.publish(topic, line.as_bytes());
         }
         if !listening {
             for addr in Swarm::listeners(&swarm) {
