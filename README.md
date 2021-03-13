@@ -15,12 +15,11 @@ How to use the library?
 
 - Main documentation: https://docs.rs/libp2p
 
-Where to ask questions?
+Where to ask questions (ordered by maintainer's preference)?
 
+- By opening an issue in this repository.
 - In the Rust section of https://discuss.libp2p.io.
 - In the #libp2p IRC channel on freenode.
-- By opening an issue in this repository.
-
 
 ## Repository Structure
 
