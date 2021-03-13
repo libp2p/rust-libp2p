@@ -2,6 +2,8 @@
 
 - Update `libp2p-swarm`.
 
+- Update dependencies.
+
 # 0.28.0 [2021-02-15]
 
 - Prevent non-published messages being added to caches.
