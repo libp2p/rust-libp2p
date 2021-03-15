@@ -195,8 +195,8 @@ impl DerDecodable<'_> for Asn1RsaEncryption {
     fn load(object: DerObject<'_>) -> Result<Self, Asn1DerError> {
         let seq: Sequence = Sequence::load(object)?;
         let r = Ok(Asn1RsaEncryption{
-            algorithm: Asn1OidRsaEncryption::load(seq.get(0)?)?,
-            parameters: <()>::load(seq.get(1)?)?,
+            algorithm: seq.get_as(0)?,
+            parameters: seq.get_as(1)?,
         });
         r
     }
@@ -260,7 +260,7 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
         let seq: Sequence = Sequence::load(object)?;
         Ok(Asn1SubjectPublicKeyInfo {
             algorithmIdentifier: seq.get_as(0)?,
-            subjectPublicKey: Asn1SubjectPublicKey::load(seq.get(1)?)?,
+            subjectPublicKey: seq.get_as(1)?,
         })
     }
 }
