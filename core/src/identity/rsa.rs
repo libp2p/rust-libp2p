@@ -20,8 +20,7 @@
 
 //! RSA keys.
 
-use asn1_der::{Asn1Der, FromDerObject, IntoDerObject, DerObject, DerTag, DerValue, Asn1DerError};
-use lazy_static::lazy_static;
+use asn1_der::{typed::{DerEncodable, DerDecodable, Sequence}, DerObject, Asn1DerError, Asn1DerErrorVariant};
 use super::error::*;
 use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
@@ -93,15 +92,16 @@ impl PublicKey {
             },
             subjectPublicKey: Asn1SubjectPublicKey(self.clone())
         };
-        let mut buf = vec![0u8; spki.serialized_len()];
-        spki.serialize(buf.iter_mut()).map(|_| buf)
-            .expect("RSA X.509 public key encoding failed.")
+        let mut buf = Vec::new();
+        let buf = spki.encode(&mut buf).map(|_| buf)
+            .expect("RSA X.509 public key encoding failed.");
+        buf
     }
 
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
     /// structure. See also `encode_x509`.
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
-        Asn1SubjectPublicKeyInfo::deserialize(pk.iter())
+        Asn1SubjectPublicKeyInfo::decode(pk)
             .map_err(|e| DecodingError::new("RSA X.509").source(e))
             .map(|spki| spki.subjectPublicKey.0)
     }
@@ -123,79 +123,111 @@ impl fmt::Debug for PublicKey {
 // Primer: http://luca.ntop.org/Teaching/Appunti/asn1.html
 // Playground: https://lapo.it/asn1js/
 
-lazy_static! {
-    /// The DER encoding of the object identifier (OID) 'rsaEncryption' for
-    /// RSA public keys defined for X.509 in [RFC-3279] and used in
-    /// SubjectPublicKeyInfo structures defined in [RFC-5280].
-    ///
-    /// [RFC-3279]: https://tools.ietf.org/html/rfc3279#section-2.3.1
-    /// [RFC-5280]: https://tools.ietf.org/html/rfc5280#section-4.1
-    static ref OID_RSA_ENCRYPTION_DER: DerObject =
-        DerObject {
-            tag: DerTag::x06,
-            value: DerValue {
-                data: vec![ 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01 ]
-            }
-        };
-}
+const ASN1_OBJECT_IDENTIFIER_TAG: u8 = 6;
+/// The DER encoding of the object identifier (OID) 'rsaEncryption' for
+/// RSA public keys defined for X.509 in [RFC-3279] and used in
+/// SubjectPublicKeyInfo structures defined in [RFC-5280].
+///
+/// [RFC-3279]: https://tools.ietf.org/html/rfc3279#section-2.3.1
+/// [RFC-5280]: https://tools.ietf.org/html/rfc5280#section-4.1
+const ASN1_RSA_ENCRYPTION_OID: [u8;9] = [ 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01 ];
 
 /// The ASN.1 OID for "rsaEncryption".
 #[derive(Clone)]
 struct Asn1OidRsaEncryption();
 
-impl IntoDerObject for Asn1OidRsaEncryption {
-    fn into_der_object(self) -> DerObject {
-        OID_RSA_ENCRYPTION_DER.clone()
-    }
-    fn serialized_len(&self) -> usize {
-        OID_RSA_ENCRYPTION_DER.serialized_len()
+impl asn1_der::typed::DerEncodable for Asn1OidRsaEncryption {
+    fn encode<S: asn1_der::Sink>(&self, sink: &mut S) -> Result<(), asn1_der::Asn1DerError> {
+        // TODO: `DerObject::write` is a hidden method. Should one use `new` or `new_from_source`?
+        // If so, I don't see a way to do that given that `S: Into<&'a [u8]` would be required.
+        asn1_der::DerObject::write(
+            ASN1_OBJECT_IDENTIFIER_TAG,
+            ASN1_RSA_ENCRYPTION_OID.len(),
+            &mut ASN1_RSA_ENCRYPTION_OID.iter(),
+            sink,
+        )?;
+        Ok(())
     }
 }
 
-impl FromDerObject for Asn1OidRsaEncryption {
-    fn from_der_object(o: DerObject) -> Result<Self, Asn1DerError> {
-        if o.tag != DerTag::x06 {
-            return Err(Asn1DerError::InvalidTag)
+impl DerDecodable<'_> for Asn1OidRsaEncryption {
+    fn load(object: DerObject<'_>) -> Result<Self, Asn1DerError> {
+        if object.tag() != ASN1_OBJECT_IDENTIFIER_TAG {
+            return Err(Asn1DerError::new(
+                Asn1DerErrorVariant::InvalidData("DER object tag is not the object identifier tag."),
+            ));
         }
-        if o.value != OID_RSA_ENCRYPTION_DER.value {
-            return Err(Asn1DerError::InvalidEncoding)
+
+        if object.value() != ASN1_RSA_ENCRYPTION_OID {
+            return Err(Asn1DerError::new(
+                Asn1DerErrorVariant::InvalidData("DER object is not the 'rsaEncryption' identifier."),
+            ));
         }
+
         Ok(Asn1OidRsaEncryption())
     }
 }
 
 /// The ASN.1 AlgorithmIdentifier for "rsaEncryption".
-#[derive(Asn1Der)]
 struct Asn1RsaEncryption {
     algorithm: Asn1OidRsaEncryption,
     parameters: ()
+}
+
+impl asn1_der::typed::DerEncodable for Asn1RsaEncryption {
+    fn encode<S: asn1_der::Sink>(&self, sink: &mut S) -> Result<(), asn1_der::Asn1DerError> {
+        // TODO: Is there a way to write to `sink` directly?
+        let mut algorithm = Vec::new();
+        self.algorithm.encode(&mut algorithm)?;
+        // TODO: Is the decode after the encode step needed? Passing a `Vec<u8>` to
+        // `Sequence::write` would not encode the payload with the right tag.
+        let algorithm = DerObject::decode(&algorithm)?;
+
+        let mut parameters = Vec::new();
+        self.parameters.encode(&mut parameters)?;
+        let parameters = DerObject::decode(&parameters)?;
+
+        asn1_der::typed::Sequence::write(&[algorithm, parameters], sink)
+    }
+}
+
+impl DerDecodable<'_> for Asn1RsaEncryption {
+    fn load(object: DerObject<'_>) -> Result<Self, Asn1DerError> {
+        let seq: Sequence = Sequence::load(object)?;
+        let r = Ok(Asn1RsaEncryption{
+            algorithm: Asn1OidRsaEncryption::load(seq.get(0)?)?,
+            parameters: <()>::load(seq.get(1)?)?,
+        });
+        r
+    }
 }
 
 /// The ASN.1 SubjectPublicKey inside a SubjectPublicKeyInfo,
 /// i.e. encoded as a DER BIT STRING.
 struct Asn1SubjectPublicKey(PublicKey);
 
-impl IntoDerObject for Asn1SubjectPublicKey {
-    fn into_der_object(self) -> DerObject {
-        let pk_der = (self.0).0;
+impl asn1_der::typed::DerEncodable for Asn1SubjectPublicKey {
+    fn encode<S: asn1_der::Sink>(&self, sink: &mut S) -> Result<(), asn1_der::Asn1DerError> {
+        let pk_der = &(self.0).0;
         let mut bit_string = Vec::with_capacity(pk_der.len() + 1);
         // The number of bits in pk_der is trivially always a multiple of 8,
         // so there are always 0 "unused bits" signaled by the first byte.
         bit_string.push(0u8);
         bit_string.extend(pk_der);
-        DerObject::new(DerTag::x03, bit_string.into())
-    }
-    fn serialized_len(&self) -> usize {
-        DerObject::compute_serialized_len((self.0).0.len() + 1)
+        asn1_der::DerObject::write(3, bit_string.len(), &mut bit_string.iter(), sink)?;
+        Ok(())
     }
 }
 
-impl FromDerObject for Asn1SubjectPublicKey {
-    fn from_der_object(o: DerObject) -> Result<Self, Asn1DerError> {
-        if o.tag != DerTag::x03 {
-            return Err(Asn1DerError::InvalidTag)
+impl DerDecodable<'_> for Asn1SubjectPublicKey {
+    fn load(object: DerObject<'_>) -> Result<Self, Asn1DerError> {
+        if object.tag() != 3 {
+            return Err(Asn1DerError::new(
+                Asn1DerErrorVariant::InvalidData("DER object tag is not the bit string tag."),
+            ));
         }
-        let pk_der: Vec<u8> = o.value.data.into_iter().skip(1).collect();
+
+        let pk_der: Vec<u8> = object.value().into_iter().skip(1).cloned().collect();
         // We don't parse pk_der further as an ASN.1 RsaPublicKey, since
         // we only need the DER encoding for `verify`.
         Ok(Asn1SubjectPublicKey(PublicKey(pk_der)))
@@ -203,11 +235,34 @@ impl FromDerObject for Asn1SubjectPublicKey {
 }
 
 /// ASN.1 SubjectPublicKeyInfo
-#[derive(Asn1Der)]
 #[allow(non_snake_case)]
 struct Asn1SubjectPublicKeyInfo {
     algorithmIdentifier: Asn1RsaEncryption,
     subjectPublicKey: Asn1SubjectPublicKey
+}
+
+impl asn1_der::typed::DerEncodable for Asn1SubjectPublicKeyInfo {
+    fn encode<S: asn1_der::Sink>(&self, sink: &mut S) -> Result<(), asn1_der::Asn1DerError> {
+        let mut identifier = Vec::new();
+        self.algorithmIdentifier.encode(&mut identifier)?;
+        let identifier = DerObject::decode(&identifier)?;
+
+        let mut key = Vec::new();
+        self.subjectPublicKey.encode(&mut key)?;
+        let key = DerObject::decode(&key)?;
+
+        asn1_der::typed::Sequence::write(&[identifier, key], sink)
+    }
+}
+
+impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
+    fn load(object: DerObject<'_>) -> Result<Self, Asn1DerError> {
+        let seq: Sequence = Sequence::load(object)?;
+        Ok(Asn1SubjectPublicKeyInfo {
+            algorithmIdentifier: seq.get_as(0)?,
+            subjectPublicKey: Asn1SubjectPublicKey::load(seq.get(1)?)?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -221,8 +276,9 @@ mod tests {
     const KEY2: &'static [u8] = include_bytes!("test/rsa-3072.pk8");
     const KEY3: &'static [u8] = include_bytes!("test/rsa-4096.pk8");
 
+    // TODO: Remove libp2p_core_v026. For compatibility testing only.
     #[derive(Clone)]
-    struct SomeKeypair(Keypair);
+    struct SomeKeypair(Keypair, libp2p_core_v026::identity::rsa::Keypair);
 
     impl fmt::Debug for SomeKeypair {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -233,7 +289,11 @@ mod tests {
     impl Arbitrary for SomeKeypair {
         fn arbitrary<G: Gen>(g: &mut G) -> SomeKeypair {
             let mut key = [KEY1, KEY2, KEY3].choose(g).unwrap().to_vec();
-            SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
+            let mut key2 = key.clone();
+            SomeKeypair(
+                Keypair::from_pkcs8(&mut key).unwrap(),
+                libp2p_core_v026::identity::rsa::Keypair::from_pkcs8(&mut key2).unwrap(),
+            )
         }
     }
 
@@ -246,9 +306,16 @@ mod tests {
 
     #[test]
     fn rsa_x509_encode_decode() {
-        fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
+        fn prop(SomeKeypair(kp, old_kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::decode_x509(&pk.encode_x509())
+            let old_kp = old_kp.public();
+
+            let x509 = pk.encode_x509();
+            let x509_old = old_kp.encode_x509();
+
+            assert_eq!(x509, x509_old);
+
+            PublicKey::decode_x509(&x509)
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
@@ -257,10 +324,9 @@ mod tests {
 
     #[test]
     fn rsa_sign_verify() {
-        fn prop(SomeKeypair(kp): SomeKeypair, msg: Vec<u8>) -> Result<bool, SigningError> {
+        fn prop(SomeKeypair(kp, _): SomeKeypair, msg: Vec<u8>) -> Result<bool, SigningError> {
             kp.sign(&msg).map(|s| kp.public().verify(&msg, &s))
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn(_,_) -> _);
     }
 }
-
