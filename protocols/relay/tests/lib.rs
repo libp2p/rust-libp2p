@@ -1112,18 +1112,15 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for CombinedBehaviour {
 
 impl NetworkBehaviourEventProcess<IdentifyEvent> for CombinedBehaviour {
     fn inject_event(&mut self, event: IdentifyEvent) {
-        match event {
-            IdentifyEvent::Received {
-                peer_id,
-                info: IdentifyInfo { listen_addrs, .. },
-                ..
-            } => {
-                for addr in listen_addrs {
-                    self.kad.add_address(&peer_id, addr);
-                }
+        if let IdentifyEvent::Received {
+            peer_id,
+            info: IdentifyInfo { listen_addrs, .. },
+            ..
+        } = event
+        {
+            for addr in listen_addrs {
+                self.kad.add_address(&peer_id, addr);
             }
-            IdentifyEvent::Sent { .. } => {}
-            e => panic!("{:?}", e),
         }
     }
 }
