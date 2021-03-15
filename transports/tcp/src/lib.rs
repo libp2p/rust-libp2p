@@ -313,11 +313,11 @@ where
 
     fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
         let domain = if socket_addr.is_ipv4() {
-            Domain::ipv4()
+            Domain::IPV4
         } else {
-            Domain::ipv6()
+            Domain::IPV6
         };
-        let socket = Socket::new(domain, Type::stream(), Some(socket2::Protocol::tcp()))?;
+        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
         if socket_addr.is_ipv6() {
             socket.set_only_v6(true)?;
         }
@@ -340,7 +340,7 @@ where
         socket.bind(&socket_addr.into())?;
         socket.listen(self.backlog as _)?;
         socket.set_nonblocking(true)?;
-        TcpListenStream::<T>::new(socket.into_tcp_listener(), self.port_reuse)
+        TcpListenStream::<T>::new(socket.into(), self.port_reuse)
     }
 
     async fn do_dial(self, socket_addr: SocketAddr) -> Result<T::Stream, io::Error> {
@@ -360,7 +360,7 @@ where
             Err(err) => return Err(err),
         };
 
-        let stream = T::new_stream(socket.into_tcp_stream()).await?;
+        let stream = T::new_stream(socket.into()).await?;
         Ok(stream)
     }
 }
