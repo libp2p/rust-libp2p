@@ -15,6 +15,8 @@
 
 - Update `libp2p-swarm`.
 
+- Update dependencies.
+
 # 0.28.1 [2021-02-15]
 
 - Update dependencies.

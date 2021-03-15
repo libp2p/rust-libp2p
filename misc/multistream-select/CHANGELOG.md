@@ -1,3 +1,7 @@
+# 0.10.3 [unreleased]
+
+- Update dependencies.
+
 # 0.10.2 [2021-03-01]
 
 - Re-enable "parallel negotiation" if the dialer has 3 or more
