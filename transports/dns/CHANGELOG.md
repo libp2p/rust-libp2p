@@ -1,3 +1,10 @@
+# 0.28.0 [unreleased]
+
+- Use `trust-dns-resolver`, removing the internal thread pool and
+  expanding the configurability of `libp2p-dns` by largely exposing the
+  configuration of `trust-dns-resolver`.
+  [PR 1927](https://github.com/libp2p/rust-libp2p/pull/1927)
+
 # 0.27.0 [2021-01-12]
 
 - Update dependencies.

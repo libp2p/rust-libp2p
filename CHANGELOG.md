@@ -44,6 +44,13 @@
 
 ## Version 0.36.0 [unreleased]
 
+- Consolidate top-level utility functions for constructing development
+  transports. There is now just `development_transport()` (available with default features)
+  and `tokio_development_transport()` (available when the corresponding tokio features are enabled).
+  Furthermore, these are now `async fn`s. The minor variations that also included `pnet`
+  support have been removed.
+  [PR 1927](https://github.com/libp2p/rust-libp2p/pull/1927)
+
 - Update libp2p crates.
 
 - Do not leak default features from libp2p crates.
