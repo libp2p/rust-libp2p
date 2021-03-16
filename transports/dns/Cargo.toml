@@ -13,8 +13,8 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { version = "0.27.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
-trust-dns-resolver = { version = "0.20", default-features = false, features = ["system-config"], git = "https://github.com/bluejekyll/trust-dns", branch = "main" }
-async-std-resolver = { version = "0.20", optional = true, git = "https://github.com/bluejekyll/trust-dns", branch = "main" }
+trust-dns-resolver = { version = "0.20", default-features = false, features = ["system-config"] }
+async-std-resolver = { version = "0.20", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
