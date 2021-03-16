@@ -47,8 +47,6 @@ where
     dial_queue: SmallVec<[TOutbound; 4]>,
     /// Current number of concurrent outbound substreams being opened.
     dial_negotiated: u32,
-    /// Maximum number of concurrent outbound substreams being opened. Value is never modified.
-    max_dial_negotiated: u32,
     /// Value to return from `connection_keep_alive`.
     keep_alive: KeepAlive,
     /// The configuration container for the handler
@@ -71,7 +69,6 @@ where
             events_out: SmallVec::new(),
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
-            max_dial_negotiated: 8,
             keep_alive: KeepAlive::Yes,
             config,
         }
@@ -204,7 +201,7 @@ where
         }
 
         if !self.dial_queue.is_empty() {
-            if self.dial_negotiated < self.max_dial_negotiated {
+            if self.dial_negotiated < self.config.max_dial_negotiated {
                 self.dial_negotiated += 1;
                 let upgrade = self.dial_queue.remove(0);
                 return Poll::Ready(
@@ -233,6 +230,8 @@ pub struct OneShotHandlerConfig {
     pub keep_alive_timeout: Duration,
     /// Timeout for outbound substream upgrades.
     pub outbound_substream_timeout: Duration,
+    /// Maximum number of concurrent outbound substreams being opened.
+    pub max_dial_negotiated: u32,
 }
 
 impl Default for OneShotHandlerConfig {
@@ -240,6 +239,7 @@ impl Default for OneShotHandlerConfig {
         OneShotHandlerConfig {
             keep_alive_timeout: Duration::from_secs(10),
             outbound_substream_timeout: Duration::from_secs(10),
+            max_dial_negotiated: 8,
         }
     }
 }

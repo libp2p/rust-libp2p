@@ -238,6 +238,10 @@ pub use libp2p_yamux as yamux;
 #[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "relay")]
+#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
+#[doc(inline)]
+pub use libp2p_relay as relay;
 #[cfg(feature = "request-response")]
 #[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
 #[doc(inline)]
@@ -255,7 +259,7 @@ pub use self::core::{
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
-pub use libp2p_core_derive::NetworkBehaviour;
+pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;

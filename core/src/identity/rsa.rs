@@ -26,7 +26,7 @@ use super::error::*;
 use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
-use std::{fmt::{self, Write}, sync::Arc};
+use std::{fmt, sync::Arc};
 use zeroize::Zeroize;
 
 /// An RSA keypair.
@@ -109,16 +109,11 @@ impl PublicKey {
 
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let bytes = &self.0;
-        let mut hex = String::with_capacity(bytes.len() * 2);
-
-        for byte in bytes {
-            write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+        f.write_str("PublicKey(PKCS1): ")?;
+        for byte in &self.0 {
+            write!(f, "{:x}", byte)?;
         }
-
-        f.debug_struct("PublicKey")
-            .field("pkcs1", &hex)
-            .finish()
+        Ok(())
     }
 }
 

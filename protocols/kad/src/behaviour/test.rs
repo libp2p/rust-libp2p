@@ -167,6 +167,7 @@ fn bootstrap() {
         ).into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
+
         let swarm_ids: Vec<_> = swarms.iter()
             .map(Swarm::local_peer_id)
             .cloned()
@@ -466,7 +467,7 @@ fn put_record() {
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
                 single_swarm.1.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[i].1),
+                    &Swarm::local_peer_id(&fully_connected_swarms[i].1),
                     fully_connected_swarms[i].0.clone(),
                 );
             }
@@ -642,7 +643,9 @@ fn get_record() {
 
     let record = Record::new(random_multihash(), vec![4,5,6]);
 
-    swarms[1].store.put(record.clone()).unwrap();
+    let expected_cache_candidate = *Swarm::local_peer_id(&swarms[1]);
+
+    swarms[2].store.put(record.clone()).unwrap();
     let qid = swarms[0].get_record(&record.key, Quorum::One);
 
     block_on(
@@ -652,12 +655,16 @@ fn get_record() {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk {
+                                records, cache_candidates
+                            })),
                             ..
                         })) => {
                             assert_eq!(id, qid);
                             assert_eq!(records.len(), 1);
                             assert_eq!(records.first().unwrap().record, record);
+                            assert_eq!(cache_candidates.len(), 1);
+                            assert_eq!(cache_candidates.values().next(), Some(&expected_cache_candidate));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -698,7 +705,7 @@ fn get_record_many() {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { records, .. })),
                             ..
                         })) => {
                             assert_eq!(id, qid);
@@ -745,7 +752,7 @@ fn add_provider() {
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
                 single_swarm.1.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[i].1),
+                    &Swarm::local_peer_id(&fully_connected_swarms[i].1),
                     fully_connected_swarms[i].0.clone(),
                 );
             }
@@ -944,8 +951,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     trudy.1.store.put(record_trudy.clone()).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
-    alice.1.add_address(Swarm::local_peer_id(&trudy.1), trudy.0.clone());
-    alice.1.add_address(Swarm::local_peer_id(&bob.1), bob.0.clone());
+    alice.1.add_address(&Swarm::local_peer_id(&trudy.1), trudy.0.clone());
+    alice.1.add_address(&Swarm::local_peer_id(&bob.1), bob.0.clone());
 
     // Drop the swarm addresses.
     let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
