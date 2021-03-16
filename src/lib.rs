@@ -283,9 +283,9 @@ pub async fn development_transport(keypair: identity::Keypair)
 {
     let transport = {
         let tcp = tcp::TcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::system(tcp).await?;
-        let websockets = websocket::WsConfig::new(transport.clone());
-        transport.or_transport(websockets)
+        let dns_tcp = dns::DnsConfig::system(tcp).await?;
+        let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+        dns_tcp.or_transport(ws_dns_tcp)
     };
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
@@ -318,9 +318,9 @@ pub fn tokio_development_transport(keypair: identity::Keypair)
 {
     let transport = {
         let tcp = tcp::TokioTcpConfig::new().nodelay(true);
-        let transport = dns::TokioDnsConfig::system(tcp)?;
-        let websockets = websocket::WsConfig::new(transport.clone());
-        transport.or_transport(websockets)
+        let dns_tcp = dns::TokioDnsConfig::system(tcp)?;
+        let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+        dns_tcp.or_transport(ws_dns_tcp)
     };
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()

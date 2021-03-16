@@ -15,6 +15,7 @@ log = "0.4.1"
 futures = "0.3.1"
 trust-dns-resolver = { version = "0.20", default-features = false, features = ["system-config"] }
 async-std-resolver = { version = "0.20", optional = true }
+smallvec = "1.6"
 
 [dev-dependencies]
 env_logger = "0.6"
