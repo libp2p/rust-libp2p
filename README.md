@@ -9,18 +9,21 @@ This repository is the central place for Rust development of the [libp2p](https:
 **Warning**: While we are trying our best to be compatible with other libp2p implementations, we
 cannot guarantee that this is the case considering the lack of a precise libp2p specifications.
 
-## Documentation
+## Getting started
 
-How to use the library?
+- **Main documentation** can be found on https://docs.rs/libp2p.
 
-- Main documentation: https://docs.rs/libp2p
+- The **[examples](examples)** folder contains small binaries showcasing the
+  many protocols in this repository.
 
-Where to ask questions?
+- To **report bugs, suggest improvements or request new features** please open
+  GitHub issue on this repository.
 
-- In the Rust section of https://discuss.libp2p.io.
-- In the #libp2p IRC channel on freenode.
-- By opening an issue in this repository.
+- For **rust-libp2p specific questions** please use the GitHub _Discussions_
+  forum https://github.com/libp2p/rust-libp2p/discussions.
 
+- For **discussions and questions related to multiple libp2p implementations**
+  please use the libp2p _Discourse_ forum https://discuss.libp2p.io.
 
 ## Repository Structure
 
