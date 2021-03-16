@@ -68,7 +68,7 @@ libp2p-floodsub = { version = "0.28.0", path = "protocols/floodsub", optional = 
 libp2p-gossipsub = { version = "0.29.0", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.28.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.29.0", path = "protocols/kad", optional = true }
-libp2p-mplex = { version = "0.27.1", path = "muxers/mplex", optional = true }
+libp2p-mplex = { version = "0.27.2", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.29.0", path = "transports/noise", optional = true }
 libp2p-ping = { version = "0.28.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.27.1", path = "transports/plaintext", optional = true }
@@ -83,7 +83,7 @@ libp2p-yamux = { version = "0.30.1", path = "muxers/yamux", optional = true }
 multiaddr = { package = "parity-multiaddr", version = "0.11.1", path = "misc/multiaddr" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
-smallvec = "1.0"
+smallvec = "1.6.1"
 wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
