@@ -1,4 +1,12 @@
-# 0.27.2 [unreleased]
+# 0.28.0 [unreleased]
+
+- `Network::dial()` understands `/p2p` addresses and `Transport::dial`
+  gets a "fully qualified" `/p2p` address when dialing a specific peer,
+  whether through the `Network::peer()` API or via `Network::dial()`
+  with a `/p2p` address.
+
+- `Network::dial()` and `network::Peer::dial()` return a `DialError`
+  on error.
 
 - Shorten and unify `Debug` impls of public keys.
 

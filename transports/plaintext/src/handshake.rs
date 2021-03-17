@@ -51,7 +51,7 @@ pub struct Remote {
 }
 
 impl HandshakeContext<Local> {
-    fn new(config: PlainText2Config) -> Result<Self, PlainTextError> {
+    fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.clone().into_peer_id().to_bytes()),
             pubkey: Some(config.local_public_key.clone().into_protobuf_encoding())
@@ -59,12 +59,12 @@ impl HandshakeContext<Local> {
         let mut buf = Vec::with_capacity(exchange.encoded_len());
         exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
 
-        Ok(Self {
+        Self {
             config,
             state: Local {
                 exchange_bytes: buf
             }
-        })
+        }
     }
 
     fn with_remote(self, exchange_bytes: BytesMut)
@@ -119,7 +119,7 @@ where
     let mut framed_socket = Framed::new(socket, UviBytes::default());
 
     trace!("starting handshake");
-    let context = HandshakeContext::new(config)?;
+    let context = HandshakeContext::new(config);
 
     trace!("sending exchange to remote");
     framed_socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;

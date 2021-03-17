@@ -1,5 +1,9 @@
 # 0.28.0 [unreleased]
 
+- New error variant `DialError::InvalidAddress`
+
+- `Swarm::dial_addr()` now returns a `DialError` on error.
+
 - Remove the option for a substream-specific multistream select protocol override.
   The override at this granularity is no longer deemed useful, in particular because
   it can usually not be configured for existing protocols like `libp2p-kad` and others.

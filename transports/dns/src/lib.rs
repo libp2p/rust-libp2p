@@ -301,7 +301,7 @@ where
             // attempt, return that error. Otherwise there were no valid DNS records
             // for the given address to begin with (i.e. DNS lookups succeeded but
             // produced no records relevant for the given `addr`).
-            Err(last_err.unwrap_or(
+            Err(last_err.unwrap_or_else(||
                 DnsErr::ResolveError(
                     ResolveErrorKind::Message("No matching records found.").into())))
         }.boxed().right_future())
@@ -483,7 +483,7 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
 }
 
 fn fqdn(name: &Cow<'_, str>) -> String {
-    if name.ends_with(".") {
+    if name.ends_with('.') {
         name.to_string()
     } else {
         format!("{}.", name)

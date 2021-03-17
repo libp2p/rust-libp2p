@@ -238,7 +238,7 @@ where
                     num_buffered += 1;
                 }
                 Frame::Close { stream_id } => {
-                    self.on_close(stream_id.into_local())?;
+                    self.on_close(stream_id.into_local());
                 }
                 Frame::Reset { stream_id } => {
                     self.on_reset(stream_id.into_local())
@@ -460,7 +460,7 @@ where
                 }
                 Frame::Close { stream_id } => {
                     let stream_id = stream_id.into_local();
-                    self.on_close(stream_id)?;
+                    self.on_close(stream_id);
                     if id == stream_id {
                         return Poll::Ready(Ok(None))
                     }
@@ -683,7 +683,7 @@ where
     }
 
     /// Processes an inbound `Close` frame.
-    fn on_close(&mut self, id: LocalStreamId) -> io::Result<()> {
+    fn on_close(&mut self, id: LocalStreamId) {
         if let Some(state) = self.substreams.remove(&id) {
             match state {
                 SubstreamState::RecvClosed { .. } | SubstreamState::Closed { .. } => {
@@ -715,8 +715,6 @@ where
             trace!("{}: Ignoring `Close` for unknown substream {}. Possibly dropped earlier.",
                 self.id, id);
         }
-
-        Ok(())
     }
 
     /// Generates the next outbound stream ID.
