@@ -1,3 +1,7 @@
+# 0.28.1 [2021-03-17]
+
+- Update `paritytech-multiaddr` to `>=v0.11.2`.
+
 # 0.28.0 [2021-03-17]
 
 - `Network::dial()` understands `/p2p` addresses and `Transport::dial`
