@@ -1,5 +1,9 @@
 # 0.28.0 [unreleased]
 
+- Update `libp2p-core`.
+
+- Add support for resolving `/dnsaddr` addresses.
+
 - Use `trust-dns-resolver`, removing the internal thread pool and
   expanding the configurability of `libp2p-dns` by largely exposing the
   configuration of `trust-dns-resolver`.

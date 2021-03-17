@@ -401,14 +401,12 @@ impl<T: Transport> Stream for RelayListener<T> {
                     Poll::Ready(Some(BehaviourToListenerMsg::IncomingRelayedConnection {
                         stream,
                         src_peer_id,
-                        relay_peer_id,
                         relay_addr,
+                        relay_peer_id: _
                     })) => {
                         return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                             upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),
-                            local_addr: relay_addr
-                                .with(Protocol::P2p(relay_peer_id.into()))
-                                .with(Protocol::P2pCircuit),
+                            local_addr: relay_addr.with(Protocol::P2pCircuit),
                             remote_addr: Protocol::P2p(src_peer_id.into()).into(),
                         })));
                     }
