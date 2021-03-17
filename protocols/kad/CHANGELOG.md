@@ -1,4 +1,4 @@
-# 0.29.0 [unreleased]
+# 0.29.0 [2021-03-17]
 
 - Add `KademliaCaching` and `KademliaConfig::set_caching` to configure
   whether Kademlia should track, in lookups, the closest nodes to a key

@@ -1,4 +1,4 @@
-# 0.11.2 [unreleased]
+# 0.11.2 [2021-03-17]
 
 - Add `Multiaddr::ends_with()`.
 

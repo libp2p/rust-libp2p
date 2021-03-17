@@ -1,4 +1,4 @@
-# 0.28.0 [unreleased]
+# 0.28.0 [2021-03-17]
 
 - `Network::dial()` understands `/p2p` addresses and `Transport::dial`
   gets a "fully qualified" `/p2p` address when dialing a specific peer,

@@ -1,4 +1,4 @@
-# 0.31.0 [unreleased]
+# 0.31.0 [2021-03-17]
 
 - Update `libp2p-core`.
 

@@ -42,7 +42,7 @@
 
 # `libp2p` facade crate
 
-## Version 0.36.0 [unreleased]
+## Version 0.36.0 [2021-03-17]
 
 - Consolidate top-level utility functions for constructing development
   transports. There is now just `development_transport()` (available with default features)
