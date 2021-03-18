@@ -64,3 +64,5 @@ The main components of this repository are structured as follows:
 - https://github.com/rs-ipfs/rust-ipfs
 - https://github.com/marcopoloprotocol/marcopolo
 - https://github.com/ChainSafe/forest
+- https://github.com/ipfs-rust/ipfs-embed
+- https://www.actyx.com/developers/
