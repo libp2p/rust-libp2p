@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = libp2p::build_development_transport(id_keys)?;
+    let transport = libp2p::development_transport(id_keys).await?;
 
     // Create an MDNS network behaviour.
     let behaviour = Mdns::new(MdnsConfig::default()).await?;

@@ -1,10 +1,4 @@
-# 0.28.0 [unreleased]
-
-- Remove the option for a substream-specific multistream select protocol override.
-  The override at this granularity is no longer deemed useful, in particular because
-  it can usually not be configured for existing protocols like `libp2p-kad` and others.
-  There is a `Swarm`-scoped configuration for this version available since
-  [1858](https://github.com/libp2p/rust-libp2p/pull/1858).
+# 0.29.0 [unreleased]
 
 - Remove `Deref` and `DerefMut` implementations previously dereferencing to the
   `NetworkBehaviour` on `Swarm`. Instead one can access the `NetworkBehaviour`
@@ -17,6 +11,18 @@
   # Go from e.g. `Swarm::local_peer_id(&my_swarm)` to `my_swarm.local_peer_id()`.
   grep -RiIl --include \*.rs --exclude-dir target . --exclude-dir .git | xargs sed -i "s/\(libp2p::\)*Swarm::\([a-z_]*\)(&mut \([a-z_0-9]*\), /\3.\2(/g"
   ```
+
+# 0.28.0 [2021-03-17]
+
+- New error variant `DialError::InvalidAddress`
+
+- `Swarm::dial_addr()` now returns a `DialError` on error.
+
+- Remove the option for a substream-specific multistream select protocol override.
+  The override at this granularity is no longer deemed useful, in particular because
+  it can usually not be configured for existing protocols like `libp2p-kad` and others.
+  There is a `Swarm`-scoped configuration for this version available since
+  [1858](https://github.com/libp2p/rust-libp2p/pull/1858).
 
 # 0.27.2 [2021-02-04]
 

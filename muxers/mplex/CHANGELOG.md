@@ -1,3 +1,7 @@
+# 0.28.0 [2021-03-17]
+
+- Update dependencies.
+
 # 0.27.1 [2021-02-15]
 
 - Update dependencies.

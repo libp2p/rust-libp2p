@@ -58,14 +58,15 @@ use libp2p::{
     NetworkBehaviour,
     PeerId,
     Swarm,
-    build_development_transport,
+    development_transport,
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     swarm::NetworkBehaviourEventProcess
 };
 use std::{error::Error, task::{Context, Poll}};
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -73,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = build_development_transport(local_key)?;
+    let transport = development_transport(local_key).await?;
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]

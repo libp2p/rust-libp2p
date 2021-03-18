@@ -1,4 +1,8 @@
-# 0.29.0 [unreleased]
+# 0.30.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.29.0 [2021-03-17]
 
 - Add `KademliaCaching` and `KademliaConfig::set_caching` to configure
   whether Kademlia should track, in lookups, the closest nodes to a key
@@ -14,6 +18,8 @@
   e.g. for write-back caching after a successful read with quorum > 1.
 
 - Update `libp2p-swarm`.
+
+- Update dependencies.
 
 # 0.28.1 [2021-02-15]
 

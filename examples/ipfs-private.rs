@@ -38,7 +38,7 @@ use libp2p::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
     },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
-    identify::{Identify, IdentifyEvent},
+    identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
     multiaddr::Protocol,
     noise,
@@ -245,11 +245,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 gossipsub_config,
             )
             .expect("Valid configuration"),
-            identify: Identify::new(
+            identify: Identify::new(IdentifyConfig::new(
                 "/ipfs/0.1.0".into(),
-                "rust-ipfs-example".into(),
                 local_key.public(),
-            ),
+            )),
             ping: Ping::new(PingConfig::new()),
         };
 

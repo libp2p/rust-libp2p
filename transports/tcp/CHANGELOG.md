@@ -1,4 +1,8 @@
-# 0.27.2 [unreleased]
+# 0.28.0 [2021-03-17]
+
+- Update `libp2p-core`.
+
+- Permit `/p2p` addresses.
 
 - Update to `if-watch-0.2`.
 

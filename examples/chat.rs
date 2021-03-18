@@ -63,7 +63,8 @@ use libp2p::{
 };
 use std::{error::Error, task::{Context, Poll}};
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId
@@ -72,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key)?;
+    let transport = libp2p::development_transport(local_key).await?;
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");

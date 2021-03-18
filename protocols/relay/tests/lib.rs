@@ -30,7 +30,7 @@ use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{identity, upgrade, PeerId};
-use libp2p_identify::{Identify, IdentifyEvent, IdentifyInfo};
+use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
@@ -381,9 +381,10 @@ fn src_try_connect_to_offline_dst() {
 
         loop {
             match src_swarm.next_event().await {
-                SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
+                SwarmEvent::UnreachableAddr { address, peer_id, .. }
                     if address == dst_addr_via_relay =>
                 {
+                    assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -437,9 +438,10 @@ fn src_try_connect_to_unsupported_dst() {
 
         loop {
             match src_swarm.next_event().await {
-                SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
+                SwarmEvent::UnreachableAddr { address, peer_id, .. }
                     if address == dst_addr_via_relay =>
                 {
+                    assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
                 SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {}
@@ -486,8 +488,10 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
 
         // Source Node fail to reach Destination Node due to failure reaching Relay.
         match src_swarm.next_event().await {
-            SwarmEvent::UnknownPeerUnreachableAddr { address, .. }
-                if address == dst_addr_via_relay => {}
+            SwarmEvent::UnreachableAddr { address, peer_id, .. }
+                if address == dst_addr_via_relay => {
+                    assert_eq!(peer_id, dst_peer_id);
+                }
             e => panic!("{:?}", e),
         }
     });
@@ -575,6 +579,9 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     }
                 }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
+                    ..
+                })) => {}
                 e => panic!("{:?}", e),
             }
         }
@@ -1007,9 +1014,10 @@ fn yield_incoming_connection_through_correct_listener() {
         }
 
         match src_3_swarm.next_event().boxed().poll_unpin(cx) {
-            Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr { address, .. })
+            Poll::Ready(SwarmEvent::UnreachableAddr { address, peer_id, .. })
                 if address == dst_addr_via_relay_3 =>
             {
+                assert_eq!(peer_id, dst_peer_id);
                 return Poll::Ready(());
             }
             Poll::Ready(SwarmEvent::Dialing { .. }) => {}
@@ -1114,18 +1122,15 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for CombinedBehaviour {
 
 impl NetworkBehaviourEventProcess<IdentifyEvent> for CombinedBehaviour {
     fn inject_event(&mut self, event: IdentifyEvent) {
-        match event {
-            IdentifyEvent::Received {
-                peer_id,
-                info: IdentifyInfo { listen_addrs, .. },
-                ..
-            } => {
-                for addr in listen_addrs {
-                    self.kad.add_address(&peer_id, addr);
-                }
+        if let IdentifyEvent::Received {
+            peer_id,
+            info: IdentifyInfo { listen_addrs, .. },
+            ..
+        } = event
+        {
+            for addr in listen_addrs {
+                self.kad.add_address(&peer_id, addr);
             }
-            IdentifyEvent::Sent { .. } => {}
-            e => panic!("{:?}", e),
         }
     }
 }
@@ -1235,11 +1240,10 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
             local_peer_id.clone(),
             MemoryStore::new(local_peer_id.clone()),
         ),
-        identify: Identify::new(
+        identify: Identify::new(IdentifyConfig::new(
             "test".to_string(),
-            "test-agent".to_string(),
             local_public_key.clone(),
-        ),
+        )),
         events: Default::default(),
     };
 
