@@ -42,6 +42,10 @@
 
 # `libp2p` facade crate
 
+## Version 0.37.0 [unreleased]
+
+- Update `libp2p-identify`.
+
 ## Version 0.36.0 [2021-03-17]
 
 - Consolidate top-level utility functions for constructing development
