@@ -107,6 +107,16 @@ pub struct IdentifyConfig {
     ///
     /// Defaults to 5 minutes.
     pub interval: Duration,
+
+    /// Whether new or expired listen addresses of the local node should
+    /// trigger an active push of an identify message to all connected peers.
+    ///
+    /// Enabling this option can result in connected peers being informed
+    /// earlier about new or expired listen addresses of the local node,
+    /// i.e. before the next periodic identify request with each peer.
+    ///
+    /// Disabled by default.
+    pub push_listen_addr_updates: bool,
 }
 
 impl IdentifyConfig {
@@ -119,6 +129,7 @@ impl IdentifyConfig {
             local_public_key,
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
+            push_listen_addr_updates: false,
         }
     }
 
@@ -139,6 +150,14 @@ impl IdentifyConfig {
     /// sent to peers after the initial request.
     pub fn with_interval(mut self, d: Duration) -> Self {
         self.interval = d;
+        self
+    }
+
+    /// Configures whether new or expired listen addresses of the local
+    /// node should trigger an active push of an identify message to all
+    /// connected peers.
+    pub fn with_push_listen_addr_updates(mut self, b: bool) -> Self {
+        self.push_listen_addr_updates = b;
         self
     }
 }
@@ -212,6 +231,18 @@ impl NetworkBehaviour for Identify {
     fn inject_disconnected(&mut self, peer_id: &PeerId) {
         self.connected.remove(peer_id);
         self.pending_push.remove(peer_id);
+    }
+
+    fn inject_new_listen_addr(&mut self, _addr: &Multiaddr) {
+        if self.config.push_listen_addr_updates {
+            self.pending_push.extend(self.connected.keys());
+        }
+    }
+
+    fn inject_expired_listen_addr(&mut self, _addr: &Multiaddr) {
+        if self.config.push_listen_addr_updates {
+            self.pending_push.extend(self.connected.keys());
+        }
     }
 
     fn inject_event(
