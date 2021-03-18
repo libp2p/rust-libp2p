@@ -113,6 +113,7 @@ use libp2p_core::{
     transport::{self, TransportError},
     muxing::StreamMuxerBox,
     network::{
+        self,
         ConnectionLimits,
         Network,
         NetworkInfo,
@@ -359,11 +360,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Initiates a new dialing attempt to the given address.
-    pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), ConnectionLimit> {
+    pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), DialError> {
         let handler = me.behaviour.new_handler()
             .into_node_handler_builder()
             .with_substream_upgrade_protocol_override(me.substream_upgrade_protocol_override);
-        me.network.dial(&addr, handler).map(|_id| ())
+        Ok(me.network.dial(&addr, handler).map(|_id| ())?)
     }
 
     /// Initiates a new dialing attempt to the given peer.
@@ -386,7 +387,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 me.network.peer(*peer_id)
                     .dial(first, addrs, handler)
                     .map(|_| ())
-                    .map_err(DialError::ConnectionLimit)
+                    .map_err(DialError::from)
             } else {
                 Err(DialError::NoAddresses)
             };
@@ -1053,9 +1054,20 @@ pub enum DialError {
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
+    /// The address given for dialing is invalid.
+    InvalidAddress(Multiaddr),
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses
+}
+
+impl From<network::DialError> for DialError {
+    fn from(err: network::DialError) -> DialError {
+        match err {
+            network::DialError::ConnectionLimit(l) => DialError::ConnectionLimit(l),
+            network::DialError::InvalidAddress(a) => DialError::InvalidAddress(a),
+        }
+    }
 }
 
 impl fmt::Display for DialError {
@@ -1063,6 +1075,7 @@ impl fmt::Display for DialError {
         match self {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
+            DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
             DialError::Banned => write!(f, "Dial error: peer is banned.")
         }
     }
@@ -1072,6 +1085,7 @@ impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
+            DialError::InvalidAddress(_) => None,
             DialError::NoAddresses => None,
             DialError::Banned => None
         }

@@ -1072,7 +1072,11 @@ fn manual_bucket_inserts() {
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
     // The peers and their addresses for which we expect `RoutablePeer` events.
     let mut expected = swarms.iter().skip(2)
-        .map(|(a, s)| (a.clone(), Swarm::local_peer_id(s).clone()))
+        .map(|(a, s)| {
+            let pid = *Swarm::local_peer_id(s);
+            let addr = a.clone().with(Protocol::P2p(pid.into()));
+            (addr, pid)
+        })
         .collect::<HashMap<_,_>>();
     // We collect the peers for which a `RoutablePeer` event
     // was received in here to check at the end of the test
@@ -1087,7 +1091,7 @@ fn manual_bucket_inserts() {
                     Poll::Ready(Some(KademliaEvent::RoutablePeer {
                         peer, address
                     })) => {
-                        assert_eq!(peer, expected.remove(&address).expect("Unexpected address"));
+                        assert_eq!(peer, expected.remove(&address).expect("Missing address"));
                         routable.push(peer);
                         if expected.is_empty() {
                             for peer in routable.iter() {

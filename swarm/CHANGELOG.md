@@ -1,4 +1,8 @@
-# 0.28.0 [unreleased]
+# 0.28.0 [2021-03-17]
+
+- New error variant `DialError::InvalidAddress`
+
+- `Swarm::dial_addr()` now returns a `DialError` on error.
 
 - Remove the option for a substream-specific multistream select protocol override.
   The override at this granularity is no longer deemed useful, in particular because
