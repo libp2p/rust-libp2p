@@ -30,7 +30,7 @@ use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{identity, upgrade, PeerId};
-use libp2p_identify::{Identify, IdentifyEvent, IdentifyInfo};
+use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
@@ -1238,11 +1238,10 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
             local_peer_id.clone(),
             MemoryStore::new(local_peer_id.clone()),
         ),
-        identify: Identify::new(
+        identify: Identify::new(IdentifyConfig::new(
             "test".to_string(),
-            "test-agent".to_string(),
             local_public_key.clone(),
-        ),
+        )),
         events: Default::default(),
     };
 
