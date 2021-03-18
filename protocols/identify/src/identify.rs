@@ -286,7 +286,7 @@ impl NetworkBehaviour for Identify {
                     protocol_version: self.config.protocol_version.clone(),
                     agent_version: self.config.agent_version.clone(),
                     listen_addrs,
-                    protocols: protocols.clone(),
+                    protocols,
                     observed_addr,
                 };
 
