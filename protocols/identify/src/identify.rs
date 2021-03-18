@@ -285,7 +285,7 @@ impl NetworkBehaviour for Identify {
                     public_key: self.config.local_public_key.clone(),
                     protocol_version: self.config.protocol_version.clone(),
                     agent_version: self.config.agent_version.clone(),
-                    listen_addrs: listen_addrs.clone(),
+                    listen_addrs,
                     protocols: protocols.clone(),
                     observed_addr,
                 };
