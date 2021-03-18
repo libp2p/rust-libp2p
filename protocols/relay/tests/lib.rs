@@ -57,9 +57,9 @@ fn src_connect_to_dst_listening_via_relay() {
     let mut dst_swarm = build_swarm(Reachability::Firewalled, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
 
-    let src_peer_id = Swarm::local_peer_id(&src_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
+    let src_peer_id = *src_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
+    let relay_peer_id = *relay_swarm.local_peer_id();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let dst_listen_addr_via_relay = relay_addr
@@ -70,10 +70,10 @@ fn src_connect_to_dst_listening_via_relay() {
         .clone()
         .with(Protocol::P2p(dst_peer_id.into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, dst_listen_addr_via_relay.clone()).unwrap();
+    dst_swarm.listen_on(dst_listen_addr_via_relay.clone()).unwrap();
 
     pool.run_until(async {
         // Destination Node dialing Relay.
@@ -142,7 +142,7 @@ fn src_connect_to_dst_listening_via_relay() {
             }
         };
 
-        Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay).unwrap();
+        src_swarm.dial_addr(dst_addr_via_relay).unwrap();
         let src = async move {
             // Source Node dialing Relay to connect to Destination Node.
             match src_swarm.next_event().await {
@@ -197,8 +197,8 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
     let mut dst_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Active);
 
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
+    let relay_peer_id = *relay_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let dst_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -209,15 +209,15 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
         .with(dst_addr.into_iter().next().unwrap())
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, dst_addr.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr.clone()).unwrap();
     // Instruct destination node to listen for incoming relayed connections from unknown relay nodes.
-    Swarm::listen_on(&mut dst_swarm, Protocol::P2pCircuit.into()).unwrap();
+    dst_swarm.listen_on(Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, dst_swarm);
 
-    Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay).unwrap();
+    src_swarm.dial_addr(dst_addr_via_relay).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.next_event().await {
@@ -269,8 +269,8 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
     let mut dst_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
 
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
+    let relay_peer_id = *relay_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let dst_addr_via_relay = relay_addr
@@ -279,10 +279,10 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, dst_addr_via_relay.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
@@ -297,7 +297,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
     spawn_swarm_on_pool(&pool, dst_swarm);
 
     pool.run_until(async move {
-        Swarm::dial_addr(&mut src_swarm, relay_addr).unwrap();
+        src_swarm.dial_addr(relay_addr).unwrap();
 
         // Source Node establishing connection to Relay.
         loop {
@@ -311,7 +311,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
             }
         }
 
-        Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay).unwrap();
+        src_swarm.dial_addr(dst_addr_via_relay).unwrap();
 
         // Source Node establishing connection to destination node via Relay.
         loop {
@@ -350,7 +350,7 @@ fn src_try_connect_to_offline_dst() {
     let mut src_swarm = build_swarm(Reachability::Firewalled, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
 
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
+    let relay_peer_id = *relay_swarm.local_peer_id();
     let dst_peer_id = PeerId::random();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -362,10 +362,10 @@ fn src_try_connect_to_offline_dst() {
         .with(dst_addr.into_iter().next().unwrap())
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay.clone()).unwrap();
+    src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.next_event().await {
@@ -404,8 +404,8 @@ fn src_try_connect_to_unsupported_dst() {
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
     let mut dst_swarm = build_keep_alive_only_swarm();
 
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
+    let relay_peer_id = *relay_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let dst_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -416,13 +416,13 @@ fn src_try_connect_to_unsupported_dst() {
         .with(dst_addr.into_iter().next().unwrap())
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, dst_addr.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, dst_swarm);
 
-    Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay.clone()).unwrap();
+    src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.next_event().await {
@@ -472,7 +472,7 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
         .with(dst_addr.into_iter().next().unwrap())
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay.clone()).unwrap();
+    src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.next_event().await {
@@ -507,9 +507,9 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
     let mut dst_swarm = build_swarm(Reachability::Firewalled, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
 
-    let src_peer_id = Swarm::local_peer_id(&src_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
+    let src_peer_id = *src_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
+    let relay_peer_id = *relay_swarm.local_peer_id();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let dst_addr_via_relay = relay_addr
@@ -519,17 +519,19 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         .with(Protocol::P2p(dst_peer_id.into()));
 
     src_swarm
+        .behaviour_mut()
         .kad
         .add_address(&relay_peer_id, relay_addr.clone());
     dst_swarm
+        .behaviour_mut()
         .kad
         .add_address(&relay_peer_id, relay_addr.clone());
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     // Destination Node listen via Relay.
-    Swarm::listen_on(&mut dst_swarm, dst_addr_via_relay.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
 
     pool.run_until(async {
         // Destination Node dialing Relay.
@@ -564,7 +566,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         }
 
         // Destination Node bootstrapping.
-        let query_id = dst_swarm.kad.bootstrap().unwrap();
+        let query_id = dst_swarm.behaviour_mut().kad.bootstrap().unwrap();
         loop {
             match dst_swarm.next_event().await {
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
@@ -572,7 +574,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     result: QueryResult::Bootstrap(Ok(_)),
                     ..
                 })) if query_id == id => {
-                    if dst_swarm.kad.iter_queries().count() == 0 {
+                    if dst_swarm.behaviour_mut().kad.iter_queries().count() == 0 {
                         break;
                     }
                 }
@@ -624,7 +626,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
 
         let src = async move {
             // Source Node looking for Destination Node on the Kademlia DHT.
-            let mut query_id = src_swarm.kad.get_closest_peers(dst_peer_id);
+            let mut query_id = src_swarm.behaviour_mut().kad.get_closest_peers(dst_peer_id);
             // One has to retry multiple times to wait for Relay to receive Identify event from Node
             // B.
             let mut tries = 0;
@@ -655,7 +657,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                             panic!("Too many retries.");
                         }
 
-                        query_id = src_swarm.kad.get_closest_peers(dst_peer_id);
+                        query_id = src_swarm.behaviour_mut().kad.get_closest_peers(dst_peer_id);
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                         ..
@@ -698,10 +700,10 @@ fn inactive_connection_timeout() {
     let mut relay_swarm = build_keep_alive_swarm();
 
     // Connections only kept alive by Source Node and Destination Node.
-    relay_swarm.keep_alive.keep_alive = KeepAlive::No;
+    relay_swarm.behaviour_mut().keep_alive.keep_alive = KeepAlive::No;
 
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
+    let relay_peer_id = *relay_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let dst_addr_via_relay = relay_addr
@@ -710,10 +712,10 @@ fn inactive_connection_timeout() {
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, dst_addr_via_relay.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
@@ -728,7 +730,7 @@ fn inactive_connection_timeout() {
     spawn_swarm_on_pool(&pool, dst_swarm);
 
     pool.run_until(async move {
-        Swarm::dial_addr(&mut src_swarm, relay_addr).unwrap();
+        src_swarm.dial_addr(relay_addr).unwrap();
         // Source Node dialing Relay.
         loop {
             match src_swarm.next_event().await {
@@ -740,7 +742,7 @@ fn inactive_connection_timeout() {
             }
         }
 
-        Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay).unwrap();
+        src_swarm.dial_addr(dst_addr_via_relay).unwrap();
 
         // Source Node establishing connection to destination node via Relay.
         match src_swarm.next_event().await {
@@ -774,8 +776,8 @@ fn concurrent_connection_same_relay_same_dst() {
     let mut dst_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
 
-    let relay_peer_id = Swarm::local_peer_id(&relay_swarm).clone();
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
+    let relay_peer_id = *relay_swarm.local_peer_id();
+    let dst_peer_id = *dst_swarm.local_peer_id();
 
     let relay_addr: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
     let dst_addr_via_relay = relay_addr
@@ -784,10 +786,10 @@ fn concurrent_connection_same_relay_same_dst() {
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    Swarm::listen_on(&mut relay_swarm, relay_addr.clone()).unwrap();
+    relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, dst_addr_via_relay.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
@@ -802,8 +804,8 @@ fn concurrent_connection_same_relay_same_dst() {
     spawn_swarm_on_pool(&pool, dst_swarm);
 
     pool.run_until(async move {
-        Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay.clone()).unwrap();
-        Swarm::dial_addr(&mut src_swarm, dst_addr_via_relay).unwrap();
+        src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
+        src_swarm.dial_addr(dst_addr_via_relay).unwrap();
 
         // Source Node establishing two connections to destination node via Relay.
         let mut num_established = 0;
@@ -856,13 +858,13 @@ fn yield_incoming_connection_through_correct_listener() {
     let mut relay_2_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
     let mut relay_3_swarm = build_swarm(Reachability::Routable, RelayMode::Active);
 
-    let dst_peer_id = Swarm::local_peer_id(&dst_swarm).clone();
-    let src_1_peer_id = Swarm::local_peer_id(&src_1_swarm).clone();
-    let src_2_peer_id = Swarm::local_peer_id(&src_2_swarm).clone();
-    let src_3_peer_id = Swarm::local_peer_id(&src_3_swarm).clone();
-    let relay_1_peer_id = Swarm::local_peer_id(&relay_1_swarm).clone();
-    let relay_2_peer_id = Swarm::local_peer_id(&relay_2_swarm).clone();
-    let relay_3_peer_id = Swarm::local_peer_id(&relay_3_swarm).clone();
+    let dst_peer_id = *dst_swarm.local_peer_id();
+    let src_1_peer_id = *src_1_swarm.local_peer_id();
+    let src_2_peer_id = *src_2_swarm.local_peer_id();
+    let src_3_peer_id = *src_3_swarm.local_peer_id();
+    let relay_1_peer_id = *relay_1_swarm.local_peer_id();
+    let relay_2_peer_id = *relay_2_swarm.local_peer_id();
+    let relay_3_peer_id = *relay_3_swarm.local_peer_id();
 
     let dst_memory_port = Protocol::Memory(rand::random::<u64>());
     let dst_addr = Multiaddr::empty().with(dst_memory_port.clone());
@@ -893,19 +895,19 @@ fn yield_incoming_connection_through_correct_listener() {
         .with(dst_memory_port)
         .with(Protocol::P2p(dst_peer_id.into()));
 
-    Swarm::listen_on(&mut relay_1_swarm, relay_1_addr.clone()).unwrap();
+    relay_1_swarm.listen_on(relay_1_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_1_swarm);
 
-    Swarm::listen_on(&mut relay_2_swarm, relay_2_addr.clone()).unwrap();
+    relay_2_swarm.listen_on(relay_2_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_2_swarm);
 
-    Swarm::listen_on(&mut relay_3_swarm, relay_3_addr.clone()).unwrap();
+    relay_3_swarm.listen_on(relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    Swarm::listen_on(&mut dst_swarm, relay_1_addr_incl_circuit.clone()).unwrap();
-    Swarm::listen_on(&mut dst_swarm, relay_2_addr_incl_circuit.clone()).unwrap();
+    dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
+    dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
     // Listen on own address in order for relay 3 to be able to connect to destination node.
-    Swarm::listen_on(&mut dst_swarm, dst_addr.clone()).unwrap();
+    dst_swarm.listen_on(dst_addr.clone()).unwrap();
 
     // Wait for destination node to establish connections to relay 1 and 2.
     pool.run_until(async {
@@ -932,8 +934,8 @@ fn yield_incoming_connection_through_correct_listener() {
         }
     });
 
-    Swarm::dial_addr(&mut src_1_swarm, dst_addr_via_relay_1.clone()).unwrap();
-    Swarm::dial_addr(&mut src_2_swarm, dst_addr_via_relay_2.clone()).unwrap();
+    src_1_swarm.dial_addr(dst_addr_via_relay_1.clone()).unwrap();
+    src_2_swarm.dial_addr(dst_addr_via_relay_2.clone()).unwrap();
     spawn_swarm_on_pool(&pool, src_1_swarm);
     spawn_swarm_on_pool(&pool, src_2_swarm);
 
@@ -992,7 +994,7 @@ fn yield_incoming_connection_through_correct_listener() {
 
     // Expect destination node to reject incoming connection from unknown relay given that
     // destination node is not listening for such connections.
-    Swarm::dial_addr(&mut src_3_swarm, dst_addr_via_relay_3.clone()).unwrap();
+    src_3_swarm.dial_addr(dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(poll_fn(|cx| {
         match dst_swarm.next_event().boxed().poll_unpin(cx) {
             Poll::Ready(SwarmEvent::Behaviour(CombinedEvent::Ping(_))) => {}
@@ -1038,7 +1040,7 @@ fn yield_incoming_connection_through_correct_listener() {
     }));
 
     // Instruct destination node to listen for incoming relayed connections from unknown relay nodes.
-    Swarm::listen_on(&mut dst_swarm, Protocol::P2pCircuit.into()).unwrap();
+    dst_swarm.listen_on(Protocol::P2pCircuit.into()).unwrap();
     // Wait for destination node to report new listen address.
     pool.run_until(async {
         loop {
@@ -1056,7 +1058,7 @@ fn yield_incoming_connection_through_correct_listener() {
 
     // Expect destination node to accept incoming connection from "unknown" relay, i.e. the
     // connection from source node 3 via relay 3.
-    Swarm::dial_addr(&mut src_3_swarm, dst_addr_via_relay_3.clone()).unwrap();
+    src_3_swarm.dial_addr(dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(async move {
         loop {
             match src_3_swarm.next_event().await {

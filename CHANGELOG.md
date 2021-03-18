@@ -1,4 +1,3 @@
-
 # Individual crates
 
 ## Main APIs
@@ -44,7 +43,15 @@
 
 ## Version 0.37.0 [unreleased]
 
-- Update `libp2p-identify`.
+- Update individual crates.
+    - `libp2p-floodsub`
+    - `libp2p-gossipsub`
+    - `libp2p-kad`
+    - `libp2p-mdns`
+    - `libp2p-ping`
+    - `libp2p-relay`
+    - `libp2p-request-response`
+    - `libp2p-swarm`
 
 ## Version 0.36.0 [2021-03-17]
 

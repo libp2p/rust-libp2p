@@ -70,12 +70,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // command-line argument, if any.
     if let Some(addr) = std::env::args().nth(1) {
         let remote = addr.parse()?;
-        Swarm::dial_addr(&mut swarm, remote)?;
+        swarm.dial_addr(remote)?;
         println!("Dialed {}", addr)
     }
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned port.
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
