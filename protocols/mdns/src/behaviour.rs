@@ -122,15 +122,15 @@ impl Mdns {
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
         let recv_socket = {
             let socket = Socket::new(
-                Domain::ipv4(),
-                Type::dgram(),
-                Some(socket2::Protocol::udp()),
+                Domain::IPV4,
+                Type::DGRAM,
+                Some(socket2::Protocol::UDP),
             )?;
             socket.set_reuse_address(true)?;
             #[cfg(unix)]
             socket.set_reuse_port(true)?;
             socket.bind(&SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 5353).into())?;
-            let socket = socket.into_udp_socket();
+            let socket = UdpSocket::from(socket);
             socket.set_multicast_loop_v4(true)?;
             socket.set_multicast_ttl_v4(255)?;
             Async::new(socket)?

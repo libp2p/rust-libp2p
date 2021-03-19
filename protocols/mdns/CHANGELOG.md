@@ -1,4 +1,8 @@
-# 0.29.0 [unreleased]
+# 0.30.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.29.0 [2021-03-17]
 
 - Introduce `MdnsConfig` with configurable TTL of discovered peer
   records and configurable multicast query interval. The default

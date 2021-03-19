@@ -1,4 +1,8 @@
-# 0.10.0 [unreleased]
+# 0.11.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.10.0 [2021-03-17]
 
 - Update `libp2p-swarm`.
 

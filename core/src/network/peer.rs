@@ -45,7 +45,7 @@ use std::{
     error,
     fmt,
 };
-use super::{Network, DialingOpts};
+use super::{Network, DialingOpts, DialError};
 
 /// The possible representations of a peer in a [`Network`], as
 /// seen by the local node.
@@ -210,7 +210,7 @@ where
     pub fn dial<I>(self, address: Multiaddr, remaining: I, handler: THandler)
         -> Result<
             (ConnectionId, DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler>),
-            ConnectionLimit
+            DialError
         >
     where
         I: IntoIterator<Item = Multiaddr>,
@@ -219,7 +219,9 @@ where
             Peer::Connected(p) => (p.peer_id, p.network),
             Peer::Dialing(p) => (p.peer_id, p.network),
             Peer::Disconnected(p) => (p.peer_id, p.network),
-            Peer::Local => return Err(ConnectionLimit { current: 0, limit: 0 })
+            Peer::Local => return Err(DialError::ConnectionLimit(ConnectionLimit {
+                current: 0, limit: 0
+            }))
         };
 
         let id = network.dial_peer(DialingOpts {

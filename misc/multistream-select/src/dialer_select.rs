@@ -260,7 +260,7 @@ where
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = SeqState::SendProtocol { io, protocol }
                         }
-                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into())),
+                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
                     }
                 }
 
