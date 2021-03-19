@@ -89,7 +89,7 @@ wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.28.0", path = "transports/deflate", optional = true }
-libp2p-dns = { version = "0.28.0", path = "transports/dns", optional = true, default-features = false }
+libp2p-dns = { version = "0.28.1", path = "transports/dns", optional = true, default-features = false }
 libp2p-mdns = { version = "0.30.0", path = "protocols/mdns", optional = true }
 libp2p-tcp = { version = "0.28.0", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.29.0", path = "transports/websocket", optional = true }
