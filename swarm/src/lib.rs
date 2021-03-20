@@ -327,7 +327,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     ///
     /// Returns an error if the address is not supported.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        self.network.listen_on(addr)
+        let id = self.network.listen_on(addr)?;
+        self.behaviour.inject_new_listener(id);
+        Ok(id)
     }
 
     /// Remove some listener.
@@ -412,6 +414,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// [`NetworkBehaviourAction::ReportObservedAddr`] or explicitly
     /// through this method.
     pub fn add_external_address(&mut self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
+        self.behaviour.inject_new_external_addr(&a);
         self.external_addrs.add(a, s)
     }
 
@@ -422,6 +425,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Returns `true` if the address existed and was removed, `false`
     /// otherwise.
     pub fn remove_external_address(&mut self, addr: &Multiaddr) -> bool {
+        self.behaviour.inject_expired_external_addr(addr);
         self.external_addrs.remove(addr)
     }
 
@@ -565,19 +569,19 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if !this.listened_addrs.contains(&listen_addr) {
                         this.listened_addrs.push(listen_addr.clone())
                     }
-                    this.behaviour.inject_new_listen_addr(&listen_addr);
+                    this.behaviour.inject_new_listen_addr(listener_id, &listen_addr);
                     return Poll::Ready(SwarmEvent::NewListenAddr(listen_addr));
                 }
                 Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr }) => {
                     log::debug!("Listener {:?}; Expired address {:?}.", listener_id, listen_addr);
                     this.listened_addrs.retain(|a| a != &listen_addr);
-                    this.behaviour.inject_expired_listen_addr(&listen_addr);
+                    this.behaviour.inject_expired_listen_addr(listener_id, &listen_addr);
                     return Poll::Ready(SwarmEvent::ExpiredListenAddr(listen_addr));
                 }
                 Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason }) => {
                     log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
                     for addr in addresses.iter() {
-                        this.behaviour.inject_expired_listen_addr(addr);
+                        this.behaviour.inject_expired_listen_addr(listener_id, addr);
                     }
                     this.behaviour.inject_listener_closed(listener_id, match &reason {
                         Ok(()) => Ok(()),
