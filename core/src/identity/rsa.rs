@@ -20,7 +20,8 @@
 
 //! RSA keys.
 
-use asn1_der::{typed::{DerEncodable, DerDecodable, DerTypeView, Sequence}, DerObject, Asn1DerError, Asn1DerErrorVariant, Sink, VecBacking};
+use asn1_der::typed::{DerEncodable, DerDecodable, DerTypeView, Sequence};
+use asn1_der::{DerObject, Asn1DerError, Asn1DerErrorVariant, Sink, VecBacking};
 use super::error::*;
 use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
