@@ -45,6 +45,7 @@
 
 - Update individual crates.
     - `libp2p-core`
+    - `libp2p-dns`
     - `libp2p-floodsub`
     - `libp2p-gossipsub`
     - `libp2p-kad`

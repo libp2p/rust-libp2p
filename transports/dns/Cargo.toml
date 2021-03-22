@@ -2,7 +2,7 @@
 name = "libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
-version = "0.28.0"
+version = "0.28.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,7 +15,7 @@ log = "0.4.1"
 futures = "0.3.1"
 trust-dns-resolver = { version = "0.20", default-features = false, features = ["system-config"] }
 async-std-resolver = { version = "0.20", optional = true }
-smallvec = "1.6"
+smallvec = "1.6.1"
 
 [dev-dependencies]
 env_logger = "0.6"
