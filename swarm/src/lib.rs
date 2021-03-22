@@ -414,8 +414,18 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// [`NetworkBehaviourAction::ReportObservedAddr`] or explicitly
     /// through this method.
     pub fn add_external_address(&mut self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
-        self.behaviour.inject_new_external_addr(&a);
-        self.external_addrs.add(a, s)
+        let result = self.external_addrs.add(a.clone(), s);
+        let expired = match &result {
+            AddAddressResult::Inserted { expired } => {
+                self.behaviour.inject_new_external_addr(&a);
+                expired
+            }
+            AddAddressResult::Updated { expired } => expired,
+        };
+        for a in expired {
+            self.behaviour.inject_expired_external_addr(&a.addr);
+        }
+        result
     }
 
     /// Removes an external address of the local node, regardless of
@@ -425,8 +435,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Returns `true` if the address existed and was removed, `false`
     /// otherwise.
     pub fn remove_external_address(&mut self, addr: &Multiaddr) -> bool {
-        self.behaviour.inject_expired_external_addr(addr);
-        self.external_addrs.remove(addr)
+        if self.external_addrs.remove(addr) {
+            self.behaviour.inject_expired_external_addr(addr);
+            true
+        } else {
+            false
+        }
     }
 
     /// Bans a peer by its peer ID.
@@ -736,10 +750,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 },
                 Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address, score }) => {
                     for addr in this.network.address_translation(&address) {
-                        if this.external_addrs.iter().all(|a| a.addr != addr) {
-                            this.behaviour.inject_new_external_addr(&addr);
-                        }
-                        this.external_addrs.add(addr, score);
+                        this.add_external_address(addr, score);
                     }
                 },
             }

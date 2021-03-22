@@ -187,7 +187,7 @@ where
     ///
     /// The translation is transport-specific. See [`Transport::address_translation`].
     pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
-        -> impl Iterator<Item = Multiaddr> + 'a
+        -> Vec<Multiaddr>
     where
         TMuxer: 'a,
         THandler: 'a,
@@ -201,7 +201,7 @@ where
         addrs.sort_unstable();
         addrs.dedup();
 
-        addrs.into_iter()
+        addrs
     }
 
     /// Returns the peer id of the local node.
