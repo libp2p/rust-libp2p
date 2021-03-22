@@ -230,12 +230,7 @@ mod tests {
         fn prop() -> bool {
             let sk = SecretKey::generate();
             let sk_after = SecretKey::decode(sk.encode()).unwrap();
-            for i in 0..32 {
-                if sk.0.to_bytes()[i] != sk_after.0.to_bytes()[i] {
-                    return false;
-                }
-            }
-            true
+            sk.0.to_bytes() == sk_after.0.to_bytes()
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);
     }
