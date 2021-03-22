@@ -213,7 +213,7 @@ impl NetworkBehaviour for Identify {
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
         };
 
-        self.connected.entry(*peer_id).or_default().insert(*conn, addr.clone());
+        self.connected.entry(*peer_id).or_default().insert(*conn, addr);
     }
 
     fn inject_connection_closed(&mut self, peer_id: &PeerId, conn: &ConnectionId, _: &ConnectedPoint) {
@@ -372,7 +372,7 @@ impl NetworkBehaviour for Identify {
                             Poll::Ready(Err(err)) => {
                                 let event = IdentifyEvent::Error {
                                     peer_id: peer,
-                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err.into()))
+                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err))
                                 };
                                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             },
