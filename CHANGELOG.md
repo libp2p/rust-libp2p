@@ -44,6 +44,7 @@
 ## Version 0.37.0 [unreleased]
 
 - Update individual crates.
+    - `libp2p-core`
     - `libp2p-dns`
     - `libp2p-floodsub`
     - `libp2p-gossipsub`
