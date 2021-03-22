@@ -476,7 +476,7 @@ mod tests {
             (swarm, pubkey)
         };
 
-        Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
         let listen_addr = async_std::task::block_on(async {
             loop {
@@ -488,7 +488,7 @@ mod tests {
                 }
             }
         });
-        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
+        swarm2.dial_addr(listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
@@ -591,7 +591,7 @@ mod tests {
                     }
                 }
 
-                swarm2.push(std::iter::once(pubkey1.clone().into_peer_id()));
+                swarm2.behaviour_mut().push(std::iter::once(pubkey1.clone().into_peer_id()));
             }
         })
     }

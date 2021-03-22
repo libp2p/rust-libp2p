@@ -161,14 +161,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns.
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off.
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => handle_input_line(&mut swarm.kademlia, line),
+                Poll::Ready(Some(line)) => handle_input_line(&mut swarm.behaviour_mut().kademlia, line),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break
             }

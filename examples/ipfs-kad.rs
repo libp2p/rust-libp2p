@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     println!("Searching for the closest peers to {:?}", to_search);
-    swarm.get_closest_peers(to_search);
+    swarm.behaviour_mut().get_closest_peers(to_search);
 
     // Kick it off!
     task::block_on(async move {
