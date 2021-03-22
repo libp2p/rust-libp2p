@@ -155,7 +155,7 @@ pub trait NetworkBehaviour: Send + 'static {
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
     }
 
-    /// Indicates to the behaviour that a new multiaddr we were listening on has expired,
+    /// Indicates to the behaviour that a multiaddr we were listening on has expired,
     /// which means that we are no longer listening in it.
     fn inject_expired_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
     }
