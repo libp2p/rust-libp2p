@@ -47,8 +47,6 @@ libp2p-tcp = { path = "../transports/tcp" }
 multihash = { version = "0.13", default-features = false, features = ["arb"] }
 quickcheck = "0.9.0"
 wasm-timer = "0.2"
-# TODO: For testing only. Remove.
-libp2p-core-v026 = { version = "0.26.0", package = "libp2p-core" }
 
 [build-dependencies]
 prost-build = "0.7"

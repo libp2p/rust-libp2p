@@ -300,9 +300,8 @@ mod tests {
     const KEY2: &'static [u8] = include_bytes!("test/rsa-3072.pk8");
     const KEY3: &'static [u8] = include_bytes!("test/rsa-4096.pk8");
 
-    // TODO: Remove libp2p_core_v026. For compatibility testing only.
     #[derive(Clone)]
-    struct SomeKeypair(Keypair, libp2p_core_v026::identity::rsa::Keypair);
+    struct SomeKeypair(Keypair);
 
     impl fmt::Debug for SomeKeypair {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -313,11 +312,7 @@ mod tests {
     impl Arbitrary for SomeKeypair {
         fn arbitrary<G: Gen>(g: &mut G) -> SomeKeypair {
             let mut key = [KEY1, KEY2, KEY3].choose(g).unwrap().to_vec();
-            let mut key2 = key.clone();
-            SomeKeypair(
-                Keypair::from_pkcs8(&mut key).unwrap(),
-                libp2p_core_v026::identity::rsa::Keypair::from_pkcs8(&mut key2).unwrap(),
-            )
+            SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
         }
     }
 
@@ -330,16 +325,9 @@ mod tests {
 
     #[test]
     fn rsa_x509_encode_decode() {
-        fn prop(SomeKeypair(kp, old_kp): SomeKeypair) -> Result<bool, String> {
+        fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            let old_kp = old_kp.public();
-
-            let x509 = pk.encode_x509();
-            let x509_old = old_kp.encode_x509();
-
-            assert_eq!(x509, x509_old);
-
-            PublicKey::decode_x509(&x509)
+            PublicKey::decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
@@ -348,7 +336,7 @@ mod tests {
 
     #[test]
     fn rsa_sign_verify() {
-        fn prop(SomeKeypair(kp, _): SomeKeypair, msg: Vec<u8>) -> Result<bool, SigningError> {
+        fn prop(SomeKeypair(kp): SomeKeypair, msg: Vec<u8>) -> Result<bool, SigningError> {
             kp.sign(&msg).map(|s| kp.public().verify(&msg, &s))
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn(_,_) -> _);
