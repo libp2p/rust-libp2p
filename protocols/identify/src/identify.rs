@@ -26,7 +26,7 @@ use libp2p_core::{
     Multiaddr,
     PeerId,
     PublicKey,
-    connection::ConnectionId,
+    connection::{ConnectionId, ListenerId},
     upgrade::UpgradeError
 };
 use libp2p_swarm::{
@@ -233,13 +233,13 @@ impl NetworkBehaviour for Identify {
         self.pending_push.remove(peer_id);
     }
 
-    fn inject_new_listen_addr(&mut self, _addr: &Multiaddr) {
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
         if self.config.push_listen_addr_updates {
             self.pending_push.extend(self.connected.keys());
         }
     }
 
-    fn inject_expired_listen_addr(&mut self, _addr: &Multiaddr) {
+    fn inject_expired_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
         if self.config.push_listen_addr_updates {
             self.pending_push.extend(self.connected.keys());
         }
