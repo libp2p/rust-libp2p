@@ -1,3 +1,7 @@
+# 0.28.2 [unreleased]
+
+- Update dependencies.
+
 # 0.28.1 [2021-03-17]
 
 - Update `paritytech-multiaddr` to `>=v0.11.2`.
