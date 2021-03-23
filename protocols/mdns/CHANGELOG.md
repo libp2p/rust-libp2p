@@ -1,5 +1,7 @@
 # 0.30.0 [unreleased]
 
+- Derive `Debug` and `Clone` for `MdnsConfig`.
+
 - Update `libp2p-swarm`.
 
 # 0.29.0 [2021-03-17]
