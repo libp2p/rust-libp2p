@@ -49,6 +49,8 @@ lazy_static! {
         SocketAddr::from((Ipv4Addr::new(224, 0, 0, 251), 5353));
 }
 
+/// Configuration for mDNS.
+#[derive(Clone, Debug)]
 pub struct MdnsConfig {
     /// TTL to use for mdns records.
     pub ttl: Duration,
