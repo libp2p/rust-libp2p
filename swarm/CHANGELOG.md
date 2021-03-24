@@ -5,12 +5,17 @@
   via `Swarm::behaviour` and `Swarm::behaviour_mut`. Methods on `Swarm` can now
   be accessed directly, e.g. via `my_swarm.local_peer_id()`. You may use the
   command below to transform fully qualified method calls on `Swarm` to simple
-  method calls.
+  method calls [PR 1995](https://github.com/libp2p/rust-libp2p/pull/1995).
   
   ``` bash
   # Go from e.g. `Swarm::local_peer_id(&my_swarm)` to `my_swarm.local_peer_id()`.
   grep -RiIl --include \*.rs --exclude-dir target . --exclude-dir .git | xargs sed -i "s/\(libp2p::\)*Swarm::\([a-z_]*\)(&mut \([a-z_0-9]*\), /\3.\2(/g"
   ```
+  
+- Extend `NetworkBehaviour` callbacks, more concretely introducing new `fn
+  inject_new_listener` and `fn inject_expired_external_addr` and have `fn
+  inject_{new,expired}_listen_addr` provide a `ListenerId` [PR
+  2011](https://github.com/libp2p/rust-libp2p/pull/2011).
 
 # 0.28.0 [2021-03-17]
 
