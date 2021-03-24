@@ -37,7 +37,7 @@ use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::{ConnectionId, ListenerId}};
 use libp2p_swarm::{
     DialPeerCondition,
     NetworkBehaviour,
@@ -1888,11 +1888,11 @@ where
         };
     }
 
-    fn inject_new_listen_addr(&mut self, addr: &Multiaddr) {
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
         self.local_addrs.insert(addr.clone());
     }
 
-    fn inject_expired_listen_addr(&mut self, addr: &Multiaddr) {
+    fn inject_expired_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
         self.local_addrs.remove(addr);
     }
 
