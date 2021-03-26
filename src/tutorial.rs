@@ -62,7 +62,7 @@
 //! derived from the public key.
 //!
 //! ```rust
-//! use crate::{identity, PeerId};
+//! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
@@ -103,7 +103,7 @@
 //!
 //! ```rust
 //! use futures::executor::block_on;
-//! use crate::{identity, PeerId};
+//! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
@@ -111,7 +111,7 @@
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(crate::development_transport(local_key))?;
+//!     let transport = block_on(libp2p::development_transport(local_key))?;
 //!
 //!     Ok(())
 //! }
@@ -143,8 +143,8 @@
 //!
 //! ```rust
 //! use futures::executor::block_on;
-//! use crate::{identity, PeerId};
-//! use crate::ping::{Ping, PingConfig};
+//! use libp2p::{identity, PeerId};
+//! use libp2p::ping::{Ping, PingConfig};
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
@@ -152,7 +152,7 @@
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(crate::development_transport(local_key))?;
+//!     let transport = block_on(libp2p::development_transport(local_key))?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -176,9 +176,9 @@
 //!
 //! ```rust
 //! use futures::executor::block_on;
-//! use crate::{identity, PeerId};
-//! use crate::ping::{Ping, PingConfig};
-//! use crate::swarm::Swarm;
+//! use libp2p::{identity, PeerId};
+//! use libp2p::ping::{Ping, PingConfig};
+//! use libp2p::swarm::Swarm;
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
@@ -186,7 +186,7 @@
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(crate::development_transport(local_key))?;
+//!     let transport = block_on(libp2p::development_transport(local_key))?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -220,9 +220,9 @@
 //!
 //! ```rust
 //! use futures::executor::block_on;
-//! use crate::{identity, PeerId};
-//! use crate::ping::{Ping, PingConfig};
-//! use crate::swarm::Swarm;
+//! use libp2p::{identity, PeerId};
+//! use libp2p::ping::{Ping, PingConfig};
+//! use libp2p::swarm::Swarm;
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
@@ -230,7 +230,7 @@
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(crate::development_transport(local_key))?;
+//!     let transport = block_on(libp2p::development_transport(local_key))?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -266,9 +266,9 @@
 //! ```no_run
 //! use futures::executor::block_on;
 //! use futures::prelude::*;
-//! use crate::ping::{Ping, PingConfig};
-//! use crate::swarm::Swarm;
-//! use crate::{identity, PeerId};
+//! use libp2p::ping::{Ping, PingConfig};
+//! use libp2p::swarm::Swarm;
+//! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //! use std::task::Poll;
 //!
@@ -277,7 +277,7 @@
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(crate::development_transport(local_key))?;
+//!     let transport = block_on(libp2p::development_transport(local_key))?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
