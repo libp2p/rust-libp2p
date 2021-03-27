@@ -84,6 +84,10 @@ pub struct GenTcpConfig<T> {
     backlog: u32,
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
+    /// `SO_RCV_BUF` to set the receive buffer size.
+    recv_buffer_size: Option<usize>,
+    /// `SO_SNDBUF` to set the send buffer size.
+    send_buffer_size: Option<usize>,
 }
 
 type Port = u16;
@@ -180,6 +184,8 @@ where
             nodelay: None,
             backlog: 1024,
             port_reuse: PortReuse::Disabled,
+            send_buffer_size: None,
+            recv_buffer_size: None,
             _impl: std::marker::PhantomData,
         }
     }
@@ -199,6 +205,18 @@ where
     /// Configures the listen backlog for new listen sockets.
     pub fn listen_backlog(mut self, backlog: u32) -> Self {
         self.backlog = backlog;
+        self
+    }
+
+    /// Configures the receive buffer size.
+    pub fn recv_buffer_size(mut self, size: usize) -> Self {
+        self.recv_buffer_size = Some(size);
+        self
+    }
+
+    /// Configures the send buffer size.
+    pub fn send_buffer_size(mut self, size: usize) -> Self {
+        self.send_buffer_size = Some(size);
         self
     }
 
@@ -326,6 +344,16 @@ where
         }
         if let Some(nodelay) = self.nodelay {
             socket.set_nodelay(nodelay)?;
+        }
+        if let Some(size) = self.send_buffer_size {
+            socket.set_send_buffer_size(size)?;
+            let actual = socket.send_buffer_size()?;
+            log::debug!("send_buffer_size: {} (requested {})", actual, size);
+        }
+        if let Some(size) = self.recv_buffer_size {
+            socket.set_recv_buffer_size(size)?;
+            let actual = socket.recv_buffer_size()?;
+            log::debug!("recv_buffer_size: {} (requested {})", actual, size);
         }
         socket.set_reuse_address(true)?;
         #[cfg(unix)]
