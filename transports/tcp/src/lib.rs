@@ -86,7 +86,7 @@ pub struct GenTcpConfig<T> {
     port_reuse: PortReuse,
     /// `SO_RCV_BUF` to set the receive buffer size, or `None` to keep the default.
     recv_buffer_size: Option<usize>,
-    /// `SO_SNDBUF` to set the send buffer size.
+    /// `SO_SNDBUF` to set the send buffer size, or `None` to keep the default.
     send_buffer_size: Option<usize>,
 }
 
