@@ -24,8 +24,8 @@
 //! Rust libp2p implementation. People new to Rust likely want to get started on
 //! [Rust](https://www.rust-lang.org/) itself, before diving into all the
 //! networking fun. This library makes heavy use of asynchronous Rust. In case
-//! you are not familiar with the concepts the Rust
-//! [async-book](https://rust-lang.github.io/async-book/) should proof useful.
+//! you are not familiar with these concepts the Rust
+//! [async-book](https://rust-lang.github.io/async-book/) should prove useful.
 //! People new to libp2p might prefer to get a general overview at libp2p.io
 //! first, though libp2p knowledge is not required for this tutorial.
 //!
@@ -38,7 +38,7 @@
 //!
 //! 1. Creating a new crate: `cargo init rust-libp2p-tutorial`
 //!
-//! 2. And adding `libp2p` as well as `futures` as a dependency in the
+//! 2. Adding `libp2p` as well as `futures` as a dependency in the
 //!    `Cargo.toml` file:
 //!
 //!    ```yaml
@@ -76,30 +76,22 @@
 //!
 //! You can already run the code above via `cargo run` which should print a
 //! different [`PeerId`](crate::PeerId) each time, given that we randomly
-//! generate the public private key pair.
+//! generate the key pair.
 //!
 //! ## Transport
 //!
-//! Next up we need to construct a transport, after all we want to send some
-//! bytes from A to B. What exactly is a transport in the rust-libp2p world you
-//! may ask? The correct answer would be anything that implements the
-//! [`Transport`] trait. The more beginner friendly answer is any implementation
-//! of transport protocols which offer connection-oriented communication
-//! channels (e.g. TCP) as well as upgrades on top of those transports like
-//! authentication and encryption protocols.
+//! Next up we need to construct a transport. After all, we want to send some
+//! bytes from A to B. A transport in libp2p provides connection-oriented communication
+//! channels (e.g. TCP) as well as upgrades on top of those like authentication and encryption
+//! protocols. Technically, a libp2p transport is anything that implements the [`Transport`] trait.
 //!
-//! Instead of going through the many options out there combining different
-//! transport protocols and wrapping them with some authentication mechanism,
-//! let's just use the convenience function
-//! [`development_transport`](crate::development_transport) for now. It will
-//! provide us with a basic transport on top of TCP, using
-//! [`noise`](crate::noise) as an authentication mechanism.
+//! Instead of constructing a transport ourselves for this tutorial, we use the convenience
+//! function [`development_transport`](crate::development_transport) that creates a TCP
+//! transport with [`noise`](crate::noise) for authenticated encryption.
 //!
-//! Note, one thing that I have postponed thus far, [`development_transport`]
-//! will not only give us an authenticated transport, but an authenticated
-//! multiplexed transport, thus allowing us to send multiple independent streams
-//! of data on a single underlying (TCP) connection. If you want to learn more,
-//! take a look at [`crate::core::muxing`] and [`yamux`](crate::yamux).
+//! Furthermore, [`development_transport`] builds a multiplexed transport, whereby multiple
+//! logical substreams can coexist on the same underlying (TCP) connection. For further details
+//! on substream multiplexing, take a look at [`crate::core::muxing`] and [`yamux`](crate::yamux).
 //!
 //! ```rust
 //! use futures::executor::block_on;
@@ -124,15 +116,15 @@
 //! defines _how_ to send bytes on the network, a [`NetworkBehaviour`] defines
 //! _what_ bytes to send on the network.
 //!
-//! To make this more concrete let's take a look at a simple implementor of the
+//! To make this more concrete, let's take a look at a simple implementation of the
 //! [`NetworkBehaviour`] trait - the [`Ping`](crate::ping::Ping)
 //! [`NetworkBehaviour`]. As you might have guessed, similar to the good old
 //! `ping` network tool, libp2p [`Ping`](crate::ping::Ping) sends a ping to a
-//! remote, expecting the remote to respond with a pong. The
+//! remote and expects to receive a pong in turn. The
 //! [`Ping`](crate::ping::Ping) [`NetworkBehaviour`] does not care _how_ the
-//! ping or pong messages are send on the network, whether they are send via
+//! ping or pong messages are send on the network, whether they are sent via
 //! TCP, whether they are encrypted via [noise](crate::noise) or just in
-//! [plaintext](crate::plaintext). It only cares about _what_ messages are send
+//! [plaintext](crate::plaintext). It only cares about _what_ messages are sent
 //! on the network.
 //!
 //! The two traits [`Transport`] and [`NetworkBehaviour`] allow us to cleanly
@@ -169,7 +161,7 @@
 //!
 //! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we need
 //! something that connects the two, allowing both to make progress. This job is
-//! carried out by a [`Swarm`]. Simply speaking a [`Swarm`] drives both a
+//! carried out by a [`Swarm`]. Put simply, a [`Swarm`] drives both a
 //! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the
 //! [`NetworkBehaviour`] to the [`Transport`] as well as events from the
 //! [`Transport`] to the [`NetworkBehaviour`].
@@ -204,7 +196,7 @@
 //! ## Multiaddr
 //!
 //! With the [`Swarm`] in place, we are all set to listen for incoming
-//! connections. We only need to pass an address to the [`Swarm`], just like
+//! connections. We only need to pass an address to the [`Swarm`], just like for
 //! [`std::net::TcpListener::bind`]. But instead of passing an IP address, we
 //! pass a [`Multiaddr`] which is yet another core concept of libp2p worth
 //! taking a look at.
@@ -323,7 +315,7 @@
 //!
 //! ## Running two nodes
 //!
-//! For convenience the example build above is also implemented in full in
+//! For convenience the example created above is also implemented in full in
 //! `examples/ping.rs`. Thus, you can either run the commands below from your
 //! own project created during the tutorial, or from the root of the rust-libp2p
 //! repository. Note that in the former case you need to ignore the `--example
