@@ -23,8 +23,9 @@
 //! To learn more about the general libp2p multi-language framework visit
 //! [libp2p.io](https://libp2p.io/).
 //!
-//! To get started with this libp2p implementation in Rust, please take a look at the
-//! [`tutorial`](crate::tutorial). Further examples can be found in the [examples] directory.
+//! To get started with this libp2p implementation in Rust, please take a look
+//! at the [`tutorial`](crate::tutorial). Further examples can be found in the
+//! [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
 //! [ping tutorial]: https://github.com/libp2p/rust-libp2p/tree/master/examples/ping.rs

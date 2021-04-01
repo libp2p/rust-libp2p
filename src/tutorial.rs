@@ -81,17 +81,20 @@
 //! ## Transport
 //!
 //! Next up we need to construct a transport. After all, we want to send some
-//! bytes from A to B. A transport in libp2p provides connection-oriented communication
-//! channels (e.g. TCP) as well as upgrades on top of those like authentication and encryption
-//! protocols. Technically, a libp2p transport is anything that implements the [`Transport`] trait.
+//! bytes from A to B. A transport in libp2p provides connection-oriented
+//! communication channels (e.g. TCP) as well as upgrades on top of those like
+//! authentication and encryption protocols. Technically, a libp2p transport is
+//! anything that implements the [`Transport`] trait.
 //!
-//! Instead of constructing a transport ourselves for this tutorial, we use the convenience
-//! function [`development_transport`](crate::development_transport) that creates a TCP
-//! transport with [`noise`](crate::noise) for authenticated encryption.
+//! Instead of constructing a transport ourselves for this tutorial, we use the
+//! convenience function [`development_transport`](crate::development_transport)
+//! that creates a TCP transport with [`noise`](crate::noise) for authenticated
+//! encryption.
 //!
-//! Furthermore, [`development_transport`] builds a multiplexed transport, whereby multiple
-//! logical substreams can coexist on the same underlying (TCP) connection. For further details
-//! on substream multiplexing, take a look at [`crate::core::muxing`] and [`yamux`](crate::yamux).
+//! Furthermore, [`development_transport`] builds a multiplexed transport,
+//! whereby multiple logical substreams can coexist on the same underlying (TCP)
+//! connection. For further details on substream multiplexing, take a look at
+//! [`crate::core::muxing`] and [`yamux`](crate::yamux).
 //!
 //! ```rust
 //! use futures::executor::block_on;
@@ -116,8 +119,8 @@
 //! defines _how_ to send bytes on the network, a [`NetworkBehaviour`] defines
 //! _what_ bytes to send on the network.
 //!
-//! To make this more concrete, let's take a look at a simple implementation of the
-//! [`NetworkBehaviour`] trait - the [`Ping`](crate::ping::Ping)
+//! To make this more concrete, let's take a look at a simple implementation of
+//! the [`NetworkBehaviour`] trait - the [`Ping`](crate::ping::Ping)
 //! [`NetworkBehaviour`]. As you might have guessed, similar to the good old
 //! `ping` network tool, libp2p [`Ping`](crate::ping::Ping) sends a ping to a
 //! remote and expects to receive a pong in turn. The
