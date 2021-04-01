@@ -84,7 +84,7 @@ pub struct GenTcpConfig<T> {
     backlog: u32,
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
-    /// `SO_RCV_BUF` to set the receive buffer size, or `None` to keep the default.
+    /// `SO_RCVBUF` to set the receive buffer size, or `None` to keep the default.
     recv_buffer_size: Option<usize>,
     /// `SO_SNDBUF` to set the send buffer size, or `None` to keep the default.
     send_buffer_size: Option<usize>,
@@ -178,6 +178,8 @@ where
     ///     See [`GenTcpConfig::ttl`].
     ///   * The size of the listen backlog for new listening sockets is `1024`.
     ///     See [`GenTcpConfig::listen_backlog`].
+    ///   * No custom `SO_RCVBUF` is set. The default of the OS TCP stack applies.
+    ///   * No custom `SO_SNDBUF` is set. The default of the OS TCP stack applies.
     pub fn new() -> Self {
         Self {
             ttl: None,
@@ -347,13 +349,17 @@ where
         }
         if let Some(size) = self.send_buffer_size {
             socket.set_send_buffer_size(size)?;
-            let actual = socket.send_buffer_size()?;
-            log::debug!("send_buffer_size: {} (requested {})", actual, size);
+            if log::log_enabled!(log::Level::Debug) {
+                let actual = socket.send_buffer_size()?;
+                log::debug!("send_buffer_size: {} (requested {})", actual, size);
+            }
         }
         if let Some(size) = self.recv_buffer_size {
             socket.set_recv_buffer_size(size)?;
-            let actual = socket.recv_buffer_size()?;
-            log::debug!("recv_buffer_size: {} (requested {})", actual, size);
+            if log::log_enabled!(log::Level::Debug) {
+                let actual = socket.recv_buffer_size()?;
+                log::debug!("recv_buffer_size: {} (requested {})", actual, size);
+            }
         }
         socket.set_reuse_address(true)?;
         #[cfg(unix)]
