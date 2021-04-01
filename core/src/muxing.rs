@@ -52,7 +52,7 @@
 //! implementation of `StreamMuxer` to control everything that happens on the wire.
 
 use fnv::FnvHashMap;
-use futures::{future, prelude::*, task::Context, task::Poll};
+use futures::{future, prelude::*, io::BufReader, task::Context, task::Poll};
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use std::{io, ops::Deref, fmt, pin::Pin, sync::atomic::{AtomicUsize, Ordering}};
@@ -240,7 +240,7 @@ impl<T> StreamMuxerEvent<T> {
 /// object that implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
 pub fn event_from_ref_and_wrap<P>(
     muxer: P,
-) -> impl Future<Output = Result<StreamMuxerEvent<SubstreamRef<P>>, <P::Target as StreamMuxer>::Error>>
+) -> impl Future<Output = Result<StreamMuxerEvent<BufReader<SubstreamRef<P>>>, <P::Target as StreamMuxer>::Error>>
 where
     P: Deref + Clone,
     P::Target: StreamMuxer,
@@ -281,7 +281,7 @@ where
     P: Deref + Clone,
     P::Target: StreamMuxer,
 {
-    type Output = Result<SubstreamRef<P>, <P::Target as StreamMuxer>::Error>;
+    type Output = Result<BufReader<SubstreamRef<P>>, <P::Target as StreamMuxer>::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match Future::poll(Pin::new(&mut self.inner), cx) {
@@ -356,16 +356,18 @@ where
 pub fn substream_from_ref<P>(
     muxer: P,
     substream: <P::Target as StreamMuxer>::Substream,
-) -> SubstreamRef<P>
+) -> BufReader<SubstreamRef<P>>
 where
     P: Deref,
     P::Target: StreamMuxer,
 {
+    BufReader::new(
     SubstreamRef {
         muxer,
         substream: Some(substream),
         shutdown_state: ShutdownState::Shutdown,
     }
+    )
 }
 
 /// Stream returned by `substream_from_ref`.

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::muxing::{StreamMuxer, StreamMuxerEvent, SubstreamRef, substream_from_ref};
+use futures::io::BufReader;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use smallvec::SmallVec;
@@ -74,7 +75,7 @@ pub struct Close<TMuxer> {
 }
 
 /// A successfully opened substream.
-pub type Substream<TMuxer> = SubstreamRef<Arc<TMuxer>>;
+pub type Substream<TMuxer> = BufReader<SubstreamRef<Arc<TMuxer>>>;
 
 /// Event that can happen on the `Muxing`.
 pub enum SubstreamEvent<TMuxer, TUserData>
