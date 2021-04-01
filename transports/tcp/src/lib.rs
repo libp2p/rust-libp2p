@@ -84,7 +84,7 @@ pub struct GenTcpConfig<T> {
     backlog: u32,
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
-    /// `SO_RCV_BUF` to set the receive buffer size.
+    /// `SO_RCV_BUF` to set the receive buffer size, or `None` to keep the default.
     recv_buffer_size: Option<usize>,
     /// `SO_SNDBUF` to set the send buffer size.
     send_buffer_size: Option<usize>,
