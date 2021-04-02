@@ -1,3 +1,8 @@
+# 0.32.0 [unreleased]
+
+- Update to `yamux` `v0.9.0` [PR
+  1960](https://github.com/libp2p/rust-libp2p/pull/1960).
+
 # 0.31.0 [2021-03-17]
 
 - Update `libp2p-core`.
