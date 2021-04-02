@@ -9,7 +9,8 @@
   [PR 1999](https://github.com/libp2p/rust-libp2p/pull/1999)
 
 - Emit `IdentifyEvent::Pushed` event after successfully pushing identification
-  information to peer.
+  information to peer [PR
+  2030](https://github.com/libp2p/rust-libp2p/pull/2030).
 
 # 0.28.0 [2021-03-17]
 
