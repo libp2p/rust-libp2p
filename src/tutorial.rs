@@ -238,7 +238,7 @@
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
-//!     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+//!     Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 //!
 //!     // Dial the peer identified by the multi-address given as the second
 //!     // command-line argument, if any.
@@ -285,13 +285,13 @@
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
-//!     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+//!     Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 //!
 //!     // Dial the peer identified by the multi-address given as the second
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote = addr.parse()?;
-//!         swarm.dial_addr(remote)?;
+//!         Swarm::dial_addr(&mut swarm, remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!
