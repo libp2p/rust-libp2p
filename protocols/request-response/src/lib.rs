@@ -181,6 +181,19 @@ pub enum OutboundFailure {
     UnsupportedProtocols,
 }
 
+impl fmt::Display for OutboundFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OutboundFailure::DialFailure => write!(f, "failed to dial the requested peer"),
+            OutboundFailure::Timeout => write!(f, "timeout while waiting for a response"),
+            OutboundFailure::ConnectionClosed => write!(f, "connection was closed before a response was received"),
+            OutboundFailure::UnsupportedProtocols => write!(f, "the remote supports none of the requested protocols")
+        }
+    }
+}
+
+impl std::error::Error for OutboundFailure {}
+
 /// Possible failures occurring in the context of receiving an
 /// inbound request and sending a response.
 #[derive(Debug, Clone, PartialEq)]
@@ -200,6 +213,19 @@ pub enum InboundFailure {
     /// being passed to [`RequestResponse::send_response`].
     ResponseOmission,
 }
+
+impl fmt::Display for InboundFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InboundFailure::Timeout => write!(f, "timeout while receiving request or sending response"),
+            InboundFailure::ConnectionClosed => write!(f, "connection was closed before a response could be sent"),
+            InboundFailure::UnsupportedProtocols => write!(f, "the local peer supports none of the protocols requested by the remote"),
+            InboundFailure::ResponseOmission => write!(f, "the response channel was dropped without sending a response to the remote")
+        }
+    }
+}
+
+impl std::error::Error for InboundFailure {}
 
 /// A channel for sending a response to an inbound request.
 ///
