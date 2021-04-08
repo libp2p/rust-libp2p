@@ -184,10 +184,10 @@ pub enum OutboundFailure {
 impl fmt::Display for OutboundFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OutboundFailure::DialFailure => write!(f, "failed to dial the requested peer"),
-            OutboundFailure::Timeout => write!(f, "timeout while waiting for a response"),
-            OutboundFailure::ConnectionClosed => write!(f, "connection was closed before a response was received"),
-            OutboundFailure::UnsupportedProtocols => write!(f, "the remote supports none of the requested protocols")
+            OutboundFailure::DialFailure => write!(f, "Failed to dial the requested peer"),
+            OutboundFailure::Timeout => write!(f, "Timeout while waiting for a response"),
+            OutboundFailure::ConnectionClosed => write!(f, "Connection was closed before a response was received"),
+            OutboundFailure::UnsupportedProtocols => write!(f, "The remote supports none of the requested protocols")
         }
     }
 }
@@ -217,10 +217,10 @@ pub enum InboundFailure {
 impl fmt::Display for InboundFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InboundFailure::Timeout => write!(f, "timeout while receiving request or sending response"),
-            InboundFailure::ConnectionClosed => write!(f, "connection was closed before a response could be sent"),
-            InboundFailure::UnsupportedProtocols => write!(f, "the local peer supports none of the protocols requested by the remote"),
-            InboundFailure::ResponseOmission => write!(f, "the response channel was dropped without sending a response to the remote")
+            InboundFailure::Timeout => write!(f, "Timeout while receiving request or sending response"),
+            InboundFailure::ConnectionClosed => write!(f, "Connection was closed before a response could be sent"),
+            InboundFailure::UnsupportedProtocols => write!(f, "The local peer supports none of the protocols requested by the remote"),
+            InboundFailure::ResponseOmission => write!(f, "The response channel was dropped without sending a response to the remote")
         }
     }
 }
