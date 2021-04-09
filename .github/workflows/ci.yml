@@ -63,7 +63,7 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        target: wasm32-wasmi
+        target: wasm32-wasi
 
     - name: Install a recent version of clang
       run: |
