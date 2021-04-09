@@ -100,6 +100,7 @@ env_logger = "0.8.1"
 tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
+resolver = "2"
 members = [
     "core",
     "misc/multiaddr",
