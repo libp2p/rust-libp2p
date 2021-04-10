@@ -266,6 +266,13 @@ impl NetworkBehaviour for Identify {
                         score: AddressScore::Finite(1),
                     });
             }
+            IdentifyHandlerEvent::IdentificationPushed => {
+                self.events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        IdentifyEvent::Pushed {
+                            peer_id,
+                        }));
+            }
             IdentifyHandlerEvent::Identify(sender) => {
                 let observed = self.connected.get(&peer_id)
                     .and_then(|addrs| addrs.get(&connection))
@@ -390,15 +397,22 @@ impl NetworkBehaviour for Identify {
 /// Event emitted  by the `Identify` behaviour.
 #[derive(Debug)]
 pub enum IdentifyEvent {
-    /// Identifying information has been received from a peer.
+    /// Identification information has been received from a peer.
     Received {
         /// The peer that has been identified.
         peer_id: PeerId,
         /// The information provided by the peer.
         info: IdentifyInfo,
     },
-    /// Identifying information of the local node has been sent to a peer.
+    /// Identification information of the local node has been sent to a peer in
+    /// response to an identification request.
     Sent {
+        /// The peer that the information has been sent to.
+        peer_id: PeerId,
+    },
+    /// Identification information of the local node has been actively pushed to
+    /// a peer.
+    Pushed {
         /// The peer that the information has been sent to.
         peer_id: PeerId,
     },
