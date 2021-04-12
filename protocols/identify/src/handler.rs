@@ -79,6 +79,8 @@ pub struct IdentifyHandler {
 pub enum IdentifyHandlerEvent {
     /// We obtained identification information from the remote.
     Identified(IdentifyInfo),
+    /// We actively pushed our identification information to the remote.
+    IdentificationPushed,
     /// We received a request for identification.
     Identify(ReplySubstream<NegotiatedSubstream>),
     /// Failed to identify the remote.
@@ -149,7 +151,8 @@ impl ProtocolsHandler for IdentifyHandler {
                         IdentifyHandlerEvent::Identified(remote_info)));
                 self.keep_alive = KeepAlive::No;
             }
-            EitherOutput::Second(()) => {}
+            EitherOutput::Second(()) => self.events.push(
+                    ProtocolsHandlerEvent::Custom(IdentifyHandlerEvent::IdentificationPushed))
         }
     }
 

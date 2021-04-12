@@ -4992,7 +4992,7 @@ mod tests {
         struct Pointers {
             slow_counter: u32,
             fast_counter: u32,
-        };
+        }
 
         let mut counters = Pointers {
             slow_counter: 0,
