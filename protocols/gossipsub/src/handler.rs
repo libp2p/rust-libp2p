@@ -22,9 +22,9 @@ use crate::config::ValidationMode;
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
+use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
-use asynchronous_codec::Framed;
 use libp2p_core::upgrade::{InboundUpgrade, NegotiationError, OutboundUpgrade, UpgradeError};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -200,6 +200,9 @@ impl ProtocolsHandler for GossipsubHandler {
 
         self.inbound_substreams_created += 1;
 
+        // Inbound substream is live set the keep alive
+        self.keep_alive = KeepAlive::Yes;
+
         // update the known kind of peer
         if self.peer_kind.is_none() {
             self.peer_kind = Some(peer_kind);
@@ -222,6 +225,9 @@ impl ProtocolsHandler for GossipsubHandler {
 
         self.outbound_substream_establishing = false;
         self.outbound_substreams_created += 1;
+
+        // Outbound substream is live set the keep alive
+        self.keep_alive = KeepAlive::Yes;
 
         // update the known kind of peer
         if self.peer_kind.is_none() {
