@@ -55,6 +55,7 @@
     - `libp2p-request-response`
     - `libp2p-swarm`
     - `libp2p-wasm-ext`
+    - `libp2p-yamux`
     
 - Drop support for `wasm32-unknown-unknown` in favor of
   `wasm32-unknown-emscripten` and `wasm32-wasi` [PR
