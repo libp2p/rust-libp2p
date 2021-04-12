@@ -56,11 +56,18 @@ jobs:
 
     - uses: actions/checkout@v2
 
-    - name: Install Rust
+    - name: Install Rust wasm32-unknown-emscripten
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        target: wasm32-unknown-unknown
+        target: wasm32-unknown-emscripten
+        override: true
+
+    - name: Install Rust wasm32-wasi
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: wasm32-wasi
         override: true
 
     - name: Install a recent version of clang
@@ -85,10 +92,15 @@ jobs:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
-    - name: Build on WASM
+    - name: Build on wasm32-unknown-emscripten
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=wasm32-unknown-unknown
+      run: cargo build --target=wasm32-unknown-emscripten
+
+    - name: Build on wasm32-wasi
+      # TODO: also run `cargo test`
+      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
+      run: cargo build --target=wasm32-wasi
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
