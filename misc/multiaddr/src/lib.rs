@@ -357,7 +357,7 @@ impl<'de> Deserialize<'de> for Multiaddr {
     where
         D: Deserializer<'de>,
     {
-        struct Visitor { is_human_readable: bool };
+        struct Visitor { is_human_readable: bool }
 
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = Multiaddr;
