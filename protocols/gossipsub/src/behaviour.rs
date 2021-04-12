@@ -2632,7 +2632,7 @@ where
                     rpc_list.push(new_rpc.clone());
                 }
             };
-        };
+        }
 
         macro_rules! add_item {
             ($object: ident, $type: ident ) => {

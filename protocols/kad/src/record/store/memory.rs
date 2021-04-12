@@ -44,6 +44,7 @@ pub struct MemoryStore {
 }
 
 /// Configuration for a `MemoryStore`.
+#[derive(Debug)]
 pub struct MemoryStoreConfig {
     /// The maximum number of records.
     pub max_records: usize,
