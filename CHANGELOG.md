@@ -55,6 +55,10 @@
     - `libp2p-request-response`
     - `libp2p-swarm`
     - `libp2p-wasm-ext`
+    
+- Drop support for `wasm32-unknown-unknown` in favor of
+  `wasm32-unknown-emscripten` and `wasm32-wasi` [PR
+  2038](https://github.com/libp2p/rust-libp2p/pull/2038).
 
 ## Version 0.36.0 [2021-03-17]
 
