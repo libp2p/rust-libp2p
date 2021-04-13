@@ -1,3 +1,10 @@
+# 0.23.0 [2021-04-14]
+
+- Extend `NetworkBehaviour` callbacks, more concretely introducing new `fn
+  inject_new_listener` and `fn inject_expired_external_addr` and have `fn
+  inject_{new,expired}_listen_addr` provide a `ListenerId` [PR
+  2011](https://github.com/libp2p/rust-libp2p/pull/2011).
+
 # 0.22.0 [2021-02-15]
 
 - Rename the crate to `libp2p-swarm-derive`.
