@@ -1,4 +1,4 @@
-# 0.30.0 [unreleased]
+# 0.30.0 [2021-04-13]
 
 - Derive `Debug` and `Clone` for `MdnsConfig`.
 

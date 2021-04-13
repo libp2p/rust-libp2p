@@ -1,4 +1,4 @@
-# 0.29.0 [unreleased]
+# 0.29.0 [2021-04-13]
 
 - Add support for configurable automatic push to connected peers
   on listen addr changes. Disabled by default.

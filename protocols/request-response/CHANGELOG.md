@@ -1,4 +1,4 @@
-# 0.11.0 [unreleased]
+# 0.11.0 [2021-04-13]
 
 - Update `libp2p-swarm`.
 - Implement `std::error::Error` for `InboundFailure` and `OutboundFailure` [PR

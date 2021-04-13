@@ -1,4 +1,4 @@
-# 0.2.0 [unreleased]
+# 0.2.0 [2021-04-13]
 
 - Update `libp2p-swarm`.
 
