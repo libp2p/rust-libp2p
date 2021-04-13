@@ -1,4 +1,4 @@
-# 0.29.0 [unreleased]
+# 0.29.0 [2021-04-13]
 
 - Remove `Deref` and `DerefMut` implementations previously dereferencing to the
   `NetworkBehaviour` on `Swarm`. Instead one can access the `NetworkBehaviour`
