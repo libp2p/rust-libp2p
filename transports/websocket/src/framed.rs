@@ -483,7 +483,8 @@ impl IncomingData {
             IncomingData::Text(d) => d,
             IncomingData::Pong(d) => d,
             IncomingData::Closed(reason) => {
-                let bytes = reason.code.to_le_bytes();
+                // TODO: Figure out what makes sense here.
+                let bytes = reason.code.to_be_bytes();
                 bytes.to_vec()
             }
         }
@@ -496,6 +497,7 @@ impl AsRef<[u8]> for IncomingData {
             IncomingData::Binary(d) => d,
             IncomingData::Text(d) => d,
             IncomingData::Pong(d) => d,
+            // TODO: Figure out what makes sense here.
             IncomingData::Closed(_) => unimplemented!(),
         }
     }
@@ -548,7 +550,6 @@ where
             Ok(sender)
         });
         let stream = stream::unfold((Vec::new(), receiver), |(mut data, mut receiver)| async {
-            trace!(target: "dp", "Am I even in the right spot here???");
             match receiver.receive(&mut data).await {
                 Ok(soketto::Incoming::Data(soketto::Data::Text(_))) => {
                     Some((Ok(IncomingData::Text(mem::take(&mut data))), (data, receiver)))
@@ -560,7 +561,6 @@ where
                     Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
                 }
                 Ok(soketto::Incoming::Closed(reason)) => {
-                    trace!("Closed because: {:?}", reason);
                     Some((Ok(IncomingData::Closed(reason)), (data, receiver)))
                 }
                 Err(e) => {
@@ -600,10 +600,7 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));
         let item = item.map(|result| {
-            result.map_err(|e| {
-                trace!("[poll_next] map_err");
-                io::Error::new(io::ErrorKind::Other, e)
-            })
+            result.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
         });
         Poll::Ready(item)
     }
@@ -618,36 +615,24 @@ where
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_ready(cx)
-            .map_err(|e| {
-                trace!("[poll_ready] Error: {:?}", e);
-                io::Error::new(io::ErrorKind::Other, e)
-            })
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: OutgoingData) -> io::Result<()> {
         Pin::new(&mut self.sender)
             .start_send(item)
-            .map_err(|e| {
-                trace!("[start_send] Error: {:?}", e);
-                io::Error::new(io::ErrorKind::Other, e)
-            })
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_flush(cx)
-            .map_err(|e| {
-                trace!("[poll_flush] Error: {:?}", e);
-                io::Error::new(io::ErrorKind::Other, e)
-            })
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_close(cx)
-            .map_err(|e| {
-                trace!("[poll_close] Error: {:?}", e);
-                io::Error::new(io::ErrorKind::Other, e)
-            })
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
