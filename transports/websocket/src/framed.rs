@@ -477,13 +477,16 @@ impl IncomingData {
         if let IncomingData::Pong(_) = self { true } else { false }
     }
 
+    pub fn is_close(&self) -> bool {
+        if let IncomingData::Closed(_) = self { true } else { false }
+    }
+
     pub fn into_bytes(self) -> Vec<u8> {
         match self {
             IncomingData::Binary(d) => d,
             IncomingData::Text(d) => d,
             IncomingData::Pong(d) => d,
             IncomingData::Closed(reason) => {
-                // TODO: Figure out what makes sense here.
                 let bytes = reason.code.to_be_bytes();
                 bytes.to_vec()
             }
@@ -563,9 +566,7 @@ where
                 Ok(soketto::Incoming::Closed(reason)) => {
                     Some((Ok(IncomingData::Closed(reason)), (data, receiver)))
                 }
-                Err(e) => {
-                    Some((Err(e), (data, receiver)))
-                }
+                Err(e) => Some((Err(e), (data, receiver)))
             }
         });
         Connection {
