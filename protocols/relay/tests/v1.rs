@@ -34,7 +34,7 @@ use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::{Relay, RelayConfig};
+use libp2p_relay::v1::{new_transport_and_behaviour, Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
@@ -73,7 +73,9 @@ fn src_connect_to_dst_listening_via_relay() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    dst_swarm.listen_on(dst_listen_addr_via_relay.clone()).unwrap();
+    dst_swarm
+        .listen_on(dst_listen_addr_via_relay.clone())
+        .unwrap();
 
     pool.run_until(async {
         // Destination Node dialing Relay.
@@ -381,9 +383,9 @@ fn src_try_connect_to_offline_dst() {
 
         loop {
             match src_swarm.next_event().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
+                SwarmEvent::UnreachableAddr {
+                    address, peer_id, ..
+                } if address == dst_addr_via_relay => {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
@@ -438,9 +440,9 @@ fn src_try_connect_to_unsupported_dst() {
 
         loop {
             match src_swarm.next_event().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
+                SwarmEvent::UnreachableAddr {
+                    address, peer_id, ..
+                } if address == dst_addr_via_relay => {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
@@ -488,10 +490,11 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
 
         // Source Node fail to reach Destination Node due to failure reaching Relay.
         match src_swarm.next_event().await {
-            SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                if address == dst_addr_via_relay => {
-                    assert_eq!(peer_id, dst_peer_id);
-                }
+            SwarmEvent::UnreachableAddr {
+                address, peer_id, ..
+            } if address == dst_addr_via_relay => {
+                assert_eq!(peer_id, dst_peer_id);
+            }
             e => panic!("{:?}", e),
         }
     });
@@ -904,8 +907,12 @@ fn yield_incoming_connection_through_correct_listener() {
     relay_3_swarm.listen_on(relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
-    dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
+    dst_swarm
+        .listen_on(relay_1_addr_incl_circuit.clone())
+        .unwrap();
+    dst_swarm
+        .listen_on(relay_2_addr_incl_circuit.clone())
+        .unwrap();
     // Listen on own address in order for relay 3 to be able to connect to destination node.
     dst_swarm.listen_on(dst_addr.clone()).unwrap();
 
@@ -1014,9 +1021,9 @@ fn yield_incoming_connection_through_correct_listener() {
         }
 
         match src_3_swarm.next_event().boxed().poll_unpin(cx) {
-            Poll::Ready(SwarmEvent::UnreachableAddr { address, peer_id, .. })
-                if address == dst_addr_via_relay_3 =>
-            {
+            Poll::Ready(SwarmEvent::UnreachableAddr {
+                address, peer_id, ..
+            }) if address == dst_addr_via_relay_3 => {
                 assert_eq!(peer_id, dst_peer_id);
                 return Poll::Ready(());
             }
@@ -1219,7 +1226,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
         Reachability::Routable => EitherTransport::Right(transport),
     };
 
-    let (transport, relay_behaviour) = libp2p_relay::new_transport_and_behaviour(
+    let (transport, relay_behaviour) = new_transport_and_behaviour(
         RelayConfig {
             actively_connect_to_dst_nodes: relay_mode.into(),
             ..Default::default()
@@ -1261,7 +1268,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
     let transport = MemoryTransport::default();
 
     let (transport, relay_behaviour) =
-        libp2p_relay::new_transport_and_behaviour(RelayConfig::default(), transport);
+        new_transport_and_behaviour(RelayConfig::default(), transport);
 
     let transport = transport
         .upgrade(upgrade::Version::V1)

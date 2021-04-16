@@ -1,4 +1,4 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
+// Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,15 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod message_proto_v2 {
+mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
 }
 
-pub mod v1;
-pub mod v2;
+mod behaviour;
+mod copy_future;
+mod handler;
+mod protocol;
 
-
-// Check that we can safely cast a `usize` to a `u64`.
-static_assertions::const_assert! {
-    std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
-}
+pub use behaviour::{Relay, RelayEvent};

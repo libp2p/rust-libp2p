@@ -1,4 +1,4 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
+// Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,15 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod message_proto_v2 {
-    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
-}
+pub mod inbound_hop;
+pub mod outbound_stop;
 
-pub mod v1;
-pub mod v2;
+const HOP_PROTOCOL_NAME: &[u8; 31] = b"/libp2p/circuit/relay/0.2.0/hop";
+const STOP_PROTOCOL_NAME: &[u8; 32] = b"/libp2p/circuit/relay/0.2.0/stop";
 
-
-// Check that we can safely cast a `usize` to a `u64`.
-static_assertions::const_assert! {
-    std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
-}
+const MAX_MESSAGE_SIZE: usize = 4096;
