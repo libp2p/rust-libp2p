@@ -456,7 +456,7 @@ pub enum IncomingData {
     Text(Vec<u8>),
     /// PONG control frame data.
     Pong(Vec<u8>),
-    /// Close reason
+    /// Close reason.
     Closed(CloseReason),
 }
 
@@ -486,9 +486,8 @@ impl IncomingData {
             IncomingData::Binary(d) => d,
             IncomingData::Text(d) => d,
             IncomingData::Pong(d) => d,
-            IncomingData::Closed(reason) => {
-                let bytes = reason.code.to_be_bytes();
-                bytes.to_vec()
+            IncomingData::Closed(CloseReason { code, ..}) => {
+                code.to_be_bytes().to_vec()
             }
         }
     }
@@ -500,7 +499,6 @@ impl AsRef<[u8]> for IncomingData {
             IncomingData::Binary(d) => d,
             IncomingData::Text(d) => d,
             IncomingData::Pong(d) => d,
-            // TODO: Figure out what makes sense here.
             IncomingData::Closed(_) => unimplemented!(),
         }
     }
