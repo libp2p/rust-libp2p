@@ -27,6 +27,7 @@ use lazy_static::lazy_static;
 use libp2p_core::{
     address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
 };
+use libp2p_core::connection::ListenerId;
 use libp2p_swarm::{
     protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters, ProtocolsHandler,
@@ -267,6 +268,10 @@ impl NetworkBehaviour for Mdns {
         ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         void::unreachable(ev)
+    }
+
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
+        self.send_buffer.push_back(build_query());
     }
 
     fn poll(
