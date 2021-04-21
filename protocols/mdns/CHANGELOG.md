@@ -1,3 +1,7 @@
+# 0.30.1 [2021-04-21]
+
+- Fix timely discovery of peers after listening on a new address.
+
 # 0.30.0 [2021-04-13]
 
 - Derive `Debug` and `Clone` for `MdnsConfig`.
