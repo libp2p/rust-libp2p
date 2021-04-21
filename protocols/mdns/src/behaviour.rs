@@ -22,12 +22,11 @@ use crate::dns::{build_query, build_query_response, build_service_discovery_resp
 use crate::query::MdnsPacket;
 use async_io::{Async, Timer};
 use futures::prelude::*;
-use if_watch::{IfEvent, IfWatcher};
 use lazy_static::lazy_static;
+use libp2p_core::connection::ListenerId;
 use libp2p_core::{
     address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
 };
-use libp2p_core::connection::ListenerId;
 use libp2p_swarm::{
     protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters, ProtocolsHandler,
@@ -38,7 +37,7 @@ use std::{
     cmp,
     collections::VecDeque,
     fmt, io, iter,
-    net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
+    net::{Ipv4Addr, SocketAddr, UdpSocket},
     pin::Pin,
     task::Context,
     task::Poll,
@@ -82,9 +81,6 @@ pub struct Mdns {
     /// Query socket for making queries.
     send_socket: Async<UdpSocket>,
 
-    /// Iface watcher.
-    if_watch: IfWatcher,
-
     /// Buffer used for receiving data from the main socket.
     /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
     /// bytes, if it can be ensured that all participating devices can handle such large packets.
@@ -122,13 +118,9 @@ pub struct Mdns {
 
 impl Mdns {
     /// Builds a new `Mdns` behaviour.
-    pub async fn new(config: MdnsConfig) -> io::Result<Self> {
+    pub fn new(config: MdnsConfig) -> io::Result<Self> {
         let recv_socket = {
-            let socket = Socket::new(
-                Domain::IPV4,
-                Type::DGRAM,
-                Some(socket2::Protocol::UDP),
-            )?;
+            let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
             socket.set_reuse_address(true)?;
             #[cfg(unix)]
             socket.set_reuse_port(true)?;
@@ -142,11 +134,9 @@ impl Mdns {
             let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
             Async::new(socket)?
         };
-        let if_watch = if_watch::IfWatcher::new().await?;
         Ok(Self {
             recv_socket,
             send_socket,
-            if_watch,
             recv_buffer: [0; 4096],
             send_buffer: Default::default(),
             discovered_nodes: SmallVec::new(),
@@ -270,8 +260,31 @@ impl NetworkBehaviour for Mdns {
         void::unreachable(ev)
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        self.send_buffer.push_back(build_query());
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
+        if let Some(Protocol::Ip4(addr)) = addr.iter().next() {
+            if !addr.is_loopback() {
+                let multicast = From::from([224, 0, 0, 251]);
+                let socket = self.recv_socket.get_ref();
+                log::trace!("joining multicast on iface {}", addr);
+                if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
+                    log::error!("join multicast failed: {}", err);
+                }
+            }
+            self.send_buffer.push_back(build_query());
+        }
+    }
+
+    fn inject_expired_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
+        if let Some(Protocol::Ip4(addr)) = addr.iter().next() {
+            if !addr.is_loopback() {
+                let multicast = From::from([224, 0, 0, 251]);
+                let socket = self.recv_socket.get_ref();
+                log::trace!("leaving multicast on iface {}", addr);
+                if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
+                    log::error!("leave multicast failed: {}", err);
+                }
+            }
+        }
     }
 
     fn poll(
@@ -284,37 +297,6 @@ impl NetworkBehaviour for Mdns {
             Self::OutEvent,
         >,
     > {
-        while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
-            let multicast = From::from([224, 0, 0, 251]);
-            let socket = self.recv_socket.get_ref();
-            match event {
-                Ok(IfEvent::Up(inet)) => {
-                    if inet.addr().is_loopback() {
-                        continue;
-                    }
-                    if let IpAddr::V4(addr) = inet.addr() {
-                        log::trace!("joining multicast on iface {}", addr);
-                        if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
-                            log::error!("join multicast failed: {}", err);
-                        } else {
-                            self.send_buffer.push_back(build_query());
-                        }
-                    }
-                }
-                Ok(IfEvent::Down(inet)) => {
-                    if inet.addr().is_loopback() {
-                        continue;
-                    }
-                    if let IpAddr::V4(addr) = inet.addr() {
-                        log::trace!("leaving multicast on iface {}", addr);
-                        if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
-                            log::error!("leave multicast failed: {}", err);
-                        }
-                    }
-                }
-                Err(err) => log::error!("if watch returned an error: {}", err),
-            }
-        }
         // Poll receive socket.
         while self.recv_socket.poll_readable(cx).is_ready() {
             match self
