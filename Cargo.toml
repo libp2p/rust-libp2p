@@ -24,6 +24,7 @@ default = [
     "plaintext",
     "pnet",
     "relay",
+    "regex-filter",
     "request-response",
     "secp256k1",
     "tcp-async-io",
@@ -39,6 +40,7 @@ floodsub = ["libp2p-floodsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
 gossipsub = ["libp2p-gossipsub"]
+regex-filter = ["libp2p-gossipsub/regex-filter"]
 mdns = ["libp2p-mdns"]
 mplex = ["libp2p-mplex"]
 noise = ["libp2p-noise"]

@@ -26,7 +26,7 @@ base64 = "0.13.0"
 smallvec = "1.6.1"
 prost = "0.7"
 hex_fmt = "0.3.0"
-regex = "1.4.0"
+regex = { version = "1.4.0", optional = true }
 
 [dev-dependencies]
 async-std = "1.6.3"
@@ -41,3 +41,6 @@ derive_builder = "0.10.0"
 
 [build-dependencies]
 prost-build = "0.7"
+
+[features]
+regex-filter = ["regex"]
