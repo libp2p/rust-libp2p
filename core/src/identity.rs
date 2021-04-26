@@ -208,7 +208,7 @@ impl PublicKey {
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
-                Err("Unsupported".to_string().into())
+                Err(DecodingError::new("Unsupported"))
             }
         }
     }
