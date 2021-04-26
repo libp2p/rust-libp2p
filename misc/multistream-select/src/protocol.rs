@@ -42,6 +42,7 @@ const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
 const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
+const MSG_IAMCLIENT: &[u8] = b"iamclient\n";
 
 /// The multistream-select header lines preceeding negotiation.
 ///
@@ -169,6 +170,13 @@ impl Message {
 
         if msg == MSG_LS {
             return Ok(Message::ListProtocols)
+        }
+
+        // TODO: This is a hack for now.
+        //
+        // See https://github.com/libp2p/specs/pull/196#discussion_r615846605 for details.
+        if msg == MSG_IAMCLIENT {
+            return Ok(Message::Protocol(Protocol("iamclient".into())))
         }
 
         // If it starts with a `/`, ends with a line feed without any
