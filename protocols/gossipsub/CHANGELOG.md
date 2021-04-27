@@ -1,3 +1,8 @@
+# 0.30.1 [2021-04-27]
+
+- Remove `regex-filter` feature flag thus always enabling `regex::RegexSubscriptionFilter` [PR
+  2056](https://github.com/libp2p/rust-libp2p/pull/2056).
+
 # 0.30.0 [2021-04-13]
 
 - Update `libp2p-swarm`.
