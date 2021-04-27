@@ -50,6 +50,7 @@
 
 - Update individual crates.
     - `libp2p-swarm-derive`
+    - `libp2p-gossipsub`
 
 ## Version 0.37.0 [2021-04-13]
 
