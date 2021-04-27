@@ -45,12 +45,13 @@
 
 - Update individual crates.
     - `libp2p-core`
+    - `libp2p-gossipsub`
+    - `libp2p-wasm-ext`
 
 ## Version 0.37.1 [2021-04-14]
 
 - Update individual crates.
     - `libp2p-swarm-derive`
-    - `libp2p-gossipsub`
 
 ## Version 0.37.0 [2021-04-13]
 
