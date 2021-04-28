@@ -18,14 +18,41 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! A basic relay server and relay client implementation.
+//!
+//! The example below involves three nodes: (1) a relay server, (2) a listening
+//! relay client listening via the relay server and (3) a dialing relay client
+//! dialing the listening relay client via the relay server.
+//!
+//! 1. To start the relay server, run `cargo run --example relay -- relay`.
+//!
+//! 2. To start the listening relay client run `cargo run --example relay -- client-listen
+//! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit` in a second terminal where:
+//!
+//!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
+//!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
+//!
+//! 3. To start the dialing relay client run `cargo run --example relay -- client-listen
+//! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/<peer-id-listening-relay-client>` in
+//! a third terminal where:
+//!
+//!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
+//!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
+//!   - `<peer-id-listening-relay-client>` is replaced by the peer id of the listening relay client.
+//!
+//! In the third terminal you will see the dialing relay client to receive pings
+//! from both the relay server AND from the listening relay client relayed via
+//! the relay server.
+
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
+use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
-use libp2p::relay::RelayConfig;
+use libp2p::relay::{Relay, RelayConfig};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{identity, PeerId, Swarm};
+use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -47,6 +74,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (relay_wrapped_transport, relay_behaviour) =
         libp2p_relay::new_transport_and_behaviour(relay_config, tcp_transport);
 
+    let behaviour = Behaviour {
+        relay: relay_behaviour,
+        ping: Ping::new(
+            PingConfig::new()
+                .with_keep_alive(true)
+                .with_interval(Duration::from_secs(1)),
+        ),
+    };
+
     let plaintext = plaintext::PlainText2Config {
         local_public_key: local_key.public(),
     };
@@ -57,10 +93,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    let mut swarm = Swarm::new(transport, relay_behaviour, local_peer_id);
+    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
 
-    // Listen on all interfaces and whatever port the OS assigns
-    swarm.listen_on("/ip6/::/tcp/0".parse()?)?;
+    match std::env::args()
+        .nth(1)
+        .expect("Please provide either of relay, client-listen or client-dial.")
+        .as_str()
+    {
+        "relay" => {
+            // Listen on all interfaces and whatever port the OS assigns
+            swarm.listen_on("/ip6/::/tcp/0".parse()?)?;
+        }
+        "client-listen" => {
+            let addr: Multiaddr = std::env::args()
+                .nth(2)
+                .expect("Please provide relayed listen address.")
+                .parse()?;
+            swarm.listen_on(addr)?;
+        }
+        "client-dial" => {
+            let addr: Multiaddr = std::env::args()
+                .nth(2)
+                .expect("Please provide relayed dial address.")
+                .parse()?;
+            swarm.dial_addr(addr)?;
+        }
+        s => panic!("Unexpected argument {:?}", s),
+    }
 
     let mut listening = false;
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
@@ -81,4 +140,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Poll::Pending
     }))
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(out_event = "Event", event_process = false)]
+struct Behaviour {
+    relay: Relay,
+    ping: Ping,
+}
+
+#[derive(Debug)]
+enum Event {
+    Relay(()),
+    Ping(PingEvent),
+}
+
+impl From<PingEvent> for Event {
+    fn from(e: PingEvent) -> Self {
+        Event::Ping(e)
+    }
+}
+
+impl From<()> for Event {
+    fn from(_: ()) -> Self {
+        Event::Relay(())
+    }
 }
