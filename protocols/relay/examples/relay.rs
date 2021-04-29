@@ -32,17 +32,16 @@
 //!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
 //!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
 //!
-//! 3. To start the dialing relay client run `cargo run --example relay -- client-listen
-//! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/<peer-id-listening-relay-client>` in
-//! a third terminal where:
+//! 3. To start the dialing relay client run `cargo run --example relay -- client-dial
+//! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/p2p/<peer-id-listening-relay-client>`
+//! in a third terminal where:
 //!
 //!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
 //!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
 //!   - `<peer-id-listening-relay-client>` is replaced by the peer id of the listening relay client.
 //!
-//! In the third terminal you will see the dialing relay client to receive pings
-//! from both the relay server AND from the listening relay client relayed via
-//! the relay server.
+//! In the third terminal you will see the dialing relay client to receive pings from both the relay
+//! server AND from the listening relay client relayed via the relay server.
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
