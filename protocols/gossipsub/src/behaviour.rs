@@ -50,7 +50,7 @@ use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
-use crate::handler::{GossipsubHandler, HandlerEvent};
+use crate::handler::{GossipsubHandler, HandlerEvent, InboundHandlerEvent};
 use crate::mcache::MessageCache;
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
@@ -193,7 +193,8 @@ impl From<MessageAuthenticity> for PublishConfig {
     }
 }
 
-type GossipsubNetworkBehaviourAction = NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GossipsubEvent>;
+type GossipsubNetworkBehaviourAction =
+    NetworkBehaviourAction<Arc<InboundHandlerEvent>, GossipsubEvent>;
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
@@ -489,17 +490,15 @@ where
         // send subscription request to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = Arc::new(
-                GossipsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![GossipsubSubscription {
-                        topic_hash: topic_hash.clone(),
-                        action: GossipsubSubscriptionAction::Subscribe,
-                    }],
-                    control_msgs: Vec::new(),
-                }
-                .into_protobuf(),
-            );
+            let event = GossipsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![GossipsubSubscription {
+                    topic_hash: topic_hash.clone(),
+                    action: GossipsubSubscriptionAction::Subscribe,
+                }],
+                control_msgs: Vec::new(),
+            }
+            .into_protobuf();
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
@@ -531,17 +530,15 @@ where
         // announce to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = Arc::new(
-                GossipsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![GossipsubSubscription {
-                        topic_hash: topic_hash.clone(),
-                        action: GossipsubSubscriptionAction::Unsubscribe,
-                    }],
-                    control_msgs: Vec::new(),
-                }
-                .into_protobuf(),
-            );
+            let event = GossipsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![GossipsubSubscription {
+                    topic_hash: topic_hash.clone(),
+                    action: GossipsubSubscriptionAction::Unsubscribe,
+                }],
+                control_msgs: Vec::new(),
+            }
+            .into_protobuf();
 
             for peer in peer_list {
                 debug!("Sending UNSUBSCRIBE to peer: {}", peer.to_string());
@@ -580,14 +577,12 @@ where
             topic: raw_message.topic.clone(),
         });
 
-        let event = Arc::new(
-            GossipsubRpc {
-                subscriptions: Vec::new(),
-                messages: vec![raw_message.clone()],
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf(),
-        );
+        let event = GossipsubRpc {
+            subscriptions: Vec::new(),
+            messages: vec![raw_message.clone()],
+            control_msgs: Vec::new(),
+        }
+        .into_protobuf();
 
         // check that the size doesn't exceed the max transmission size
         if event.encoded_len() > self.config.max_transmit_size() {
@@ -898,6 +893,7 @@ where
                 add_peers, topic_hash
             );
             added_peers.extend(peers.iter().cloned().take(add_peers));
+
             self.mesh.insert(
                 topic_hash.clone(),
                 peers.into_iter().take(add_peers).collect(),
@@ -947,6 +943,17 @@ where
                     topic_hash: topic_hash.clone(),
                 },
             );
+
+            // If the peer did not previously exist in any mesh, inform the handler
+            if self.peer_added_to_mesh(&peer_id, topic_hash) {
+                // This is the first mesh the peer has joined
+                self.events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        event: Arc::new(InboundHandlerEvent::JoinedMesh),
+                        handler: NotifyHandler::Any,
+                    });
+            }
         }
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
@@ -1018,6 +1025,17 @@ where
                 info!("LEAVE: Sending PRUNE to peer: {:?}", peer);
                 let control = self.make_prune(topic_hash, &peer, self.config.do_px());
                 Self::control_pool_add(&mut self.control_pool, peer, control);
+
+                // If the peer is no longer in any mesh, inform the handler
+                if self.peer_removed_from_mesh(&peer, topic_hash) {
+                    // The peer no longer exists in any mesh, inform the handler
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: peer,
+                            event: Arc::new(InboundHandlerEvent::LeftMesh),
+                            handler: NotifyHandler::Any,
+                        });
+                }
             }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
@@ -1074,10 +1092,7 @@ where
         }
 
         // IHAVE flood protection
-        let peer_have = self
-            .count_received_ihave
-            .entry(*peer_id)
-            .or_insert(0);
+        let peer_have = self.count_received_ihave.entry(*peer_id).or_insert(0);
         *peer_have += 1;
         if *peer_have > self.config.max_ihave_messages() {
             debug!(
@@ -1201,10 +1216,7 @@ where
         if !cached_messages.is_empty() {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
-            let message_list = cached_messages
-                .into_iter()
-                .map(|entry| entry.1)
-                .collect();
+            let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
             if self
                 .send_message(
                     *peer_id,
@@ -1282,7 +1294,7 @@ where
                         }
                     }
 
-                    //check the score
+                    // check the score
                     if below_zero {
                         // we don't GRAFT peers with negative score
                         debug!(
@@ -1312,6 +1324,16 @@ where
                         peer_id, &topic_hash
                     );
                     peers.insert(*peer_id);
+                    // inform the handler
+                    if self.peer_added_to_mesh(peer_id, &topic_hash) {
+                        // This is the first mesh the peer has joined
+                        self.events
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id: peer_id.clone(),
+                                event: Arc::new(InboundHandlerEvent::JoinedMesh),
+                                handler: NotifyHandler::Any,
+                            });
+                    }
 
                     if let Some((peer_score, ..)) = &mut self.peer_score {
                         peer_score.graft(peer_id, topic_hash);
@@ -1381,6 +1403,17 @@ where
                 }
 
                 update_backoff = true;
+
+                // inform the handler
+                if self.peer_removed_from_mesh(peer_id, topic_hash) {
+                    // The peer no longer exists in any mesh, inform the handler
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: peer_id.clone(),
+                            event: Arc::new(InboundHandlerEvent::LeftMesh),
+                            handler: NotifyHandler::Any,
+                        });
+                }
             }
         }
         if update_backoff {
@@ -1605,10 +1638,7 @@ where
                 .or_insert_with(|| msg_id.clone());
         }
         if !self.duplicate_cache.insert(msg_id.clone()) {
-            debug!(
-                "Message already received, ignoring. Message: {}",
-                msg_id
-            );
+            debug!("Message already received, ignoring. Message: {}", msg_id);
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.duplicated_message(propagation_source, &msg_id, &message.topic);
             }
@@ -1710,8 +1740,8 @@ where
             }
         };
 
-        // Collect potential graft messages for the peer.
-        let mut grafts = Vec::new();
+        // Collect potential graft topics for the peer.
+        let mut topics_to_graft = Vec::new();
 
         // Notify the application about the subscription, after the grafts are sent.
         let mut application_event = Vec::new();
@@ -1787,9 +1817,7 @@ where
                                     peer_score
                                         .graft(propagation_source, subscription.topic_hash.clone());
                                 }
-                                grafts.push(GossipsubControlAction::Graft {
-                                    topic_hash: subscription.topic_hash.clone(),
-                                });
+                                topics_to_graft.push(subscription.topic_hash.clone());
                             }
                         }
                     }
@@ -1811,8 +1839,7 @@ where
                     }
                     // remove topic from the peer_topics mapping
                     subscribed_topics.remove(&subscription.topic_hash);
-                    unsubscribed_peers
-                        .push((*propagation_source, subscription.topic_hash.clone()));
+                    unsubscribed_peers.push((*propagation_source, subscription.topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Unsubscribed {
@@ -1829,16 +1856,43 @@ where
             self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false);
         }
 
+        // Potentially inform the handler if we have added this peer to a mesh for the first time.
+        let mut inform_handler = true;
+        if let Some(topics) = self.peer_topics.get(propagation_source) {
+            for topic in topics {
+                if !topics_to_graft.contains(topic) {
+                    if let Some(mesh_peers) = self.mesh.get(topic) {
+                        if mesh_peers.contains(propagation_source) {
+                            // the peer is already in a mesh for another topic
+                            inform_handler = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if inform_handler {
+            self.events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: propagation_source.clone(),
+                    event: Arc::new(InboundHandlerEvent::JoinedMesh),
+                    handler: NotifyHandler::Any,
+                });
+        }
+
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
         // heartbeat.
-        if !grafts.is_empty()
+        if !topics_to_graft.is_empty()
             && self
                 .send_message(
                     *propagation_source,
                     GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
-                        control_msgs: grafts,
+                        control_msgs: topics_to_graft
+                            .into_iter()
+                            .map(|topic_hash| GossipsubControlAction::Graft { topic_hash })
+                            .collect(),
                     }
                     .into_protobuf(),
                 )
@@ -1898,9 +1952,7 @@ where
         let mut scores = HashMap::new();
         let peer_score = &self.peer_score;
         let mut score = |p: &PeerId| match peer_score {
-            Some((peer_score, ..)) => *scores
-                .entry(*p)
-                .or_insert_with(|| peer_score.score(p)),
+            Some((peer_score, ..)) => *scores.entry(*p).or_insert_with(|| peer_score.score(p)),
             _ => 0.0,
         };
 
@@ -2008,15 +2060,15 @@ where
                     }
                     if self.outbound_peers.contains(&peer) {
                         if outbound <= self.config.mesh_outbound_min() {
-                            //do not remove anymore outbound peers
+                            // do not remove anymore outbound peers
                             continue;
                         } else {
-                            //an outbound peer gets removed
+                            // an outbound peer gets removed
                             outbound -= 1;
                         }
                     }
 
-                    //remove the peer
+                    // remove the peer
                     peers.remove(&peer);
                     let current_topic = to_prune.entry(peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
@@ -2315,9 +2367,20 @@ where
         // handle the grafts and overlapping prunes per peer
         for (peer, topics) in to_graft.iter() {
             for topic in topics {
-                //inform scoring of graft
+                // inform scoring of graft
                 if let Some((peer_score, ..)) = &mut self.peer_score {
                     peer_score.graft(peer, topic.clone());
+                }
+
+                // inform the handler of the peer being added to the mesh
+                if self.peer_added_to_mesh(peer, topic) {
+                    // This is the first mesh the peer has joined
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: peer.clone(),
+                            event: Arc::new(InboundHandlerEvent::JoinedMesh),
+                            handler: NotifyHandler::Any,
+                        });
                 }
             }
             let mut control_msgs: Vec<GossipsubControlAction> = topics
@@ -2328,6 +2391,9 @@ where
                 .collect();
 
             // If there are prunes associated with the same peer add them.
+            // NOTE: In this case a peer has been added to a topic mesh, and removed from another.
+            // It therefore must be in at least one mesh and we do not need to inform the handler
+            // of its removal from another.
             if let Some(topics) = to_prune.remove(peer) {
                 let mut prunes = topics
                     .iter()
@@ -2361,16 +2427,26 @@ where
 
         // handle the remaining prunes
         for (peer, topics) in to_prune.iter() {
-            let remaining_prunes = topics
-                .iter()
-                .map(|topic_hash| {
-                    self.make_prune(
-                        topic_hash,
-                        peer,
-                        self.config.do_px() && !no_px.contains(peer),
-                    )
-                })
-                .collect();
+            let mut remaining_prunes = Vec::new();
+            for topic_hash in topics {
+                let prune = self.make_prune(
+                    topic_hash,
+                    peer,
+                    self.config.do_px() && !no_px.contains(peer),
+                );
+                remaining_prunes.push(prune);
+                // inform the handler
+                if self.peer_removed_from_mesh(peer, topic_hash) {
+                    // The peer no longer exists in any mesh, inform the handler
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: peer.clone(),
+                            event: Arc::new(InboundHandlerEvent::LeftMesh),
+                            handler: NotifyHandler::Any,
+                        });
+                }
+            }
+
             if self
                 .send_message(
                     *peer,
@@ -2432,14 +2508,12 @@ where
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let event = Arc::new(
-                GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: vec![message.clone()],
-                    control_msgs: Vec::new(),
-                }
-                .into_protobuf(),
-            );
+            let event = GossipsubRpc {
+                subscriptions: Vec::new(),
+                messages: vec![message.clone()],
+                control_msgs: Vec::new(),
+            }
+            .into_protobuf();
 
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
@@ -2574,12 +2648,52 @@ where
         }
     }
 
+    /// This is called when peers are added to any mesh. It checks if the peer existed
+    /// in any other mesh. If this is the first mesh they have joined, this returns true,
+    /// signifying the handler should be notified to maintain a connection.
+    fn peer_added_to_mesh(&self, peer_id: &PeerId, new_topic: &TopicHash) -> bool {
+        if let Some(topics) = self.peer_topics.get(peer_id) {
+            for topic in topics {
+                if topic != new_topic {
+                    if let Some(mesh_peers) = self.mesh.get(topic) {
+                        if mesh_peers.contains(peer_id) {
+                            // the peer is already in a mesh for another topic
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        // This is the first mesh the peer has joined, inform the handler
+        return true;
+    }
+
+    /// This is called when peers are removed from a mesh. It checks if the peer exists
+    /// in any other mesh. If this is the last mesh they have joined, we return true, in order to
+    /// notify the handler to no longer maintain a connection.
+    fn peer_removed_from_mesh(&self, peer_id: &PeerId, old_topic: &TopicHash) -> bool {
+        if let Some(topics) = self.peer_topics.get(peer_id) {
+            for topic in topics {
+                if topic != old_topic {
+                    if let Some(mesh_peers) = self.mesh.get(topic) {
+                        if mesh_peers.contains(peer_id) {
+                            // the peer exists in another mesh still
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        // The peer is not in any other mesh, inform the handler
+        return true;
+    }
+
     /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
     fn send_message(
         &mut self,
         peer_id: PeerId,
-        message: impl Into<Arc<rpc_proto::Rpc>>,
+        message: rpc_proto::Rpc,
     ) -> Result<(), PublishError> {
         // If the message is oversized, try and fragment it. If it cannot be fragmented, log an
         // error and drop the message (all individual messages should be small enough to fit in the
@@ -2591,7 +2705,7 @@ where
             self.events
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
-                    event: message,
+                    event: Arc::new(InboundHandlerEvent::Message(message)),
                     handler: NotifyHandler::Any,
                 })
         }
@@ -2600,10 +2714,7 @@ where
 
     // If a message is too large to be sent as-is, this attempts to fragment it into smaller RPC
     // messages to be sent.
-    fn fragment_message(
-        &self,
-        rpc: Arc<rpc_proto::Rpc>,
-    ) -> Result<Vec<Arc<rpc_proto::Rpc>>, PublishError> {
+    fn fragment_message(&self, rpc: rpc_proto::Rpc) -> Result<Vec<rpc_proto::Rpc>, PublishError> {
         if rpc.encoded_len() < self.config.max_transmit_size() {
             return Ok(vec![rpc]);
         }
@@ -2719,7 +2830,7 @@ where
             }
         }
 
-        Ok(rpc_list.into_iter().map(Arc::new).collect())
+        Ok(rpc_list)
     }
 }
 
@@ -2744,6 +2855,7 @@ where
             self.config.protocol_id_prefix().clone(),
             self.config.max_transmit_size(),
             self.config.validation_mode().clone(),
+            self.config.idle_timeout().clone(),
             self.config.support_floodsub(),
         )
     }
@@ -2823,7 +2935,18 @@ where
                 // check the mesh for the topic
                 if let Some(mesh_peers) = self.mesh.get_mut(&topic) {
                     // check if the peer is in the mesh and remove it
-                    mesh_peers.remove(peer_id);
+                    if mesh_peers.remove(peer_id) {
+                        // inform the handler
+                        if self.peer_removed_from_mesh(peer_id, topic) {
+                            // The peer no longer exists in any mesh, inform the handler
+                            self.events
+                                .push_back(NetworkBehaviourAction::NotifyHandler {
+                                    peer_id: peer_id.clone(),
+                                    event: Arc::new(InboundHandlerEvent::LeftMesh),
+                                    handler: NotifyHandler::Any,
+                                });
+                        }
+                    }
                 }
 
                 // remove from topic_peers
@@ -3319,10 +3442,10 @@ mod local_test {
         rpc.messages.push(test_message());
 
         let mut rpc_proto = rpc.clone().into_protobuf();
-        let fragmented_messages = gs.fragment_message(Arc::new(rpc_proto.clone())).unwrap();
+        let fragmented_messages = gs.fragment_message(rpc_proto.clone()).unwrap();
         assert_eq!(
             fragmented_messages,
-            vec![Arc::new(rpc_proto.clone())],
+            vec![rpc_proto.clone()],
             "Messages under the limit shouldn't be fragmented"
         );
 
@@ -3334,7 +3457,7 @@ mod local_test {
         }
 
         let fragmented_messages = gs
-            .fragment_message(Arc::new(rpc_proto))
+            .fragment_message(rpc_proto)
             .expect("Should be able to fragment the messages");
 
         assert!(
@@ -3369,7 +3492,7 @@ mod local_test {
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs
-                .fragment_message(Arc::new(rpc_proto.clone()))
+                .fragment_message(rpc_proto.clone())
                 .expect("Messages must be valid");
 
             if rpc_proto.encoded_len() < max_transmit_size {
@@ -3394,9 +3517,7 @@ mod local_test {
 
                 // ensure they can all be encoded
                 let mut buf = bytes::BytesMut::with_capacity(message.encoded_len());
-                codec
-                    .encode(Arc::try_unwrap(message).unwrap(), &mut buf)
-                    .unwrap()
+                codec.encode(message, &mut buf).unwrap()
             }
         }
         QuickCheck::new()
