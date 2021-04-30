@@ -40,7 +40,7 @@ use libp2p_swarm::{
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct Config {
     pub reservation_duration: Duration,
@@ -155,6 +155,7 @@ impl IntoProtocolsHandler for RelayHandlerProto {
             alive_lend_out_substreams: Default::default(),
             circuits: Default::default(),
             active_reservation: Default::default(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 
@@ -202,6 +203,7 @@ pub struct RelayHandler {
     circuits: FuturesUnordered<BoxFuture<'static, (CircuitId, PeerId, Result<(), std::io::Error>)>>,
 
     active_reservation: Option<Delay>,
+    keep_alive: KeepAlive,
 }
 
 impl ProtocolsHandler for RelayHandler {
@@ -466,16 +468,9 @@ impl ProtocolsHandler for RelayHandler {
         ));
     }
 
+    // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.reservation_deny_futures.is_empty()
-            && self.reservation_accept_futures.is_empty()
-            && self.active_reservation.is_none()
-            && self.alive_lend_out_substreams.is_empty()
-        {
-            KeepAlive::No
-        } else {
-            KeepAlive::Yes
-        }
+        self.keep_alive
     }
 
     fn poll(
@@ -656,6 +651,25 @@ impl ProtocolsHandler for RelayHandler {
             return Poll::Ready(ProtocolsHandlerEvent::Custom(
                 RelayHandlerEvent::ReservationTimedOut {},
             ));
+        }
+
+        if self.reservation_accept_futures.is_empty()
+            && self.reservation_deny_futures.is_empty()
+            && self.circuit_accept_futures.is_empty()
+            && self.circuit_deny_futures.is_empty()
+            && self.alive_lend_out_substreams.is_empty()
+            && self.circuits.is_empty()
+            && self.active_reservation.is_none()
+        {
+            match self.keep_alive {
+                KeepAlive::Yes => {
+                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                }
+                KeepAlive::Until(_) => {}
+                KeepAlive::No => panic!("RelayHandler never sets KeepAlive::No."),
+            }
+        } else {
+            self.keep_alive = KeepAlive::Yes;
         }
 
         Poll::Pending
