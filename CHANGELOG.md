@@ -41,11 +41,12 @@
 
 # `libp2p` facade crate
 
-## Version 0.37.2 [unreleased]
+## Version 0.38.0 [unreleased]
 
 - Update individual crates.
     - `libp2p-core`
     - `libp2p-gossipsub`
+    - `libp2p-pnet`
     - `libp2p-wasm-ext`
 
 ## Version 0.37.1 [2021-04-14]
