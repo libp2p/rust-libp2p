@@ -50,7 +50,7 @@ use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
-use crate::handler::{GossipsubHandler, HandlerEvent, InboundHandlerEvent};
+use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
@@ -62,7 +62,7 @@ use crate::types::{
     FastMessageId, GossipsubControlAction, GossipsubMessage, GossipsubSubscription,
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
-use crate::types::{GossipsubRpc, PeerKind};
+use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 
@@ -194,7 +194,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 }
 
 type GossipsubNetworkBehaviourAction =
-    NetworkBehaviourAction<Arc<InboundHandlerEvent>, GossipsubEvent>;
+    NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>;
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
@@ -229,7 +229,7 @@ pub struct Gossipsub<
 
     /// A map of peers to their protocol kind. This is to identify different kinds of gossipsub
     /// peers.
-    peer_protocols: HashMap<PeerId, PeerKind>,
+    peer_protocols: HashMap<PeerId, PeerConnections>,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
     topic_peers: HashMap<TopicHash, BTreeSet<PeerId>>,
@@ -461,7 +461,7 @@ where
 
     /// Lists all known peers and their associated protocol.
     pub fn peer_protocol(&self) -> impl Iterator<Item = (&PeerId, &PeerKind)> {
-        self.peer_protocols.iter()
+        self.peer_protocols.iter().map(|(k, v)| (k, &v.kind))
     }
 
     /// Returns the gossipsub score for a given peer, if one exists.
@@ -629,8 +629,8 @@ where
                 }
 
                 // Floodsub peers
-                for (peer, kind) in &self.peer_protocols {
-                    if kind == &PeerKind::Floodsub
+                for (peer, connections) in &self.peer_protocols {
+                    if connections.kind == PeerKind::Floodsub
                         && !self
                             .score_below_threshold(peer, |ts| ts.publish_threshold)
                             .0
@@ -945,15 +945,14 @@ where
             );
 
             // If the peer did not previously exist in any mesh, inform the handler
-            if self.peer_added_to_mesh(&peer_id, topic_hash) {
-                // This is the first mesh the peer has joined
-                self.events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        event: Arc::new(InboundHandlerEvent::JoinedMesh),
-                        handler: NotifyHandler::Any,
-                    });
-            }
+            peer_added_to_mesh(
+                peer_id,
+                vec![topic_hash],
+                &self.mesh,
+                self.peer_topics.get(&peer_id),
+                &mut self.events,
+                &self.peer_protocols,
+            );
         }
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
@@ -969,7 +968,7 @@ where
             peer_score.prune(peer, topic_hash.clone());
         }
 
-        match self.peer_protocols.get(peer) {
+        match self.peer_protocols.get(peer).map(|v| &v.kind) {
             Some(PeerKind::Floodsub) => {
                 error!("Attempted to prune a Floodsub peer");
             }
@@ -1026,16 +1025,15 @@ where
                 let control = self.make_prune(topic_hash, &peer, self.config.do_px());
                 Self::control_pool_add(&mut self.control_pool, peer, control);
 
-                // If the peer is no longer in any mesh, inform the handler
-                if self.peer_removed_from_mesh(&peer, topic_hash) {
-                    // The peer no longer exists in any mesh, inform the handler
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: peer,
-                            event: Arc::new(InboundHandlerEvent::LeftMesh),
-                            handler: NotifyHandler::Any,
-                        });
-                }
+                // If the peer did not previously exist in any mesh, inform the handler
+                peer_removed_from_mesh(
+                    peer,
+                    topic_hash,
+                    &self.mesh,
+                    self.peer_topics.get(&peer),
+                    &mut self.events,
+                    &self.peer_protocols,
+                );
             }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
@@ -1324,16 +1322,15 @@ where
                         peer_id, &topic_hash
                     );
                     peers.insert(*peer_id);
-                    // inform the handler
-                    if self.peer_added_to_mesh(peer_id, &topic_hash) {
-                        // This is the first mesh the peer has joined
-                        self.events
-                            .push_back(NetworkBehaviourAction::NotifyHandler {
-                                peer_id: peer_id.clone(),
-                                event: Arc::new(InboundHandlerEvent::JoinedMesh),
-                                handler: NotifyHandler::Any,
-                            });
-                    }
+                    // If the peer did not previously exist in any mesh, inform the handler
+                    peer_added_to_mesh(
+                        peer_id.clone(),
+                        vec![&topic_hash],
+                        &self.mesh,
+                        self.peer_topics.get(&peer_id),
+                        &mut self.events,
+                        &self.peer_protocols,
+                    );
 
                     if let Some((peer_score, ..)) = &mut self.peer_score {
                         peer_score.graft(peer_id, topic_hash);
@@ -1405,15 +1402,14 @@ where
                 update_backoff = true;
 
                 // inform the handler
-                if self.peer_removed_from_mesh(peer_id, topic_hash) {
-                    // The peer no longer exists in any mesh, inform the handler
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: peer_id.clone(),
-                            event: Arc::new(InboundHandlerEvent::LeftMesh),
-                            handler: NotifyHandler::Any,
-                        });
-                }
+                peer_removed_from_mesh(
+                    peer_id.clone(),
+                    topic_hash,
+                    &self.mesh,
+                    self.peer_topics.get(&peer_id),
+                    &mut self.events,
+                    &self.peer_protocols,
+                );
             }
         }
         if update_backoff {
@@ -1783,7 +1779,7 @@ where
 
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source)
-                        && match self.peer_protocols.get(propagation_source) {
+                        && match self.peer_protocols.get(propagation_source).map(|v| &v.kind) {
                             Some(PeerKind::Gossipsubv1_1) => true,
                             Some(PeerKind::Gossipsub) => true,
                             _ => false,
@@ -1857,27 +1853,16 @@ where
         }
 
         // Potentially inform the handler if we have added this peer to a mesh for the first time.
-        let mut inform_handler = true;
-        if let Some(topics) = self.peer_topics.get(propagation_source) {
-            for topic in topics {
-                if !topics_to_graft.contains(topic) {
-                    if let Some(mesh_peers) = self.mesh.get(topic) {
-                        if mesh_peers.contains(propagation_source) {
-                            // the peer is already in a mesh for another topic
-                            inform_handler = false;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if inform_handler {
-            self.events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: propagation_source.clone(),
-                    event: Arc::new(InboundHandlerEvent::JoinedMesh),
-                    handler: NotifyHandler::Any,
-                });
+        let topics_joined = topics_to_graft.iter().collect::<Vec<_>>();
+        if !topics_joined.is_empty() {
+            peer_added_to_mesh(
+                propagation_source.clone(),
+                topics_joined,
+                &self.mesh,
+                self.peer_topics.get(propagation_source),
+                &mut self.events,
+                &self.peer_protocols,
+            );
         }
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
@@ -2373,15 +2358,15 @@ where
                 }
 
                 // inform the handler of the peer being added to the mesh
-                if self.peer_added_to_mesh(peer, topic) {
-                    // This is the first mesh the peer has joined
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: peer.clone(),
-                            event: Arc::new(InboundHandlerEvent::JoinedMesh),
-                            handler: NotifyHandler::Any,
-                        });
-                }
+                // If the peer did not previously exist in any mesh, inform the handler
+                peer_added_to_mesh(
+                    peer.clone(),
+                    vec![topic],
+                    &self.mesh,
+                    self.peer_topics.get(&peer),
+                    &mut self.events,
+                    &self.peer_protocols,
+                );
             }
             let mut control_msgs: Vec<GossipsubControlAction> = topics
                 .iter()
@@ -2436,15 +2421,14 @@ where
                 );
                 remaining_prunes.push(prune);
                 // inform the handler
-                if self.peer_removed_from_mesh(peer, topic_hash) {
-                    // The peer no longer exists in any mesh, inform the handler
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: peer.clone(),
-                            event: Arc::new(InboundHandlerEvent::LeftMesh),
-                            handler: NotifyHandler::Any,
-                        });
-                }
+                peer_removed_from_mesh(
+                    peer.clone(),
+                    topic_hash,
+                    &self.mesh,
+                    self.peer_topics.get(&peer),
+                    &mut self.events,
+                    &self.peer_protocols,
+                );
             }
 
             if self
@@ -2648,46 +2632,6 @@ where
         }
     }
 
-    /// This is called when peers are added to any mesh. It checks if the peer existed
-    /// in any other mesh. If this is the first mesh they have joined, this returns true,
-    /// signifying the handler should be notified to maintain a connection.
-    fn peer_added_to_mesh(&self, peer_id: &PeerId, new_topic: &TopicHash) -> bool {
-        if let Some(topics) = self.peer_topics.get(peer_id) {
-            for topic in topics {
-                if topic != new_topic {
-                    if let Some(mesh_peers) = self.mesh.get(topic) {
-                        if mesh_peers.contains(peer_id) {
-                            // the peer is already in a mesh for another topic
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-        // This is the first mesh the peer has joined, inform the handler
-        return true;
-    }
-
-    /// This is called when peers are removed from a mesh. It checks if the peer exists
-    /// in any other mesh. If this is the last mesh they have joined, we return true, in order to
-    /// notify the handler to no longer maintain a connection.
-    fn peer_removed_from_mesh(&self, peer_id: &PeerId, old_topic: &TopicHash) -> bool {
-        if let Some(topics) = self.peer_topics.get(peer_id) {
-            for topic in topics {
-                if topic != old_topic {
-                    if let Some(mesh_peers) = self.mesh.get(topic) {
-                        if mesh_peers.contains(peer_id) {
-                            // the peer exists in another mesh still
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-        // The peer is not in any other mesh, inform the handler
-        return true;
-    }
-
     /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
     fn send_message(
@@ -2705,7 +2649,7 @@ where
             self.events
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
-                    event: Arc::new(InboundHandlerEvent::Message(message)),
+                    event: Arc::new(GossipsubHandlerIn::Message(message)),
                     handler: NotifyHandler::Any,
                 })
         }
@@ -2902,15 +2846,6 @@ where
         // Insert an empty set of the topics of this peer until known.
         self.peer_topics.insert(*peer_id, Default::default());
 
-        // By default we assume a peer is only a floodsub peer.
-        //
-        // The protocol negotiation occurs once a message is sent/received. Once this happens we
-        // update the type of peer that this is in order to determine which kind of routing should
-        // occur.
-        self.peer_protocols
-            .entry(*peer_id)
-            .or_insert(PeerKind::Floodsub);
-
         if let Some((peer_score, ..)) = &mut self.peer_score {
             peer_score.add_peer(*peer_id);
         }
@@ -2935,18 +2870,7 @@ where
                 // check the mesh for the topic
                 if let Some(mesh_peers) = self.mesh.get_mut(&topic) {
                     // check if the peer is in the mesh and remove it
-                    if mesh_peers.remove(peer_id) {
-                        // inform the handler
-                        if self.peer_removed_from_mesh(peer_id, topic) {
-                            // The peer no longer exists in any mesh, inform the handler
-                            self.events
-                                .push_back(NetworkBehaviourAction::NotifyHandler {
-                                    peer_id: peer_id.clone(),
-                                    event: Arc::new(InboundHandlerEvent::LeftMesh),
-                                    handler: NotifyHandler::Any,
-                                });
-                        }
-                    }
+                    mesh_peers.remove(peer_id);
                 }
 
                 // remove from topic_peers
@@ -2990,7 +2914,7 @@ where
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
-        _: &ConnectionId,
+        connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
     ) {
         // Ignore connections from blacklisted peers.
@@ -3024,24 +2948,50 @@ where
                 )
             }
         }
+
+        // By default we assume a peer is only a floodsub peer.
+        //
+        // The protocol negotiation occurs once a message is sent/received. Once this happens we
+        // update the type of peer that this is in order to determine which kind of routing should
+        // occur.
+        self.peer_protocols
+            .entry(*peer_id)
+            .or_insert(PeerConnections {
+                kind: PeerKind::Floodsub,
+                connections: vec![*connection_id],
+            })
+            .connections
+            .push(*connection_id);
     }
 
     fn inject_connection_closed(
         &mut self,
-        peer: &PeerId,
-        _: &ConnectionId,
+        peer_id: &PeerId,
+        connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
     ) {
         // Remove IP from peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(endpoint.get_remote_address()) {
-                peer_score.remove_ip(peer, &ip);
+                peer_score.remove_ip(peer_id, &ip);
             } else {
                 trace!(
                     "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
-                    peer,
+                    peer_id,
                     endpoint
                 )
+            }
+        }
+
+        // Remove the connection from the list
+        // If there are no connections left, inject_disconnected will remove the mapping entirely.
+        if let Some(connections) = self.peer_protocols.get_mut(peer_id) {
+            if let Some(index) = connections
+                .connections
+                .iter()
+                .position(|v| v == connection_id)
+            {
+                connections.connections.remove(index);
             }
         }
     }
@@ -3092,15 +3042,15 @@ where
                     );
                     // We treat this peer as disconnected
                     self.inject_disconnected(&propagation_source);
-                } else if let Some(old_kind) = self.peer_protocols.get_mut(&propagation_source) {
+                } else if let Some(conn) = self.peer_protocols.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
                     // inject_connected). All other PeerKind changes are ignored.
                     debug!(
                         "New peer type found: {} for peer: {}",
                         kind, propagation_source
                     );
-                    if let PeerKind::Floodsub = *old_kind {
-                        *old_kind = kind;
+                    if let PeerKind::Floodsub = conn.kind {
+                        conn.kind = kind;
                     }
                 }
             }
@@ -3249,12 +3199,98 @@ where
     }
 }
 
+/// This is called when peers are added to any mesh. It checks if the peer existed
+/// in any other mesh. If this is the first mesh they have joined, it queues a message to notify
+/// the appropriate connection handler to maintain a connection.
+fn peer_added_to_mesh(
+    peer_id: PeerId,
+    new_topics: Vec<&TopicHash>,
+    mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
+    known_topics: Option<&BTreeSet<TopicHash>>,
+    events: &mut VecDeque<GossipsubNetworkBehaviourAction>,
+    connections: &HashMap<PeerId, PeerConnections>,
+) {
+    // Ensure there is an active connection
+    let connection_id = match connections.get(&peer_id) {
+        Some(conn) if !conn.connections.is_empty() => conn.connections[0],
+        _ => {
+            warn!(
+                "Peer has no active connection but added to a mesh. Peer {}",
+                peer_id
+            );
+            return; // There is no active connection registered for this peer.
+        }
+    };
+
+    if let Some(topics) = known_topics {
+        for topic in topics {
+            if !new_topics.contains(&topic) {
+                if let Some(mesh_peers) = mesh.get(topic) {
+                    if mesh_peers.contains(&peer_id) {
+                        // the peer is already in a mesh for another topic
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    // This is the first mesh the peer has joined, inform the handler
+    events.push_back(NetworkBehaviourAction::NotifyHandler {
+        peer_id,
+        event: Arc::new(GossipsubHandlerIn::JoinedMesh),
+        handler: NotifyHandler::One(connection_id),
+    });
+}
+
+/// This is called when peers are removed from a mesh. It checks if the peer exists
+/// in any other mesh. If this is the last mesh they have joined, we return true, in order to
+/// notify the handler to no longer maintain a connection.
+fn peer_removed_from_mesh(
+    peer_id: PeerId,
+    old_topic: &TopicHash,
+    mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
+    known_topics: Option<&BTreeSet<TopicHash>>,
+    events: &mut VecDeque<GossipsubNetworkBehaviourAction>,
+    connections: &HashMap<PeerId, PeerConnections>,
+) {
+    // Ensure there is an active connection
+    let connection_id = match connections.get(&peer_id) {
+        Some(conn) if !conn.connections.is_empty() => conn.connections[0],
+        _ => {
+            warn!(
+                "Peer has no active connection and was removed from a mesh. Peer {}",
+                peer_id
+            );
+            return; // There is no active connection registered for this peer.
+        }
+    };
+
+    if let Some(topics) = known_topics {
+        for topic in topics {
+            if topic != old_topic {
+                if let Some(mesh_peers) = mesh.get(topic) {
+                    if mesh_peers.contains(&peer_id) {
+                        // the peer exists in another mesh still
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    // The peer is not in any other mesh, inform the handler
+    events.push_back(NetworkBehaviourAction::NotifyHandler {
+        peer_id,
+        event: Arc::new(GossipsubHandlerIn::LeftMesh),
+        handler: NotifyHandler::One(connection_id),
+    });
+}
+
 /// Helper function to get a subset of random gossipsub peers for a `topic_hash`
 /// filtered by the function `f`. The number of peers to get equals the output of `n_map`
 /// that gets as input the number of filtered peers.
 fn get_random_peers_dynamic(
     topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
-    peer_protocols: &HashMap<PeerId, PeerKind>,
+    peer_protocols: &HashMap<PeerId, PeerConnections>,
     topic_hash: &TopicHash,
     // maps the number of total peers to the number of selected peers
     n_map: impl Fn(usize) -> usize,
@@ -3267,8 +3303,8 @@ fn get_random_peers_dynamic(
             .cloned()
             .filter(|p| {
                 f(p) && match peer_protocols.get(p) {
-                    Some(PeerKind::Gossipsub) => true,
-                    Some(PeerKind::Gossipsubv1_1) => true,
+                    Some(connections) if connections.kind == PeerKind::Gossipsub => true,
+                    Some(connections) if connections.kind == PeerKind::Gossipsubv1_1 => true,
                     _ => false,
                 }
             })
@@ -3296,7 +3332,7 @@ fn get_random_peers_dynamic(
 /// filtered by the function `f`.
 fn get_random_peers(
     topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
-    peer_protocols: &HashMap<PeerId, PeerKind>,
+    peer_protocols: &HashMap<PeerId, PeerConnections>,
     topic_hash: &TopicHash,
     n: usize,
     f: impl FnMut(&PeerId) -> bool,

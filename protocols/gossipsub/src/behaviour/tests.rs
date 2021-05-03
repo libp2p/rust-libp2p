@@ -351,7 +351,7 @@ mod tests {
                 .iter()
                 .fold(vec![], |mut collected_subscriptions, e| match e {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                        InboundHandlerEvent::Message(ref message) => {
+                        GossipsubHandlerIn::Message(ref message) => {
                             for s in &message.subscriptions {
                                 match s.subscribe {
                                     Some(true) => collected_subscriptions.push(s.clone()),
@@ -420,7 +420,7 @@ mod tests {
                 .iter()
                 .fold(vec![], |mut collected_subscriptions, e| match e {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                        InboundHandlerEvent::Message(ref message) => {
+                        GossipsubHandlerIn::Message(ref message) => {
                             for s in &message.subscriptions {
                                 match s.subscribe {
                                     Some(true) => collected_subscriptions.push(s.clone()),
@@ -597,7 +597,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                    InboundHandlerEvent::Message(ref message) => {
+                    GossipsubHandlerIn::Message(ref message) => {
                         let event = proto_to_message(&message);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -687,7 +687,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                    InboundHandlerEvent::Message(ref message) => {
+                    GossipsubHandlerIn::Message(ref message) => {
                         let event = proto_to_message(&message);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -735,26 +735,26 @@ mod tests {
 
         // check that our subscriptions are sent to each of the peers
         // collect all the SendEvents
-        let send_events: Vec<&NetworkBehaviourAction<Arc<InboundHandlerEvent>, GossipsubEvent>> =
-            gs.events
-                .iter()
-                .filter(|e| match e {
-                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                        if let InboundHandlerEvent::Message(ref m) = **event {
-                            !m.subscriptions.is_empty()
-                        } else {
-                            false
-                        }
+        let send_events: Vec<&NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>> = gs
+            .events
+            .iter()
+            .filter(|e| match e {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
+                        !m.subscriptions.is_empty()
+                    } else {
+                        false
                     }
-                    _ => false,
-                })
-                .collect();
+                }
+                _ => false,
+            })
+            .collect();
 
         // check that there are two subscriptions sent to each peer
         for sevent in send_events.clone() {
             match sevent {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         assert!(
                             m.subscriptions.len() == 2,
                             "There should be two subscriptions sent to each peer (1 for each topic)."
@@ -894,7 +894,15 @@ mod tests {
 
         gs.peer_protocols = peers
             .iter()
-            .map(|p| (p.clone(), PeerKind::Gossipsubv1_1))
+            .map(|p| {
+                (
+                    p.clone(),
+                    PeerConnections {
+                        kind: PeerKind::Gossipsubv1_1,
+                        connections: vec![ConnectionId::new(1)],
+                    },
+                )
+            })
             .collect();
 
         let random_peers =
@@ -974,7 +982,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_messages, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         let event = proto_to_message(&m);
                         for c in &event.messages {
                             collected_messages.push(c.clone())
@@ -1032,7 +1040,7 @@ mod tests {
             // is the message is being sent?
             let message_exists = gs.events.iter().any(|e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         let event = proto_to_message(m);
                         event
                             .messages
@@ -1274,7 +1282,7 @@ mod tests {
                 .iter()
                 .map(|e| match e {
                     NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                        if let InboundHandlerEvent::Message(ref m) = **event {
+                        if let GossipsubHandlerIn::Message(ref m) = **event {
                             let event = proto_to_message(m);
                             event
                                 .control_msgs
@@ -1310,17 +1318,17 @@ mod tests {
         //add peer as explicit peer
         gs.add_explicit_peer(&peer);
 
-        let dial_events: Vec<&NetworkBehaviourAction<Arc<InboundHandlerEvent>, GossipsubEvent>> =
-            gs.events
-                .iter()
-                .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Disconnected,
-                    } => peer_id == &peer,
-                    _ => false,
-                })
-                .collect();
+        let dial_events: Vec<&NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>> = gs
+            .events
+            .iter()
+            .filter(|e| match e {
+                NetworkBehaviourAction::DialPeer {
+                    peer_id,
+                    condition: DialPeerCondition::Disconnected,
+                } => peer_id == &peer,
+                _ => false,
+            })
+            .collect();
 
         assert_eq!(
             dial_events.len(),
@@ -1514,7 +1522,7 @@ mod tests {
                 .iter()
                 .filter(|e| match e {
                     NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                        if let InboundHandlerEvent::Message(ref m) = **event {
+                        if let GossipsubHandlerIn::Message(ref m) = **event {
                             let event = proto_to_message(m);
                             peer_id == &peers[0]
                                 && event
@@ -2031,7 +2039,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -2610,7 +2618,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_messages, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         let event = proto_to_message(m);
                         for c in &event.messages {
                             collected_messages.push((peer_id.clone(), c.clone()))
@@ -2758,7 +2766,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push((peer_id.clone(), s.clone()));
@@ -2814,7 +2822,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                    if let InboundHandlerEvent::Message(ref m) = **event {
+                    if let GossipsubHandlerIn::Message(ref m) = **event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push((peer_id.clone(), s.clone()));
@@ -4341,7 +4349,7 @@ mod tests {
                 .iter()
                 .map(|e| match e {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                        if let InboundHandlerEvent::Message(ref m) = **event {
+                        if let GossipsubHandlerIn::Message(ref m) = **event {
                             let event = proto_to_message(m);
                             event.messages.len()
                         } else {
@@ -4787,7 +4795,7 @@ mod tests {
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                     if peer_id == &p1 || peer_id == &p2 {
-                        if let InboundHandlerEvent::Message(ref m) = **event {
+                        if let GossipsubHandlerIn::Message(ref m) = **event {
                             let event = proto_to_message(m);
                             for s in &event.messages {
                                 collected_publish.push(s.clone());
@@ -4845,7 +4853,7 @@ mod tests {
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                     if peer_id == &p1 || peer_id == &p2 {
-                        if let InboundHandlerEvent::Message(ref m) = **event {
+                        if let GossipsubHandlerIn::Message(ref m) = **event {
                             let event = proto_to_message(m);
                             for s in &event.messages {
                                 collected_publish.push(s.clone());
@@ -5164,7 +5172,7 @@ mod tests {
             let messages_to_p1 = gs2.events.drain(..).filter_map(|e| match e {
                 NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                     if &peer_id == &p1 {
-                        if let InboundHandlerEvent::Message(m) = Arc::try_unwrap(event).unwrap() {
+                        if let GossipsubHandlerIn::Message(m) = Arc::try_unwrap(event).unwrap() {
                             Some(m)
                         } else {
                             None

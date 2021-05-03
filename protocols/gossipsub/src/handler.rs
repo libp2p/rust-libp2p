@@ -64,7 +64,7 @@ pub enum HandlerEvent {
 
 /// A message sent from the behaviour to the handler.
 #[derive(Debug, Clone)]
-pub enum InboundHandlerEvent {
+pub enum GossipsubHandlerIn {
     /// A gossipsub message to send.
     Message(crate::rpc_proto::Rpc),
     /// The peer has joined the mesh.
@@ -127,6 +127,10 @@ pub struct GossipsubHandler {
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
+
+    /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
+    /// decisions about the keep alive state for this connection.
+    in_mesh: bool,
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
@@ -187,12 +191,13 @@ impl GossipsubHandler {
             idle_timeout,
             upgrade_errors: VecDeque::new(),
             keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
+            in_mesh: false,
         }
     }
 }
 
 impl ProtocolsHandler for GossipsubHandler {
-    type InEvent = InboundHandlerEvent;
+    type InEvent = GossipsubHandlerIn;
     type OutEvent = HandlerEvent;
     type Error = GossipsubHandlerError;
     type InboundOpenInfo = ();
@@ -215,9 +220,6 @@ impl ProtocolsHandler for GossipsubHandler {
         }
 
         self.inbound_substreams_created += 1;
-
-        // Inbound substream is live set the keep alive
-        self.keep_alive = KeepAlive::Yes;
 
         // update the known kind of peer
         if self.peer_kind.is_none() {
@@ -242,9 +244,6 @@ impl ProtocolsHandler for GossipsubHandler {
         self.outbound_substream_establishing = false;
         self.outbound_substreams_created += 1;
 
-        // Outbound substream is live set the keep alive
-        self.keep_alive = KeepAlive::Yes;
-
         // update the known kind of peer
         if self.peer_kind.is_none() {
             self.peer_kind = Some(peer_kind);
@@ -261,15 +260,19 @@ impl ProtocolsHandler for GossipsubHandler {
         }
     }
 
-    fn inject_event(&mut self, message: InboundHandlerEvent) {
+    fn inject_event(&mut self, message: GossipsubHandlerIn) {
         if !self.protocol_unsupported {
             match message {
-                InboundHandlerEvent::Message(m) => self.send_queue.push(m),
+                GossipsubHandlerIn::Message(m) => self.send_queue.push(m),
                 // If we have joined the mesh, keep the connection alive.
-                InboundHandlerEvent::JoinedMesh => self.keep_alive = KeepAlive::Yes,
+                GossipsubHandlerIn::JoinedMesh => {
+                    self.in_mesh = true;
+                    self.keep_alive = KeepAlive::Yes;
+                }
                 // If we have left the mesh, start the idle timer.
-                InboundHandlerEvent::LeftMesh => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout)
+                GossipsubHandlerIn::LeftMesh => {
+                    self.in_mesh = false;
+                    self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
                 }
             }
         }
@@ -385,6 +388,10 @@ impl ProtocolsHandler for GossipsubHandler {
                 Some(InboundSubstreamState::WaitingInput(mut substream)) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(message))) => {
+                            if !self.in_mesh {
+                                self.keep_alive =
+                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
+                            }
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
                             return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
@@ -428,7 +435,6 @@ impl ProtocolsHandler for GossipsubHandler {
                                 // substream.
                                 warn!("Inbound substream error while closing: {:?}", e);
                             }
-
                             self.inbound_substream = None;
                             if self.outbound_substream.is_none() {
                                 self.keep_alive = KeepAlive::No;
@@ -505,7 +511,11 @@ impl ProtocolsHandler for GossipsubHandler {
                 Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
                     match Sink::poll_flush(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
-                            self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
+                            if !self.in_mesh {
+                                // if not in the mesh, reset the idle timeout
+                                self.keep_alive =
+                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
+                            }
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }

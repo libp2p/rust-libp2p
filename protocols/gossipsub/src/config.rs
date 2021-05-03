@@ -183,7 +183,7 @@ impl GossipsubConfig {
     }
 
     /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Peers that idle beyond this timeout are disconnected.
+    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
     /// Default is 120 seconds.
     pub fn idle_timeout(&self) -> Duration {
         self.idle_timeout
@@ -534,7 +534,7 @@ impl GossipsubConfigBuilder {
     }
 
     /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Peers that idle beyond this timeout are disconnected.
+    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
     /// Default is 120 seconds.
     pub fn idle_timeout(&mut self, idle_timeout: Duration) -> &mut Self {
         self.config.idle_timeout = idle_timeout;
