@@ -533,7 +533,7 @@ impl std::fmt::Display for RelayError {
 
 impl std::error::Error for RelayError {}
 
-/// Message from the [`RelayTransport`] to the [`Relay`](crate::Relay)
+/// Message from the [`RelayTransport`] to the [`Relay`](crate::v1::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.

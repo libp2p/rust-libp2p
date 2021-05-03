@@ -60,45 +60,56 @@ impl Default for Config {
     }
 }
 
+/// The events produced by the [`Relay`] behaviour.
 #[derive(Debug)]
 pub enum RelayEvent {
-    // TODO: Note that this can both be a new one or a renewal.
+    /// An inbound reservation request has been accepted.
     ReservationReqAccepted {
         src_peer_id: PeerId,
+        /// Indicates whether the request replaces an existing reservation.
         renewed: bool,
     },
+    /// Accepting an inbound reservation request failed.
     ReservationReqAcceptFailed {
         src_peer_id: PeerId,
         error: std::io::Error,
     },
+    /// An inbound reservation request has been denied.
     ReservationReqDenied {
         src_peer_id: PeerId,
     },
+    /// Denying an inbound reservation request has failed.
     ReservationReqDenyFailed {
         src_peer_id: PeerId,
         error: std::io::Error,
     },
+    /// An inbound reservation has timed out.
     ReservationTimedOut {
         src_peer_id: PeerId,
     },
+    /// An inbound circuit request has been denied.
     CircuitReqDenied {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
     },
+    /// Denying an inbound circuit request failed.
     CircuitReqDenyFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
         error: std::io::Error,
     },
+    /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
     },
+    /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
         error: std::io::Error,
     },
+    /// An inbound circuit has closed.
     CircuitClosed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
@@ -106,7 +117,8 @@ pub enum RelayEvent {
     },
 }
 
-// TODO: Consider having one Behaviour for relay and one for both source and destination.
+/// [`Relay`] is a [`NetworkBehaviour`] that implements the relay server
+/// functionality of the circuit relay v2 protocol.
 pub struct Relay {
     config: Config,
 

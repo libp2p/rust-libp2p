@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::message_proto;
-
 use crate::v2::behaviour::CircuitId;
 use crate::v2::copy_future::CopyFuture;
 use crate::v2::message_proto::Status;
@@ -55,12 +53,12 @@ pub enum RelayHandlerIn {
     },
     DenyReservationReq {
         inbound_reservation_req: inbound_hop::ReservationReq,
-        status: message_proto::Status,
+        status: Status,
     },
     DenyCircuitReq {
         circuit_id: Option<CircuitId>,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: message_proto::Status,
+        status: Status,
     },
     NegotiateOutboundConnect {
         circuit_id: CircuitId,
@@ -79,40 +77,51 @@ pub enum RelayHandlerIn {
     },
 }
 
+/// The events produced by the [`RelayHandler`].
 pub enum RelayHandlerEvent {
+    /// An inbound reservation request has been received.
     ReservationReqReceived {
         inbound_reservation_req: inbound_hop::ReservationReq,
     },
+    /// An inbound reservation request has been accepted.
     ReservationReqAccepted {
+        /// Indicates whether the request replaces an existing reservation.
         renewed: bool,
     },
-    ReservationReqAcceptFailed {
-        error: std::io::Error,
-    },
+    /// Accepting an inbound reservation request failed.
+    ReservationReqAcceptFailed { error: std::io::Error },
+    /// An inbound reservation request has been denied.
     ReservationReqDenied {},
-    ReservationReqDenyFailed {
-        error: std::io::Error,
-    },
+    /// Denying an inbound reservation request has failed.
+    ReservationReqDenyFailed { error: std::io::Error },
+    /// An inbound reservation has timed out.
     ReservationTimedOut {},
+    /// An inbound circuit request has been received.
     CircuitReqReceived(inbound_hop::CircuitReq),
+    /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
     },
+    /// Denying an inbound circuit request failed.
     CircuitReqDenyFailed {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
         error: std::io::Error,
     },
+    /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
     },
+    /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
         error: std::io::Error,
     },
+    /// An outbound substream for an inbound circuit request has been
+    /// negotiated.
     OutboundConnectNegotiated {
         circuit_id: CircuitId,
         src_peer_id: PeerId,
@@ -122,6 +131,7 @@ pub enum RelayHandlerEvent {
         dst_stream: NegotiatedSubstream,
         dst_pending_data: Bytes,
     },
+    /// Negotiating an outbound substream for an inbound circuit request failed.
     OutboundConnectNegotiationFailed {
         circuit_id: CircuitId,
         src_peer_id: PeerId,
@@ -129,6 +139,7 @@ pub enum RelayHandlerEvent {
         inbound_circuit_req: inbound_hop::CircuitReq,
         status: Status,
     },
+    /// An inbound circuit has closed.
     CircuitClosed {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
@@ -168,7 +179,10 @@ impl IntoProtocolsHandler for RelayHandlerProto {
     }
 }
 
+/// [`ProtocolsHandler`] that manages substreams for a relay on a single
+/// connection with a peer.
 pub struct RelayHandler {
+    /// Static [`RelayHandler`] [`Config`].
     config: Config,
 
     /// Queue of events to return when polled.
@@ -188,23 +202,34 @@ pub struct RelayHandler {
         >,
     >,
 
-    reservation_accept_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
-    reservation_deny_futures: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
-
-    circuit_accept_futures: FuturesUnordered<
-        BoxFuture<'static, Result<CircuitParts, (CircuitId, PeerId, std::io::Error)>>,
-    >,
-    circuit_deny_futures: FuturesUnordered<
-        BoxFuture<'static, (Option<CircuitId>, PeerId, Result<(), std::io::Error>)>,
-    >,
-
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
-
-    circuits: FuturesUnordered<BoxFuture<'static, (CircuitId, PeerId, Result<(), std::io::Error>)>>,
-
-    active_reservation: Option<Delay>,
+    /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
+
+    /// Futures accepting an inbound reservation request.
+    reservation_accept_futures: Futures<Result<(), std::io::Error>>,
+    /// Futures denying an inbound reservation request.
+    reservation_deny_futures: Futures<Result<(), std::io::Error>>,
+    /// Timeout for the currently active reservation.
+    active_reservation: Option<Delay>,
+
+    /// Futures accepting an inbound circuit request.
+    circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, std::io::Error)>>,
+    /// Futures deying an inbound circuit request.
+    circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), std::io::Error>)>,
+    /// Tracks substreams lend out to other [`RelayHandler`]s.
+    ///
+    /// Contains a [`futures::future::Future`] for each lend out substream that
+    /// resolves once the substream is dropped.
+    ///
+    /// Once all substreams are dropped and this handler has no other work,
+    /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
+    /// eventually.
+    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
+    /// Futures relaying data for circuit between two peers.
+    circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 }
+
+type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
 impl ProtocolsHandler for RelayHandler {
     type InEvent = RelayHandlerIn;

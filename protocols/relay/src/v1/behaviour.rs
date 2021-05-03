@@ -769,7 +769,7 @@ enum RelayListener {
 
 impl RelayListener {
     /// Returns whether the channel to the
-    /// [`RelayListener`](crate::transport::RelayListener) is closed.
+    /// [`RelayListener`](crate::v1::RelayListener) is closed.
     fn is_closed(&self) -> bool {
         match self {
             RelayListener::Connecting { to_listener, .. }
