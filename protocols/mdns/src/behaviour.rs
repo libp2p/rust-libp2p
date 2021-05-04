@@ -214,8 +214,8 @@ impl Mdns {
                         } else {
                             self.discovered_nodes
                                 .push((*peer.id(), addr.clone(), new_expiration));
+                            discovered.push((*peer.id(), addr));
                         }
-                        discovered.push((*peer.id(), addr));
                     }
                 }
 
