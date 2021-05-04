@@ -1324,7 +1324,7 @@ where
                     peers.insert(*peer_id);
                     // If the peer did not previously exist in any mesh, inform the handler
                     peer_added_to_mesh(
-                        peer_id.clone(),
+                        peer_id,
                         vec![&topic_hash],
                         &self.mesh,
                         self.peer_topics.get(&peer_id),
