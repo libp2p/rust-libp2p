@@ -24,10 +24,10 @@ use async_io::{Async, Timer};
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use lazy_static::lazy_static;
+use libp2p_core::connection::ListenerId;
 use libp2p_core::{
     address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
 };
-use libp2p_core::connection::ListenerId;
 use libp2p_swarm::{
     protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters, ProtocolsHandler,
@@ -85,6 +85,9 @@ pub struct Mdns {
     /// Iface watcher.
     if_watch: IfWatcher,
 
+    /// Send a query.
+    query: bool,
+
     /// Buffer used for receiving data from the main socket.
     /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
     /// bytes, if it can be ensured that all participating devices can handle such large packets.
@@ -124,11 +127,7 @@ impl Mdns {
     /// Builds a new `Mdns` behaviour.
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
         let recv_socket = {
-            let socket = Socket::new(
-                Domain::IPV4,
-                Type::DGRAM,
-                Some(socket2::Protocol::UDP),
-            )?;
+            let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
             socket.set_reuse_address(true)?;
             #[cfg(unix)]
             socket.set_reuse_port(true)?;
@@ -147,6 +146,7 @@ impl Mdns {
             recv_socket,
             send_socket,
             if_watch,
+            query: false,
             recv_buffer: [0; 4096],
             send_buffer: Default::default(),
             discovered_nodes: SmallVec::new(),
@@ -172,6 +172,7 @@ impl Mdns {
         self.timeout.set_interval(self.query_interval);
         match packet {
             MdnsPacket::Query(query) => {
+                self.query = false;
                 for packet in build_query_response(
                     query.query_id(),
                     *params.local_peer_id(),
@@ -271,7 +272,7 @@ impl NetworkBehaviour for Mdns {
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        self.send_buffer.push_back(build_query());
+        self.query = true;
     }
 
     fn poll(
@@ -297,7 +298,7 @@ impl NetworkBehaviour for Mdns {
                         if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
                             log::error!("join multicast failed: {}", err);
                         } else {
-                            self.send_buffer.push_back(build_query());
+                            self.query = true;
                         }
                     }
                 }
@@ -333,10 +334,10 @@ impl NetworkBehaviour for Mdns {
             }
         }
         if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-            self.send_buffer.push_back(build_query());
+            self.query = true;
         }
         // Send responses.
-        if !self.send_buffer.is_empty() {
+        if !self.send_buffer.is_empty() || self.query {
             while self.send_socket.poll_writable(cx).is_ready() {
                 if let Some(packet) = self.send_buffer.pop_front() {
                     match self
@@ -348,6 +349,9 @@ impl NetworkBehaviour for Mdns {
                         Some(Err(err)) => log::error!("{}", err),
                         None => self.send_buffer.push_front(packet),
                     }
+                } else if self.query {
+                    self.send_buffer.push_back(build_query());
+                    self.query = false;
                 } else {
                     break;
                 }
