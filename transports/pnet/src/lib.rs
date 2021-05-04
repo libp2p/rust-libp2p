@@ -30,7 +30,7 @@ use log::trace;
 use pin_project::pin_project;
 use rand::RngCore;
 use salsa20::{
-    cipher::{NewStreamCipher, SyncStreamCipher},
+    cipher::{NewCipher, StreamCipher},
     Salsa20, XSalsa20,
 };
 use sha3::{digest::ExtendableOutput, Shake128};
