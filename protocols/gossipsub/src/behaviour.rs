@@ -1403,7 +1403,7 @@ where
 
                 // inform the handler
                 peer_removed_from_mesh(
-                    peer_id.clone(),
+                    peer_id,
                     topic_hash,
                     &self.mesh,
                     self.peer_topics.get(&peer_id),
