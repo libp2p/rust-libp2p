@@ -227,8 +227,8 @@ pub struct Gossipsub<
     /// duplicates from being propagated to the application and on the network.
     duplicate_cache: DuplicateCache<MessageId>,
 
-    /// A map of peers to their protocol kind. This is to identify different kinds of gossipsub
-    /// peers.
+    /// A set of connected peers, indexed by their [`PeerId`]. tracking both the [`PeerKind`] and
+    /// the set of [`ConnectionId`]s.
     peer_protocols: HashMap<PeerId, PeerConnections>,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
@@ -2350,17 +2350,17 @@ where
         no_px: HashSet<PeerId>,
     ) {
         // handle the grafts and overlapping prunes per peer
-        for (peer, topics) in to_graft.iter() {
-            for topic in topics {
+        for (peer, topics) in to_graft.into_iter() {
+            for topic in &topics {
                 // inform scoring of graft
                 if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.graft(peer, topic.clone());
+                    peer_score.graft(&peer, topic.clone());
                 }
 
                 // inform the handler of the peer being added to the mesh
                 // If the peer did not previously exist in any mesh, inform the handler
                 peer_added_to_mesh(
-                    peer.clone(),
+                    peer,
                     vec![topic],
                     &self.mesh,
                     self.peer_topics.get(&peer),
@@ -2379,14 +2379,14 @@ where
             // NOTE: In this case a peer has been added to a topic mesh, and removed from another.
             // It therefore must be in at least one mesh and we do not need to inform the handler
             // of its removal from another.
-            if let Some(topics) = to_prune.remove(peer) {
+            if let Some(topics) = to_prune.remove(&peer) {
                 let mut prunes = topics
                     .iter()
                     .map(|topic_hash| {
                         self.make_prune(
                             topic_hash,
-                            peer,
-                            self.config.do_px() && !no_px.contains(peer),
+                            &peer,
+                            self.config.do_px() && !no_px.contains(&peer),
                         )
                     })
                     .collect::<Vec<_>>();
@@ -2396,7 +2396,7 @@ where
             // send the control messages
             if self
                 .send_message(
-                    *peer,
+                    peer,
                     GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
@@ -3211,15 +3211,13 @@ fn peer_added_to_mesh(
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
-    let connection_id = match connections.get(&peer_id) {
-        Some(conn) if !conn.connections.is_empty() => conn.connections[0],
-        _ => {
-            warn!(
-                "Peer has no active connection but added to a mesh. Peer {}",
-                peer_id
-            );
-            return; // There is no active connection registered for this peer.
-        }
+    let connection_id = {
+        let conn = connections.get(&peer_id).expect("To be connected to peer.");
+        assert!(
+            !conn.connections.is_empty(),
+            "Must have at least one connection"
+        );
+        conn.connections[0]
     };
 
     if let Some(topics) = known_topics {
@@ -3254,15 +3252,13 @@ fn peer_removed_from_mesh(
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
-    let connection_id = match connections.get(&peer_id) {
-        Some(conn) if !conn.connections.is_empty() => conn.connections[0],
-        _ => {
-            warn!(
-                "Peer has no active connection and was removed from a mesh. Peer {}",
-                peer_id
-            );
-            return; // There is no active connection registered for this peer.
-        }
+    let connection_id = {
+        let conn = connections.get(&peer_id).expect("To be connected to peer.");
+        assert!(
+            !conn.connections.is_empty(),
+            "There should be at least one connection to a peer"
+        );
+        conn.connections[0]
     };
 
     if let Some(topics) = known_topics {

@@ -525,8 +525,20 @@ mod tests {
             .insert(topic_hashes[1].clone(), Default::default());
         let new_peers: Vec<PeerId> = vec![];
         for _ in 0..3 {
+            let random_peer = PeerId::random();
+            // inform the behaviour of a new peer
+            gs.inject_connection_established(
+                &random_peer,
+                &ConnectionId::new(1),
+                &ConnectedPoint::Dialer {
+                    address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
+                },
+            );
+            gs.inject_connected(&random_peer);
+
+            // add the new peer to the fanout
             let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
-            fanout_peers.insert(PeerId::random());
+            fanout_peers.insert(random_peer);
         }
 
         // subscribe to topic1
