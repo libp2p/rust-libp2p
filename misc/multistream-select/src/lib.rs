@@ -137,6 +137,7 @@ pub enum Version {
     /// [1]: https://github.com/multiformats/go-multistream/issues/20
     /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
     V1Lazy,
+    V1SimOpen,
     // Draft: https://github.com/libp2p/specs/pull/95
     // V2,
 }

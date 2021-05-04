@@ -35,22 +35,21 @@ fn select_proto_basic() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
-        let server = async_std::task::spawn(async move {
+        let server = async move {
             let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
             let (proto, mut io) = listener_select_proto(connec, protos).await.unwrap();
             assert_eq!(proto, b"/proto2");
 
-            let mut out = vec![0; 32];
-            let n = io.read(&mut out).await.unwrap();
-            out.truncate(n);
+            let mut out = vec![0; 4];
+            io.read_exact(&mut out).await.unwrap();
             assert_eq!(out, b"ping");
 
             io.write_all(b"pong").await.unwrap();
             io.flush().await.unwrap();
-        });
+        };
 
-        let client = async_std::task::spawn(async move {
+        let client = async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
@@ -60,18 +59,17 @@ fn select_proto_basic() {
             io.write_all(b"ping").await.unwrap();
             io.flush().await.unwrap();
 
-            let mut out = vec![0; 32];
-            let n = io.read(&mut out).await.unwrap();
-            out.truncate(n);
+            let mut out = vec![0; 4];
+            io.read_exact(&mut out).await.unwrap();
             assert_eq!(out, b"pong");
-        });
+        };
 
-        server.await;
-        client.await;
+        futures::future::join(server, client).await;
     }
 
     async_std::task::block_on(run(Version::V1));
     async_std::task::block_on(run(Version::V1Lazy));
+    async_std::task::block_on(run(Version::V1SimOpen));
 }
 
 /// Tests the expected behaviour of failed negotiations.
@@ -165,7 +163,7 @@ fn negotiation_failed() {
 
     for (listen_protos, dial_protos) in protos {
         for dial_payload in payloads.clone() {
-            for &version in &[Version::V1, Version::V1Lazy] {
+            for &version in &[Version::V1, Version::V1Lazy, Version::V1SimOpen] {
                 async_std::task::block_on(run(Test {
                     version,
                     listen_protos: listen_protos.clone(),
@@ -237,4 +235,34 @@ fn select_proto_serial() {
 
     async_std::task::block_on(run(Version::V1));
     async_std::task::block_on(run(Version::V1Lazy));
+    async_std::task::block_on(run(Version::V1SimOpen));
+}
+
+#[test]
+fn simultaneous_open() {
+    async fn run(version: Version) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener_addr = listener.local_addr().unwrap();
+
+        let server = async move {
+            let connec = listener.accept().await.unwrap().0;
+            let protos = vec![b"/proto1", b"/proto2"];
+            let (proto, io) = dialer_select_proto_serial(connec, protos, version).await.unwrap();
+            assert_eq!(proto, b"/proto2");
+            io.complete().await.unwrap();
+        };
+
+        let client = async move {
+            let connec = TcpStream::connect(&listener_addr).await.unwrap();
+            let protos = vec![b"/proto3", b"/proto2"];
+            let (proto, io) = dialer_select_proto_serial(connec, protos.into_iter(), version)
+                .await.unwrap();
+            assert_eq!(proto, b"/proto2");
+            io.complete().await.unwrap();
+        };
+
+        futures::future::join(server, client).await;
+    }
+
+    futures::executor::block_on(run(Version::V1SimOpen));
 }
