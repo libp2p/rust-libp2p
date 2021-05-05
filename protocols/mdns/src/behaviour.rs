@@ -173,6 +173,7 @@ impl Mdns {
         match packet {
             MdnsPacket::Query(query) => {
                 self.query = false;
+                log::trace!("sending response");
                 for packet in build_query_response(
                     query.query_id(),
                     *params.local_peer_id(),
@@ -350,6 +351,7 @@ impl NetworkBehaviour for Mdns {
                         None => self.send_buffer.push_front(packet),
                     }
                 } else if self.query {
+                    log::trace!("sending query");
                     self.send_buffer.push_back(build_query());
                     self.query = false;
                 } else {
