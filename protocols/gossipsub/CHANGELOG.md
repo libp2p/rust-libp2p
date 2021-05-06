@@ -1,3 +1,10 @@
+# 0.31.0 [unreleased]
+
+- Keep connections to peers in a mesh alive. Allow closing idle connections to peers not in a mesh
+  [PR-2043].
+
+[PR-2043]: https://github.com/libp2p/rust-libp2p/pull/2043https://github.com/libp2p/rust-libp2p/pull/2043
+
 # 0.30.1 [2021-04-27]
 
 - Remove `regex-filter` feature flag thus always enabling `regex::RegexSubscriptionFilter` [PR
