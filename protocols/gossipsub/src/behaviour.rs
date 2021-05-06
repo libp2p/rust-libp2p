@@ -2989,31 +2989,31 @@ where
 
         // Remove the connection from the list
         // If there are no connections left, inject_disconnected will remove the mapping entirely.
-        let connections = self
-            .connected_peers
-            .get_mut(peer_id)
-            .expect("Peers connection must be registered");
-        let index = connections
-            .connections
-            .iter()
-            .position(|v| v == connection_id)
-            .expect("Previously established connection to a non-black-listed peer to be present");
-        connections.connections.remove(index);
+        if let Some(connections) = self.connected_peers.get_mut(peer_id) {
+            let index = connections
+                .connections
+                .iter()
+                .position(|v| v == connection_id)
+                .expect(
+                    "Previously established connection to a non-black-listed peer to be present",
+                );
+            connections.connections.remove(index);
 
-        // If there are more connections and this peer is in a mesh, inform the first connection
-        // handler.
-        if !connections.connections.is_empty() {
-            if let Some(topics) = self.peer_topics.get(peer_id) {
-                for topic in topics {
-                    if let Some(mesh_peers) = self.mesh.get(topic) {
-                        if mesh_peers.contains(peer_id) {
-                            self.events
-                                .push_back(NetworkBehaviourAction::NotifyHandler {
-                                    peer_id: peer_id.clone(),
-                                    event: Arc::new(GossipsubHandlerIn::JoinedMesh),
-                                    handler: NotifyHandler::One(connections.connections[0]),
-                                });
-                            break;
+            // If there are more connections and this peer is in a mesh, inform the first connection
+            // handler.
+            if !connections.connections.is_empty() {
+                if let Some(topics) = self.peer_topics.get(peer_id) {
+                    for topic in topics {
+                        if let Some(mesh_peers) = self.mesh.get(topic) {
+                            if mesh_peers.contains(peer_id) {
+                                self.events
+                                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                                        peer_id: peer_id.clone(),
+                                        event: Arc::new(GossipsubHandlerIn::JoinedMesh),
+                                        handler: NotifyHandler::One(connections.connections[0]),
+                                    });
+                                break;
+                            }
                         }
                     }
                 }
