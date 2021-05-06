@@ -85,9 +85,6 @@ pub struct Mdns {
     /// Iface watcher.
     if_watch: IfWatcher,
 
-    /// Send a query.
-    query: bool,
-
     /// Buffer used for receiving data from the main socket.
     /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
     /// bytes, if it can be ensured that all participating devices can handle such large packets.
@@ -146,7 +143,6 @@ impl Mdns {
             recv_socket,
             send_socket,
             if_watch,
-            query: false,
             recv_buffer: [0; 4096],
             send_buffer: Default::default(),
             discovered_nodes: SmallVec::new(),
@@ -169,10 +165,9 @@ impl Mdns {
     }
 
     fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
-        self.timeout.set_interval(self.query_interval);
         match packet {
             MdnsPacket::Query(query) => {
-                self.query = false;
+                self.timeout.set_interval(self.query_interval);
                 log::trace!("sending response");
                 for packet in build_query_response(
                     query.query_id(),
@@ -273,7 +268,8 @@ impl NetworkBehaviour for Mdns {
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        self.query = true;
+        self.timeout
+            .set_interval_at(Instant::now(), self.query_interval);
     }
 
     fn poll(
@@ -299,7 +295,8 @@ impl NetworkBehaviour for Mdns {
                         if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
                             log::error!("join multicast failed: {}", err);
                         } else {
-                            self.query = true;
+                            self.timeout
+                                .set_interval_at(Instant::now(), self.query_interval);
                         }
                     }
                 }
@@ -334,29 +331,23 @@ impl NetworkBehaviour for Mdns {
                 _ => {}
             }
         }
-        if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-            self.query = true;
-        }
         // Send responses.
-        if !self.send_buffer.is_empty() || self.query {
-            while self.send_socket.poll_writable(cx).is_ready() {
-                if let Some(packet) = self.send_buffer.pop_front() {
-                    match self
-                        .send_socket
-                        .send_to(&packet, *IPV4_MDNS_MULTICAST_ADDRESS)
-                        .now_or_never()
-                    {
-                        Some(Ok(_)) => {}
-                        Some(Err(err)) => log::error!("{}", err),
-                        None => self.send_buffer.push_front(packet),
-                    }
-                } else if self.query {
-                    log::trace!("sending query");
-                    self.send_buffer.push_back(build_query());
-                    self.query = false;
-                } else {
-                    break;
+        while self.send_socket.poll_writable(cx).is_ready() {
+            if let Some(packet) = self.send_buffer.pop_front() {
+                match self
+                    .send_socket
+                    .send_to(&packet, *IPV4_MDNS_MULTICAST_ADDRESS)
+                    .now_or_never()
+                {
+                    Some(Ok(_)) => {}
+                    Some(Err(err)) => log::error!("{}", err),
+                    None => self.send_buffer.push_front(packet),
                 }
+            } else if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
+                log::trace!("sending query");
+                self.send_buffer.push_back(build_query());
+            } else {
+                break;
             }
         }
         // Emit discovered event.
