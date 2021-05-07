@@ -27,6 +27,8 @@
 
 #[cfg(feature = "identify")]
 mod identify;
+#[cfg(feature = "kad")]
+mod kad;
 #[cfg(feature = "ping")]
 mod ping;
 mod swarm;
@@ -37,6 +39,8 @@ use open_metrics_client::registry::Registry;
 pub struct Metrics {
     #[cfg(feature = "identify")]
     identify: identify::Metrics,
+    #[cfg(feature = "kad")]
+    kad: kad::Metrics,
     #[cfg(feature = "ping")]
     ping: ping::Metrics,
     swarm: swarm::Metrics,
@@ -56,6 +60,8 @@ impl Metrics {
         Self {
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),
+            #[cfg(feature = "kad")]
+            kad: kad::Metrics::new(sub_registry),
             #[cfg(feature = "ping")]
             ping: ping::Metrics::new(sub_registry),
             swarm: swarm::Metrics::new(sub_registry),
