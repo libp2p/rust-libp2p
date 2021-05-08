@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod inbound_hop;
+pub mod inbound_stop;
+pub mod outbound_hop;
 pub mod outbound_stop;
 
 const HOP_PROTOCOL_NAME: &[u8; 31] = b"/libp2p/circuit/relay/0.2.0/hop";

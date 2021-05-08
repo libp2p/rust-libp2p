@@ -22,10 +22,10 @@
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
-use libp2p::identify::{Identify, IdentifyEvent, IdentifyConfig};
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::noise;
-use libp2p::ping::{Ping, PingEvent, PingConfig};
-use libp2p::relay::v2::{Relay, RelayEvent};
+use libp2p::ping::{Ping, PingConfig, PingEvent};
+use libp2p::relay::v2::relay::{self, Relay};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId, Swarm};
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     enum Event {
         Ping(PingEvent),
         Identify(IdentifyEvent),
-        Relay(RelayEvent),
+        Relay(relay::Event),
     }
 
     impl From<PingEvent> for Event {
@@ -78,8 +78,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<RelayEvent> for Event {
-        fn from(e: RelayEvent) -> Self {
+    impl From<relay::Event> for Event {
+        fn from(e: relay::Event) -> Self {
             Event::Relay(e)
         }
     }
@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(Event::Relay(event))) => println!("{:?}", event),
-                Poll::Ready(Some(_)) => {},
+                Poll::Ready(Some(_)) => {}
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => {
                     if !listening {

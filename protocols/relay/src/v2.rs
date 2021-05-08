@@ -25,9 +25,17 @@ mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
 }
 
-mod behaviour;
+pub mod client;
 mod copy_future;
-mod handler;
 mod protocol;
+pub mod relay;
 
-pub use behaviour::{Relay, RelayEvent};
+/// The ID of an outgoing / incoming, relay / destination request.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RequestId(u64);
+
+impl RequestId {
+    fn new() -> RequestId {
+        RequestId(rand::random())
+    }
+}

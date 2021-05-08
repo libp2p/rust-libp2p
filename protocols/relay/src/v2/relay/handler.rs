@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::behaviour::CircuitId;
+use crate::v2::relay::CircuitId;
 use crate::v2::copy_future::CopyFuture;
 use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_hop, outbound_stop};
@@ -46,7 +46,7 @@ pub struct Config {
     pub max_circuit_bytes: u64,
 }
 
-pub enum RelayHandlerIn {
+pub enum In {
     AcceptReservationReq {
         inbound_reservation_req: inbound_hop::ReservationReq,
         addrs: Vec<Multiaddr>,
@@ -77,8 +77,8 @@ pub enum RelayHandlerIn {
     },
 }
 
-/// The events produced by the [`RelayHandler`].
-pub enum RelayHandlerEvent {
+/// The events produced by the [`Handler`].
+pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
         inbound_reservation_req: inbound_hop::ReservationReq,
@@ -147,15 +147,15 @@ pub enum RelayHandlerEvent {
     },
 }
 
-pub struct RelayHandlerProto {
+pub struct Prototype {
     pub config: Config,
 }
 
-impl IntoProtocolsHandler for RelayHandlerProto {
-    type Handler = RelayHandler;
+impl IntoProtocolsHandler for Prototype {
+    type Handler = Handler;
 
     fn into_handler(self, _remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
-        RelayHandler {
+        Handler {
             config: self.config,
             queued_events: Default::default(),
             pending_error: Default::default(),
@@ -181,8 +181,8 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 
 /// [`ProtocolsHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
-pub struct RelayHandler {
-    /// Static [`RelayHandler`] [`Config`].
+pub struct Handler {
+    /// Static [`Handler`] [`Config`].
     config: Config,
 
     /// Queue of events to return when polled.
@@ -216,7 +216,7 @@ pub struct RelayHandler {
     circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, std::io::Error)>>,
     /// Futures deying an inbound circuit request.
     circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), std::io::Error>)>,
-    /// Tracks substreams lend out to other [`RelayHandler`]s.
+    /// Tracks substreams lend out to other [`Handler`]s.
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that
     /// resolves once the substream is dropped.
@@ -231,9 +231,9 @@ pub struct RelayHandler {
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
-impl ProtocolsHandler for RelayHandler {
-    type InEvent = RelayHandlerIn;
-    type OutEvent = RelayHandlerEvent;
+impl ProtocolsHandler for Handler {
+    type InEvent = In;
+    type OutEvent = Event;
     type Error = ProtocolsHandlerUpgrErr<
         EitherError<inbound_hop::UpgradeError, outbound_stop::UpgradeError>,
     >;
@@ -261,14 +261,14 @@ impl ProtocolsHandler for RelayHandler {
         match request {
             inbound_hop::Req::Reserve(inbound_reservation_req) => {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    RelayHandlerEvent::ReservationReqReceived {
+                    Event::ReservationReqReceived {
                         inbound_reservation_req,
                     },
                 ));
             }
             inbound_hop::Req::Connect(circuit_req) => {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    RelayHandlerEvent::CircuitReqReceived(circuit_req),
+                    Event::CircuitReqReceived(circuit_req),
                 ));
             }
         }
@@ -291,7 +291,7 @@ impl ProtocolsHandler for RelayHandler {
         self.alive_lend_out_substreams.push(rx);
 
         self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-            RelayHandlerEvent::OutboundConnectNegotiated {
+            Event::OutboundConnectNegotiated {
                 circuit_id,
                 src_peer_id,
                 src_connection_id,
@@ -305,21 +305,21 @@ impl ProtocolsHandler for RelayHandler {
 
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
-            RelayHandlerIn::AcceptReservationReq {
+            In::AcceptReservationReq {
                 inbound_reservation_req,
                 addrs,
             } => {
                 self.reservation_accept_futures
                     .push(inbound_reservation_req.accept(addrs).boxed());
             }
-            RelayHandlerIn::DenyReservationReq {
+            In::DenyReservationReq {
                 inbound_reservation_req,
                 status,
             } => {
                 self.reservation_deny_futures
                     .push(inbound_reservation_req.deny(status).boxed());
             }
-            RelayHandlerIn::NegotiateOutboundConnect {
+            In::NegotiateOutboundConnect {
                 circuit_id,
                 inbound_circuit_req,
                 relay_peer_id,
@@ -343,7 +343,7 @@ impl ProtocolsHandler for RelayHandler {
                         ),
                     });
             }
-            RelayHandlerIn::DenyCircuitReq {
+            In::DenyCircuitReq {
                 circuit_id,
                 inbound_circuit_req,
                 status,
@@ -356,7 +356,7 @@ impl ProtocolsHandler for RelayHandler {
                         .boxed(),
                 );
             }
-            RelayHandlerIn::AcceptAndDriveCircuit {
+            In::AcceptAndDriveCircuit {
                 circuit_id,
                 dst_peer_id,
                 inbound_circuit_req,
@@ -483,7 +483,7 @@ impl ProtocolsHandler for RelayHandler {
         } = open_info;
 
         self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-            RelayHandlerEvent::OutboundConnectNegotiationFailed {
+            Event::OutboundConnectNegotiationFailed {
                 circuit_id,
                 src_peer_id,
                 src_connection_id,
@@ -526,7 +526,7 @@ impl ProtocolsHandler for RelayHandler {
             match result {
                 Ok(()) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::CircuitClosed {
+                        Event::CircuitClosed {
                             circuit_id,
                             dst_peer_id,
                             error: None,
@@ -535,7 +535,7 @@ impl ProtocolsHandler for RelayHandler {
                 }
                 Err(e) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::CircuitClosed {
+                        Event::CircuitClosed {
                             circuit_id,
                             dst_peer_id,
                             error: Some(e),
@@ -553,12 +553,12 @@ impl ProtocolsHandler for RelayHandler {
                         .replace(Delay::new(self.config.reservation_duration))
                         .is_some();
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::ReservationReqAccepted { renewed },
+                        Event::ReservationReqAccepted { renewed },
                     ));
                 }
                 Err(error) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::ReservationReqAcceptFailed { error },
+                        Event::ReservationReqAcceptFailed { error },
                     ));
                 }
             }
@@ -568,12 +568,12 @@ impl ProtocolsHandler for RelayHandler {
             match result {
                 Ok(()) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::ReservationReqDenied {},
+                        Event::ReservationReqDenied {},
                     ))
                 }
                 Err(error) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::ReservationReqDenyFailed { error },
+                        Event::ReservationReqDenyFailed { error },
                     ));
                 }
             }
@@ -621,7 +621,7 @@ impl ProtocolsHandler for RelayHandler {
                     self.circuits.push(circuit);
 
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::CircuitReqAccepted {
+                        Event::CircuitReqAccepted {
                             circuit_id,
                             dst_peer_id,
                         },
@@ -629,7 +629,7 @@ impl ProtocolsHandler for RelayHandler {
                 }
                 Err((circuit_id, dst_peer_id, error)) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::CircuitReqAcceptFailed {
+                        Event::CircuitReqAcceptFailed {
                             circuit_id,
                             dst_peer_id,
                             error,
@@ -645,7 +645,7 @@ impl ProtocolsHandler for RelayHandler {
             match result {
                 Ok(()) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::CircuitReqDenied {
+                        Event::CircuitReqDenied {
                             circuit_id,
                             dst_peer_id,
                         },
@@ -653,7 +653,7 @@ impl ProtocolsHandler for RelayHandler {
                 }
                 Err(error) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RelayHandlerEvent::CircuitReqDenyFailed {
+                        Event::CircuitReqDenyFailed {
                             circuit_id,
                             dst_peer_id,
                             error,
@@ -674,7 +674,7 @@ impl ProtocolsHandler for RelayHandler {
         {
             self.active_reservation = None;
             return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                RelayHandlerEvent::ReservationTimedOut {},
+                Event::ReservationTimedOut {},
             ));
         }
 
@@ -691,7 +691,7 @@ impl ProtocolsHandler for RelayHandler {
                     self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
                 }
                 KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("RelayHandler never sets KeepAlive::No."),
+                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
             }
         } else {
             self.keep_alive = KeepAlive::Yes;

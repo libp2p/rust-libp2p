@@ -18,37 +18,31 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::message_proto::{hop_message, HopMessage, Limit, Reservation, Status};
-use crate::v2::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
+use crate::v2::message_proto::{stop_message, Status, StopMessage};
+use crate::v2::protocol::{MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::{Bytes, BytesMut};
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{upgrade, Multiaddr, PeerId};
+use libp2p_core::{upgrade, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::convert::TryInto;
 use std::io::Cursor;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{error, fmt, iter};
 use unsigned_varint::codec::UviBytes;
 
-pub struct Upgrade {
-    pub reservation_duration: Duration,
-    pub max_circuit_duration: Duration,
-    pub max_circuit_bytes: u64,
-}
+pub struct Upgrade {}
 
 impl upgrade::UpgradeInfo for Upgrade {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(HOP_PROTOCOL_NAME)
+        iter::once(STOP_PROTOCOL_NAME)
     }
 }
 
 impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
-    type Output = Req;
+    type Output = Circuit;
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -63,28 +57,26 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
-            let HopMessage {
+            let StopMessage {
                 r#type,
                 peer,
-                reservation: _,
                 limit: _,
                 status: _,
-            } = HopMessage::decode(Cursor::new(msg))?;
+            } = StopMessage::decode(Cursor::new(msg))?;
 
-            let r#type = hop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+            let r#type =
+                stop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
             match r#type {
-                hop_message::Type::Reserve => Ok(Req::Reserve(ReservationReq {
-                    substream,
-                    reservation_duration: self.reservation_duration,
-                    max_circuit_duration: self.max_circuit_duration,
-                    max_circuit_bytes: self.max_circuit_bytes,
-                })),
-                hop_message::Type::Connect => {
-                    let dst = PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
-                        .map_err(|_| UpgradeError::ParsePeerId)?;
-                    Ok(Req::Connect(CircuitReq { substream, dst }))
+                stop_message::Type::Connect => {
+                    let src_peer_id =
+                        PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
+                            .map_err(|_| UpgradeError::ParsePeerId)?;
+                    Ok(Circuit {
+                        substream,
+                        src_peer_id,
+                    })
                 }
-                hop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
+                stop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
             }
         }
         .boxed()
@@ -151,89 +143,20 @@ impl error::Error for UpgradeError {
     }
 }
 
-pub enum Req {
-    Reserve(ReservationReq),
-    Connect(CircuitReq),
-}
-
-pub struct ReservationReq {
+pub struct Circuit {
     substream: Framed<NegotiatedSubstream, UviBytes>,
-    reservation_duration: Duration,
-    max_circuit_duration: Duration,
-    max_circuit_bytes: u64,
+    src_peer_id: PeerId,
 }
 
-impl ReservationReq {
-    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), std::io::Error> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: Some(Reservation {
-                addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: Some(
-                    (SystemTime::now() + self.reservation_duration)
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                        .try_into()
-                        // TODO: Can we do better? Why represent time as an i64 in protobuf in the first place?
-                        .expect("Time to fit i64."),
-                ),
-                // TODO: Does this need to be set?
-                voucher: None,
-            }),
-            limit: Some(Limit {
-                // TODO: Handle the unwrap. Why use an i32 in protobuf in the first place?
-                duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
-                // TODO: Handle the unwrap. Why use an i64 instead of a u64?
-                data: Some(self.max_circuit_bytes.try_into().unwrap()),
-            }),
-            status: Some(Status::Ok.into()),
-        };
-
-        self.send(msg).await
-    }
-
-    pub async fn deny(self, status: Status) -> Result<(), std::io::Error> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(status.into()),
-        };
-
-        self.send(msg).await
-    }
-
-    async fn send(mut self, msg: HopMessage) -> Result<(), std::io::Error> {
-        let mut msg_bytes = BytesMut::new();
-        msg.encode(&mut msg_bytes)
-            // TODO: Sure panicing is safe here?
-            .expect("all the mandatory fields are always filled; QED");
-        self.substream.send(msg_bytes.freeze()).await?;
-        self.substream.flush().await?;
-        self.substream.close().await?;
-
-        Ok(())
-    }
-}
-
-pub struct CircuitReq {
-    dst: PeerId,
-    substream: Framed<NegotiatedSubstream, UviBytes>,
-}
-
-impl CircuitReq {
-    pub fn dst(&self) -> PeerId {
-        self.dst
+impl Circuit {
+    pub(crate) fn src_peer_id(&self) -> PeerId {
+        self.src_peer_id
     }
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), std::io::Error> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
+        let msg = StopMessage {
+            r#type: stop_message::Type::Status.into(),
             peer: None,
-            reservation: None,
             limit: None,
             status: Some(Status::Ok.into()),
         };
@@ -254,22 +177,10 @@ impl CircuitReq {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub async fn deny(mut self, status: Status) -> Result<(), std::io::Error> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(status.into()),
-        };
-        self.send(msg).await?;
-        self.substream.close().await
-    }
-
-    async fn send(&mut self, msg: HopMessage) -> Result<(), std::io::Error> {
+    async fn send(&mut self, msg: StopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-            // TODO: Sure panicing is safe here?
+        // TODO: Sure panicing is safe here?
             .expect("all the mandatory fields are always filled; QED");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;
