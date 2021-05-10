@@ -24,21 +24,29 @@
 //! relay client listening via the relay server and (3) a dialing relay client
 //! dialing the listening relay client via the relay server.
 //!
-//! 1. To start the relay server, run `cargo run --example relay -- relay`.
+//! 1. To start the relay server, run `cargo run --example relay -- relay` which will print
+//!    something along the lines of:
+//!
+//!    ```
+//!    Local peer id: PeerId("12D3KooWAP5X5k9DS94n7AsiUAsaiso59Kioh14j2c13fCiudjdZ")
+//!    #                      ^-- <peer-id-relay-server>
+//!    Listening on "/ip6/::1/tcp/36537"
+//!    #             ^-- <addr-relay-server>
+//!    ```
 //!
 //! 2. To start the listening relay client run `cargo run --example relay -- client-listen
 //! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit` in a second terminal where:
 //!
-//!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
-//!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
+//!   - `<addr-relay-server>`: one of the listening addresses of the relay server
+//!   - `<peer-id-relay-server>`: the peer id of the relay server
 //!
 //! 3. To start the dialing relay client run `cargo run --example relay -- client-dial
 //! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/p2p/<peer-id-listening-relay-client>`
 //! in a third terminal where:
 //!
-//!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
-//!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
-//!   - `<peer-id-listening-relay-client>` is replaced by the peer id of the listening relay client.
+//!   - `<addr-relay-server>`: one of the listening addresses of the relay server
+//!   - `<peer-id-relay-server>`: the peer id of the relay server
+//!   - `<peer-id-listening-relay-client>`: the peer id of the listening relay client
 //!
 //! In the third terminal you will see the dialing relay client to receive pings from both the relay
 //! server AND from the listening relay client relayed via the relay server.
