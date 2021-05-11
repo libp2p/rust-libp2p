@@ -99,6 +99,7 @@ enum IncomingRelayReq {
     },
 }
 
+#[derive(Debug)]
 pub struct RelayConfig {
     /// How long to keep connections alive when they're idle.
     ///

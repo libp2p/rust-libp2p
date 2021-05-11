@@ -1,3 +1,13 @@
+# 0.28.2 [2021-04-27]
+
+- Support dialing `Multiaddr` with `/p2p` protocol [PR
+  2058](https://github.com/libp2p/rust-libp2p/pull/2058).
+
+# 0.28.1 [2021-04-01]
+
+- Require at least js-sys v0.3.50 [PR
+  2023](https://github.com/libp2p/rust-libp2p/pull/2023).
+
 # 0.28.0 [2021-03-17]
 
 - Update `libp2p-core`.
@@ -40,4 +50,3 @@
 - Updated dependencies.
 - Support `/dns` in the websocket implementation
   ([PR 1626](https://github.com/libp2p/rust-libp2p/pull/1626))
-

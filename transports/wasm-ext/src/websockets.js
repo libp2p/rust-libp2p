@@ -31,7 +31,7 @@ export const websocket_transport = () => {
 
 /// Turns a string multiaddress into a WebSockets string URL.
 const multiaddr_to_ws = (addr) => {
-	let parsed = addr.match(/^\/(ip4|ip6|dns4|dns6|dns)\/(.*?)\/tcp\/(.*?)\/(ws|wss|x-parity-ws\/(.*)|x-parity-wss\/(.*))$/);
+	let parsed = addr.match(/^\/(ip4|ip6|dns4|dns6|dns)\/(.*?)\/tcp\/(.*?)\/(ws|wss|x-parity-ws\/(.*)|x-parity-wss\/(.*))(|\/p2p\/[a-zA-Z0-9]+)$/);
 	if (parsed != null) {
 		let proto = 'wss';
 		if (parsed[4] == 'ws' || parsed[4].startsWith('x-parity-ws/')) {

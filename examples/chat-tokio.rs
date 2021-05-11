@@ -25,7 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
+//! cargo run --example chat-tokio --features="tcp-tokio mdns"
 //! ```
 //!
 //! Alternatively, to run with the minimal set of features and crates:
@@ -33,7 +33,7 @@
 //! ```sh
 //!cargo run --example chat-tokio \\
 //!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
+//!    --features="floodsub mplex noise tcp-tokio mdns"
 //! ```
 
 use libp2p::{
@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
-        Swarm::dial_addr(&mut swarm, addr)?;
+        swarm.dial_addr(addr)?;
         println!("Dialed {:?}", to_dial)
     }
 
@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
     let mut listening = false;
@@ -166,7 +166,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         };
         if let Some((topic, line)) = to_publish {
-            swarm.floodsub.publish(topic, line.as_bytes());
+            swarm.behaviour_mut().floodsub.publish(topic, line.as_bytes());
         }
         if !listening {
             for addr in Swarm::listeners(&swarm) {

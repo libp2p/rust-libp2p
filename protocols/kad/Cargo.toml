@@ -2,7 +2,7 @@
 name = "libp2p-kad"
 edition = "2018"
 description = "Kademlia protocol for libp2p"
-version = "0.29.0"
+version = "0.30.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -18,7 +18,7 @@ asynchronous-codec = "0.6"
 futures = "0.3.1"
 log = "0.4"
 libp2p-core = { version = "0.28.0", path = "../../core" }
-libp2p-swarm = { version = "0.28.0", path = "../../swarm" }
+libp2p-swarm = { version = "0.29.0", path = "../../swarm" }
 prost = "0.7"
 rand = "0.7.2"
 sha2 = "0.9.1"

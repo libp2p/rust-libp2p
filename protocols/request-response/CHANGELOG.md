@@ -1,3 +1,9 @@
+# 0.11.0 [2021-04-13]
+
+- Update `libp2p-swarm`.
+- Implement `std::error::Error` for `InboundFailure` and `OutboundFailure` [PR
+  2033](https://github.com/libp2p/rust-libp2p/pull/2033).
+
 # 0.10.0 [2021-03-17]
 
 - Update `libp2p-swarm`.

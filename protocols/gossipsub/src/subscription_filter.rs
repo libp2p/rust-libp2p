@@ -200,7 +200,6 @@ where
     }
 }
 
-#[cfg(feature = "regex-filter")]
 pub mod regex {
     use super::TopicSubscriptionFilter;
     use crate::TopicHash;

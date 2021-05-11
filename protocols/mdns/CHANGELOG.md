@@ -1,3 +1,19 @@
+# 0.30.2 [2021-05-06]
+
+- Fix discovered event emission.
+  [PR 2065](https://github.com/libp2p/rust-libp2p/pull/2065)
+
+# 0.30.1 [2021-04-21]
+
+- Fix timely discovery of peers after listening on a new address.
+  [PR 2053](https://github.com/libp2p/rust-libp2p/pull/2053/)
+
+# 0.30.0 [2021-04-13]
+
+- Derive `Debug` and `Clone` for `MdnsConfig`.
+
+- Update `libp2p-swarm`.
+
 # 0.29.0 [2021-03-17]
 
 - Introduce `MdnsConfig` with configurable TTL of discovered peer

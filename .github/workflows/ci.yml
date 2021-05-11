@@ -13,20 +13,20 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.8.0
+      uses: styfle/cancel-workflow-action@0.9.0
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -36,6 +36,9 @@ jobs:
 
     - name: Run tests, with all features
       run: cargo test --workspace --all-features
+
+    - name: Run benches, with all features
+      run: cargo test --workspace --benches --all-features
 
   test-wasm:
     name: Build on WASM
@@ -47,17 +50,24 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.8.0
+      uses: styfle/cancel-workflow-action@0.9.0
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
-    - name: Install Rust
+    - name: Install Rust wasm32-unknown-emscripten
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        target: wasm32-unknown-unknown
+        target: wasm32-unknown-emscripten
+        override: true
+
+    - name: Install Rust wasm32-wasi
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: wasm32-wasi
         override: true
 
     - name: Install a recent version of clang
@@ -71,21 +81,26 @@ jobs:
       run: apt-get install -y cmake
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
-    - name: Build on WASM
+    - name: Build on wasm32-unknown-emscripten
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=wasm32-unknown-unknown
+      run: cargo build --target=wasm32-unknown-emscripten
+
+    - name: Build on wasm32-wasi
+      # TODO: also run `cargo test`
+      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
+      run: cargo build --target=wasm32-wasi
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
@@ -95,7 +110,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.8.0
+      uses: styfle/cancel-workflow-action@0.9.0
       with:
         access_token: ${{ github.token }}
 
@@ -109,7 +124,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.8.0
+      uses: styfle/cancel-workflow-action@0.9.0
       with:
         access_token: ${{ github.token }}
 
@@ -123,13 +138,13 @@ jobs:
         components: clippy
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -140,41 +155,6 @@ jobs:
         command: clippy
         args: -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style
 
-  run-benchmarks:
-    runs-on: ubuntu-latest
-    steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.8.0
-      with:
-        access_token: ${{ github.token }}
-
-    - uses: actions/checkout@v2
-
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.4
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2.1.4
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
-
-    - name: Run cargo bench
-      uses: actions-rs/cargo@v1
-      with:
-        command: bench
-        args: --workspace
-
   integration-test:
     name: Integration tests
     runs-on: ubuntu-latest
@@ -183,20 +163,20 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.8.0
+      uses: styfle/cancel-workflow-action@0.9.0
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v2.1.5
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
