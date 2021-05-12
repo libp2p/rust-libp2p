@@ -46,6 +46,7 @@
 - Update individual crates.
     - `libp2p-core`
     - `libp2p-gossipsub`
+    - `libp2p-noise`
     - `libp2p-pnet`
     - `libp2p-wasm-ext`
 
