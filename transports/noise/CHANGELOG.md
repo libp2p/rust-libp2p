@@ -1,3 +1,9 @@
+# 0.31.0 [unreleased]
+
+- Update to `snow` `v0.8.0` ([PR-2068]).
+
+[PR-2068]: https://github.com/libp2p/rust-libp2p/pull/2068
+
 # 0.30.0 [2021-03-17]
 
 - Update `libp2p-core`.
