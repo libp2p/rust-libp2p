@@ -17,7 +17,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Cache CARGO_HOME
       uses: actions/cache@v2.1.5
@@ -54,7 +54,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Install Rust wasm32-unknown-emscripten
       uses: actions-rs/toolchain@v1
@@ -114,7 +114,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
@@ -128,7 +128,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - uses: actions-rs/toolchain@v1
       with:
@@ -167,7 +167,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Cache CARGO_HOME
       uses: actions/cache@v2.1.5
