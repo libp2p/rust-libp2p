@@ -65,6 +65,7 @@ pub struct GossipsubConfig {
     fanout_ttl: Duration,
     check_explicit_peers_ticks: u64,
     max_transmit_size: usize,
+    idle_timeout: Duration,
     duplicate_cache_time: Duration,
     validate_messages: bool,
     validation_mode: ValidationMode,
@@ -179,6 +180,13 @@ impl GossipsubConfig {
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
         self.max_transmit_size
+    }
+
+    /// The time a connection is maintained to a peer without being in the mesh and without
+    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
+    /// Default is 120 seconds.
+    pub fn idle_timeout(&self) -> Duration {
+        self.idle_timeout
     }
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
@@ -384,6 +392,7 @@ impl Default for GossipsubConfigBuilder {
                 fanout_ttl: Duration::from_secs(60),
                 check_explicit_peers_ticks: 300,
                 max_transmit_size: 65536,
+                idle_timeout: Duration::from_secs(120),
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
                 validation_mode: ValidationMode::Strict,
@@ -521,6 +530,14 @@ impl GossipsubConfigBuilder {
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.max_transmit_size = max_transmit_size;
+        self
+    }
+
+    /// The time a connection is maintained to a peer without being in the mesh and without
+    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
+    /// Default is 120 seconds.
+    pub fn idle_timeout(&mut self, idle_timeout: Duration) -> &mut Self {
+        self.config.idle_timeout = idle_timeout;
         self
     }
 
@@ -768,6 +785,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
         let _ = builder.field("max_transmit_size", &self.max_transmit_size);
+        let _ = builder.field("idle_timeout", &self.idle_timeout);
         let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("validate_messages", &self.validate_messages);
         let _ = builder.field("validation_mode", &self.validation_mode);
