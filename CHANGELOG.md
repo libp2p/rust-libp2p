@@ -41,7 +41,7 @@
 
 # `libp2p` facade crate
 
-## Version 0.38.0 [2021-05-12]
+## Version 0.38.0 [2021-05-14]
 
 - Update individual crates.
     - `libp2p-core`
