@@ -41,6 +41,15 @@
 
 # `libp2p` facade crate
 
+## Version 0.38.0 [unreleased]
+
+- Update individual crates.
+    - `libp2p-core`
+    - `libp2p-gossipsub`
+    - `libp2p-noise`
+    - `libp2p-pnet`
+    - `libp2p-wasm-ext`
+
 ## Version 0.37.1 [2021-04-14]
 
 - Update individual crates.
@@ -61,7 +70,7 @@
     - `libp2p-swarm`
     - `libp2p-wasm-ext`
     - `libp2p-yamux`
-    
+
 - Drop support for `wasm32-unknown-unknown` in favor of
   `wasm32-unknown-emscripten` and `wasm32-wasi` [PR
   2038](https://github.com/libp2p/rust-libp2p/pull/2038).
