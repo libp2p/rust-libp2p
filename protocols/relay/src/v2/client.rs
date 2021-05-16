@@ -196,8 +196,13 @@ impl NetworkBehaviour for Client {
                         .get(&relay_peer_id)
                         .and_then(|cs| cs.get(0))
                     {
-                        Some(_connection) => {
-                            todo!()
+                        Some(connection_id) => {
+                            self.queued_actions
+                                .push_back(NetworkBehaviourAction::NotifyHandler {
+                                    peer_id: relay_peer_id,
+                                    handler: NotifyHandler::One(*connection_id),
+                                    event: handler::In::Reserve { to_listener },
+                                });
                         }
                         None => {
                             self.rqsts_pending_connection
@@ -226,8 +231,16 @@ impl NetworkBehaviour for Client {
                         .get(&relay_peer_id)
                         .and_then(|cs| cs.get(0))
                     {
-                        Some(_connection) => {
-                            todo!()
+                        Some(connection_id) => {
+                            self.queued_actions
+                                .push_back(NetworkBehaviourAction::NotifyHandler {
+                                    peer_id: relay_peer_id,
+                                    handler: NotifyHandler::One(*connection_id),
+                                    event: handler::In::EstablishCircuit {
+                                        send_back,
+                                        dst_peer_id,
+                                    },
+                                });
                         }
                         None => {
                             self.rqsts_pending_connection

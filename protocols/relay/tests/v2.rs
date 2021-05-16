@@ -136,18 +136,38 @@ fn handle_dial_failure() {
         .with(Protocol::P2p(client_peer_id.into()));
 
     client.listen_on(client_addr.clone()).unwrap();
+    assert!(!pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
+}
 
-    pool.run_until(async {
-        match client.next_event().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-            e => panic!("{:?}", e),
-        }
+#[test]
+fn reuse_connection() {
+    let _ = env_logger::try_init();
+    let mut pool = LocalPool::new();
 
-        match client.next_event().await {
-            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {}
-            e => panic!("{:?}", e),
-        }
-    })
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    spawn_swarm_on_pool(&pool, relay);
+
+    let client_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2pCircuit);
+    let mut client = build_client();
+    let client_peer_id = *client.local_peer_id();
+
+    client.dial_addr(relay_addr).unwrap();
+    assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
+
+    client.listen_on(client_addr.clone()).unwrap();
+    pool.run_until(wait_for_reservation(
+        &mut client,
+        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        relay_peer_id,
+    ));
 }
 
 fn build_relay() -> Swarm<Relay> {
@@ -279,5 +299,20 @@ async fn wait_for_reservation(
     match client.next_event().await {
         SwarmEvent::NewListenAddr(addr) if addr == client_addr => {}
         e => panic!("{:?}", e),
+    }
+}
+
+async fn wait_for_dial(client: &mut Swarm<Client>, relay_peer_id: PeerId) -> bool {
+    loop {
+        match client.next_event().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {
+                return false
+            }
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
+                return true
+            }
+            e => panic!("{:?}", e),
+        }
     }
 }
