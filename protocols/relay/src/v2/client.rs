@@ -138,8 +138,8 @@ impl NetworkBehaviour for Client {
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
-        todo!();
+    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+        self.rqsts_pending_connection.remove(peer_id);
     }
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {}

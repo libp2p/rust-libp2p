@@ -33,9 +33,7 @@ use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
 use libp2p::NetworkBehaviour;
-use libp2p_swarm::{
-    AddressScore, NetworkBehaviour, Swarm, SwarmEvent,
-};
+use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 
 #[test]
 fn reservation() {
@@ -117,6 +115,37 @@ fn connect() {
                 }
                 e => panic!("{:?}", e),
             }
+        }
+    })
+}
+
+#[test]
+fn handle_dial_failure() {
+    let _ = env_logger::try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let relay_peer_id = PeerId::random();
+
+    let mut client = build_client();
+    let client_peer_id = *client.local_peer_id();
+    let client_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(client_peer_id.into()));
+
+    client.listen_on(client_addr.clone()).unwrap();
+
+    pool.run_until(async {
+        match client.next_event().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
+        }
+
+        match client.next_event().await {
+            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {}
+            e => panic!("{:?}", e),
         }
     })
 }
