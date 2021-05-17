@@ -65,9 +65,10 @@ impl Prototype {
 impl IntoProtocolsHandler for Prototype {
     type Handler = Handler;
 
-    fn into_handler(self, remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
+    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         Handler {
             remote_peer_id: *remote_peer_id,
+            remote_addr: endpoint.get_remote_address().clone(),
             local_peer_id: self.local_peer_id,
             queued_events: Default::default(),
             reservation: None,
@@ -83,6 +84,7 @@ impl IntoProtocolsHandler for Prototype {
 pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
+    remote_addr: Multiaddr,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -143,8 +145,7 @@ impl ProtocolsHandler for Handler {
                     stream: connection,
                     src_peer_id,
                     relay_peer_id: self.remote_peer_id,
-                    // TODO: Fix
-                    relay_addr: Multiaddr::empty(),
+                    relay_addr: self.remote_addr.clone(),
                 },
             )
         } else {

@@ -523,7 +523,6 @@ pub enum ToListenerMsg {
     Reservation {
         addrs: Vec<Multiaddr>,
     },
-    // TODO: Rename to circuit.
     IncomingRelayedConnection {
         stream: RelayedConnection,
         src_peer_id: PeerId,
