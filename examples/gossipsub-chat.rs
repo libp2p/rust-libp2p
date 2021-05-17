@@ -116,7 +116,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Listen on all interfaces and whatever port the OS assigns
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+    swarm
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+        .unwrap();
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
@@ -138,7 +140,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.behaviour_mut().publish(topic.clone(), line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm
+                    .behaviour_mut()
+                    .publish(topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
             } {
