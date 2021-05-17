@@ -22,8 +22,8 @@ use crate::v2::client::transport;
 use crate::v2::protocol::{inbound_stop, outbound_hop};
 use futures::channel::mpsc::Sender;
 use futures::channel::oneshot;
-use futures::stream::FuturesUnordered;
 use futures::future::FutureExt;
+use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
@@ -43,7 +43,8 @@ pub enum In {
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<super::Connection, transport::OutgoingRelayReqError>>,
+        send_back:
+            oneshot::Sender<Result<super::RelayedConnection, transport::OutgoingRelayReqError>>,
     },
 }
 
@@ -136,7 +137,7 @@ impl ProtocolsHandler for Handler {
             let src_peer_id = inbound_circuit.src_peer_id();
             let (tx, rx) = oneshot::channel();
             self.alive_lend_out_substreams.push(rx);
-            let connection = super::Connection::new_inbound(inbound_circuit, tx);
+            let connection = super::RelayedConnection::new_inbound(inbound_circuit, tx);
             reservation.pending_msgs.push_back(
                 transport::ToListenerMsg::IncomingRelayedConnection {
                     stream: connection,
@@ -197,7 +198,11 @@ impl ProtocolsHandler for Handler {
             ) => {
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
-                let _ = send_back.send(Ok(super::Connection::new_outbound(substream, read_buffer, tx)));
+                let _ = send_back.send(Ok(super::RelayedConnection::new_outbound(
+                    substream,
+                    read_buffer,
+                    tx,
+                )));
             }
             _ => unreachable!(),
         }
@@ -301,6 +306,7 @@ pub enum OutboundOpenInfo {
         to_listener: Sender<transport::ToListenerMsg>,
     },
     Connect {
-        send_back: oneshot::Sender<Result<super::Connection, transport::OutgoingRelayReqError>>,
+        send_back:
+            oneshot::Sender<Result<super::RelayedConnection, transport::OutgoingRelayReqError>>,
     },
 }

@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::client::Connection;
+use crate::v2::client::RelayedConnection;
 use crate::v2::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
@@ -145,7 +145,7 @@ impl<T: Clone> ClientTransport<T> {
 }
 
 impl<T: Transport + Clone> Transport for ClientTransport<T> {
-    type Output = EitherOutput<<T as Transport>::Output, Connection>;
+    type Output = EitherOutput<<T as Transport>::Output, RelayedConnection>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
@@ -413,17 +413,17 @@ impl<T: Transport> Stream for RelayListener<T> {
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<Connection, RelayError>>;
+pub type RelayedDial = BoxFuture<'static, Result<RelayedConnection, RelayError>>;
 
 #[pin_project(project = RelayedListenerUpgradeProj)]
 pub enum RelayedListenerUpgrade<T: Transport> {
     Inner(#[pin] <T as Transport>::ListenerUpgrade),
-    Relayed(Option<Connection>),
+    Relayed(Option<RelayedConnection>),
 }
 
 impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     type Output = Result<
-        EitherOutput<<T as Transport>::Output, Connection>,
+        EitherOutput<<T as Transport>::Output, RelayedConnection>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -530,7 +530,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<Connection, OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<RelayedConnection, OutgoingRelayReqError>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
@@ -546,7 +546,7 @@ pub enum ToListenerMsg {
     },
     // TODO: Rename to circuit.
     IncomingRelayedConnection {
-        stream: Connection,
+        stream: RelayedConnection,
         src_peer_id: PeerId,
         relay_peer_id: PeerId,
         relay_addr: Multiaddr,
