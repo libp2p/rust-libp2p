@@ -128,23 +128,14 @@ where
 /// A `Future` returned by [`dialer_select_proto_serial`] which negotiates
 /// a protocol iteratively by considering one protocol after the other.
 #[pin_project::pin_project]
-pub struct DialerSelectSeq<R, I>
-where
-    R: AsyncRead + AsyncWrite,
-    I: Iterator,
-    I::Item: AsRef<[u8]>
-{
+pub struct DialerSelectSeq<R, I: Iterator> {
     // TODO: It would be nice if eventually N = I::Item = Protocol.
     protocols: iter::Peekable<I>,
     state: SeqState<R, I::Item>,
     version: Version,
 }
 
-enum SeqState<R, N>
-where
-    R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
-{
+enum SeqState<R, N> {
     SendHeader { io: MessageIO<R>, },
     SendProtocol { io: MessageIO<R>, protocol: N },
     FlushProtocol { io: MessageIO<R>, protocol: N },
@@ -274,22 +265,13 @@ where
 /// a protocol selectively by considering all supported protocols of the remote
 /// "in parallel".
 #[pin_project::pin_project]
-pub struct DialerSelectPar<R, I>
-where
-    R: AsyncRead + AsyncWrite,
-    I: Iterator,
-    I::Item: AsRef<[u8]>
-{
+pub struct DialerSelectPar<R, I: Iterator> {
     protocols: I,
     state: ParState<R, I::Item>,
     version: Version,
 }
 
-enum ParState<R, N>
-where
-    R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
-{
+enum ParState<R, N> {
     SendHeader { io: MessageIO<R> },
     SendProtocolsRequest { io: MessageIO<R> },
     Flush { io: MessageIO<R> },
