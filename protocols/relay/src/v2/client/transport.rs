@@ -38,30 +38,29 @@ use std::task::{Context, Poll};
 ///
 /// Allows the local node to:
 ///
-/// TODO: Update!
 /// 1. Use inner wrapped transport as before.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v2::client;
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
-///    #     RelayConfig::default(),
+///    # let (transport, behaviour) = client::Client::new_transport_and_behaviour(
+///    #     PeerId::random(),
 ///    #     inner_transport,
 ///    # );
-///    relay_transport.dial(Multiaddr::empty().with(Protocol::Memory(42)));
+///    transport.dial(Multiaddr::empty().with(Protocol::Memory(42)));
 ///    ```
 ///
 /// 2. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, PeerId, Transport};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v2::client;
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
-///    #     RelayConfig::default(),
+///    # let (transport, behaviour) = client::Client::new_transport_and_behaviour(
+///    #     PeerId::random(),
 ///    #     inner_transport,
 ///    # );
 ///    let dst_addr_via_relay = Multiaddr::empty()
@@ -70,45 +69,25 @@ use std::task::{Context, Poll};
 ///        .with(Protocol::P2pCircuit) // Signal to connect via relay and not directly.
 ///        .with(Protocol::Memory(42)) // Destination address.
 ///        .with(Protocol::P2p(PeerId::random().into())); // Destination peer id.
-///    relay_transport.dial(dst_addr_via_relay).unwrap();
+///    transport.dial(dst_addr_via_relay).unwrap();
 ///    ```
 ///
 /// 3. Listen for incoming relayed connections via specific relay.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, PeerId, Transport};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v2::client;
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
-///    #     RelayConfig::default(),
+///    # let (transport, behaviour) = client::Client::new_transport_and_behaviour(
+///    #     PeerId::random(),
 ///    #     inner_transport,
 ///    # );
 ///    let relay_addr = Multiaddr::empty()
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(PeerId::random().into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
-///    relay_transport.listen_on(relay_addr).unwrap();
-///    ```
-/// TODO Is (4) still supported?
-///
-/// 4. Listen for incoming relayed connections via any relay.
-///
-///    Note: Without this listener, incoming relayed connections from relays, that the local node is
-///    not explicitly listening via, are dropped.
-///
-///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, PeerId, Transport};
-///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
-///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
-///    #     RelayConfig::default(),
-///    #     inner_transport,
-///    # );
-///    let addr = Multiaddr::empty()
-///        .with(Protocol::P2pCircuit); // Signal to listen via any relay.
-///    relay_transport.listen_on(addr).unwrap();
+///    transport.listen_on(relay_addr).unwrap();
 ///    ```
 #[derive(Clone)]
 pub struct ClientTransport<T: Clone> {
@@ -122,13 +101,13 @@ impl<T: Clone> ClientTransport<T> {
     /// [`ClientTransport`].
     ///
     ///```
-    /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
-    ///
-    /// let inner_transport = DummyTransport::<()>::new();
-    /// let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
-    ///     RelayConfig::default(),
-    ///     inner_transport,
+    /// # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
+    /// # use libp2p_core::transport::memory::MemoryTransport;
+    /// # use libp2p_relay::v2::client;
+    /// let inner_transport = MemoryTransport::default();
+    /// let (transport, behaviour) = client::Client::new_transport_and_behaviour(
+    ///    PeerId::random(),
+    ///    inner_transport,
     /// );
     ///```
     pub(crate) fn new(t: T) -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
@@ -520,7 +499,7 @@ impl std::fmt::Display for RelayError {
 
 impl std::error::Error for RelayError {}
 
-/// Message from the [`ClientTransport`] to the [`Relay`](crate::v1::Relay)
+/// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
