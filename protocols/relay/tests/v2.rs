@@ -34,6 +34,7 @@ use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
 use libp2p::NetworkBehaviour;
 use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use std::time::Duration;
 
 #[test]
 fn reservation() {
@@ -57,10 +58,22 @@ fn reservation() {
 
     client.listen_on(client_addr.clone()).unwrap();
 
+    // Wait for initial reservation.
+    pool.run_until(wait_for_reservation(
+        &mut client,
+        client_addr
+            .clone()
+            .with(Protocol::P2p(client_peer_id.into())),
+        relay_peer_id,
+        false, // No renewal.
+    ));
+
+    // Wait for renewal.
     pool.run_until(wait_for_reservation(
         &mut client,
         client_addr.with(Protocol::P2p(client_peer_id.into())),
         relay_peer_id,
+        true, // Renewal.
     ));
 }
 
@@ -91,6 +104,7 @@ fn connect() {
         &mut dst,
         dst_addr.clone(),
         relay_peer_id,
+        false, // No renewal.
     ));
     spawn_swarm_on_pool(&pool, dst);
 
@@ -167,6 +181,7 @@ fn reuse_connection() {
         &mut client,
         client_addr.with(Protocol::P2p(client_peer_id.into())),
         relay_peer_id,
+        false, // No renewal.
     ));
 }
 
@@ -181,7 +196,13 @@ fn build_relay() -> Swarm<Relay> {
         transport,
         Relay {
             ping: Ping::new(PingConfig::new()),
-            relay: relay::Relay::new(local_peer_id, Default::default()),
+            relay: relay::Relay::new(
+                local_peer_id,
+                relay::Config {
+                    reservation_duration: Duration::from_secs(2),
+                    ..Default::default()
+                },
+            ),
         },
         local_peer_id,
     )
@@ -282,12 +303,14 @@ async fn wait_for_reservation(
     client: &mut Swarm<Client>,
     client_addr: Multiaddr,
     relay_peer_id: PeerId,
+    renewal: bool,
 ) {
     loop {
         match client.next_event().await {
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::Reserved {
                 relay_peer_id: peer_id,
-            })) if relay_peer_id == peer_id => break,
+                renewed,
+            })) if relay_peer_id == peer_id && renewed == renewal => break,
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}

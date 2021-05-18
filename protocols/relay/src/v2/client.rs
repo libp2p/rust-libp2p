@@ -49,6 +49,8 @@ pub enum Event {
     // TODO: Should this be renamed to ReservationAccepted?
     Reserved {
         relay_peer_id: PeerId,
+        /// Indicates whether the request replaces an existing reservation.
+        renewed: bool,
     },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
@@ -180,10 +182,11 @@ impl NetworkBehaviour for Client {
         handler_event: handler::Event,
     ) {
         match handler_event {
-            handler::Event::Reserved => {
+            handler::Event::Reserved { renewed } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Reserved {
                         relay_peer_id: event_source,
+                        renewed,
                     }))
             }
             handler::Event::CircuitReqDenied { src_peer_id } => {

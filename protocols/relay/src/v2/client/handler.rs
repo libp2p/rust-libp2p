@@ -143,27 +143,29 @@ impl ProtocolsHandler for Handler {
         inbound_circuit: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        if let Some(reservation) = &mut self.reservation {
-            let src_peer_id = inbound_circuit.src_peer_id();
-            let (tx, rx) = oneshot::channel();
-            self.alive_lend_out_substreams.push(rx);
-            let connection = super::RelayedConnection::new_inbound(inbound_circuit, tx);
-            reservation.pending_msgs.push_back(
-                transport::ToListenerMsg::IncomingRelayedConnection {
+        match &mut self.reservation {
+            Some(Reservation::Accepted { pending_msgs, .. })
+            | Some(Reservation::Renewal { pending_msgs, .. }) => {
+                let src_peer_id = inbound_circuit.src_peer_id();
+                let (tx, rx) = oneshot::channel();
+                self.alive_lend_out_substreams.push(rx);
+                let connection = super::RelayedConnection::new_inbound(inbound_circuit, tx);
+                pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
                     stream: connection,
                     src_peer_id,
                     relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_addr.clone(),
-                },
-            )
-        } else {
-            let src_peer_id = inbound_circuit.src_peer_id();
-            self.circuit_deny_futs.push(
-                inbound_circuit
-                    .deny(Status::NoReservation)
-                    .map(move |result| (src_peer_id, result))
-                    .boxed(),
-            )
+                })
+            }
+            _ => {
+                let src_peer_id = inbound_circuit.src_peer_id();
+                self.circuit_deny_futs.push(
+                    inbound_circuit
+                        .deny(Status::NoReservation)
+                        .map(move |result| (src_peer_id, result))
+                        .boxed(),
+                )
+            }
         }
     }
 
@@ -189,14 +191,15 @@ impl ProtocolsHandler for Handler {
                         .map(|a| a.with(Protocol::P2p(local_peer_id.into())))
                         .collect(),
                 });
-                self.reservation = Some(Reservation {
+                self.reservation = Some(Reservation::Accepted {
                     // TODO: Should timeout fire early to make sure reservation never expires?
-                    renewal_timeout: Delay::new(
-                        expire
-                            .expect("TODO handle where no expire")
-                            .checked_duration_since(Instant::now())
-                            .unwrap(),
-                    ),
+                    renewal_timeout: expire.map(|e| {
+                        Delay::new(
+                            e.checked_duration_since(Instant::now())
+                                // TODO Handle
+                                .unwrap(),
+                        )
+                    }),
                     pending_msgs,
                     to_listener,
                 })
@@ -259,6 +262,7 @@ impl ProtocolsHandler for Handler {
         _open_info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
+        // TODO: If this was a reservation request, set reservation to `None`.
         panic!("{:?}", error)
     }
 
@@ -285,27 +289,47 @@ impl ProtocolsHandler for Handler {
             return Poll::Ready(event);
         }
 
-        if let Some(reservation) = &mut self.reservation {
-            if !reservation.pending_msgs.is_empty() {
-                match reservation.to_listener.poll_ready(cx) {
+        // Maintain existing reservation.
+        if let Some(Reservation::Accepted {
+            renewal_timeout,
+            pending_msgs,
+            to_listener,
+        }) = &mut self.reservation
+        {
+            if !pending_msgs.is_empty() {
+                match to_listener.poll_ready(cx) {
                     Poll::Ready(Ok(())) => {
-                        reservation
-                            .to_listener
-                            .start_send(
-                                reservation
-                                    .pending_msgs
-                                    .pop_front()
-                                    .expect("Called !is_empty()."),
-                            )
+                        to_listener
+                            .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
+                            // TODO: Handle
                             .unwrap();
                     }
                     Poll::Ready(Err(e)) => todo!("{:?}", e),
                     Poll::Pending => {}
                 }
             }
-            match reservation.renewal_timeout.poll_unpin(cx) {
-                Poll::Ready(()) => todo!(),
-                Poll::Pending => {}
+            match renewal_timeout.as_mut().map(|t| t.poll_unpin(cx)) {
+                Some(Poll::Ready(())) => {
+                    // TODO: Can we do better?
+                    match self.reservation.take() {
+                        Some(Reservation::Accepted {
+                            to_listener,
+                            pending_msgs,
+                            ..
+                        }) => {
+                            self.reservation = Some(Reservation::Renewal { pending_msgs });
+                            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                                protocol: SubstreamProtocol::new(
+                                    outbound_hop::Upgrade::Reserve,
+                                    OutboundOpenInfo::Reserve { to_listener },
+                                ),
+                            });
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                Some(Poll::Pending) => {}
+                None => {}
             }
         }
 
@@ -330,10 +354,16 @@ impl ProtocolsHandler for Handler {
     }
 }
 
-struct Reservation {
-    renewal_timeout: Delay,
-    pending_msgs: VecDeque<transport::ToListenerMsg>,
-    to_listener: Sender<transport::ToListenerMsg>,
+enum Reservation {
+    Accepted {
+        /// [`None`] if reservation does not expire.
+        renewal_timeout: Option<Delay>,
+        pending_msgs: VecDeque<transport::ToListenerMsg>,
+        to_listener: Sender<transport::ToListenerMsg>,
+    },
+    Renewal {
+        pending_msgs: VecDeque<transport::ToListenerMsg>,
+    },
 }
 
 pub enum OutboundOpenInfo {

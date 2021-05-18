@@ -35,16 +35,16 @@ use std::time::Duration;
 // TODO: Expose this as RelayConfig?
 pub struct Config {
     // TODO: Should we use u32?
-    max_reservations: usize,
-    _max_reservations_per_ip: u32,
+    pub max_reservations: usize,
+    pub _max_reservations_per_ip: u32,
     // TODO: Good idea?
-    _max_reservations_per_asn: u32,
-    reservation_duration: Duration,
+    pub _max_reservations_per_asn: u32,
+    pub reservation_duration: Duration,
 
     // TODO: Should we use u32?
-    max_circuits: usize,
-    max_circuit_duration: Duration,
-    max_circuit_bytes: u64,
+    pub max_circuits: usize,
+    pub max_circuit_duration: Duration,
+    pub max_circuit_bytes: u64,
 }
 
 impl Default for Config {
