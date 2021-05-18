@@ -65,8 +65,6 @@ impl Default for Config {
 }
 
 /// The events produced by the [`Relay`] behaviour.
-//
-// TODO: Should this be renamed to Event? Would be inline with [`Config`].
 #[derive(Debug)]
 pub enum Event {
     /// An inbound reservation request has been accepted.

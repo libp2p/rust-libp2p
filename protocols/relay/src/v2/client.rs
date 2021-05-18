@@ -24,7 +24,7 @@ mod handler;
 mod transport;
 
 use crate::v2::protocol::inbound_stop;
-use bytes::{Bytes};
+use bytes::Bytes;
 use futures::channel::mpsc::{Receiver, Sender};
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
@@ -42,9 +42,23 @@ use std::io::{Error, IoSlice};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+/// The events produced by the [`Client`] behaviour.
 #[derive(Debug)]
 pub enum Event {
-    Reserved { relay_peer_id: PeerId },
+    /// An outbound reservation has been accepted.
+    // TODO: Should this be renamed to ReservationAccepted?
+    Reserved {
+        relay_peer_id: PeerId,
+    },
+    /// An inbound circuit request has been denied.
+    CircuitReqDenied {
+        src_peer_id: PeerId,
+    },
+    /// Denying an inbound circuit request failed.
+    CircuitReqDenyFailed {
+        src_peer_id: PeerId,
+        error: std::io::Error,
+    },
 }
 
 pub struct Client {
@@ -172,6 +186,17 @@ impl NetworkBehaviour for Client {
                         relay_peer_id: event_source,
                     }))
             }
+            handler::Event::CircuitReqDenied { src_peer_id } => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::CircuitReqDenied { src_peer_id },
+                    ))
+            }
+            handler::Event::CircuitReqDenyFailed { src_peer_id, error } => self
+                .queued_actions
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::CircuitReqDenyFailed { src_peer_id, error },
+                )),
         }
     }
 
@@ -325,7 +350,7 @@ impl RelayedConnection {
                     read_buffer,
                     drop_notifier,
                 };
-                return Poll::Ready(Ok(()))
+                return Poll::Ready(Ok(()));
             }
             Poll::Ready(Err(e)) => {
                 return Poll::Ready(Err(e));

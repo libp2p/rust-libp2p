@@ -177,10 +177,21 @@ impl Circuit {
         Ok((io, read_buffer.freeze()))
     }
 
+    pub async fn deny(mut self, status: Status) -> Result<(), std::io::Error> {
+        let msg = StopMessage {
+            r#type: stop_message::Type::Status.into(),
+            peer: None,
+            limit: None,
+            status: Some(status.into()),
+        };
+
+        self.send(msg).await
+    }
+
     async fn send(&mut self, msg: StopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-        // TODO: Sure panicing is safe here?
+            // TODO: Sure panicing is safe here?
             .expect("all the mandatory fields are always filled; QED");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;

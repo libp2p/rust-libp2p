@@ -19,11 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::v2::client::transport;
+use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_stop, outbound_hop};
 use futures::channel::mpsc::Sender;
 use futures::channel::oneshot;
-use futures::future::FutureExt;
-use futures::stream::FuturesUnordered;
+use futures::future::{BoxFuture, FutureExt};
+use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
@@ -49,7 +50,17 @@ pub enum In {
 }
 
 pub enum Event {
-    Reserved,
+    Reserved {
+        /// Indicates whether the request replaces an existing reservation.
+        renewed: bool,
+    },
+    /// An inbound circuit request has been denied.
+    CircuitReqDenied { src_peer_id: PeerId },
+    /// Denying an inbound circuit request failed.
+    CircuitReqDenyFailed {
+        src_peer_id: PeerId,
+        error: std::io::Error,
+    },
 }
 
 pub struct Prototype {
@@ -73,6 +84,7 @@ impl IntoProtocolsHandler for Prototype {
             queued_events: Default::default(),
             reservation: None,
             alive_lend_out_substreams: Default::default(),
+            circuit_deny_futs: Default::default(),
         }
     }
 
@@ -107,12 +119,8 @@ pub struct Handler {
     /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
-}
 
-struct Reservation {
-    renewal_timeout: Delay,
-    pending_msgs: VecDeque<transport::ToListenerMsg>,
-    to_listener: Sender<transport::ToListenerMsg>,
+    circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
 }
 
 impl ProtocolsHandler for Handler {
@@ -149,7 +157,13 @@ impl ProtocolsHandler for Handler {
                 },
             )
         } else {
-            todo!("deny")
+            let src_peer_id = inbound_circuit.src_peer_id();
+            self.circuit_deny_futs.push(
+                inbound_circuit
+                    .deny(Status::NoReservation)
+                    .map(move |result| (src_peer_id, result))
+                    .boxed(),
+            )
         }
     }
 
@@ -164,31 +178,28 @@ impl ProtocolsHandler for Handler {
                 OutboundOpenInfo::Reserve { to_listener },
             ) => {
                 self.queued_events
-                    .push_back(ProtocolsHandlerEvent::Custom(Event::Reserved));
-                match self.reservation {
-                    Some(_) => todo!(),
-                    None => {
-                        let local_peer_id = self.local_peer_id;
-                        let mut pending_msgs = VecDeque::new();
-                        pending_msgs.push_back(transport::ToListenerMsg::Reservation {
-                            addrs: addrs
-                                .into_iter()
-                                .map(|a| a.with(Protocol::P2p(local_peer_id.into())))
-                                .collect(),
-                        });
-                        self.reservation = Some(Reservation {
-                            // TODO: Should timeout fire early to make sure reservation never expires?
-                            renewal_timeout: Delay::new(
-                                expire
-                                    .expect("TODO handle where no expire")
-                                    .checked_duration_since(Instant::now())
-                                    .unwrap(),
-                            ),
-                            pending_msgs,
-                            to_listener,
-                        })
-                    }
-                }
+                    .push_back(ProtocolsHandlerEvent::Custom(Event::Reserved {
+                        renewed: self.reservation.is_some(),
+                    }));
+                let local_peer_id = self.local_peer_id;
+                let mut pending_msgs = VecDeque::new();
+                pending_msgs.push_back(transport::ToListenerMsg::Reservation {
+                    addrs: addrs
+                        .into_iter()
+                        .map(|a| a.with(Protocol::P2p(local_peer_id.into())))
+                        .collect(),
+                });
+                self.reservation = Some(Reservation {
+                    // TODO: Should timeout fire early to make sure reservation never expires?
+                    renewal_timeout: Delay::new(
+                        expire
+                            .expect("TODO handle where no expire")
+                            .checked_duration_since(Instant::now())
+                            .unwrap(),
+                    ),
+                    pending_msgs,
+                    to_listener,
+                })
             }
             (
                 outbound_hop::Output::Circuit {
@@ -298,8 +309,31 @@ impl ProtocolsHandler for Handler {
             }
         }
 
+        while let Poll::Ready(Some((src_peer_id, result))) =
+            self.circuit_deny_futs.poll_next_unpin(cx)
+        {
+            match result {
+                Ok(()) => {
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitReqDenied {
+                        src_peer_id,
+                    }))
+                }
+                Err(error) => {
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                        Event::CircuitReqDenyFailed { src_peer_id, error },
+                    ))
+                }
+            }
+        }
+
         Poll::Pending
     }
+}
+
+struct Reservation {
+    renewal_timeout: Delay,
+    pending_msgs: VecDeque<transport::ToListenerMsg>,
+    to_listener: Sender<transport::ToListenerMsg>,
 }
 
 pub enum OutboundOpenInfo {
