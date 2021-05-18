@@ -36,6 +36,7 @@ use libp2p_swarm::{
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 pub enum In {
     Reserve {
@@ -92,6 +93,7 @@ impl IntoProtocolsHandler for Prototype {
             reservation: None,
             alive_lend_out_substreams: Default::default(),
             circuit_deny_futs: Default::default(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 
@@ -109,6 +111,8 @@ pub struct Handler {
             EitherError<inbound_stop::UpgradeError, outbound_hop::UpgradeError>,
         >,
     >,
+    /// Until when to keep the connection alive.
+    keep_alive: KeepAlive,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -433,9 +437,7 @@ impl ProtocolsHandler for Handler {
 
     // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
     fn connection_keep_alive(&self) -> KeepAlive {
-        // TODO
-        // TODO: cover lend out substreams.
-        KeepAlive::Yes
+        self.keep_alive
     }
 
     fn poll(
@@ -519,6 +521,21 @@ impl ProtocolsHandler for Handler {
                     ))
                 }
             }
+        }
+
+        if self.reservation.is_none()
+            && self.alive_lend_out_substreams.is_empty()
+            && self.circuit_deny_futs.is_empty()
+        {
+            match self.keep_alive {
+                KeepAlive::Yes => {
+                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                }
+                KeepAlive::Until(_) => {}
+                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+            }
+        } else {
+            self.keep_alive = KeepAlive::Yes;
         }
 
         Poll::Pending
