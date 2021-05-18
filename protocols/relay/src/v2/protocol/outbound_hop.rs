@@ -19,10 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::v2::message_proto::{hop_message, HopMessage, Peer, Status};
-use asynchronous_codec::{Framed, FramedParts};
 use crate::v2::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
-use bytes::{Bytes};
+use asynchronous_codec::{Framed, FramedParts};
+use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
+use futures_timer::Delay;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
@@ -125,9 +126,11 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                             .map_err(|_| UpgradeError::InvalidReservationAddrs)?
                     };
 
-                    let expire = if let Some(expires) = reservation.expire {
+                    let renewal_timeout = if let Some(expires) = reservation.expire {
                         Some(
                             unix_timestamp_to_instant(expires)
+                                .and_then(|instant| instant.checked_duration_since(Instant::now()))
+                                .map(|duration| Delay::new(duration))
                                 .ok_or(UpgradeError::InvalidReservationExpiration)?,
                         )
                     } else {
@@ -136,7 +139,10 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
                     substream.close().await?;
 
-                    Output::Reservation { expire, addrs }
+                    Output::Reservation {
+                        renewal_timeout,
+                        addrs,
+                    }
                 }
                 Upgrade::Connect { .. } => {
                     let FramedParts {
@@ -272,7 +278,7 @@ fn unix_timestamp_to_instant(secs: i64) -> Option<Instant> {
 
 pub enum Output {
     Reservation {
-        expire: Option<Instant>,
+        renewal_timeout: Option<Delay>,
         addrs: Vec<Multiaddr>,
     },
     Circuit {

@@ -36,7 +36,6 @@ use libp2p_swarm::{
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
-use std::time::Instant;
 
 pub enum In {
     Reserve {
@@ -82,6 +81,7 @@ impl IntoProtocolsHandler for Prototype {
             remote_addr: endpoint.get_remote_address().clone(),
             local_peer_id: self.local_peer_id,
             queued_events: Default::default(),
+            pending_error: Default::default(),
             reservation: None,
             alive_lend_out_substreams: Default::default(),
             circuit_deny_futs: Default::default(),
@@ -97,6 +97,11 @@ pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
     remote_addr: Multiaddr,
+    pending_error: Option<
+        ProtocolsHandlerUpgrErr<
+            EitherError<inbound_stop::UpgradeError, outbound_hop::UpgradeError>,
+        >,
+    >,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -176,33 +181,32 @@ impl ProtocolsHandler for Handler {
     ) {
         match (output, info) {
             (
-                outbound_hop::Output::Reservation { expire, addrs },
+                outbound_hop::Output::Reservation {
+                    renewal_timeout,
+                    addrs,
+                },
                 OutboundOpenInfo::Reserve { to_listener },
             ) => {
-                self.queued_events
-                    .push_back(ProtocolsHandlerEvent::Custom(Event::Reserved {
-                        renewed: self.reservation.is_some(),
-                    }));
-                let local_peer_id = self.local_peer_id;
-                let mut pending_msgs = VecDeque::new();
+                let (renewed, mut pending_msgs) = match self.reservation.take() {
+                    Some(Reservation::Accepted { pending_msgs, .. })
+                    | Some(Reservation::Renewal { pending_msgs, .. }) => (true, pending_msgs),
+                    None => (false, VecDeque::new()),
+                };
+
                 pending_msgs.push_back(transport::ToListenerMsg::Reservation {
                     addrs: addrs
                         .into_iter()
-                        .map(|a| a.with(Protocol::P2p(local_peer_id.into())))
+                        .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
                         .collect(),
                 });
                 self.reservation = Some(Reservation::Accepted {
-                    // TODO: Should timeout fire early to make sure reservation never expires?
-                    renewal_timeout: expire.map(|e| {
-                        Delay::new(
-                            e.checked_duration_since(Instant::now())
-                                // TODO Handle
-                                .unwrap(),
-                        )
-                    }),
+                    renewal_timeout,
                     pending_msgs,
                     to_listener,
-                })
+                });
+
+                self.queued_events
+                    .push_back(ProtocolsHandlerEvent::Custom(Event::Reserved { renewed }));
             }
             (
                 outbound_hop::Output::Circuit {
@@ -284,6 +288,12 @@ impl ProtocolsHandler for Handler {
             Self::Error,
         >,
     > {
+        // Check for a pending (fatal) error.
+        if let Some(err) = self.pending_error.take() {
+            // The handler will not be polled again by the `Swarm`.
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
+        }
+
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
