@@ -47,17 +47,25 @@ use std::task::{Context, Poll};
 pub enum Event {
     /// An outbound reservation has been accepted.
     // TODO: Should this be renamed to ReservationAccepted?
-    Reserved {
+    ReservationReqAccepted {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
-        renewed: bool,
+        renewal: bool,
+    },
+    ReservationReqFailed {
+        relay_peer_id: PeerId,
+        /// Indicates whether the request replaces an existing reservation.
+        renewal: bool,
+    },
+    OutboundCircuitReqFailed {
+        relay_peer_id: PeerId,
     },
     /// An inbound circuit request has been denied.
-    CircuitReqDenied {
+    InboundCircuitReqDenied {
         src_peer_id: PeerId,
     },
     /// Denying an inbound circuit request failed.
-    CircuitReqDenyFailed {
+    InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
         error: std::io::Error,
     },
@@ -182,23 +190,41 @@ impl NetworkBehaviour for Client {
         handler_event: handler::Event,
     ) {
         match handler_event {
-            handler::Event::Reserved { renewed } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Reserved {
-                        relay_peer_id: event_source,
-                        renewed,
-                    }))
-            }
-            handler::Event::CircuitReqDenied { src_peer_id } => {
+            handler::Event::ReservationReqAccepted { renewal } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitReqDenied { src_peer_id },
+                        Event::ReservationReqAccepted {
+                            relay_peer_id: event_source,
+                            renewal,
+                        },
                     ))
             }
-            handler::Event::CircuitReqDenyFailed { src_peer_id, error } => self
+            handler::Event::ReservationReqFailed { renewal } => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::ReservationReqFailed {
+                            relay_peer_id: event_source,
+                            renewal,
+                        },
+                    ))
+            }
+            handler::Event::OutboundCircuitReqFailed {} => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::OutboundCircuitReqFailed {
+                            relay_peer_id: event_source,
+                        },
+                    ))
+            }
+            handler::Event::InboundCircuitReqDenied { src_peer_id } => self
                 .queued_actions
                 .push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::CircuitReqDenyFailed { src_peer_id, error },
+                    Event::InboundCircuitReqDenied { src_peer_id },
+                )),
+            handler::Event::InboundCircuitReqDenyFailed { src_peer_id, error } => self
+                .queued_actions
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::InboundCircuitReqDenyFailed { src_peer_id, error },
                 )),
         }
     }

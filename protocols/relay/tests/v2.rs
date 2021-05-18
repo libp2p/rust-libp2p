@@ -303,14 +303,14 @@ async fn wait_for_reservation(
     client: &mut Swarm<Client>,
     client_addr: Multiaddr,
     relay_peer_id: PeerId,
-    renewal: bool,
+    is_renewal: bool,
 ) {
     loop {
         match client.next_event().await {
-            SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::Reserved {
+            SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
-                renewed,
-            })) if relay_peer_id == peer_id && renewed == renewal => break,
+                renewal,
+            })) if relay_peer_id == peer_id && renewal == is_renewal => break,
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}

@@ -49,14 +49,21 @@ pub enum In {
 }
 
 pub enum Event {
-    Reserved {
+    ReservationReqAccepted {
         /// Indicates whether the request replaces an existing reservation.
-        renewed: bool,
+        renewal: bool,
     },
+    ReservationReqFailed {
+        /// Indicates whether the request replaces an existing reservation.
+        renewal: bool,
+    },
+    OutboundCircuitReqFailed {},
     /// An inbound circuit request has been denied.
-    CircuitReqDenied { src_peer_id: PeerId },
+    InboundCircuitReqDenied {
+        src_peer_id: PeerId,
+    },
     /// Denying an inbound circuit request failed.
-    CircuitReqDenyFailed {
+    InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
         error: std::io::Error,
     },
@@ -187,7 +194,7 @@ impl ProtocolsHandler for Handler {
                 },
                 OutboundOpenInfo::Reserve { to_listener },
             ) => {
-                let (renewed, mut pending_msgs) = match self.reservation.take() {
+                let (renewal, mut pending_msgs) = match self.reservation.take() {
                     Some(Reservation::Accepted { pending_msgs, .. })
                     | Some(Reservation::Renewal { pending_msgs, .. }) => (true, pending_msgs),
                     None => (false, VecDeque::new()),
@@ -205,8 +212,9 @@ impl ProtocolsHandler for Handler {
                     to_listener,
                 });
 
-                self.queued_events
-                    .push_back(ProtocolsHandlerEvent::Custom(Event::Reserved { renewed }));
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::ReservationReqAccepted { renewal },
+                ));
             }
             (
                 outbound_hop::Output::Circuit {
@@ -256,18 +264,171 @@ impl ProtocolsHandler for Handler {
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        _error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        todo!()
+        match error {
+            ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::Failed,
+            )) => {}
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::ProtocolError(e),
+            )) => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
+                ));
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                    upgrade::UpgradeError::Apply(EitherError::A(error)),
+                ))
+            }
+        }
     }
 
     fn inject_dial_upgrade_error(
         &mut self,
-        _open_info: Self::OutboundOpenInfo,
+        open_info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
-        // TODO: If this was a reservation request, set reservation to `None`.
-        panic!("{:?}", error)
+        match open_info {
+            // TODO: Inform listener or just drop it?
+            OutboundOpenInfo::Reserve { to_listener: _ } => {
+                let renewal = self.reservation.take().is_some();
+
+                match error {
+                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )) => {}
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::ProtocolError(e),
+                    )) => {
+                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                            upgrade::UpgradeError::Select(
+                                upgrade::NegotiationError::ProtocolError(e),
+                            ),
+                        ));
+                    }
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                        match error {
+                            outbound_hop::UpgradeError::Decode(_)
+                            | outbound_hop::UpgradeError::Io(_)
+                            | outbound_hop::UpgradeError::ParseTypeField
+                            | outbound_hop::UpgradeError::ParseStatusField
+                            | outbound_hop::UpgradeError::MissingStatusField
+                            | outbound_hop::UpgradeError::MissingReservationField
+                            | outbound_hop::UpgradeError::NoAddressesinReservation
+                            | outbound_hop::UpgradeError::InvalidReservationExpiration
+                            | outbound_hop::UpgradeError::InvalidReservationAddrs
+                            | outbound_hop::UpgradeError::UnexpectedTypeConnect
+                            | outbound_hop::UpgradeError::UnexpectedTypeReserve => {
+                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                ));
+                            }
+                            outbound_hop::UpgradeError::UnexpectedStatus(status) => {
+                                match status {
+                                    Status::Ok => {
+                                        unreachable!(
+                                            "Status success was explicitly expected earlier."
+                                        )
+                                    }
+                                    // With either status below there is either no reason to stay
+                                    // connected or it is a protocol violation.
+                                    // Thus terminate the connection.
+                                    Status::ConnectionFailed
+                                    | Status::NoReservation
+                                    | Status::PermissionDenied
+                                    | Status::UnexpectedMessage
+                                    | Status::MalformedMessage => {
+                                        self.pending_error =
+                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                            ));
+                                    }
+                                    // The connection to the relay might still proof helpful CONNECT
+                                    // requests. Thus do not terminate the connection.
+                                    Status::ReservationRefused | Status::ResourceLimitExceeded => {}
+                                }
+                            }
+                        }
+                    }
+                }
+
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::ReservationReqFailed { renewal },
+                ));
+            }
+            // TODO: Should we inform listenerupgrade via send_back?
+            OutboundOpenInfo::Connect { send_back: _ } => {
+                match error {
+                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )) => {}
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::ProtocolError(e),
+                    )) => {
+                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                            upgrade::UpgradeError::Select(
+                                upgrade::NegotiationError::ProtocolError(e),
+                            ),
+                        ));
+                    }
+                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                        match error {
+                            outbound_hop::UpgradeError::Decode(_)
+                            | outbound_hop::UpgradeError::Io(_)
+                            | outbound_hop::UpgradeError::ParseTypeField
+                            | outbound_hop::UpgradeError::ParseStatusField
+                            | outbound_hop::UpgradeError::MissingStatusField
+                            | outbound_hop::UpgradeError::MissingReservationField
+                            | outbound_hop::UpgradeError::NoAddressesinReservation
+                            | outbound_hop::UpgradeError::InvalidReservationExpiration
+                            | outbound_hop::UpgradeError::InvalidReservationAddrs
+                            | outbound_hop::UpgradeError::UnexpectedTypeConnect
+                            | outbound_hop::UpgradeError::UnexpectedTypeReserve => {
+                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                ));
+                            }
+                            outbound_hop::UpgradeError::UnexpectedStatus(status) => {
+                                match status {
+                                    Status::Ok => {
+                                        unreachable!(
+                                            "Status success was explicitly expected earlier."
+                                        )
+                                    }
+                                    // With either status below there is either no reason to stay
+                                    // connected or it is a protocol violation.
+                                    // Thus terminate the connection.
+                                    Status::ReservationRefused
+                                    | Status::UnexpectedMessage
+                                    | Status::MalformedMessage => {
+                                        self.pending_error =
+                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                            ));
+                                    }
+                                    // While useless for reaching this particular destination, the
+                                    // connection to the relay might still proof helpful for other
+                                    // destinations. Thus do not terminate the connection.
+                                    Status::ResourceLimitExceeded
+                                    | Status::ConnectionFailed
+                                    | Status::NoReservation
+                                    | Status::PermissionDenied => {}
+                                }
+                            }
+                        }
+                    }
+                };
+
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::OutboundCircuitReqFailed {},
+                ));
+            }
+        }
     }
 
     // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
@@ -348,13 +509,13 @@ impl ProtocolsHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitReqDenied {
-                        src_peer_id,
-                    }))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                        Event::InboundCircuitReqDenied { src_peer_id },
+                    ))
                 }
                 Err(error) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitReqDenyFailed { src_peer_id, error },
+                        Event::InboundCircuitReqDenyFailed { src_peer_id, error },
                     ))
                 }
             }
