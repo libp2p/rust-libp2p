@@ -34,6 +34,7 @@ use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use log::debug;
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
@@ -472,10 +473,11 @@ impl ProtocolsHandler for Handler {
             if !pending_msgs.is_empty() {
                 match to_listener.poll_ready(cx) {
                     Poll::Ready(Ok(())) => {
-                        to_listener
+                        if let Err(e) = to_listener
                             .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
-                            // TODO: Handle
-                            .unwrap();
+                        {
+                            debug!("Failed to sent pending message to listener: {:?}", e);
+                        }
                     }
                     Poll::Ready(Err(e)) => todo!("{:?}", e),
                     Poll::Pending => {}
@@ -506,6 +508,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
+        // Deny incoming circuit requests.
         while let Poll::Ready(Some((src_peer_id, result))) =
             self.circuit_deny_futs.poll_next_unpin(cx)
         {
@@ -523,6 +526,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
+        // Update keep-alive handling.
         if self.reservation.is_none()
             && self.alive_lend_out_substreams.is_empty()
             && self.circuit_deny_futs.is_empty()
