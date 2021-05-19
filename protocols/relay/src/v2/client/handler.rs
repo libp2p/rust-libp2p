@@ -463,11 +463,38 @@ impl ProtocolsHandler for Handler {
             return Poll::Ready(event);
         }
 
-        // Maintain existing reservation.
+        // Check if reservation needs renewal.
+        match self.reservation.take() {
+            Some(Reservation::Accepted {
+                mut renewal_timeout,
+                pending_msgs,
+                to_listener,
+            }) => match renewal_timeout.as_mut().map(|t| t.poll_unpin(cx)) {
+                Some(Poll::Ready(())) => {
+                    self.reservation = Some(Reservation::Renewal { pending_msgs });
+                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                        protocol: SubstreamProtocol::new(
+                            outbound_hop::Upgrade::Reserve,
+                            OutboundOpenInfo::Reserve { to_listener },
+                        ),
+                    });
+                }
+                Some(Poll::Pending) | None => {
+                    self.reservation = Some(Reservation::Accepted {
+                        renewal_timeout,
+                        pending_msgs,
+                        to_listener,
+                    });
+                }
+            },
+            r => self.reservation = r,
+        }
+
+        // Forward messages to transport listener.
         if let Some(Reservation::Accepted {
-            renewal_timeout,
             pending_msgs,
             to_listener,
+            ..
         }) = &mut self.reservation
         {
             if !pending_msgs.is_empty() {
@@ -477,34 +504,15 @@ impl ProtocolsHandler for Handler {
                             .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
                         {
                             debug!("Failed to sent pending message to listener: {:?}", e);
+                            self.reservation.take();
                         }
                     }
-                    Poll::Ready(Err(e)) => todo!("{:?}", e),
+                    Poll::Ready(Err(e)) => {
+                        debug!("Channel to listener failed: {:?}", e);
+                        self.reservation.take();
+                    }
                     Poll::Pending => {}
                 }
-            }
-            match renewal_timeout.as_mut().map(|t| t.poll_unpin(cx)) {
-                Some(Poll::Ready(())) => {
-                    // TODO: Can we do better?
-                    match self.reservation.take() {
-                        Some(Reservation::Accepted {
-                            to_listener,
-                            pending_msgs,
-                            ..
-                        }) => {
-                            self.reservation = Some(Reservation::Renewal { pending_msgs });
-                            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                                protocol: SubstreamProtocol::new(
-                                    outbound_hop::Upgrade::Reserve,
-                                    OutboundOpenInfo::Reserve { to_listener },
-                                ),
-                            });
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                Some(Poll::Pending) => {}
-                None => {}
             }
         }
 
