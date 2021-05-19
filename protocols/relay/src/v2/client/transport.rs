@@ -31,6 +31,7 @@ use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{ListenerEvent, TransportError};
 use libp2p_core::{PeerId, Transport};
 use pin_project::pin_project;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -181,6 +182,7 @@ impl<T: Transport + Clone> Transport for ClientTransport<T> {
                 );
 
                 Ok(RelayListener::Relayed {
+                    queued_new_addresses: Default::default(),
                     from_behaviour,
                     msg_to_behaviour,
                 })
@@ -308,8 +310,8 @@ fn parse_relayed_multiaddr(
 pub enum RelayListener<T: Transport> {
     Inner(#[pin] <T as Transport>::Listener),
     Relayed {
+        queued_new_addresses: VecDeque<Multiaddr>,
         from_behaviour: mpsc::Receiver<ToListenerMsg>,
-
         msg_to_behaviour: Option<BoxFuture<'static, Result<(), mpsc::SendError>>>,
     },
 }
@@ -350,6 +352,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                 Poll::Pending => {}
             },
             RelayListenerProj::Relayed {
+                queued_new_addresses,
                 from_behaviour,
                 msg_to_behaviour,
             } => {
@@ -361,6 +364,10 @@ impl<T: Transport> Stream for RelayListener<T> {
                         }
                         Poll::Pending => {}
                     }
+                }
+
+                if let Some(addr) = queued_new_addresses.pop_front() {
+                    return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
                 }
 
                 match from_behaviour.poll_next_unpin(cx) {
@@ -377,10 +384,14 @@ impl<T: Transport> Stream for RelayListener<T> {
                         })));
                     }
                     Poll::Ready(Some(ToListenerMsg::Reservation { addrs })) => {
-                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
-                            // TODO: What about the other addresses?
-                            addrs.into_iter().next().unwrap()
-                        ))));
+                        let mut iter = addrs.into_iter();
+                        let first = iter.next();
+                        queued_new_addresses.extend(iter);
+                        if let Some(addr) = first {
+                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
+                                addr,
+                            ))));
+                        }
                     }
                     Poll::Ready(None) => return Poll::Ready(None),
                     Poll::Pending => {}
