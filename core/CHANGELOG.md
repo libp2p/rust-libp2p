@@ -1,3 +1,7 @@
+# 0.28.4 [unreleased]
+
+- Update dependencies.
+
 # 0.28.3 [2021-04-26]
 
 - Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
