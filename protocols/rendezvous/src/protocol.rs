@@ -1,9 +1,11 @@
 use asynchronous_codec::{BytesMut, Decoder, Encoder, Framed};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::NegotiatedSubstream;
-use std::io::Error;
 use std::{future, iter};
 use void::Void;
+use futures::AsyncRead;
+use futures::AsyncWrite;
+use crate::codec::RendezvousCodec;
+use crate::codec;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Rendezvous;
@@ -23,52 +25,63 @@ impl UpgradeInfo for Rendezvous {
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for Rendezvous {
-    type Output = Framed<TSocket, RendezvousCodec>;
+impl<TSocket: AsyncRead + AsyncWrite> InboundUpgrade<TSocket> for Rendezvous {
+    type Output = InboundStream<TSocket>;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        future::ok(Framed::new(socket, RendezvousCodec))
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        future::ready(todo!())
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for Rendezvous {
-    type Output = Framed<TSocket, RendezvousCodec>;
+impl<TSocket: AsyncRead + AsyncWrite> OutboundUpgrade<TSocket> for Rendezvous {
+    //type Output = Framed<TSocket, RendezvousCodec>;
+    type Output = DiscoverResponse;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        future::ok(Framed::new(socket, RendezvousCodec))
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        //future::ready(Ok(Framed::new(socket, RendezvousCodec)))
+        future::ready(todo!())
     }
 }
 
-/// The event emitted by the Handler. This informs the behaviour of various events created
-/// by the handler.
-#[derive(Debug)]
-pub enum Message {
-    RegisterReq,
-    DiscoverReq,
-    RegisterResp,
-    DiscoverResp,
+pub enum InboundStream<TSocket> {
+    Register(RegisterRequest<TSocket>),
+    Discover
 }
 
-struct RendezvousCodec;
-
-impl Encoder for RendezvousCodec {
-    type Item = Message;
-    type Error = std::io::Error;
+pub enum Outbound<TSocket> {
+    Register(RegisterRequest<TSocket>),
+    Discover
 }
 
-impl Decoder for RendezvousCodec {
-    type Item = Message;
-    type Error = std::io::Error;
+pub struct RegisterRequest<TSocket> {
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        todo!("decode src and return it")
+}
+
+impl<TSocket> RegisterRequest<TSocket> {
+    pub fn respond_with(self, response: RegisterResponse) -> RegisterResponseFuture<TSocket> {
+        todo!()
     }
 }
 
-mod wire {
-    include!(concat!(env!("OUT_DIR"), "/rendezvous.pb.rs"));
+pub struct DiscoverRequest<TSocket> {
+
+}
+
+pub enum DiscoverResponse {
+    Registrations,
+    Error,
+}
+
+pub enum RegisterResponse {
+    Ok,
+    Error
+}
+
+pub struct RegisterResponseFuture<TSocket> {
+    stream: Framed<TSocket, RendezvousCodec>,
+    message: codec::Message
 }

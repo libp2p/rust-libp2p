@@ -13,8 +13,12 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 libp2p-core = { version = "0.28.0", path = "../../core" }
 libp2p-swarm = { version = "0.29.0", path = "../../swarm" }
-libp2p-request-response = { path = "../../protocols/request-response" }
 prost = "0.7"
+void = "1"
+log = "0.4"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+thiserror = "1" # TODO: REMOVE FOR PRODUCTION USE
+unsigned-varint = "0.7"
 
 [build-dependencies]
 prost-build = "0.7"

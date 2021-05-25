@@ -1,5 +1,5 @@
 use crate::protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -7,60 +7,61 @@ use libp2p_swarm::{
 use std::error::Error;
 use std::fmt;
 use std::task::{Context, Poll};
+use std::time::Instant;
+use asynchronous_codec::Framed;
+use crate::codec::RendezvousCodec;
+use crate::codec::Message;
+use crate::protocol::{InboundStream, DiscoverResponse};
+use std::collections::VecDeque;
 
-#[derive(Debug)]
-pub struct HandlerEvent(protocol::Message);
+pub struct RendezvousHandler<TSocket>{
+    /// Upgrade configuration for the rendezvous protocol.
+    listen_protocol: SubstreamProtocol<protocol::Rendezvous, ()>,
 
-pub struct RendezvousHandler;
 
-impl RendezvousHandler {
+
+    in_events: VecDeque<RendezvousHandlerIn>,
+
+    /// Queue of values that we want to send to the remote.
+    out_events: VecDeque<RendezvousHandlerOut>,
+}
+
+impl RendezvousHandler<TSocket> {
     pub fn new() -> Self {
-        Self
-    }
-}
-
-/// The result of an inbound or outbound ping.
-pub type RendezvousResult = Result<RendezvousSuccess, RendezvousFailure>;
-
-/// The successful result of processing an inbound or outbound ping.
-#[derive(Debug)]
-pub enum RendezvousSuccess {}
-
-/// An outbound ping failure.
-#[derive(Debug)]
-pub enum RendezvousFailure {
-    Other {
-        error: Box<dyn std::error::Error + Send + 'static>,
-    },
-}
-
-impl fmt::Display for RendezvousFailure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RendezvousFailureFailure::Other { error } => write!(f, "Rendezvous error: {}", error),
+        Self {
+            listen_protocol: SubstreamProtocol::new(Default::default(), ()),
+            in_events: VecDeque::new(),
+            out_events: VecDeque::new()
         }
     }
 }
 
-impl Error for RendezvousFailure {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            RendezvousFailure::Other { error } => Some(&**error),
-        }
-    }
+#[derive(Debug)]
+pub enum RendezvousHandlerOut {
+    DiscoverResponse(DiscoverResponse),
+    RegisterResponse,
+    RegisterRequest,
+    DiscoverRequest,
 }
 
-impl ProtocolsHandler for RendezvousHandler {
-    type InEvent = ();
-    type OutEvent = RendezvousResult;
-    type Error = RendezvousFailure;
-    type InboundProtocol = protocol::Rendezvous;
-    type OutboundProtocol = protocol::Rendezvous;
-    type OutboundOpenInfo = ();
+#[derive(Debug, Clone)]
+pub enum RendezvousHandlerIn {
+    DiscoverRequest,
+    RegisterRequest,
+}
+
+impl ProtocolsHandler for RendezvousHandler<TSocket> {
+    type InEvent = RendezvousHandlerIn;
+    type OutEvent = RendezvousHandlerOut;
+    type Error = ();
     type InboundOpenInfo = ();
+    type InboundProtocol = protocol::Rendezvous;
+    type OutboundOpenInfo = ();
+    type OutboundProtocol = protocol::Rendezvous;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        todo!()
+        let rendezvous_protocol = crate::protocol::Rendezvous::new();
+        SubstreamProtocol::new(rendezvous_protocol, ())
     }
 
     fn inject_fully_negotiated_inbound(
@@ -68,53 +69,25 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _info: Self::InboundOpenInfo,
     ) {
-        // If the peer doesn't support the protocol, reject all substreams
-        if self.protocol_unsupported {
-            return;
+        match substream {
+            InboundStream::Discover => self.out_events.push_back(RendezvousHandlerOut::DiscoverRequest),
+            InboundStream::Register(a) => self.out_events.push_back(RendezvousHandlerOut::RegisterRequest)
         }
-
-        self.inbound_substreams_created += 1;
-
-        // update the known kind of peer
-        if self.peer_kind.is_none() {
-            self.peer_kind = Some(peer_kind);
-        }
-
-        // new inbound substream. Replace the current one, if it exists.
-        trace!("New inbound substream request");
-        self.inbound_substream = Some(InboundSubstreamState::WaitingInput(substream));
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        message: Self::OutboundOpenInfo,
+        _info: Self::OutboundOpenInfo,
     ) {
-        if self.outbound_substream.is_some() {
-            warn!("Established an outbound substream with one already available");
-            // Add the message back to the send queue
-            self.send_queue.push(message);
-        } else {
-            self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
+        match substream {
+
         }
+        self.out_events.push_back(RendezvousHandlerOut::DiscoverResponse(substream));
     }
 
-    fn inject_event(&mut self, message: GossipsubHandlerIn) {
-        if !self.protocol_unsupported {
-            match message {
-                GossipsubHandlerIn::Message(m) => self.send_queue.push(m),
-                // If we have joined the mesh, keep the connection alive.
-                GossipsubHandlerIn::JoinedMesh => {
-                    self.in_mesh = true;
-                    self.keep_alive = KeepAlive::Yes;
-                }
-                // If we have left the mesh, start the idle timer.
-                GossipsubHandlerIn::LeftMesh => {
-                    self.in_mesh = false;
-                    self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
-                }
-            }
-        }
+    fn inject_event(&mut self, message: RendezvousHandlerIn) {
+            RendezvousHandlerIn::Message(m) => self.out_events.push(m)
     }
 
     fn inject_dial_upgrade_error(
@@ -140,6 +113,6 @@ impl ProtocolsHandler for RendezvousHandler {
             Self::Error,
         >,
     > {
-        todo!()
+        Poll::Ready(ProtocolsHandlerEvent::Custom(RendezvousResult::Ok(())))
     }
 }

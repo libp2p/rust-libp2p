@@ -1,5 +1,6 @@
 mod handler;
 mod protocol;
+mod codec;
 
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{Multiaddr, PeerId};
