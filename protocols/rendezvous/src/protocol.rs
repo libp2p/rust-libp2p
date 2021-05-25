@@ -26,62 +26,21 @@ impl UpgradeInfo for Rendezvous {
 }
 
 impl<TSocket: AsyncRead + AsyncWrite> InboundUpgrade<TSocket> for Rendezvous {
-    type Output = InboundStream<TSocket>;
+    type Output = Framed<TSocket, RendezvousCodec>;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        future::ready(todo!())
+        future::ready(Ok(Framed::new(socket, RendezvousCodec::default())))
     }
 }
 
 impl<TSocket: AsyncRead + AsyncWrite> OutboundUpgrade<TSocket> for Rendezvous {
-    //type Output = Framed<TSocket, RendezvousCodec>;
-    type Output = DiscoverResponse;
+    type Output = Framed<TSocket, RendezvousCodec>;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        //future::ready(Ok(Framed::new(socket, RendezvousCodec)))
-        future::ready(todo!())
+        future::ready(Ok(Framed::new(socket, RendezvousCodec::default())))
     }
-}
-
-pub enum InboundStream<TSocket> {
-    Register(RegisterRequest<TSocket>),
-    Discover
-}
-
-pub enum Outbound<TSocket> {
-    Register(RegisterRequest<TSocket>),
-    Discover
-}
-
-pub struct RegisterRequest<TSocket> {
-
-}
-
-impl<TSocket> RegisterRequest<TSocket> {
-    pub fn respond_with(self, response: RegisterResponse) -> RegisterResponseFuture<TSocket> {
-        todo!()
-    }
-}
-
-pub struct DiscoverRequest<TSocket> {
-
-}
-
-pub enum DiscoverResponse {
-    Registrations,
-    Error,
-}
-
-pub enum RegisterResponse {
-    Ok,
-    Error
-}
-
-pub struct RegisterResponseFuture<TSocket> {
-    stream: Framed<TSocket, RendezvousCodec>,
-    message: codec::Message
 }
