@@ -36,7 +36,6 @@
 
 ## Utilities
 
-- [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 
 # `libp2p` facade crate
