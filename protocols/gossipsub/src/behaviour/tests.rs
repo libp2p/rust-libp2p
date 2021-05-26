@@ -1833,9 +1833,11 @@ mod tests {
         assert_eq!(dials_set.len(), config.prune_peers());
 
         //all dial peers must be in px
-        assert!(dials_set.is_subset(&HashSet::from_iter(
-            px.iter().map(|i| i.peer_id.as_ref().unwrap().clone())
-        )));
+        assert!(dials_set.is_subset(
+            &px.iter()
+                .map(|i| i.peer_id.as_ref().unwrap().clone())
+                .collect::<HashSet<_>>()
+        ));
     }
 
     #[test]
