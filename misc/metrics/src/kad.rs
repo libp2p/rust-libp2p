@@ -38,6 +38,8 @@ pub struct Metrics {
     query_result_num_success: Family<QueryResult, Histogram>,
     query_result_num_failure: Family<QueryResult, Histogram>,
     query_result_duration: Family<QueryResult, Histogram>,
+
+    routing_updated: Family<RoutingUpdated, Counter>,
 }
 
 impl Metrics {
@@ -119,6 +121,13 @@ impl Metrics {
             Box::new(query_result_duration.clone()),
         );
 
+        let routing_updated = Family::default();
+        sub_registry.register(
+            "routing_updated",
+            "Number of peers added, updated or evicted to, in or from the routing table",
+            Box::new(routing_updated.clone()),
+        );
+
         Self {
             query_result_get_record_ok,
             query_result_get_record_error,
@@ -133,6 +142,8 @@ impl Metrics {
             query_result_num_success,
             query_result_num_failure,
             query_result_duration,
+
+            routing_updated,
         }
     }
 }
@@ -198,6 +209,36 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                         }
                     },
                     _ => {}
+                }
+            }
+            libp2p_kad::KademliaEvent::RoutingUpdated{
+                is_new_peer,
+                old_peer,
+                ..
+            } => {
+                if *is_new_peer {
+                    self.kad
+                        .routing_updated
+                        .get_or_create(&RoutingUpdated {
+                            action: RoutingAction::Added,
+                        })
+                        .inc();
+                } else {
+                    self.kad
+                        .routing_updated
+                        .get_or_create(&RoutingUpdated {
+                            action: RoutingAction::Updated,
+                        })
+                        .inc();
+                }
+
+                if old_peer.is_some() {
+                    self.kad
+                        .routing_updated
+                        .get_or_create(&RoutingUpdated {
+                            action: RoutingAction::Evicted,
+                        })
+                        .inc();
                 }
             }
             _ => {}
@@ -319,4 +360,16 @@ impl From<&libp2p_kad::GetProvidersError> for GetProvidersResult {
             },
         }
     }
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct RoutingUpdated {
+    action: RoutingAction,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+enum RoutingAction {
+    Added,
+    Updated,
+    Evicted,
 }
