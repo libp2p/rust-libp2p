@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+package envelope_proto;
+
+import "keys.proto";
+
+message Envelope {
+  required keys_proto.PublicKey public_key = 1;
+  required bytes payload_type = 2;
+  required bytes payload = 3;
+  required bytes signature = 5;
+}

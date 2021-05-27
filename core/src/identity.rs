@@ -135,6 +135,7 @@ impl PublicKey {
     /// that the signature has been produced by the corresponding
     /// private key (authenticity), and that the message has not been
     /// tampered with (integrity).
+    #[must_use]
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         use PublicKey::*;
         match self {
