@@ -61,8 +61,8 @@ pub mod muxing;
 pub mod network;
 pub mod transport;
 pub mod upgrade;
-mod signed_envelope;
-mod peer_record;
+pub mod signed_envelope;
+pub mod peer_record;
 
 pub use multiaddr::Multiaddr;
 pub use multihash;
