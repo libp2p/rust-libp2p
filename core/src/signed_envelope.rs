@@ -2,6 +2,7 @@ use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::PublicKey;
 use prost::bytes::BufMut;
+use std::convert::TryInto;
 use unsigned_varint::encode::usize_buffer;
 
 // TODO: docs
@@ -117,4 +118,35 @@ impl SignedEnvelope {
     // pub fn payload_unchecked(&self) -> Vec<u8> {
     //
     // }
+
+    pub fn into_protobuf_encoding(self) -> Vec<u8> {
+        use prost::Message;
+
+        let envelope = crate::envelope_proto::Envelope {
+            public_key: self.key.into(),
+            payload_type: self.payload_type,
+            payload: self.payload,
+            signature: self.signature,
+        };
+
+        let mut buf = Vec::with_capacity(envelope.encoded_len());
+        envelope
+            .encode(&mut buf)
+            .expect("Vec<u8> provides capacity as needed");
+        buf
+    }
+
+    // TODO: wrap error to not expose `prost` as a dependency
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, prost::DecodeError> {
+        use prost::Message;
+
+        let envelope = crate::envelope_proto::Envelope::decode(bytes)?;
+
+        Ok(Self {
+            key: envelope.public_key.try_into().unwrap(), // TODO: error handling
+            payload_type: envelope.payload_type,
+            payload: envelope.payload,
+            signature: envelope.signature,
+        })
+    }
 }
