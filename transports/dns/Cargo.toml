@@ -2,7 +2,7 @@
 name = "libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
-version = "0.28.1"
+version = "0.29.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.28.1", path = "../../core" }
+libp2p-core = { version = "0.29.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
 trust-dns-resolver = { version = "0.20", default-features = false, features = ["system-config"] }
@@ -31,4 +31,3 @@ tokio = ["trust-dns-resolver/tokio-runtime"]
 # available for `tokio`.
 tokio-dns-over-rustls = ["tokio", "trust-dns-resolver/dns-over-rustls"]
 tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustls"]
-
