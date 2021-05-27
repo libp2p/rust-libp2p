@@ -1,11 +1,10 @@
-use asynchronous_codec::{BytesMut, Decoder, Encoder, Framed};
+use asynchronous_codec::{Framed};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::{future, iter};
 use void::Void;
 use futures::AsyncRead;
 use futures::AsyncWrite;
 use crate::codec::RendezvousCodec;
-use crate::codec;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Rendezvous;

@@ -18,7 +18,7 @@ void = "1"
 log = "0.4"
 futures = { version = "0.3", default-features = false, features = ["std"] }
 thiserror = "1" # TODO: REMOVE FOR PRODUCTION USE
-unsigned-varint = "0.7"
+unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [build-dependencies]
 prost-build = "0.7"

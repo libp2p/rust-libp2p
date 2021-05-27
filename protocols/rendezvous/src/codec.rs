@@ -1,13 +1,14 @@
 use asynchronous_codec::{Encoder, BytesMut, Decoder, Bytes};
 use unsigned_varint::codec::UviBytes;
 use std::convert::{TryFrom, TryInto};
+use libp2p_core::{AuthenticatedPeerRecord, SignedEnvelope, signed_envelope, peer_record};
 
 #[derive(Debug)]
 pub enum Message {
     Register {
         namespace: String,
         ttl: Option<i64>,
-        // TODO: Signed peer record field
+        record: AuthenticatedPeerRecord
     },
     SuccessfullyRegistered {
         ttl: i64
@@ -36,8 +37,8 @@ pub enum Message {
 #[derive(Debug)]
 pub struct Registration {
     namespace: String,
+    record: AuthenticatedPeerRecord
     // ttl: i64, TODO: This is useless as a relative value, need registration timestamp, this needs to be a unix timestamp or this is relative in remaining seconds
-    // TODO: Signed peer record
 }
 
 #[derive(Debug)]
@@ -68,12 +69,12 @@ impl From<Message> for wire::Message {
         use wire::message::*;
 
         match message {
-            Message::Register { namespace, ttl } => wire::Message {
+            Message::Register { namespace, ttl, record } => wire::Message {
                 r#type: Some(MessageType::Register.into()),
                 register: Some(Register {
                     ns: Some(namespace),
                     ttl,
-                    signed_peer_record: None
+                    signed_peer_record: Some(record.into_signed_envelope().into_protobuf_encoding())
                 }),
                 register_response: None,
                 unregister: None,
@@ -168,10 +169,11 @@ impl TryFrom<wire::Message> for Message {
         use wire::message::*;
 
         let message = match message {
-            wire::Message { r#type: Some(0), register: Some(Register { ns, ttl, .. }), .. } => {
+            wire::Message { r#type: Some(0), register: Some(Register { ns, ttl, signed_peer_record: Some(signed_peer_record) }), .. } => {
                 Message::Register {
                     namespace: ns.ok_or(ConversionError::MissingNamespace)?,
-                    ttl
+                    ttl,
+                    record: AuthenticatedPeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?)?
                 }
             },
             wire::Message { r#type: Some(1), register_response: Some(RegisterResponse { status: Some(0), ttl, .. }), .. } => {
@@ -202,7 +204,8 @@ impl TryFrom<wire::Message> for Message {
             wire::Message { r#type: Some(4), discover_response: Some(DiscoverResponse { registrations, status: Some(0), .. }), .. } => {
                 Message::DiscoverResponse {
                     registrations: registrations.into_iter().map(|reggo| Ok(Registration {
-                        namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?
+                        namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?,
+                        record: AuthenticatedPeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(&reggo.signed_peer_record.ok_or(ConversionError::MissingSignedPeerRecord)?)?)?
                     })).collect::<Result<Vec<_>, ConversionError>>()?,
                 }
             },
@@ -228,10 +231,16 @@ pub enum ConversionError {
     InconsistentWireMessage,
     #[error("Missing namespace field")]
     MissingNamespace,
+    #[error("Missing signed peer record field")]
+    MissingSignedPeerRecord,
     #[error("Missing TTL field")]
     MissingTtl,
     #[error("Bad status code")]
     BadStatusCode,
+    #[error("Failed to decode signed envelope")]
+    BadSignedEnvelope(#[from] signed_envelope::DecodingError),
+    #[error("Failed to decode envelope as signed peer record")]
+    BadSignedPeerRecord(#[from] peer_record::FromEnvelopeError),
 }
 
 impl TryFrom<wire::message::ResponseStatus> for ErrorCode {
