@@ -1,8 +1,9 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
-use crate::PublicKey;
+use crate::{identity, PublicKey};
 use prost::bytes::BufMut;
 use std::convert::TryInto;
+use std::fmt;
 use unsigned_varint::encode::usize_buffer;
 
 // TODO: docs
@@ -102,13 +103,16 @@ impl SignedEnvelope {
         &self,
         domain_separation: String,
         expected_payload_type: &[u8],
-    ) -> Result<&[u8], ()> {
+    ) -> Result<&[u8], ReadPayloadError> {
         if &self.payload_type != expected_payload_type {
-            panic!("bad payload type") // TODO: error handling
+            return Err(ReadPayloadError::UnexpectedPayloadType {
+                expected: expected_payload_type.to_vec(),
+                got: self.payload_type.clone(),
+            });
         }
 
         if !self.verify(domain_separation) {
-            panic!("bad signature") // TODO: error handling
+            return Err(ReadPayloadError::InvalidSignature);
         }
 
         Ok(&self.payload)
@@ -136,17 +140,77 @@ impl SignedEnvelope {
         buf
     }
 
-    // TODO: wrap error to not expose `prost` as a dependency
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, prost::DecodeError> {
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
         use prost::Message;
 
         let envelope = crate::envelope_proto::Envelope::decode(bytes)?;
 
         Ok(Self {
-            key: envelope.public_key.try_into().unwrap(), // TODO: error handling
+            key: envelope.public_key.try_into()?,
             payload_type: envelope.payload_type,
             payload: envelope.payload,
             signature: envelope.signature,
         })
     }
 }
+
+#[derive(Debug)]
+pub enum DecodingError {
+    /// Decoding the provided bytes as a signed envelope failed.
+    InvalidEnvelope(prost::DecodeError),
+    /// The public key in the envelope could not be converted to our internal public key type.
+    InvalidPublicKey(identity::error::DecodingError),
+}
+
+impl From<prost::DecodeError> for DecodingError {
+    fn from(e: prost::DecodeError) -> Self {
+        Self::InvalidEnvelope(e)
+    }
+}
+
+impl From<identity::error::DecodingError> for DecodingError {
+    fn from(e: identity::error::DecodingError) -> Self {
+        Self::InvalidPublicKey(e)
+    }
+}
+
+impl fmt::Display for DecodingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidEnvelope(_) => write!(f, "Failed to decode envelope"),
+            Self::InvalidPublicKey(_) => write!(f, "Failed to convert public key"),
+        }
+    }
+}
+
+impl std::error::Error for DecodingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidEnvelope(inner) => Some(inner),
+            Self::InvalidPublicKey(inner) => Some(inner),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ReadPayloadError {
+    /// The signature on the signed envelope does not verify with the provided domain separation string.
+    InvalidSignature,
+    /// The payload contained in the envelope is not of the expected type.
+    UnexpectedPayloadType { expected: Vec<u8>, got: Vec<u8> },
+}
+
+impl fmt::Display for ReadPayloadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidSignature => write!(f, "Invalid signature"),
+            Self::UnexpectedPayloadType { expected, got } => write!(
+                f,
+                "Unexpected payload type, expected {:?} but got {:?}",
+                expected, got
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ReadPayloadError {}
