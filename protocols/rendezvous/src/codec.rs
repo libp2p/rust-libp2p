@@ -36,8 +36,14 @@ pub enum Message {
 
 #[derive(Debug)]
 pub struct Registration {
-    namespace: String,
+    pub namespace: String,
     record: AuthenticatedPeerRecord, // ttl: i64, TODO: This is useless as a relative value, need registration timestamp, this needs to be a unix timestamp or this is relative in remaining seconds
+}
+
+impl Registration {
+    pub fn new(namespace: String, record: AuthenticatedPeerRecord) -> Self {
+        Self { namespace, record }
+    }
 }
 
 #[derive(Debug)]
@@ -225,6 +231,7 @@ impl TryFrom<wire::Message> for Message {
                     .map(|reggo| {
                         Ok(Registration {
                             namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?,
+                            record: todo!(),
                         })
                     })
                     .collect::<Result<Vec<_>, ConversionError>>()?,
