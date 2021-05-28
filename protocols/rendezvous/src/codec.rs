@@ -5,11 +5,7 @@ use unsigned_varint::codec::UviBytes;
 
 #[derive(Debug)]
 pub enum Message {
-    Register {
-        namespace: String,
-        ttl: Option<i64>,
-        record: AuthenticatedPeerRecord,
-    },
+    Register(NewRegistration),
     SuccessfullyRegistered {
         ttl: i64,
     },
@@ -35,15 +31,28 @@ pub enum Message {
 }
 
 #[derive(Debug)]
-pub struct Registration {
+pub struct NewRegistration {
     pub namespace: String,
-    record: AuthenticatedPeerRecord, // ttl: i64, TODO: This is useless as a relative value, need registration timestamp, this needs to be a unix timestamp or this is relative in remaining seconds
+    pub record: AuthenticatedPeerRecord,
+    ttl: Option<i64>,
 }
 
-impl Registration {
-    pub fn new(namespace: String, record: AuthenticatedPeerRecord) -> Self {
-        Self { namespace, record }
+/// If unspecified, rendezvous nodes should assume a TTL of 2h.
+///
+/// See https://github.com/libp2p/specs/blob/d21418638d5f09f2a4e5a1ceca17058df134a300/rendezvous/README.md#L116-L117.
+const DEFAULT_TTL: i64 = 60 * 60 * 2;
+
+impl NewRegistration {
+    pub fn effective_ttl(&self) -> i64 {
+        self.ttl.unwrap_or(DEFAULT_TTL)
     }
+}
+
+#[derive(Debug)]
+pub struct Registration {
+    pub namespace: String,
+    pub record: AuthenticatedPeerRecord,
+    // pub ttl: i64, // TODO: This is useless as a relative value, need registration timestamp, this needs to be a unix timestamp or this is relative in remaining seconds
 }
 
 #[derive(Debug)]
@@ -56,7 +65,6 @@ pub enum ErrorCode {
     InternalError,
     Unavailable,
 }
-
 
 pub struct RendezvousCodec {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
@@ -129,11 +137,11 @@ impl From<Message> for wire::Message {
         use wire::message::*;
 
         match message {
-            Message::Register {
+            Message::Register(NewRegistration {
                 namespace,
-                ttl,
                 record,
-            } => wire::Message {
+                ttl,
+            }) => wire::Message {
                 r#type: Some(MessageType::Register.into()),
                 register: Some(Register {
                     ns: Some(namespace),
@@ -247,13 +255,13 @@ impl TryFrom<wire::Message> for Message {
                         signed_peer_record: Some(signed_peer_record),
                     }),
                 ..
-            } => Message::Register {
+            } => Message::Register(NewRegistration {
                 namespace: ns.ok_or(ConversionError::MissingNamespace)?,
                 ttl,
                 record: AuthenticatedPeerRecord::from_signed_envelope(
                     SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?,
                 )?,
-            },
+            }),
             wire::Message {
                 r#type: Some(1),
                 register_response:

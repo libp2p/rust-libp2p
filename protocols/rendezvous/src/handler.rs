@@ -62,11 +62,7 @@ pub enum Input {
 impl From<Input> for Message {
     fn from(req: Input) -> Self {
         match req {
-            Input::RegisterRequest { namespace, ttl } => Message::Register {
-                namespace,
-                ttl,
-                record: todo!(),
-            },
+            Input::RegisterRequest { namespace, ttl } => Message::Register(todo!()),
             Input::UnregisterRequest { namespace } => Message::Unregister { namespace },
             Input::DiscoverRequest { namespace } => Message::Discover { namespace },
             Input::RegisterResponse { ttl } => Message::SuccessfullyRegistered { ttl },

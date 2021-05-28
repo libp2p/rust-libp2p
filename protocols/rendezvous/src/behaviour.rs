@@ -104,7 +104,10 @@ impl NetworkBehaviour for Rendezvous {
         event: crate::handler::HandlerEvent,
     ) {
         match event.0 {
-            Message::Register { namespace, ttl, .. } => {
+            Message::Register(new_reggo) => {
+                let namespace = new_reggo.namespace;
+                let ttl = unimplemented!();
+
                 todo!("add to hashmap");
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
