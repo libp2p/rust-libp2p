@@ -34,7 +34,7 @@ pub enum Message {
 pub struct NewRegistration {
     pub namespace: String,
     pub record: AuthenticatedPeerRecord,
-    ttl: Option<i64>,
+    pub ttl: Option<i64>,
 }
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
