@@ -131,6 +131,3 @@ members = [
 [[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
-
-[patch.crates-io]
-soketto = { git = "https://github.com/paritytech/soketto", branch = "dp-close-reason-as-incoming" }
