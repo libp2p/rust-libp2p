@@ -57,6 +57,61 @@ pub enum ErrorCode {
     Unavailable,
 }
 
+
+pub struct RendezvousCodec {
+    /// Codec to encode/decode the Unsigned varint length prefix of the frames.
+    length_codec: UviBytes,
+}
+
+impl Default for RendezvousCodec {
+    fn default() -> Self {
+        let mut length_codec = UviBytes::default();
+        length_codec.set_max_len(1024 * 1024); // 1MB TODO clarify with spec what the default should be
+
+        Self { length_codec }
+    }
+}
+
+impl Encoder for RendezvousCodec {
+    type Item = Message;
+    type Error = Error;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        use prost::Message;
+
+        let message = wire::Message::from(item);
+
+        let mut buf = Vec::with_capacity(message.encoded_len());
+
+        message
+            .encode(&mut buf)
+            .expect("Buffer has sufficient capacity");
+
+        // length prefix the protobuf message, ensuring the max limit is not hit
+        self.length_codec.encode(Bytes::from(buf), dst)?;
+
+        Ok(())
+    }
+}
+
+impl Decoder for RendezvousCodec {
+    type Item = Message;
+    type Error = Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        use prost::Message;
+
+        let message = match self.length_codec.decode(src)? {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+
+        let message = wire::Message::decode(message)?;
+
+        Ok(Some(message.try_into()?))
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to encode message as bytes")]
@@ -371,60 +426,6 @@ impl From<NotAnError> for ConversionError {
 #[derive(Debug, thiserror::Error)]
 #[error("The provided response code is not an error code")]
 pub struct NotAnError;
-
-pub struct RendezvousCodec {
-    /// Codec to encode/decode the Unsigned varint length prefix of the frames.
-    length_codec: UviBytes,
-}
-
-impl Default for RendezvousCodec {
-    fn default() -> Self {
-        let mut length_codec = UviBytes::default();
-        length_codec.set_max_len(1024 * 1024); // 1MB TODO clarify with spec what the default should be
-
-        Self { length_codec }
-    }
-}
-
-impl Encoder for RendezvousCodec {
-    type Item = Message;
-    type Error = Error;
-
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        use prost::Message;
-
-        let message = wire::Message::from(item);
-
-        let mut buf = Vec::with_capacity(message.encoded_len());
-
-        message
-            .encode(&mut buf)
-            .expect("Buffer has sufficient capacity");
-
-        // length prefix the protobuf message, ensuring the max limit is not hit
-        self.length_codec.encode(Bytes::from(buf), dst)?;
-
-        Ok(())
-    }
-}
-
-impl Decoder for RendezvousCodec {
-    type Item = Message;
-    type Error = Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        use prost::Message;
-
-        let message = match self.length_codec.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-
-        let message = wire::Message::decode(message)?;
-
-        Ok(Some(message.try_into()?))
-    }
-}
 
 mod wire {
     include!(concat!(env!("OUT_DIR"), "/rendezvous.pb.rs"));
