@@ -126,6 +126,8 @@ impl ProtocolsHandler for RendezvousHandler {
     ) {
         if let InboundState::None = self.inbound_substream {
             self.inbound_substream = InboundState::Reading(substream);
+        } else {
+            unreachable!("Invalid inbound state")
         }
     }
 
@@ -134,8 +136,10 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         msg: Self::OutboundOpenInfo,
     ) {
-        if let OutboundState::None = self.outbound_substream {
+        if let OutboundState::WaitingUpgrade = self.outbound_substream {
             self.outbound_substream = OutboundState::PendingSend(substream, msg);
+        } else {
+            unreachable!("Invalid outbound state")
         }
     }
 
