@@ -22,9 +22,9 @@ use crate::config::ValidationMode;
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
+use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
-use asynchronous_codec::Framed;
 use libp2p_core::upgrade::{InboundUpgrade, NegotiationError, OutboundUpgrade, UpgradeError};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -60,6 +60,17 @@ pub enum HandlerEvent {
     /// An inbound or outbound substream has been established with the peer and this informs over
     /// which protocol. This message only occurs once per connection.
     PeerKind(PeerKind),
+}
+
+/// A message sent from the behaviour to the handler.
+#[derive(Debug, Clone)]
+pub enum GossipsubHandlerIn {
+    /// A gossipsub message to send.
+    Message(crate::rpc_proto::Rpc),
+    /// The peer has joined the mesh.
+    JoinedMesh,
+    /// The peer has left the mesh.
+    LeftMesh,
 }
 
 /// The maximum number of substreams we accept or create before disconnecting from the peer.
@@ -108,11 +119,18 @@ pub struct GossipsubHandler {
     /// This value is set to true to indicate the peer doesn't support gossipsub.
     protocol_unsupported: bool,
 
+    /// The amount of time we allow idle connections before disconnecting.
+    idle_timeout: Duration,
+
     /// Collection of errors from attempting an upgrade.
     upgrade_errors: VecDeque<ProtocolsHandlerUpgrErr<GossipsubHandlerError>>,
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
+
+    /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
+    /// decisions about the keep alive state for this connection.
+    in_mesh: bool,
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
@@ -148,6 +166,7 @@ impl GossipsubHandler {
         protocol_id_prefix: std::borrow::Cow<'static, str>,
         max_transmit_size: usize,
         validation_mode: ValidationMode,
+        idle_timeout: Duration,
         support_floodsub: bool,
     ) -> Self {
         GossipsubHandler {
@@ -169,19 +188,21 @@ impl GossipsubHandler {
             peer_kind: None,
             peer_kind_sent: false,
             protocol_unsupported: false,
+            idle_timeout,
             upgrade_errors: VecDeque::new(),
             keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
+            in_mesh: false,
         }
     }
 }
 
 impl ProtocolsHandler for GossipsubHandler {
-    type InEvent = crate::rpc_proto::Rpc;
+    type InEvent = GossipsubHandlerIn;
     type OutEvent = HandlerEvent;
     type Error = GossipsubHandlerError;
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = Self::InEvent;
+    type OutboundOpenInfo = crate::rpc_proto::Rpc;
     type OutboundProtocol = ProtocolConfig;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -239,9 +260,21 @@ impl ProtocolsHandler for GossipsubHandler {
         }
     }
 
-    fn inject_event(&mut self, message: crate::rpc_proto::Rpc) {
+    fn inject_event(&mut self, message: GossipsubHandlerIn) {
         if !self.protocol_unsupported {
-            self.send_queue.push(message);
+            match message {
+                GossipsubHandlerIn::Message(m) => self.send_queue.push(m),
+                // If we have joined the mesh, keep the connection alive.
+                GossipsubHandlerIn::JoinedMesh => {
+                    self.in_mesh = true;
+                    self.keep_alive = KeepAlive::Yes;
+                }
+                // If we have left the mesh, start the idle timer.
+                GossipsubHandlerIn::LeftMesh => {
+                    self.in_mesh = false;
+                    self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
+                }
+            }
         }
     }
 
@@ -355,6 +388,10 @@ impl ProtocolsHandler for GossipsubHandler {
                 Some(InboundSubstreamState::WaitingInput(mut substream)) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(message))) => {
+                            if !self.in_mesh {
+                                self.keep_alive =
+                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
+                            }
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
                             return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
@@ -398,7 +435,6 @@ impl ProtocolsHandler for GossipsubHandler {
                                 // substream.
                                 warn!("Inbound substream error while closing: {:?}", e);
                             }
-
                             self.inbound_substream = None;
                             if self.outbound_substream.is_none() {
                                 self.keep_alive = KeepAlive::No;
@@ -465,6 +501,7 @@ impl ProtocolsHandler for GossipsubHandler {
                             return Poll::Ready(ProtocolsHandlerEvent::Close(e));
                         }
                         Poll::Pending => {
+                            self.keep_alive = KeepAlive::Yes;
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
                             break;
@@ -474,11 +511,17 @@ impl ProtocolsHandler for GossipsubHandler {
                 Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
                     match Sink::poll_flush(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
+                            if !self.in_mesh {
+                                // if not in the mesh, reset the idle timeout
+                                self.keep_alive =
+                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
+                            }
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => return Poll::Ready(ProtocolsHandlerEvent::Close(e)),
                         Poll::Pending => {
+                            self.keep_alive = KeepAlive::Yes;
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingFlush(substream));
                             break;
@@ -506,6 +549,7 @@ impl ProtocolsHandler for GossipsubHandler {
                             ));
                         }
                         Poll::Pending => {
+                            self.keep_alive = KeepAlive::No;
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::_Closing(substream));
                             break;

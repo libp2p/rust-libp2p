@@ -1,3 +1,7 @@
+# 0.31.0 [unreleased]
+
+- Update dependencies.
+
 # 0.30.2 [2021-05-06]
 
 - Fix discovered event emission.

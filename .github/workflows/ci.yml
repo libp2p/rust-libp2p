@@ -17,16 +17,16 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -54,17 +54,17 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Install Rust wasm32-unknown-emscripten
-      uses: actions-rs/toolchain@v1
+      uses: actions-rs/toolchain@v1.0.7
       with:
         toolchain: stable
         target: wasm32-unknown-emscripten
         override: true
 
     - name: Install Rust wasm32-wasi
-      uses: actions-rs/toolchain@v1
+      uses: actions-rs/toolchain@v1.0.7
       with:
         toolchain: stable
         target: wasm32-wasi
@@ -81,13 +81,13 @@ jobs:
       run: apt-get install -y cmake
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -114,7 +114,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
@@ -128,9 +128,9 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
-    - uses: actions-rs/toolchain@v1
+    - uses: actions-rs/toolchain@v1.0.7
       with:
         profile: minimal
         toolchain: stable
@@ -138,19 +138,19 @@ jobs:
         components: clippy
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
     - name: Run cargo clippy
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: clippy
         args: -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style
@@ -167,16 +167,16 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2.1.5
+      uses: actions/cache@v2.1.6
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}

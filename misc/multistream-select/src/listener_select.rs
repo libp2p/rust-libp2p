@@ -65,11 +65,7 @@ where
 /// The `Future` returned by [`listener_select_proto`] that performs a
 /// multistream-select protocol negotiation on an underlying I/O stream.
 #[pin_project::pin_project]
-pub struct ListenerSelectFuture<R, N>
-where
-    R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
-{
+pub struct ListenerSelectFuture<R, N> {
     // TODO: It would be nice if eventually N = Protocol, which has a
     // few more implications on the API.
     protocols: SmallVec<[(N, Protocol); 8]>,
@@ -83,11 +79,7 @@ where
     last_sent_na: bool,
 }
 
-enum State<R, N>
-where
-    R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
-{
+enum State<R, N> {
     RecvHeader { io: MessageIO<R> },
     SendHeader { io: MessageIO<R> },
     RecvMessage { io: MessageIO<R> },
