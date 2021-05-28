@@ -1,3 +1,7 @@
+# 0.29.0 [unreleased]
+
+- Update dependencies.
+
 # 0.28.2 [2021-04-27]
 
 - Support dialing `Multiaddr` with `/p2p` protocol [PR

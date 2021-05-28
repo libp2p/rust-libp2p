@@ -1,4 +1,6 @@
-# 0.28.4 [unreleased]
+# 0.29.0 [unreleased]
+
+- Switch from `parity-multiaddr` to upstream `multiaddr`.
 
 - Update dependencies.
 
