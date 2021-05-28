@@ -2,7 +2,7 @@ use crate::codec::RendezvousCodec;
 use crate::codec::{Message, Registration};
 use crate::protocol;
 use asynchronous_codec::Framed;
-use futures::Sink;
+use futures::SinkExt;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -199,9 +199,9 @@ impl ProtocolsHandler for RendezvousHandler {
     > {
         match std::mem::replace(&mut self.inbound_substream, InboundSubstreamState::Poisoned) {
             InboundSubstreamState::PendingSend(mut substream, message) => {
-                match Sink::poll_ready(Pin::new(&mut substream), cx) {
+                match substream.poll_ready_unpin(cx) {
                     Poll::Ready(Ok(())) => {
-                        match Sink::start_send(Pin::new(&mut substream), message) {
+                        match substream.start_send_unpin(message) {
                             Ok(()) => {
                                 self.inbound_substream =
                                     InboundSubstreamState::PendingFlush(substream);
@@ -222,7 +222,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 }
             }
             InboundSubstreamState::PendingFlush(mut substream) => {
-                match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                match substream.poll_flush_unpin(cx) {
                     Poll::Ready(Ok(())) => {
                         self.inbound_substream = InboundSubstreamState::Idle;
                     }
@@ -237,7 +237,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
             }
             InboundSubstreamState::Closing(mut substream) => {
-                match Sink::poll_close(Pin::new(&mut substream), cx) {
+                match substream.poll_close_unpin(cx) {
                     Poll::Ready(..) => {
                         if let OutboundSubstreamState::Idle | OutboundSubstreamState::Poisoned =
                             self.outbound_substream
@@ -265,9 +265,9 @@ impl ProtocolsHandler for RendezvousHandler {
                 self.outbound_substream = OutboundSubstreamState::WaitingUpgrade(msg);
             }
             OutboundSubstreamState::PendingSend(mut substream, message) => {
-                match Sink::poll_ready(Pin::new(&mut substream), cx) {
+                match substream.poll_ready_unpin(cx) {
                     Poll::Ready(Ok(())) => {
-                        match Sink::start_send(Pin::new(&mut substream), message) {
+                        match substream.start_send_unpin(message) {
                             Ok(()) => {
                                 self.outbound_substream =
                                     OutboundSubstreamState::PendingFlush(substream);
@@ -288,7 +288,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 }
             }
             OutboundSubstreamState::PendingFlush(mut substream) => {
-                match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                match substream.poll_flush_unpin(cx) {
                     Poll::Ready(Ok(())) => {
                         self.outbound_substream =
                             OutboundSubstreamState::WaitingForRemoteToRespond(substream)
@@ -306,7 +306,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(message)));
             }
             OutboundSubstreamState::Closing(mut substream) => {
-                match Sink::poll_close(Pin::new(&mut substream), cx) {
+                match substream.poll_close_unpin(cx) {
                     Poll::Ready(..) => {
                         if let InboundSubstreamState::Idle | InboundSubstreamState::Poisoned =
                             self.inbound_substream
