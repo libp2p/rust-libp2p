@@ -1712,6 +1712,13 @@ where
 
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+
+                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest{ request: InboundRequest::FindNode {
+                        num_closer_peers: closer_peers.len(),
+                    }}
+                ));
+
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
                     handler: NotifyHandler::One(connection),
@@ -1732,6 +1739,14 @@ where
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+
+                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest{ request: InboundRequest::GetProvider {
+                        num_closer_peers: closer_peers.len(),
+                        num_provider_peers: provider_peers.len(),
+                    }}
+                ));
+
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
                     handler: NotifyHandler::One(connection),
@@ -1777,9 +1792,14 @@ where
                     return
                 }
 
-                self.provider_received(key, provider)
+                self.provider_received(key, provider);
+
+                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest{ request: InboundRequest::AddProvider {} }
+                ));
             }
 
+            // TODO: Should this not be called GetRecordReq?
             KademliaHandlerEvent::GetRecord { key, request_id } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
@@ -1795,6 +1815,13 @@ where
                 };
 
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+
+                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest{ request: InboundRequest::GetRecord {
+                        num_closer_peers: closer_peers.len(),
+                        present_locally: record.is_some(),
+                    }}
+                ));
 
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
@@ -1862,6 +1889,10 @@ where
                 request_id
             } => {
                 self.record_received(source, connection, request_id, record);
+
+                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest{ request: InboundRequest::PutRecord {} }
+                ));
             }
 
             KademliaHandlerEvent::PutRecordRes {
@@ -2059,7 +2090,18 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug)]
 pub enum KademliaEvent {
+    // TODO: Should this rather be called InboundRequestResult as it is not based on full queries,
+    // but on partial quries which we could call requests.
+    //
+    // TODO: Should we include the KademliaRequestId?
+    //
+    // TODO: Also check how rust-ipfs currently handles putting untrusted records.
+    InboundRequest {
+        request: InboundRequest,
+    },
+
     /// A query has produced a result.
+    // TODO: Consider renaming to OutboundQueryResult.
     QueryResult {
         /// The ID of the query that finished.
         id: QueryId,
@@ -2121,6 +2163,26 @@ pub enum KademliaEvent {
         peer: PeerId,
         address: Multiaddr,
     }
+}
+
+// TODO: Doc
+#[derive(Debug)]
+pub enum InboundRequest {
+    FindNode {
+        num_closer_peers: usize,
+    },
+    GetProvider {
+        num_closer_peers: usize,
+        num_provider_peers: usize,
+    },
+    AddProvider {
+    },
+    GetRecord {
+        num_closer_peers: usize,
+        present_locally: bool,
+    },
+    PutRecord {
+    },
 }
 
 /// The results of Kademlia queries.
