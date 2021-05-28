@@ -301,7 +301,7 @@ impl ProtocolsHandler for RendezvousHandler {
             },
             OutboundState::WaitForRemote(substream) => {
                 let message: Message = todo!("Sink::read??");
-                self.outbound_substream = OutboundState::None;
+                self.outbound_substream = OutboundState::Closing(substream);
                 return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(message)));
             }
             OutboundState::Closing(mut substream) => match substream.poll_close_unpin(cx) {
