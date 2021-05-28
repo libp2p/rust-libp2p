@@ -34,7 +34,7 @@ pub enum Message {
 pub struct NewRegistration {
     pub namespace: String,
     pub record: AuthenticatedPeerRecord,
-    pub ttl: Option<i64>,
+    ttl: Option<i64>,
 }
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
@@ -43,6 +43,14 @@ pub struct NewRegistration {
 const DEFAULT_TTL: i64 = 60 * 60 * 2;
 
 impl NewRegistration {
+    pub fn new(namespace: String, record: AuthenticatedPeerRecord, ttl: Option<i64>) -> Self {
+        Self {
+            namespace,
+            record,
+            ttl
+        }
+    }
+
     pub fn effective_ttl(&self) -> i64 {
         self.ttl.unwrap_or(DEFAULT_TTL)
     }
