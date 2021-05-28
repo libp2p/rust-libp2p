@@ -295,14 +295,11 @@ impl TryFrom<wire::Message> for Message {
                         ..
                     }),
                 ..
-            } => {
-                let response_status =
-                    unsafe { std::mem::transmute::<_, wire::message::ResponseStatus>(error_code) };
-
-                Message::FailedToDiscover {
-                    error: response_status.try_into()?,
-                }
-            }
+            } => Message::FailedToDiscover {
+                error: wire::message::ResponseStatus::from_i32(error_code)
+                    .ok_or(ConversionError::BadStatusCode)?
+                    .try_into()?,
+            },
             _ => return Err(ConversionError::InconsistentWireMessage),
         };
 
