@@ -792,7 +792,7 @@ fn add_provider() {
                             })) => {
                                 assert!(qids.is_empty() || qids.remove(&id));
                                 match res {
-                                    Err(e) => panic!(e),
+                                    Err(e) => panic!("{:?}", e),
                                     Ok(ok) => {
                                         assert!(keys.contains(&ok.key));
                                         results.push(ok.key);

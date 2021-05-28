@@ -32,7 +32,7 @@ use crate::handler::{
     KademliaHandlerIn
 };
 use crate::jobs::*;
-use crate::kbucket::{self, KBucketsTable, NodeStatus};
+use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
@@ -471,6 +471,7 @@ where
                             peer: *peer,
                             addresses: entry.value().clone(),
                             old_peer: None,
+                            bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
                         }
                     ))
                 }
@@ -495,6 +496,7 @@ where
                                 peer: *peer,
                                 addresses,
                                 old_peer: None,
+                                bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
                             }
                         ));
                         RoutingUpdate::Success
@@ -961,6 +963,9 @@ where
         let key = kbucket::Key::from(peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, old_status) => {
+                if old_status != new_status {
+                    entry.update(new_status)
+                }
                 if let Some(address) = address {
                     if entry.value().insert(address) {
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -968,12 +973,10 @@ where
                                 peer,
                                 addresses: entry.value().clone(),
                                 old_peer: None,
+                                bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
                             }
                         ))
                     }
-                }
-                if old_status != new_status {
-                    entry.update(new_status);
                 }
             },
 
@@ -1010,6 +1013,7 @@ where
                                     peer,
                                     addresses,
                                     old_peer: None,
+                                    bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
                                 };
                                 self.queued_events.push_back(
                                     NetworkBehaviourAction::GenerateEvent(event));
@@ -1955,9 +1959,10 @@ where
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
+                    bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
                     peer: key.into_preimage(),
                     addresses: value,
-                    old_peer: entry.evicted.map(|n| n.key.into_preimage())
+                    old_peer: entry.evicted.map(|n| n.key.into_preimage()),
                 };
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
             }
@@ -2074,6 +2079,7 @@ pub enum KademliaEvent {
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
         old_peer: Option<PeerId>,
+        bucket_range: Option<(Distance, Distance)>,
     },
 
     /// A peer has connected for whom no listen address is known.
