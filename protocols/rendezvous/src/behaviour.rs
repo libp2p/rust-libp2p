@@ -8,12 +8,20 @@ use libp2p_swarm::{
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 
-struct Rendezvous {
+pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<Input, Event>>,
     registrations: HashMap<Registration, HashSet<PeerId>>,
 }
 
 impl Rendezvous {
+
+    pub fn new() -> Self {
+        Self {
+            events: Default::default(),
+            registrations: Default::default()
+        }
+    }
+
     pub fn register(&mut self, ns: String, rendezvous_node: PeerId) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -44,7 +52,8 @@ impl Rendezvous {
     }
 }
 
-enum Event {
+#[derive(Debug)]
+pub enum Event {
     Discovered {
         rendezvous_node: PeerId,
         ns: Vec<Registration>,

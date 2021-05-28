@@ -20,5 +20,12 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 thiserror = "1" # TODO: REMOVE FOR PRODUCTION USE
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
+[dev-dependencies]
+libp2p-mplex = { version = "0.28", path = "../../muxers/mplex" }
+libp2p-noise = { version = "0.31", path = "../../transports/noise" }
+libp2p-yamux = { version = "0.32", path = "../../muxers/yamux" }
+rand = "0.8"
+tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+
 [build-dependencies]
 prost-build = "0.7"

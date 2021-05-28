@@ -47,7 +47,7 @@ impl NewRegistration {
         Self {
             namespace,
             record,
-            ttl
+            ttl,
         }
     }
 
