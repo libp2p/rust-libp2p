@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("opt: {:?}", opt);
 
     // Create a static known PeerId based on given secret
-    let local_key: identity::Keypair = generate_ed25519(opt.deterministic_peer_secret);
+    let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
@@ -169,9 +169,9 @@ fn publish_listener_peer(addr: &libp2p::Multiaddr, mode: &Mode, local_peer_id: P
     }
 }
 
-fn generate_ed25519(deterministic_peer_secret: u8) -> identity::Keypair {
+fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     let mut bytes = [0u8; 32];
-    bytes[0] = deterministic_peer_secret;
+    bytes[0] = secret_key_seed;
 
     let secret_key = ed25519::SecretKey::from_bytes(&mut bytes)
         .expect("this returns `Err` only if the length is wrong; the length is correct; qed");
@@ -294,7 +294,7 @@ struct Opt {
 
     /// Fixed value to generate deterministic peer id
     #[structopt(short = "d")]
-    deterministic_peer_secret: u8,
+    secret_key_seed: u8,
 
     /// The listening address
     #[structopt(long)]
