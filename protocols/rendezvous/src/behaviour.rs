@@ -5,6 +5,7 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
+use log::debug;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 
@@ -92,16 +93,18 @@ impl NetworkBehaviour for Rendezvous {
         RendezvousHandler::new()
     }
 
-    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        todo!()
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
     }
 
-    fn inject_connected(&mut self, _peer_id: &PeerId) {
-        todo!()
+    fn inject_connected(&mut self, peer_id: &PeerId) {
+        debug!("New peer connected: {}", peer_id);
+        // Dont need to do anything here?
     }
 
-    fn inject_disconnected(&mut self, _peer_id: &PeerId) {
-        todo!()
+    fn inject_disconnected(&mut self, peer_id: &PeerId) {
+        debug!("Peer disconnected: {}", peer_id);
+        // Don't need to do anything?
     }
 
     fn inject_event(
@@ -137,7 +140,8 @@ impl NetworkBehaviour for Rendezvous {
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                     Event::FailedToRegisterWithRendezvousNode {
                         rendezvous_node: peer_id,
-                        // todo: need to get the namespace somehow?
+                        // todo: need to get the namespace somehow? The handler will probably have to remember
+                        // the request this message is a response to as the wire message does not contain this info
                         ns: "".to_string(),
                         err_code: error,
                     },
