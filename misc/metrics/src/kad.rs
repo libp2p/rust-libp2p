@@ -21,6 +21,7 @@
 use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
 use open_metrics_client::metrics::family::Family;
+use open_metrics_client::metrics::gauge::Gauge;
 use open_metrics_client::metrics::histogram::{exponential_series, Histogram};
 use open_metrics_client::registry::{Registry, Unit};
 
@@ -124,7 +125,7 @@ impl Metrics {
         let routing_updated = Family::default();
         sub_registry.register(
             "routing_updated",
-            "Number of peers added, updated or evicted to, in or from the routing table",
+            "Number of peers added, updated or evicted to, in or from a specific kbucket in the routing table",
             Box::new(routing_updated.clone()),
         );
 
@@ -151,7 +152,7 @@ impl Metrics {
 impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         match event {
-            libp2p_kad::KademliaEvent::QueryResult { result, stats, .. } => {
+            libp2p_kad::KademliaEvent::OutboundQueryResult { result, stats, .. } => {
                 self.kad
                     .query_result_num_requests
                     .get_or_create(&result.into())
@@ -211,16 +212,21 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                     _ => {}
                 }
             }
-            libp2p_kad::KademliaEvent::RoutingUpdated{
+            libp2p_kad::KademliaEvent::RoutingUpdated {
                 is_new_peer,
                 old_peer,
+                bucket_range,
                 ..
             } => {
+                let bucket = bucket_range
+                    .and_then(|(low, _high)| low.ilog2())
+                    .unwrap_or(0);
                 if *is_new_peer {
                     self.kad
                         .routing_updated
                         .get_or_create(&RoutingUpdated {
                             action: RoutingAction::Added,
+                            bucket,
                         })
                         .inc();
                 } else {
@@ -228,6 +234,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                         .routing_updated
                         .get_or_create(&RoutingUpdated {
                             action: RoutingAction::Updated,
+                            bucket,
                         })
                         .inc();
                 }
@@ -237,6 +244,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                         .routing_updated
                         .get_or_create(&RoutingUpdated {
                             action: RoutingAction::Evicted,
+                            bucket,
                         })
                         .inc();
                 }
@@ -365,6 +373,7 @@ impl From<&libp2p_kad::GetProvidersError> for GetProvidersResult {
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct RoutingUpdated {
     action: RoutingAction,
+    bucket: u32,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
