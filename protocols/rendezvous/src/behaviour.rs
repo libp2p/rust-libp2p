@@ -10,7 +10,7 @@ use std::task::{Context, Poll};
 
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<Input, Event>>,
-    registrations: HashMap<Registration, HashSet<PeerId>>,
+    registrations: HashMap<String, HashSet<PeerId>>,
 }
 
 impl Rendezvous {
@@ -77,11 +77,11 @@ pub enum Event {
     },
     PeerRegistered {
         peer_id: PeerId,
-        ns: Registration,
+        ns: String,
     },
     PeerUnregistered {
         peer_id: PeerId,
-        ns: Registration,
+        ns: String,
     },
 }
 
@@ -105,7 +105,6 @@ impl NetworkBehaviour for Rendezvous {
         todo!()
     }
 
-    // inject event from handler
     fn inject_event(
         &mut self,
         peer_id: PeerId,
@@ -114,15 +113,16 @@ impl NetworkBehaviour for Rendezvous {
     ) {
         match event.0 {
             Message::Register(new_reggo) => {
-                let namespace = new_reggo.namespace;
-                let ttl = unimplemented!();
+                let ttl = new_reggo.effective_ttl();
 
-                todo!("add to hashmap");
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::RegisterRequest { namespace, ttl },
+                        event: Input::RegisterRequest {
+                            namespace: new_reggo.namespace,
+                            ttl: Some(ttl),
+                        },
                     })
             }
             Message::SuccessfullyRegistered { ttl } => {
@@ -153,12 +153,26 @@ impl NetworkBehaviour for Rendezvous {
                 // }
             }
             Message::Discover { namespace } => {
-                let registrations = todo!("get from hashmap using namespace");
+                if let Some(ns) = namespace {
+                    if let Some(peers) = self.registrations.get_mut(&ns) {
+                        self.events
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id,
+                                handler: NotifyHandler::Any,
+                                event: Input::DiscoverResponse {
+                                    discovered: peers
+                                        .iter()
+                                        .map(|a| (ns.clone(), peer_id))
+                                        .collect(),
+                                },
+                            });
+                    }
+                }
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::DiscoverResponse { registrations },
+                        event: Input::DiscoverResponse { discovered: vec![] },
                     })
             }
             Message::DiscoverResponse { registrations } => {

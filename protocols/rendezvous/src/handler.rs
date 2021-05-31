@@ -1,16 +1,14 @@
-use crate::codec::{Error, RendezvousCodec};
+use crate::codec::RendezvousCodec;
 use crate::codec::{Message, Registration};
 use crate::protocol;
 use crate::protocol::Rendezvous;
 use asynchronous_codec::Framed;
-use futures::{SinkExt, Stream, StreamExt};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade};
+use futures::{SinkExt, StreamExt};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use std::collections::VecDeque;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -56,7 +54,7 @@ pub enum Input {
         ttl: i64,
     },
     DiscoverResponse {
-        registrations: Vec<Registration>,
+        discovered: Vec<(String, PeerId)>,
     },
 }
 
@@ -67,9 +65,17 @@ impl From<Input> for Message {
             Input::UnregisterRequest { namespace } => Message::Unregister { namespace },
             Input::DiscoverRequest { namespace } => Message::Discover { namespace },
             Input::RegisterResponse { ttl } => Message::SuccessfullyRegistered { ttl },
-            Input::DiscoverResponse { registrations } => {
-                Message::DiscoverResponse { registrations }
-            }
+            Input::DiscoverResponse {
+                discovered: namespaces,
+            } => Message::DiscoverResponse {
+                registrations: namespaces
+                    .iter()
+                    .map(|a| Registration {
+                        namespace: a.0.to_string(),
+                        record: todo!(),
+                    })
+                    .collect(),
+            },
         }
     }
 }
@@ -169,7 +175,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 InboundState::WaitForBehaviour(substream),
                 outbound,
             ) => (InboundState::PendingSend(substream, todo!()), outbound),
-            (_) => unreachable!("Handler in invalid state"),
+            _ => unreachable!("Handler in invalid state"),
         };
 
         self.inbound_substream = inbound_substream;
