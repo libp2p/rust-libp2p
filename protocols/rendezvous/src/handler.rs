@@ -1,10 +1,12 @@
-use crate::codec::RendezvousCodec;
+use crate::codec::{ConversionError, RendezvousCodec};
 use crate::codec::{Message, Registration};
 use crate::protocol;
 use crate::protocol::Rendezvous;
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId};
+use libp2p_core::{
+    AuthenticatedPeerRecord, InboundUpgrade, OutboundUpgrade, PeerId, SignedEnvelope,
+};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -54,6 +56,7 @@ pub enum Input {
         ttl: i64,
     },
     DiscoverResponse {
+        record: AuthenticatedPeerRecord,
         discovered: Vec<(String, PeerId)>,
     },
 }
@@ -67,12 +70,13 @@ impl From<Input> for Message {
             Input::RegisterResponse { ttl } => Message::SuccessfullyRegistered { ttl },
             Input::DiscoverResponse {
                 discovered: namespaces,
+                record,
             } => Message::DiscoverResponse {
                 registrations: namespaces
                     .iter()
                     .map(|a| Registration {
                         namespace: a.0.to_string(),
-                        record: todo!(),
+                        record: record.clone(),
                     })
                     .collect(),
             },

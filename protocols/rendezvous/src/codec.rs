@@ -302,7 +302,13 @@ impl TryFrom<wire::Message> for Message {
                     .map(|reggo| {
                         Ok(Registration {
                             namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?,
-                            record: todo!(),
+                            record: AuthenticatedPeerRecord::from_signed_envelope(
+                                SignedEnvelope::from_protobuf_encoding(
+                                    &reggo
+                                        .signed_peer_record
+                                        .ok_or(ConversionError::MissingSignedPeerRecord)?,
+                                )?,
+                            )?,
                         })
                     })
                     .collect::<Result<Vec<_>, ConversionError>>()?,

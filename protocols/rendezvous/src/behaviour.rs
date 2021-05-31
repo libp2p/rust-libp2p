@@ -160,6 +160,7 @@ impl NetworkBehaviour for Rendezvous {
                                 peer_id,
                                 handler: NotifyHandler::Any,
                                 event: Input::DiscoverResponse {
+                                    record: todo!(),
                                     discovered: peers
                                         .iter()
                                         .map(|a| (ns.clone(), peer_id))
@@ -172,7 +173,10 @@ impl NetworkBehaviour for Rendezvous {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::DiscoverResponse { discovered: vec![] },
+                        event: Input::DiscoverResponse {
+                            record: todo!(),
+                            discovered: vec![],
+                        },
                     })
             }
             Message::DiscoverResponse { registrations } => {

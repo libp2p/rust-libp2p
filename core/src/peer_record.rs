@@ -130,7 +130,7 @@ impl std::error::Error for DecodingError {
 }
 
 // TODO: docs
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthenticatedPeerRecord {
     inner: PeerRecord,
 
