@@ -95,15 +95,15 @@ where
 }
 
 pub async fn await_events_or_timeout<A, B>(
-    alice_event: impl Future<Output = A>,
-    bob_event: impl Future<Output = B>,
+    swarm_1_event: impl Future<Output = A>,
+    swarm_2_event: impl Future<Output = B>,
 ) -> (A, B) {
     tokio::time::timeout(
         Duration::from_secs(10),
-        future::join(alice_event, bob_event),
+        future::join(swarm_1_event, swarm_2_event),
     )
-    .await
-    .expect("network behaviours to emit an event within 10 seconds")
+        .await
+        .expect("network behaviours to emit an event within 10 seconds")
 }
 
 /// Connects two swarms with each other.
@@ -116,7 +116,7 @@ pub async fn await_events_or_timeout<A, B>(
 /// We also assume that the swarms don't emit any behaviour events during the
 /// connection phase. Any event emitted is considered a bug from this functions
 /// PoV because they would be lost.
-pub async fn connect<BA, BB>(alice: &mut Swarm<BA>, bob: &mut Swarm<BB>)
+pub async fn connect<BA, BB>(receiver: &mut Swarm<BA>, dialer: &mut Swarm<BB>)
 where
     BA: NetworkBehaviour,
     BB: NetworkBehaviour,
@@ -127,14 +127,14 @@ where
     let mut bob_connected = false;
 
     while !alice_connected && !bob_connected {
-        let (alice_event, bob_event) = future::join(alice.next_event(), bob.next_event()).await;
+        let (alice_event, bob_event) = future::join(receiver.next_event(), dialer.next_event()).await;
 
         match alice_event {
             SwarmEvent::ConnectionEstablished { .. } => {
                 alice_connected = true;
             }
             SwarmEvent::NewListenAddr(addr) => {
-                bob.dial_addr(addr).unwrap();
+                dialer.dial_addr(addr).unwrap();
             }
             SwarmEvent::Behaviour(event) => {
                 panic!(

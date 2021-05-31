@@ -1,4 +1,4 @@
 pub mod behaviour;
-mod codec;
+pub mod codec;
 mod handler;
 mod protocol;
