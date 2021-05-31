@@ -1,12 +1,10 @@
-use crate::codec::{ConversionError, RendezvousCodec};
+use crate::codec::RendezvousCodec;
 use crate::codec::{Message, Registration};
 use crate::protocol;
 use crate::protocol::Rendezvous;
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
-use libp2p_core::{
-    AuthenticatedPeerRecord, InboundUpgrade, OutboundUpgrade, PeerId, SignedEnvelope,
-};
+use libp2p_core::{AuthenticatedPeerRecord, InboundUpgrade, OutboundUpgrade, PeerId};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,

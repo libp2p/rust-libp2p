@@ -14,11 +14,10 @@ pub struct Rendezvous {
 }
 
 impl Rendezvous {
-
     pub fn new() -> Self {
         Self {
             events: Default::default(),
-            registrations: Default::default()
+            registrations: Default::default(),
         }
     }
 
@@ -145,12 +144,11 @@ impl NetworkBehaviour for Rendezvous {
                 ))
             }
             Message::Unregister { namespace } => {
-                // todo: implement Hash, Eq for Registration
-                // if let Some(peers) = self.registrations.get_mut() {
-                //     if peers.contains(&peer_id) {
-                //         peers.remove(&peer_id)
-                //     }
-                // }
+                if let Some(peers) = self.registrations.get_mut(&namespace) {
+                    if peers.contains(&peer_id) {
+                        peers.remove(&peer_id);
+                    }
+                }
             }
             Message::Discover { namespace } => {
                 if let Some(ns) = namespace {
