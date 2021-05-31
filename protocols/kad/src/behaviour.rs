@@ -469,6 +469,7 @@ where
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::RoutingUpdated {
                             peer: *peer,
+                            is_new_peer: false,
                             addresses: entry.value().clone(),
                             old_peer: None,
                             bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
@@ -494,6 +495,7 @@ where
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
                                 peer: *peer,
+                                is_new_peer: true,
                                 addresses,
                                 old_peer: None,
                                 bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
@@ -971,6 +973,7 @@ where
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
                                 peer,
+                                is_new_peer: false,
                                 addresses: entry.value().clone(),
                                 old_peer: None,
                                 bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
@@ -1011,6 +1014,7 @@ where
                             kbucket::InsertResult::Inserted => {
                                 let event = KademliaEvent::RoutingUpdated {
                                     peer,
+                                    is_new_peer: true,
                                     addresses,
                                     old_peer: None,
                                     bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
@@ -1992,6 +1996,7 @@ where
                 let event = KademliaEvent::RoutingUpdated {
                     bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
                     peer: key.into_preimage(),
+                    is_new_peer: true,
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),
                 };
@@ -2090,12 +2095,7 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug)]
 pub enum KademliaEvent {
-    // TODO: Should this rather be called InboundRequestResult as it is not based on full queries,
-    // but on partial quries which we could call requests.
-    //
-    // TODO: Should we include the KademliaRequestId?
-    //
-    // TODO: Also check how rust-ipfs currently handles putting untrusted records.
+    /// An inbound request has been received and handled.
     InboundRequest {
         request: InboundRequest,
     },
@@ -2116,12 +2116,17 @@ pub enum KademliaEvent {
     RoutingUpdated {
         /// The ID of the peer that was added or updated.
         peer: PeerId,
+        /// Whether this is a new peer and was thus just added to the routing
+        /// table, or whether it is an existing peer who's addresses changed.
+        is_new_peer: bool,
         /// The full list of known addresses of `peer`.
         addresses: Addresses,
+        /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+        /// the bucket of the peer.
+        bucket_range: Option<(Distance, Distance)>,
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
         old_peer: Option<PeerId>,
-        bucket_range: Option<(Distance, Distance)>,
     },
 
     /// A peer has connected for whom no listen address is known.
