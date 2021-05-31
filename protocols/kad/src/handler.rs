@@ -250,8 +250,6 @@ pub enum KademliaHandlerEvent<TUserData> {
     },
 
     /// Request to get a value from the dht records
-    //
-    // TODO: Should this not be called GetRecordReq?
     GetRecord {
         /// Key for which we should look in the dht
         key: record::Key,
