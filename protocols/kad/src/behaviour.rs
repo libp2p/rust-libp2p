@@ -2127,6 +2127,8 @@ pub enum KademliaEvent {
         addresses: Addresses,
         /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
         /// the bucket of the peer.
+        //
+        // TODO: Ideally this should not be an Option.
         bucket_range: Option<(Distance, Distance)>,
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
