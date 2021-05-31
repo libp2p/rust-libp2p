@@ -65,6 +65,7 @@ pub enum Event {
     RegisteredWithRendezvousNode {
         rendezvous_node: PeerId,
         ns: String,
+        ttl: i64,
     },
     FailedToRegisterWithRendezvousNode {
         rendezvous_node: PeerId,
@@ -133,6 +134,7 @@ impl NetworkBehaviour for Rendezvous {
                     Event::RegisteredWithRendezvousNode {
                         rendezvous_node: peer_id,
                         ns: "".to_string(),
+                        ttl,
                     },
                 ))
             }
@@ -162,14 +164,37 @@ impl NetworkBehaviour for Rendezvous {
                                 peer_id,
                                 handler: NotifyHandler::Any,
                                 event: Input::DiscoverResponse {
-                                    record: todo!(),
                                     discovered: peers
                                         .iter()
-                                        .map(|a| (ns.clone(), peer_id))
+                                        .map(|peer| (ns.clone(), peer.clone()))
                                         .collect(),
+                                    record: todo!(),
                                 },
                             });
                     }
+                } else {
+                    let discovered = self
+                        .registrations
+                        .iter()
+                        .map(|(ns, peers)| {
+                            peers
+                                .iter()
+                                .map(|peer_id| (ns.clone(), peer_id.clone()))
+                                .collect::<Vec<(String, PeerId)>>()
+                                .into_iter()
+                        })
+                        .flatten()
+                        .collect::<Vec<(String, PeerId)>>();
+
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::Any,
+                            event: Input::DiscoverResponse {
+                                discovered,
+                                record: todo!(),
+                            },
+                        });
                 }
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {

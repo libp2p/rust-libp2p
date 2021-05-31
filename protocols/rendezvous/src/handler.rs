@@ -1,5 +1,5 @@
-use crate::codec::RendezvousCodec;
 use crate::codec::{Message, Registration};
+use crate::codec::{NewRegistration, RendezvousCodec};
 use crate::protocol;
 use crate::protocol::Rendezvous;
 use asynchronous_codec::Framed;
@@ -9,16 +9,13 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use log::error;
 use std::task::{Context, Poll};
 use void::Void;
 
-pub struct RendezvousRequest;
-
 pub struct RendezvousHandler {
     outbound_substream: OutboundState,
-
     inbound_substream: InboundState,
-
     keep_alive: KeepAlive,
 }
 
@@ -52,34 +49,12 @@ pub enum Input {
     },
     RegisterResponse {
         ttl: i64,
+        message: Message,
     },
     DiscoverResponse {
         record: AuthenticatedPeerRecord,
         discovered: Vec<(String, PeerId)>,
     },
-}
-
-impl From<Input> for Message {
-    fn from(req: Input) -> Self {
-        match req {
-            Input::RegisterRequest { namespace, ttl } => Message::Register(todo!()),
-            Input::UnregisterRequest { namespace } => Message::Unregister { namespace },
-            Input::DiscoverRequest { namespace } => Message::Discover { namespace },
-            Input::RegisterResponse { ttl } => Message::SuccessfullyRegistered { ttl },
-            Input::DiscoverResponse {
-                discovered: namespaces,
-                record,
-            } => Message::DiscoverResponse {
-                registrations: namespaces
-                    .iter()
-                    .map(|a| Registration {
-                        namespace: a.0.to_string(),
-                        record: record.clone(),
-                    })
-                    .collect(),
-            },
-        }
-    }
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
@@ -154,29 +129,51 @@ impl ProtocolsHandler for RendezvousHandler {
     // event injected from NotifyHandler
     fn inject_event(&mut self, req: Input) {
         let (inbound_substream, outbound_substream) = match (
-            &req,
+            req,
             std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
             std::mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
         ) {
-            (Input::RegisterRequest { .. }, inbound, OutboundState::None) => {
-                (inbound, OutboundState::Start(Message::from(req)))
-            }
-            (Input::UnregisterRequest { .. }, inbound, OutboundState::None) => {
-                (inbound, OutboundState::Start(Message::from(req)))
-            }
-            (Input::DiscoverRequest { .. }, inbound, OutboundState::None) => {
-                (inbound, OutboundState::Start(Message::from(req)))
-            }
+            (Input::RegisterRequest { namespace, ttl }, inbound, OutboundState::None) => (
+                inbound,
+                OutboundState::Start(Message::Register(NewRegistration::new(
+                    namespace.clone(),
+                    todo!(),
+                    ttl,
+                ))),
+            ),
+            (Input::UnregisterRequest { namespace }, inbound, OutboundState::None) => (
+                inbound,
+                OutboundState::Start(Message::Unregister {
+                    namespace: namespace.clone(),
+                }),
+            ),
+            (Input::DiscoverRequest { namespace }, inbound, OutboundState::None) => (
+                inbound,
+                OutboundState::Start(Message::Discover {
+                    namespace: namespace.clone(),
+                }),
+            ),
             (
-                Input::RegisterResponse { .. },
+                Input::RegisterResponse { ttl: _ttl, message },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
-            ) => (InboundState::PendingSend(substream, todo!()), outbound),
+            ) => (InboundState::PendingSend(substream, message), outbound),
             (
-                Input::DiscoverResponse { .. },
+                Input::DiscoverResponse { record, discovered },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
-            ) => (InboundState::PendingSend(substream, todo!()), outbound),
+            ) => {
+                let msg = Message::DiscoverResponse {
+                    registrations: discovered
+                        .iter()
+                        .map(|d| Registration {
+                            namespace: d.0.to_string(),
+                            record: record.clone(),
+                        })
+                        .collect(),
+                };
+                (InboundState::PendingSend(substream, msg), outbound)
+            }
             _ => unreachable!("Handler in invalid state"),
         };
 
@@ -187,9 +184,9 @@ impl ProtocolsHandler for RendezvousHandler {
     fn inject_dial_upgrade_error(
         &mut self,
         _info: Self::OutboundOpenInfo,
-        _error: ProtocolsHandlerUpgrErr<Void>,
+        error: ProtocolsHandlerUpgrErr<Void>,
     ) {
-        todo!()
+        error!("Dial upgrade error {:?}", error);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -242,10 +239,12 @@ impl ProtocolsHandler for RendezvousHandler {
                     self.inbound_substream = InboundState::WaitForBehaviour(substream);
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
                 }
-                Poll::Ready(Some(Err(_e))) => {
-                    todo!()
+                Poll::Ready(Some(Err(e))) => {
+                    error!("Error when sending outbound: {:?}", e);
                 }
-                Poll::Ready(None) => todo!(),
+                Poll::Ready(None) => {
+                    error!("Honestly no idea what to do if this happens");
+                }
                 Poll::Pending => {
                     self.inbound_substream = InboundState::Reading(substream);
                 }
@@ -276,7 +275,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 });
             }
             OutboundState::WaitingUpgrade => {
-                self.outbound_substream = OutboundState::WaitingUpgrade
+                self.outbound_substream = OutboundState::WaitingUpgrade;
             }
             OutboundState::PendingSend(mut substream, message) => {
                 match substream.poll_ready_unpin(cx) {
@@ -285,6 +284,7 @@ impl ProtocolsHandler for RendezvousHandler {
                             self.outbound_substream = OutboundState::PendingFlush(substream);
                         }
                         Err(e) => {
+                            error!("Error when sending outbound: {:?}", e);
                             return Poll::Ready(ProtocolsHandlerEvent::Close(e));
                         }
                     },
@@ -301,17 +301,31 @@ impl ProtocolsHandler for RendezvousHandler {
                 Poll::Ready(Ok(())) => {
                     self.outbound_substream = OutboundState::WaitForRemote(substream)
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(ProtocolsHandlerEvent::Close(e)),
+                Poll::Ready(Err(e)) => {
+                    error!("Error when flushing outbound: {:?}", e);
+                    return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                }
                 Poll::Pending => {
                     self.keep_alive = KeepAlive::Yes;
                     self.outbound_substream = OutboundState::PendingFlush(substream);
                 }
             },
-            OutboundState::WaitForRemote(substream) => {
-                let message: Message = todo!("Sink::read??");
-                self.outbound_substream = OutboundState::Closing(substream);
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(message)));
-            }
+            OutboundState::WaitForRemote(mut substream) => match substream.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(msg))) => {
+                    self.outbound_substream = OutboundState::Closing(substream);
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    self.outbound_substream = OutboundState::Closing(substream);
+                    error!("Error when receiving message from outbound: {:?}", e)
+                }
+                Poll::Ready(None) => {
+                    error!("Honestly no idea what to do if this happens");
+                }
+                Poll::Pending => {
+                    self.outbound_substream = OutboundState::WaitForRemote(substream);
+                }
+            },
             OutboundState::Closing(mut substream) => match substream.poll_close_unpin(cx) {
                 Poll::Ready(..) => {
                     if let InboundState::None | InboundState::Poisoned = self.inbound_substream {
@@ -324,7 +338,12 @@ impl ProtocolsHandler for RendezvousHandler {
                 }
             },
             OutboundState::None => self.outbound_substream = OutboundState::None,
-            OutboundState::Poisoned => self.outbound_substream = OutboundState::Poisoned,
+            OutboundState::Poisoned => {
+                self.outbound_substream = {
+                    error!("outbound poisoned");
+                    OutboundState::Poisoned
+                }
+            }
         }
 
         Poll::Pending

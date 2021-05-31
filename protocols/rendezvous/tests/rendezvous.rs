@@ -1,11 +1,9 @@
 pub mod harness;
+use crate::harness::{await_events_or_timeout, connect, new_swarm};
+use libp2p_core::PeerId;
+use libp2p_rendezvous::behaviour::{Event, Rendezvous};
 use libp2p_swarm::Swarm;
-use libp2p_core::{PeerId, AuthenticatedPeerRecord};
-use crate::harness::{new_swarm, connect, await_events_or_timeout};
-use libp2p_rendezvous::behaviour::{Rendezvous, Event};
-use libp2p_rendezvous::codec::Registration;
 use std::time::Duration;
-use tokio::time::error::Elapsed;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
@@ -14,15 +12,18 @@ async fn given_successful_registration_then_successful_discovery() {
     let namespace = "some-namespace".to_string();
 
     // register
-    test.registration_swarm.behaviour_mut().register(namespace.clone(), test.rendezvous_peer_id);
+    test.registration_swarm
+        .behaviour_mut()
+        .register(namespace.clone(), test.rendezvous_peer_id);
 
     test.assert_successful_registration(namespace.clone()).await;
 
     // discover
-    test.discovery_swarm.behaviour_mut().discover(Some(namespace), test.rendezvous_peer_id);
+    test.discovery_swarm
+        .behaviour_mut()
+        .discover(Some(namespace), test.rendezvous_peer_id);
 
     test.assert_successful_discovery().await;
-
 }
 
 struct RendezvousTest {
@@ -38,12 +39,11 @@ struct RendezvousTest {
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let (mut registration_swarm, _, registration_peer_id) = harness::new_swarm(|_, _| {
-            Rendezvous::new()
-        });
-        let (mut discovery_swarm, _, discovery_peer_id) = new_swarm(|_, _| Rendezvous::new() );
+        let (mut registration_swarm, _, registration_peer_id) =
+            harness::new_swarm(|_, _| Rendezvous::new());
+        let (mut discovery_swarm, _, discovery_peer_id) = new_swarm(|_, _| Rendezvous::new());
 
-        let (mut rendezvous_swarm, _, rendezvous_peer_id) = new_swarm(|_, _| Rendezvous::new() );
+        let (mut rendezvous_swarm, _, rendezvous_peer_id) = new_swarm(|_, _| Rendezvous::new());
 
         connect(&mut rendezvous_swarm, &mut discovery_swarm).await;
         connect(&mut rendezvous_swarm, &mut registration_swarm).await;
@@ -82,10 +82,13 @@ impl RendezvousTest {
     pub async fn assert_successful_discovery(&mut self) {
         // TODO: Is it by design that there is no event emitted on the rendezvous side for discovery?
 
-        match tokio::time::timeout(Duration::from_secs(10), self.discovery_swarm.next()).await.expect("") {
+        match tokio::time::timeout(Duration::from_secs(10), self.discovery_swarm.next())
+            .await
+            .expect("")
+        {
             // TODO: Assert against the actual registration
             Event::Discovered { .. } => {}
-            event => panic!("Discovery swarm emitted unexpected event {:?}", event)
+            event => panic!("Discovery swarm emitted unexpected event {:?}", event),
         }
     }
 }
