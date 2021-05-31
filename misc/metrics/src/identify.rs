@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::histogram::{exponential_series, Histogram};
+use open_metrics_client::metrics::histogram::{exponential_buckets, Histogram};
 use open_metrics_client::registry::Registry;
 use std::iter;
 
@@ -60,7 +60,7 @@ impl Metrics {
         );
 
         let received_info_listen_addrs =
-            Histogram::new(iter::once(0.0).chain(exponential_series(1.0, 2.0, 9)));
+            Histogram::new(iter::once(0.0).chain(exponential_buckets(1.0, 2.0, 9)));
         sub_registry.register(
             "received_info_listen_addrs",
             "Number of listen addresses for remote peer received in \
@@ -69,7 +69,7 @@ impl Metrics {
         );
 
         let received_info_protocols =
-            Histogram::new(iter::once(0.0).chain(exponential_series(1.0, 2.0, 9)));
+            Histogram::new(iter::once(0.0).chain(exponential_buckets(1.0, 2.0, 9)));
         sub_registry.register(
             "received_info_protocols",
             "Number of protocols supported by the remote peer received in \

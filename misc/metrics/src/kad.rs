@@ -22,7 +22,7 @@ use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
 use open_metrics_client::metrics::family::Family;
 use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::{exponential_series, Histogram};
+use open_metrics_client::metrics::histogram::{exponential_buckets, Histogram};
 use open_metrics_client::registry::{Registry, Unit};
 
 pub struct Metrics {
@@ -41,13 +41,15 @@ pub struct Metrics {
     query_result_duration: Family<QueryResult, Histogram>,
 
     routing_updated: Family<RoutingUpdated, Counter>,
+
+    inbound_requests: Family<InboundRequest, Counter>,
 }
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry("kad");
 
-        let query_result_get_record_ok = Histogram::new(exponential_series(1.0, 2.0, 10));
+        let query_result_get_record_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_record_ok",
             "Number of records returned by a successful Kademlia get record query.",
@@ -61,7 +63,7 @@ impl Metrics {
             Box::new(query_result_get_record_error.clone()),
         );
 
-        let query_result_get_closest_peers_ok = Histogram::new(exponential_series(1.0, 2.0, 10));
+        let query_result_get_closest_peers_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_closest_peers_ok",
             "Number of closest peers returned by a successful Kademlia get closest peers query.",
@@ -75,7 +77,7 @@ impl Metrics {
             Box::new(query_result_get_closest_peers_error.clone()),
         );
 
-        let query_result_get_providers_ok = Histogram::new(exponential_series(1.0, 2.0, 10));
+        let query_result_get_providers_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_providers_ok",
             "Number of providers returned by a successful Kademlia get providers query.",
@@ -90,7 +92,7 @@ impl Metrics {
         );
 
         let query_result_num_requests =
-            Family::new_with_constructor(|| Histogram::new(exponential_series(1.0, 2.0, 10)));
+            Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_requests",
             "Number of requests started for a Kademlia query.",
@@ -98,7 +100,7 @@ impl Metrics {
         );
 
         let query_result_num_success =
-            Family::new_with_constructor(|| Histogram::new(exponential_series(1.0, 2.0, 10)));
+            Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_success",
             "Number of successful requests of a Kademlia query.",
@@ -106,7 +108,7 @@ impl Metrics {
         );
 
         let query_result_num_failure =
-            Family::new_with_constructor(|| Histogram::new(exponential_series(1.0, 2.0, 10)));
+            Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_failure",
             "Number of failed requests of a Kademlia query.",
@@ -114,7 +116,7 @@ impl Metrics {
         );
 
         let query_result_duration =
-            Family::new_with_constructor(|| Histogram::new(exponential_series(0.001, 2.0, 12)));
+            Family::new_with_constructor(|| Histogram::new(exponential_buckets(0.001, 2.0, 12)));
         sub_registry.register_with_unit(
             "query_result_duration",
             "Duration of a Kademlia query.",
@@ -127,6 +129,13 @@ impl Metrics {
             "routing_updated",
             "Number of peers added, updated or evicted to, in or from a specific kbucket in the routing table",
             Box::new(routing_updated.clone()),
+        );
+
+        let inbound_requests = Family::default();
+        sub_registry.register(
+            "inbound_requests",
+            "Number of inbound requests",
+            Box::new(inbound_requests.clone()),
         );
 
         Self {
@@ -145,6 +154,8 @@ impl Metrics {
             query_result_duration,
 
             routing_updated,
+
+            inbound_requests,
         }
     }
 }
@@ -248,6 +259,10 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                         })
                         .inc();
                 }
+            }
+
+            libp2p_kad::KademliaEvent::InboundRequest { request } => {
+                self.kad.inbound_requests.get_or_create(&request.into()).inc();
             }
             _ => {}
         }
@@ -381,4 +396,32 @@ enum RoutingAction {
     Added,
     Updated,
     Evicted,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct InboundRequest {
+    request: Request,
+}
+
+impl From<&libp2p_kad::InboundRequest> for InboundRequest {
+    fn from(request: &libp2p_kad::InboundRequest) -> Self {
+        Self {
+            request: match request {
+                libp2p_kad::InboundRequest::FindNode { .. } => Request::FindNode,
+                libp2p_kad::InboundRequest::GetProvider { .. } => Request::GetProvider,
+                libp2p_kad::InboundRequest::AddProvider { .. } => Request::AddProvider,
+                libp2p_kad::InboundRequest::GetRecord { .. } => Request::GetRecord,
+                libp2p_kad::InboundRequest::PutRecord { .. } => Request::PutRecord,
+            },
+        }
+    }
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+enum Request {
+    FindNode,
+    GetProvider,
+    AddProvider,
+    GetRecord,
+    PutRecord,
 }

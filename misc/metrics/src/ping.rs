@@ -21,7 +21,7 @@
 use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
 use open_metrics_client::metrics::family::Family;
-use open_metrics_client::metrics::histogram::{exponential_series, Histogram};
+use open_metrics_client::metrics::histogram::{exponential_buckets, Histogram};
 use open_metrics_client::registry::{Registry, Unit};
 
 #[derive(Clone, Hash, PartialEq, Eq, Encode)]
@@ -58,7 +58,7 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry("ping");
 
-        let rtt = Histogram::new(exponential_series(0.001, 2.0, 12));
+        let rtt = Histogram::new(exponential_buckets(0.001, 2.0, 12));
         sub_registry.register_with_unit(
             "rtt",
             "Round-trip time sending a 'ping' and receiving a 'pong'",
