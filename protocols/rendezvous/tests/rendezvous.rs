@@ -1,3 +1,4 @@
+use log::debug;
 pub mod harness;
 use crate::harness::{await_events_or_timeout, connect, new_swarm};
 use libp2p_core::{Multiaddr, PeerId};
@@ -22,14 +23,14 @@ async fn given_successful_registration_then_successful_discovery() {
 
     test.assert_successful_registration(namespace.clone()).await;
 
-    println!("Registration worked!");
-
-    // discover
-    test.discovery_swarm
-        .behaviour_mut()
-        .discover(Some(namespace), test.rendezvous_peer_id);
-
-    test.assert_successful_discovery().await;
+    // println!("Registration worked!");
+    //
+    // // discover
+    // test.discovery_swarm
+    //     .behaviour_mut()
+    //     .discover(Some(namespace), test.rendezvous_peer_id);
+    //
+    // test.assert_successful_discovery().await;
 }
 
 struct RendezvousTest {
@@ -54,6 +55,8 @@ fn get_rand_listen_addr() -> Multiaddr {
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
+        let _ = env_logger::builder().is_test(true).try_init().unwrap();
+
         let registration_keys = Keypair::generate_ed25519();
         let discovery_keys = Keypair::generate_ed25519();
         let rendezvous_keys = Keypair::generate_ed25519();
@@ -100,6 +103,8 @@ impl RendezvousTest {
                 registration_swarm_event,
             ) => {
 
+                debug!("{:?}", &rendezvous_swarm_event);
+                debug!("{:?}", &registration_swarm_event);
                 // TODO: Assertion against the actual peer record, pass the peer record in for assertion
 
                 assert!(matches!(rendezvous_swarm_event, Event::PeerRegistered { .. }));

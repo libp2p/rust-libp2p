@@ -9,10 +9,14 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use log::debug;
 use log::error;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::task::{Context, Poll};
 use void::Void;
 
+#[derive(Debug)]
 pub struct RendezvousHandler {
     outbound_substream: OutboundState,
     inbound_substream: InboundState,
@@ -29,6 +33,7 @@ impl RendezvousHandler {
     }
 }
 
+#[derive(Debug)]
 pub struct HandlerEvent(pub Message);
 
 #[derive(Debug)]
@@ -68,6 +73,20 @@ enum InboundState {
     Poisoned,
 }
 
+impl Debug for InboundState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            InboundState::None => f.write_str("none"),
+            InboundState::Reading(_) => f.write_str("reading"),
+            InboundState::PendingSend(_, _) => f.write_str("pending_send"),
+            InboundState::PendingFlush(_) => f.write_str("pending_flush"),
+            InboundState::WaitForBehaviour(_) => f.write_str("waiting_for_behaviour"),
+            InboundState::Closing(_) => f.write_str("closing"),
+            InboundState::Poisoned => f.write_str("poisoned"),
+        }
+    }
+}
+
 /// State of the outbound substream, opened either by us or by the remote.
 enum OutboundState {
     None,
@@ -84,6 +103,21 @@ enum OutboundState {
     Poisoned,
 }
 
+impl Debug for OutboundState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            OutboundState::None => f.write_str("none"),
+            OutboundState::Start(_) => f.write_str("start"),
+            OutboundState::WaitingUpgrade => f.write_str("waiting_upgrade"),
+            OutboundState::PendingSend(_, _) => f.write_str("pending_send"),
+            OutboundState::PendingFlush(_) => f.write_str("pending_flush"),
+            OutboundState::WaitForRemote(_) => f.write_str("waiting_for_remote"),
+            OutboundState::Closing(_) => f.write_str("closing"),
+            OutboundState::Poisoned => f.write_str("poisoned"),
+        }
+    }
+}
+
 impl ProtocolsHandler for RendezvousHandler {
     type InEvent = Input;
     type OutEvent = HandlerEvent;
@@ -94,8 +128,8 @@ impl ProtocolsHandler for RendezvousHandler {
     type OutboundProtocol = protocol::Rendezvous;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        let rendezvous_protocol = crate::protocol::Rendezvous::new();
-        SubstreamProtocol::new(rendezvous_protocol, ())
+        debug!("creating substream protocol");
+        SubstreamProtocol::new(protocol::Rendezvous::new(), ())
     }
 
     fn inject_fully_negotiated_inbound(
@@ -103,6 +137,7 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _msg: Self::InboundOpenInfo,
     ) {
+        debug!("injected inbound");
         if let InboundState::None = self.inbound_substream {
             self.inbound_substream = InboundState::Reading(substream);
         } else {
@@ -115,6 +150,7 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         msg: Self::OutboundOpenInfo,
     ) {
+        debug!("injected outbound");
         if let OutboundState::WaitingUpgrade = self.outbound_substream {
             self.outbound_substream = OutboundState::PendingSend(substream, msg);
         } else {
@@ -124,6 +160,7 @@ impl ProtocolsHandler for RendezvousHandler {
 
     // event injected from NotifyHandler
     fn inject_event(&mut self, req: Input) {
+        debug!("injecting event into handler from behaviour: {:?}", &req);
         let (inbound_substream, outbound_substream) = match (
             req,
             std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
@@ -208,6 +245,14 @@ impl ProtocolsHandler for RendezvousHandler {
             Self::Error,
         >,
     > {
+        debug!(
+            "polling handler: inbound_state: {:?}",
+            &self.inbound_substream
+        );
+        debug!(
+            "polling handler: outbound_state {:?}",
+            &self.outbound_substream
+        );
         match std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned) {
             InboundState::PendingSend(mut substream, message) => {
                 match substream.poll_ready_unpin(cx) {

@@ -26,6 +26,7 @@ libp2p-noise = { version = "0.31", path = "../../transports/noise" }
 libp2p-yamux = { version = "0.32", path = "../../muxers/yamux" }
 rand = "0.8"
 tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+env_logger = "0.8"
 
 [build-dependencies]
 prost-build = "0.7"

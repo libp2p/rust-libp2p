@@ -110,6 +110,7 @@ impl NetworkBehaviour for Rendezvous {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        debug!("spawning protocol handler");
         RendezvousHandler::new()
     }
 
@@ -133,6 +134,7 @@ impl NetworkBehaviour for Rendezvous {
         _connection: ConnectionId,
         event: crate::handler::HandlerEvent,
     ) {
+        debug!("behaviour::inject_event {:?}", &event);
         match event.0 {
             Message::Register(new_registration) => {
                 let (namespace, ttl) = self.registrations.add(new_registration);
@@ -214,8 +216,41 @@ impl NetworkBehaviour for Rendezvous {
         >,
     > {
         if let Some(event) = self.events.pop_front() {
+            debug!("polling behaviour: {:?}", &event);
             return Poll::Ready(event);
         }
+
+        // if let Some(event) = self.events.pop_front() {
+        //     return Poll::Ready(match event {
+        //         NetworkBehaviourAction::NotifyHandler {
+        //             peer_id,
+        //             handler,
+        //             event,
+        //         } => {
+        //             debug!("polling notifying handler: {:?}", &event);
+        //             return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+        //                 peer_id,
+        //                 event,
+        //                 handler,
+        //             });
+        //         }
+        //         NetworkBehaviourAction::GenerateEvent(e) => {
+        //             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(e));
+        //         }
+        //         NetworkBehaviourAction::DialAddress { address } => {
+        //             return Poll::Ready(NetworkBehaviourAction::DialAddress { address });
+        //         }
+        //         NetworkBehaviourAction::DialPeer { peer_id, condition } => {
+        //             return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition });
+        //         }
+        //         NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+        //             return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr {
+        //                 address,
+        //                 score,
+        //             })
+        //         }
+        //     });
+        // }
 
         Poll::Pending
     }

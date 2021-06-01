@@ -1,10 +1,11 @@
-use asynchronous_codec::{Framed};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use std::{future, iter};
-use void::Void;
+use crate::codec::RendezvousCodec;
+use asynchronous_codec::Framed;
 use futures::AsyncRead;
 use futures::AsyncWrite;
-use crate::codec::RendezvousCodec;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use log::debug;
+use std::{future, iter};
+use void::Void;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Rendezvous;
@@ -30,6 +31,7 @@ impl<TSocket: AsyncRead + AsyncWrite> InboundUpgrade<TSocket> for Rendezvous {
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        debug!("upgrading inbound");
         future::ready(Ok(Framed::new(socket, RendezvousCodec::default())))
     }
 }
@@ -40,6 +42,7 @@ impl<TSocket: AsyncRead + AsyncWrite> OutboundUpgrade<TSocket> for Rendezvous {
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        debug!("upgrading outbound");
         future::ready(Ok(Framed::new(socket, RendezvousCodec::default())))
     }
 }

@@ -9,10 +9,10 @@ use libp2p_mplex::MplexConfig;
 use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_yamux::YamuxConfig;
+use log::debug;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::time::Duration;
-
 /// An adaptor struct for libp2p that spawns futures into the current
 /// thread-local runtime.
 struct GlobalSpawnTokioExecutor;
@@ -114,9 +114,11 @@ where
                     event
                 );
             }
-            _ => {}
+            _ => {
+                debug!("{:?}", alice_event);
+            }
         }
-        match bob_event {
+        match &bob_event {
             SwarmEvent::ConnectionEstablished { .. } => {
                 bob_connected = true;
             }
@@ -126,7 +128,9 @@ where
                     event
                 );
             }
-            _ => {}
+            _ => {
+                debug!("{:?}", bob_event);
+            }
         }
     }
 }
