@@ -1,14 +1,14 @@
-use crate::codec::{ErrorCode, Message, Registration, NewRegistration};
+use crate::codec::{ErrorCode, Message, NewRegistration, Registration};
 use crate::handler::{Input, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId, PeerRecord, SignedEnvelope};
+use libp2p_core::identity::Keypair;
+use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::debug;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
-use libp2p_core::identity::Keypair;
 
 // TODO: Unit Tests
 pub struct Registrations {
@@ -18,7 +18,7 @@ pub struct Registrations {
 impl Registrations {
     pub fn new() -> Self {
         Self {
-            registrations_for_namespace: Default::default()
+            registrations_for_namespace: Default::default(),
         }
     }
 
@@ -26,13 +26,17 @@ impl Registrations {
         let ttl = new_registration.effective_ttl();
         let namespace = new_registration.namespace;
 
-        self.registrations_for_namespace.entry(namespace.clone())
+        self.registrations_for_namespace
+            .entry(namespace.clone())
             .or_insert_with(|| HashMap::new())
-            .insert( new_registration.record.peer_id(), Registration {
-                namespace: namespace.clone(),
-                record: new_registration.record,
-                ttl
-            });
+            .insert(
+                new_registration.record.peer_id(),
+                Registration {
+                    namespace: namespace.clone(),
+                    record: new_registration.record,
+                    ttl,
+                },
+            );
 
         (namespace, ttl)
     }
@@ -50,7 +54,12 @@ impl Registrations {
 
         if let Some(namespace) = namespace {
             if let Some(registrations) = self.registrations_for_namespace.get(&namespace) {
-                Some(registrations.values().cloned().collect::<Vec<Registration>>())
+                Some(
+                    registrations
+                        .values()
+                        .cloned()
+                        .collect::<Vec<Registration>>(),
+                )
             } else {
                 None
             }
@@ -58,8 +67,11 @@ impl Registrations {
             let discovered = self
                 .registrations_for_namespace
                 .iter()
-                .map(|(ns, registrations)| {
-                    registrations.values().cloned().collect::<Vec<Registration>>()
+                .map(|(_, registrations)| {
+                    registrations
+                        .values()
+                        .cloned()
+                        .collect::<Vec<Registration>>()
                 })
                 .flatten()
                 .collect::<Vec<Registration>>();
@@ -83,7 +95,7 @@ impl Rendezvous {
         let peer_record = PeerRecord {
             peer_id: key_pair.public().into_peer_id(),
             seq: 0,
-            addresses: listen_addresses
+            addresses: listen_addresses,
         };
 
         Self {
@@ -94,13 +106,9 @@ impl Rendezvous {
         }
     }
 
-    pub fn register(
-        &mut self,
-        namespace: String,
-        rendezvous_node: PeerId,
-    ) {
-
-        let authenticated_peer_record = AuthenticatedPeerRecord::from_record(self.key_pair.clone(), self.peer_record.clone());
+    pub fn register(&mut self, namespace: String, rendezvous_node: PeerId) {
+        let authenticated_peer_record =
+            AuthenticatedPeerRecord::from_record(self.key_pair.clone(), self.peer_record.clone());
 
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -109,8 +117,8 @@ impl Rendezvous {
                     request: NewRegistration {
                         namespace,
                         record: authenticated_peer_record,
-                        ttl: None
-                    }
+                        ttl: None,
+                    },
                 },
                 handler: NotifyHandler::Any,
             });
@@ -201,7 +209,9 @@ impl NetworkBehaviour for Rendezvous {
                 let (namespace, ttl) = self.registrations.add(new_registration);
 
                 // emit behaviour event
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered { peer_id, namespace }));
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerRegistered { peer_id, namespace },
+                ));
 
                 // notify the handler that to send a response
                 self.events
@@ -211,28 +221,23 @@ impl NetworkBehaviour for Rendezvous {
                         event: Input::RegisterResponse { ttl },
                     });
             }
-            Message::RegisterResponse { ttl } => {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::RegisteredWithRendezvousNode {
-                        rendezvous_node: peer_id,
-                        ttl,
-                    },
-                ))
-            }
-            Message::FailedToRegister { error } => {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::FailedToRegisterWithRendezvousNode {
-                        rendezvous_node: peer_id,
-                        err_code: error,
-                    },
-                ))
-            }
+            Message::RegisterResponse { ttl } => self.events.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::RegisteredWithRendezvousNode {
+                    rendezvous_node: peer_id,
+                    ttl,
+                }),
+            ),
+            Message::FailedToRegister { error } => self.events.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::FailedToRegisterWithRendezvousNode {
+                    rendezvous_node: peer_id,
+                    err_code: error,
+                }),
+            ),
             Message::Unregister { namespace } => {
                 self.registrations.remove(namespace, peer_id);
                 // TODO: Should send unregister response?
             }
             Message::Discover { namespace } => {
-
                 let registrations = self.registrations.get(namespace);
 
                 if let Some(registrations) = registrations {
@@ -241,8 +246,9 @@ impl NetworkBehaviour for Rendezvous {
                             peer_id,
                             handler: NotifyHandler::Any,
                             event: Input::DiscoverResponse {
-                                discovered: registrations
-                            }})
+                                discovered: registrations,
+                            },
+                        })
                 } else {
                     self.events
                         .push_back(NetworkBehaviourAction::NotifyHandler {

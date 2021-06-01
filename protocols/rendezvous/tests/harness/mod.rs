@@ -4,12 +4,10 @@ use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::SelectUpgrade;
-use libp2p_core::{identity, Executor, Multiaddr, Transport, PeerId};
+use libp2p_core::{identity, Executor, Multiaddr, PeerId, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
-use libp2p_swarm::{
-    IntoProtocolsHandler, NetworkBehaviour, ProtocolsHandler, Swarm, SwarmBuilder, SwarmEvent,
-};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::pin::Pin;
@@ -33,7 +31,9 @@ pub struct Actor<B: NetworkBehaviour> {
 }
 
 pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
-    behaviour_fn: F, id_keys: identity::Keypair, listen_address: Multiaddr,
+    behaviour_fn: F,
+    id_keys: identity::Keypair,
+    listen_address: Multiaddr,
 ) -> (Swarm<B>, Multiaddr, PeerId)
 where
     B: NetworkBehaviour,

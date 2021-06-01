@@ -4,7 +4,7 @@ use crate::protocol;
 use crate::protocol::Rendezvous;
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
-use libp2p_core::{AuthenticatedPeerRecord, InboundUpgrade, OutboundUpgrade, PeerId};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -34,7 +34,7 @@ pub struct HandlerEvent(pub Message);
 #[derive(Debug)]
 pub enum Input {
     RegisterRequest {
-        request: NewRegistration
+        request: NewRegistration,
     },
     UnregisterRequest {
         namespace: String,
@@ -131,9 +131,12 @@ impl ProtocolsHandler for RendezvousHandler {
         ) {
             (
                 Input::RegisterRequest {
-                    request: NewRegistration {
-                        namespace, record, ttl
-                    }
+                    request:
+                        NewRegistration {
+                            namespace,
+                            record,
+                            ttl,
+                        },
                 },
                 inbound,
                 OutboundState::None,
@@ -161,14 +164,17 @@ impl ProtocolsHandler for RendezvousHandler {
                 Input::RegisterResponse { ttl },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
-            ) => (InboundState::PendingSend(substream, Message::RegisterResponse { ttl }), outbound),
+            ) => (
+                InboundState::PendingSend(substream, Message::RegisterResponse { ttl }),
+                outbound,
+            ),
             (
                 Input::DiscoverResponse { discovered },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
             ) => {
                 let msg = Message::DiscoverResponse {
-                    registrations: discovered
+                    registrations: discovered,
                 };
                 (InboundState::PendingSend(substream, msg), outbound)
             }
