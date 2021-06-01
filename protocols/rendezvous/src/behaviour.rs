@@ -10,77 +10,6 @@ use log::debug;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
-// TODO: Unit Tests
-pub struct Registrations {
-    registrations_for_namespace: HashMap<String, HashMap<PeerId, Registration>>,
-}
-
-impl Registrations {
-    pub fn new() -> Self {
-        Self {
-            registrations_for_namespace: Default::default(),
-        }
-    }
-
-    pub fn add(&mut self, new_registration: NewRegistration) -> (String, i64) {
-        let ttl = new_registration.effective_ttl();
-        let namespace = new_registration.namespace;
-
-        self.registrations_for_namespace
-            .entry(namespace.clone())
-            .or_insert_with(|| HashMap::new())
-            .insert(
-                new_registration.record.peer_id(),
-                Registration {
-                    namespace: namespace.clone(),
-                    record: new_registration.record,
-                    ttl,
-                },
-            );
-
-        (namespace, ttl)
-    }
-
-    pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
-        if let Some(registrations) = self.registrations_for_namespace.get_mut(&namespace) {
-            registrations.remove(&peer_id);
-        }
-    }
-
-    pub fn get(&mut self, namespace: Option<String>) -> Option<Vec<Registration>> {
-        if self.registrations_for_namespace.is_empty() {
-            return None;
-        }
-
-        if let Some(namespace) = namespace {
-            if let Some(registrations) = self.registrations_for_namespace.get(&namespace) {
-                Some(
-                    registrations
-                        .values()
-                        .cloned()
-                        .collect::<Vec<Registration>>(),
-                )
-            } else {
-                None
-            }
-        } else {
-            let discovered = self
-                .registrations_for_namespace
-                .iter()
-                .map(|(_, registrations)| {
-                    registrations
-                        .values()
-                        .cloned()
-                        .collect::<Vec<Registration>>()
-                })
-                .flatten()
-                .collect::<Vec<Registration>>();
-
-            Some(discovered)
-        }
-    }
-}
-
 pub const DOMAIN: &str = "libp2p-rendezvous";
 
 pub struct Rendezvous {
@@ -289,5 +218,76 @@ impl NetworkBehaviour for Rendezvous {
         }
 
         Poll::Pending
+    }
+}
+
+// TODO: Unit Tests
+pub struct Registrations {
+    registrations_for_namespace: HashMap<String, HashMap<PeerId, Registration>>,
+}
+
+impl Registrations {
+    pub fn new() -> Self {
+        Self {
+            registrations_for_namespace: Default::default(),
+        }
+    }
+
+    pub fn add(&mut self, new_registration: NewRegistration) -> (String, i64) {
+        let ttl = new_registration.effective_ttl();
+        let namespace = new_registration.namespace;
+
+        self.registrations_for_namespace
+            .entry(namespace.clone())
+            .or_insert_with(|| HashMap::new())
+            .insert(
+                new_registration.record.peer_id(),
+                Registration {
+                    namespace: namespace.clone(),
+                    record: new_registration.record,
+                    ttl,
+                },
+            );
+
+        (namespace, ttl)
+    }
+
+    pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
+        if let Some(registrations) = self.registrations_for_namespace.get_mut(&namespace) {
+            registrations.remove(&peer_id);
+        }
+    }
+
+    pub fn get(&mut self, namespace: Option<String>) -> Option<Vec<Registration>> {
+        if self.registrations_for_namespace.is_empty() {
+            return None;
+        }
+
+        if let Some(namespace) = namespace {
+            if let Some(registrations) = self.registrations_for_namespace.get(&namespace) {
+                Some(
+                    registrations
+                        .values()
+                        .cloned()
+                        .collect::<Vec<Registration>>(),
+                )
+            } else {
+                None
+            }
+        } else {
+            let discovered = self
+                .registrations_for_namespace
+                .iter()
+                .map(|(_, registrations)| {
+                    registrations
+                        .values()
+                        .cloned()
+                        .collect::<Vec<Registration>>()
+                })
+                .flatten()
+                .collect::<Vec<Registration>>();
+
+            Some(discovered)
+        }
     }
 }
