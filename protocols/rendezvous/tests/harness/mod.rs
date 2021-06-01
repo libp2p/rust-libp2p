@@ -32,38 +32,12 @@ pub struct Actor<B: NetworkBehaviour> {
     pub peer_id: PeerId,
 }
 
-pub async fn new_connected_swarm_pair<B, F>(behaviour_fn: F) -> (Actor<B>, Actor<B>)
-where
-    B: NetworkBehaviour,
-    F: Fn(PeerId, identity::Keypair) -> B + Clone,
-    <<<B as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Clone,
-<B as NetworkBehaviour>::OutEvent: Debug{
-    let (swarm, addr, peer_id) = new_swarm(behaviour_fn.clone());
-    let mut alice = Actor {
-        swarm,
-        addr,
-        peer_id,
-    };
-
-    let (swarm, addr, peer_id) = new_swarm(behaviour_fn);
-    let mut bob = Actor {
-        swarm,
-        addr,
-        peer_id,
-    };
-
-    connect(&mut alice.swarm, &mut bob.swarm).await;
-
-    (alice, bob)
-}
-
 pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
-    behaviour_fn: F,
+    behaviour_fn: F, id_keys: identity::Keypair, listen_address: Multiaddr,
 ) -> (Swarm<B>, Multiaddr, PeerId)
 where
     B: NetworkBehaviour,
 {
-    let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
 
     let dh_keys = Keypair::<X25519Spec>::new()
@@ -86,14 +60,9 @@ where
         .executor(Box::new(GlobalSpawnTokioExecutor))
         .build();
 
-    let address_port = rand::random::<u64>();
-    let addr = format!("/memory/{}", address_port)
-        .parse::<Multiaddr>()
-        .unwrap();
+    Swarm::listen_on(&mut swarm, listen_address.clone()).unwrap();
 
-    Swarm::listen_on(&mut swarm, addr.clone()).unwrap();
-
-    (swarm, addr, peer_id)
+    (swarm, listen_address, peer_id)
 }
 
 pub async fn await_events_or_timeout<A, B>(

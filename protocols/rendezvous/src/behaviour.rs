@@ -1,13 +1,14 @@
 use crate::codec::{ErrorCode, Message, Registration, NewRegistration};
 use crate::handler::{Input, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId};
+use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId, PeerRecord, SignedEnvelope};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::debug;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
+use libp2p_core::identity::Keypair;
 
 // TODO: Unit Tests
 pub struct Registrations {
@@ -68,16 +69,28 @@ impl Registrations {
     }
 }
 
+pub const DOMAIN: &str = "libp2p-rendezvous";
+
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<Input, Event>>,
     registrations: Registrations,
+    key_pair: Keypair,
+    peer_record: PeerRecord,
 }
 
 impl Rendezvous {
-    pub fn new() -> Self {
+    pub fn new(key_pair: Keypair, listen_addresses: Vec<Multiaddr>) -> Self {
+        let peer_record = PeerRecord {
+            peer_id: key_pair.public().into_peer_id(),
+            seq: 0,
+            addresses: listen_addresses
+        };
+
         Self {
             events: Default::default(),
             registrations: Registrations::new(),
+            key_pair,
+            peer_record,
         }
     }
 
@@ -85,15 +98,17 @@ impl Rendezvous {
         &mut self,
         namespace: String,
         rendezvous_node: PeerId,
-        record: AuthenticatedPeerRecord,
     ) {
+
+        let authenticated_peer_record = AuthenticatedPeerRecord::from_record(self.key_pair.clone(), self.peer_record.clone());
+
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
                 event: Input::RegisterRequest {
                     request: NewRegistration {
                         namespace,
-                        record,
+                        record: authenticated_peer_record,
                         ttl: None
                     }
                 },
