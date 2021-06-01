@@ -1,7 +1,7 @@
 use crate::codec::{ErrorCode, Message, Registration};
 use crate::handler::{Input, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
@@ -22,13 +22,19 @@ impl Rendezvous {
         }
     }
 
-    pub fn register(&mut self, ns: String, rendezvous_node: PeerId) {
+    pub fn register(
+        &mut self,
+        ns: String,
+        rendezvous_node: PeerId,
+        record: AuthenticatedPeerRecord,
+    ) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
                 event: Input::RegisterRequest {
                     namespace: ns,
                     ttl: None,
+                    record,
                 },
                 handler: NotifyHandler::Any,
             });
@@ -125,6 +131,7 @@ impl NetworkBehaviour for Rendezvous {
                         event: Input::RegisterRequest {
                             namespace: new_reggo.namespace,
                             ttl: Some(ttl),
+                            record: todo!(),
                         },
                     })
             }

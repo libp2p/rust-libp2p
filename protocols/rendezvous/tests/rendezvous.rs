@@ -12,9 +12,11 @@ async fn given_successful_registration_then_successful_discovery() {
     let namespace = "some-namespace".to_string();
 
     // register
-    test.registration_swarm
-        .behaviour_mut()
-        .register(namespace.clone(), test.rendezvous_peer_id);
+    test.registration_swarm.behaviour_mut().register(
+        namespace.clone(),
+        test.rendezvous_peer_id,
+        todo!(),
+    );
 
     test.assert_successful_registration(namespace.clone()).await;
 

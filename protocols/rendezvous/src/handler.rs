@@ -36,7 +36,7 @@ pub enum Input {
     RegisterRequest {
         namespace: String,
         ttl: Option<i64>,
-        // TODO: Signed peer record field
+        record: AuthenticatedPeerRecord,
     },
     UnregisterRequest {
         namespace: String,
@@ -133,11 +133,19 @@ impl ProtocolsHandler for RendezvousHandler {
             std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
             std::mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
         ) {
-            (Input::RegisterRequest { namespace, ttl }, inbound, OutboundState::None) => (
+            (
+                Input::RegisterRequest {
+                    namespace,
+                    ttl,
+                    record,
+                },
+                inbound,
+                OutboundState::None,
+            ) => (
                 inbound,
                 OutboundState::Start(Message::Register(NewRegistration::new(
                     namespace.clone(),
-                    todo!(),
+                    record,
                     ttl,
                 ))),
             ),
