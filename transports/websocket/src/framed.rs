@@ -461,7 +461,7 @@ pub enum Incoming {
 /// Application data received over the websocket connection
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Data {
-    /// Textual data.
+    /// UTF-8 encoded textual data.
     Text(Vec<u8>),
     /// Binary data.
     Binary(Vec<u8>)
