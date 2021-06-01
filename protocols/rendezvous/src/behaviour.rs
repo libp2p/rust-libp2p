@@ -124,19 +124,23 @@ impl NetworkBehaviour for Rendezvous {
             Message::Register(new_reggo) => {
                 let ttl = new_reggo.effective_ttl();
 
+                self.registrations
+                    .entry(new_reggo.namespace)
+                    .or_insert_with(|| HashSet::new())
+                    .insert(new_reggo.record.peer_id());
+
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::RegisterRequest {
-                            namespace: new_reggo.namespace,
-                            ttl: Some(ttl),
-                            record: todo!(),
+                        event: Input::RegisterResponse {
+                            ttl,
+                            message: Message::SuccessfullyRegistered { ttl },
                         },
                     })
             }
             Message::SuccessfullyRegistered { ttl } => {
-                // where to get namespace from
+                // where to get namespace from?
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                     Event::RegisteredWithRendezvousNode {
                         rendezvous_node: peer_id,
@@ -162,6 +166,7 @@ impl NetworkBehaviour for Rendezvous {
                         peers.remove(&peer_id);
                     }
                 }
+                // todo: maybe send a unregister response to the remote?
             }
             Message::Discover { namespace } => {
                 if let Some(ns) = namespace {
@@ -175,7 +180,6 @@ impl NetworkBehaviour for Rendezvous {
                                         .iter()
                                         .map(|peer| (ns.clone(), peer.clone()))
                                         .collect(),
-                                    record: todo!(),
                                 },
                             });
                     }
@@ -197,20 +201,14 @@ impl NetworkBehaviour for Rendezvous {
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::Any,
-                            event: Input::DiscoverResponse {
-                                discovered,
-                                record: todo!(),
-                            },
+                            event: Input::DiscoverResponse { discovered },
                         });
                 }
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::DiscoverResponse {
-                            record: todo!(),
-                            discovered: vec![],
-                        },
+                        event: Input::DiscoverResponse { discovered: vec![] },
                     })
             }
             Message::DiscoverResponse { registrations } => {

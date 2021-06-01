@@ -1,6 +1,6 @@
 pub mod harness;
 use crate::harness::{await_events_or_timeout, connect, new_swarm};
-use libp2p_core::PeerId;
+use libp2p_core::AuthenticatedPeerRecord;
 use libp2p_rendezvous::behaviour::{Event, Rendezvous};
 use libp2p_swarm::Swarm;
 use std::time::Duration;
@@ -30,13 +30,13 @@ async fn given_successful_registration_then_successful_discovery() {
 
 struct RendezvousTest {
     pub registration_swarm: Swarm<Rendezvous>,
-    pub registration_peer_id: PeerId,
+    pub registration_peer_id: AuthenticatedPeerRecord,
 
     pub discovery_swarm: Swarm<Rendezvous>,
-    pub discovery_peer_id: PeerId,
+    pub discovery_peer_id: AuthenticatedPeerRecord,
 
     pub rendezvous_swarm: Swarm<Rendezvous>,
-    pub rendezvous_peer_id: PeerId,
+    pub rendezvous_peer_id: AuthenticatedPeerRecord,
 }
 
 impl RendezvousTest {

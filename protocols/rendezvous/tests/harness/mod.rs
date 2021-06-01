@@ -1,17 +1,19 @@
 use futures::future;
-use libp2p_core::{Executor, Multiaddr, PeerId, identity, Transport};
-use std::pin::Pin;
 use futures::Future;
-use libp2p_swarm::{NetworkBehaviour, Swarm, IntoProtocolsHandler, ProtocolsHandler, SwarmBuilder, SwarmEvent};
-use std::fmt::Debug;
-use libp2p_core::transport::MemoryTransport;
-use libp2p_core::transport::upgrade::Version;
-use libp2p_core::upgrade::SelectUpgrade;
-use std::time::Duration;
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_noise::{self, NoiseConfig, X25519Spec, Keypair};
-use libp2p_yamux::YamuxConfig;
+use libp2p_core::transport::upgrade::Version;
+use libp2p_core::transport::MemoryTransport;
+use libp2p_core::upgrade::SelectUpgrade;
+use libp2p_core::{identity, AuthenticatedPeerRecord, Executor, Multiaddr, Transport};
 use libp2p_mplex::MplexConfig;
+use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
+use libp2p_swarm::{
+    IntoProtocolsHandler, NetworkBehaviour, ProtocolsHandler, Swarm, SwarmBuilder, SwarmEvent,
+};
+use libp2p_yamux::YamuxConfig;
+use std::fmt::Debug;
+use std::pin::Pin;
+use std::time::Duration;
 
 /// An adaptor struct for libp2p that spawns futures into the current
 /// thread-local runtime.
@@ -27,13 +29,13 @@ impl Executor for GlobalSpawnTokioExecutor {
 pub struct Actor<B: NetworkBehaviour> {
     pub swarm: Swarm<B>,
     pub addr: Multiaddr,
-    pub peer_id: PeerId,
+    pub peer_id: AuthenticatedPeerRecord,
 }
 
 pub async fn new_connected_swarm_pair<B, F>(behaviour_fn: F) -> (Actor<B>, Actor<B>)
 where
     B: NetworkBehaviour,
-    F: Fn(PeerId, identity::Keypair) -> B + Clone,
+    F: Fn(AuthenticatedPeerRecord, identity::Keypair) -> B + Clone,
     <<<B as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Clone,
 <B as NetworkBehaviour>::OutEvent: Debug{
     let (swarm, addr, peer_id) = new_swarm(behaviour_fn.clone());
@@ -55,14 +57,14 @@ where
     (alice, bob)
 }
 
-pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
+pub fn new_swarm<B: NetworkBehaviour, F: Fn(AuthenticatedPeerRecord, identity::Keypair) -> B>(
     behaviour_fn: F,
-) -> (Swarm<B>, Multiaddr, PeerId)
+) -> (Swarm<B>, Multiaddr, AuthenticatedPeerRecord)
 where
     B: NetworkBehaviour,
 {
     let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(id_keys.public());
+    let peer_id = AuthenticatedPeerRecord::from(id_keys.public());
 
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
@@ -102,8 +104,8 @@ pub async fn await_events_or_timeout<A, B>(
         Duration::from_secs(10),
         future::join(swarm_1_event, swarm_2_event),
     )
-        .await
-        .expect("network behaviours to emit an event within 10 seconds")
+    .await
+    .expect("network behaviours to emit an event within 10 seconds")
 }
 
 /// Connects two swarms with each other.
@@ -127,7 +129,8 @@ where
     let mut bob_connected = false;
 
     while !alice_connected && !bob_connected {
-        let (alice_event, bob_event) = future::join(receiver.next_event(), dialer.next_event()).await;
+        let (alice_event, bob_event) =
+            future::join(receiver.next_event(), dialer.next_event()).await;
 
         match alice_event {
             SwarmEvent::ConnectionEstablished { .. } => {

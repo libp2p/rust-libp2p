@@ -52,7 +52,6 @@ pub enum Input {
         message: Message,
     },
     DiscoverResponse {
-        record: AuthenticatedPeerRecord,
         discovered: Vec<(String, PeerId)>,
     },
 }
@@ -167,7 +166,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 outbound,
             ) => (InboundState::PendingSend(substream, message), outbound),
             (
-                Input::DiscoverResponse { record, discovered },
+                Input::DiscoverResponse { discovered },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
             ) => {
