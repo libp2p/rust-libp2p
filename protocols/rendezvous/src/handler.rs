@@ -34,9 +34,7 @@ pub struct HandlerEvent(pub Message);
 #[derive(Debug)]
 pub enum Input {
     RegisterRequest {
-        namespace: String,
-        ttl: Option<i64>,
-        record: AuthenticatedPeerRecord,
+        request: NewRegistration
     },
     UnregisterRequest {
         namespace: String,
@@ -49,10 +47,9 @@ pub enum Input {
     },
     RegisterResponse {
         ttl: i64,
-        message: Message,
     },
     DiscoverResponse {
-        discovered: Vec<(String, PeerId)>,
+        discovered: Vec<Registration>,
     },
 }
 
@@ -134,9 +131,9 @@ impl ProtocolsHandler for RendezvousHandler {
         ) {
             (
                 Input::RegisterRequest {
-                    namespace,
-                    ttl,
-                    record,
+                    request: NewRegistration {
+                        namespace, record, ttl
+                    }
                 },
                 inbound,
                 OutboundState::None,
@@ -161,10 +158,10 @@ impl ProtocolsHandler for RendezvousHandler {
                 }),
             ),
             (
-                Input::RegisterResponse { ttl: _ttl, message },
+                Input::RegisterResponse { ttl },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
-            ) => (InboundState::PendingSend(substream, message), outbound),
+            ) => (InboundState::PendingSend(substream, Message::RegisterResponse { ttl }), outbound),
             (
                 Input::DiscoverResponse { discovered },
                 InboundState::WaitForBehaviour(substream),
@@ -172,12 +169,6 @@ impl ProtocolsHandler for RendezvousHandler {
             ) => {
                 let msg = Message::DiscoverResponse {
                     registrations: discovered
-                        .iter()
-                        .map(|d| Registration {
-                            namespace: d.0.to_string(),
-                            record: record.clone(),
-                        })
-                        .collect(),
                 };
                 (InboundState::PendingSend(substream, msg), outbound)
             }

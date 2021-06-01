@@ -4,7 +4,7 @@ use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::SelectUpgrade;
-use libp2p_core::{identity, AuthenticatedPeerRecord, Executor, Multiaddr, Transport};
+use libp2p_core::{identity, Executor, Multiaddr, Transport, PeerId};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
 use libp2p_swarm::{
@@ -29,13 +29,13 @@ impl Executor for GlobalSpawnTokioExecutor {
 pub struct Actor<B: NetworkBehaviour> {
     pub swarm: Swarm<B>,
     pub addr: Multiaddr,
-    pub peer_id: AuthenticatedPeerRecord,
+    pub peer_id: PeerId,
 }
 
 pub async fn new_connected_swarm_pair<B, F>(behaviour_fn: F) -> (Actor<B>, Actor<B>)
 where
     B: NetworkBehaviour,
-    F: Fn(AuthenticatedPeerRecord, identity::Keypair) -> B + Clone,
+    F: Fn(PeerId, identity::Keypair) -> B + Clone,
     <<<B as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Clone,
 <B as NetworkBehaviour>::OutEvent: Debug{
     let (swarm, addr, peer_id) = new_swarm(behaviour_fn.clone());
@@ -57,14 +57,14 @@ where
     (alice, bob)
 }
 
-pub fn new_swarm<B: NetworkBehaviour, F: Fn(AuthenticatedPeerRecord, identity::Keypair) -> B>(
+pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
     behaviour_fn: F,
-) -> (Swarm<B>, Multiaddr, AuthenticatedPeerRecord)
+) -> (Swarm<B>, Multiaddr, PeerId)
 where
     B: NetworkBehaviour,
 {
     let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = AuthenticatedPeerRecord::from(id_keys.public());
+    let peer_id = PeerId::from(id_keys.public());
 
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
