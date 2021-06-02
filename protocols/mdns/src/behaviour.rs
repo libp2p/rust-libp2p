@@ -24,10 +24,10 @@ use async_io::{Async, Timer};
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use lazy_static::lazy_static;
+use libp2p_core::connection::ListenerId;
 use libp2p_core::{
     address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
 };
-use libp2p_core::connection::ListenerId;
 use libp2p_swarm::{
     protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters, ProtocolsHandler,
@@ -124,11 +124,7 @@ impl Mdns {
     /// Builds a new `Mdns` behaviour.
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
         let recv_socket = {
-            let socket = Socket::new(
-                Domain::IPV4,
-                Type::DGRAM,
-                Some(socket2::Protocol::UDP),
-            )?;
+            let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
             socket.set_reuse_address(true)?;
             #[cfg(unix)]
             socket.set_reuse_port(true)?;
@@ -169,9 +165,10 @@ impl Mdns {
     }
 
     fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
-        self.timeout.set_interval(self.query_interval);
         match packet {
             MdnsPacket::Query(query) => {
+                self.timeout.set_interval(self.query_interval);
+                log::trace!("sending response");
                 for packet in build_query_response(
                     query.query_id(),
                     *params.local_peer_id(),
@@ -214,8 +211,8 @@ impl Mdns {
                         } else {
                             self.discovered_nodes
                                 .push((*peer.id(), addr.clone(), new_expiration));
+                            discovered.push((*peer.id(), addr));
                         }
-                        discovered.push((*peer.id(), addr));
                     }
                 }
 
@@ -271,7 +268,8 @@ impl NetworkBehaviour for Mdns {
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        self.send_buffer.push_back(build_query());
+        self.timeout
+            .set_interval_at(Instant::now(), self.query_interval);
     }
 
     fn poll(
@@ -297,7 +295,8 @@ impl NetworkBehaviour for Mdns {
                         if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
                             log::error!("join multicast failed: {}", err);
                         } else {
-                            self.send_buffer.push_back(build_query());
+                            self.timeout
+                                .set_interval_at(Instant::now(), self.query_interval);
                         }
                     }
                 }
@@ -332,25 +331,23 @@ impl NetworkBehaviour for Mdns {
                 _ => {}
             }
         }
-        if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-            self.send_buffer.push_back(build_query());
-        }
         // Send responses.
-        if !self.send_buffer.is_empty() {
-            while self.send_socket.poll_writable(cx).is_ready() {
-                if let Some(packet) = self.send_buffer.pop_front() {
-                    match self
-                        .send_socket
-                        .send_to(&packet, *IPV4_MDNS_MULTICAST_ADDRESS)
-                        .now_or_never()
-                    {
-                        Some(Ok(_)) => {}
-                        Some(Err(err)) => log::error!("{}", err),
-                        None => self.send_buffer.push_front(packet),
-                    }
-                } else {
-                    break;
+        while self.send_socket.poll_writable(cx).is_ready() {
+            if let Some(packet) = self.send_buffer.pop_front() {
+                match self
+                    .send_socket
+                    .send_to(&packet, *IPV4_MDNS_MULTICAST_ADDRESS)
+                    .now_or_never()
+                {
+                    Some(Ok(_)) => {}
+                    Some(Err(err)) => log::error!("{}", err),
+                    None => self.send_buffer.push_front(packet),
                 }
+            } else if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
+                log::trace!("sending query");
+                self.send_buffer.push_back(build_query());
+            } else {
+                break;
             }
         }
         // Emit discovered event.
