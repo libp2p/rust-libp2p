@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.28.4"
+version = "0.29.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,7 +20,7 @@ futures-timer = "3"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.5.0", optional = true }
 log = "0.4"
-multiaddr = { package = "parity-multiaddr", version = "0.11.2", path = "../misc/multiaddr" }
+multiaddr = { version = "0.12.0" }
 multihash = { version = "0.13", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
 multistream-select = { version = "0.10", path = "../misc/multistream-select" }
 parking_lot = "0.11.0"

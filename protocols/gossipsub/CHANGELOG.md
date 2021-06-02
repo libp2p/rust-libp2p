@@ -1,3 +1,7 @@
+# 0.32.0 [unreleased]
+
+- Update dependencies.
+
 # 0.31.0 [2021-05-17]
 
 - Keep connections to peers in a mesh alive. Allow closing idle connections to peers not in a mesh
