@@ -189,6 +189,8 @@ impl ProtocolsHandler for RendezvousHandler {
             _ => unreachable!("Handler in invalid state"),
         };
 
+        debug!("inbound: {:?}", inbound_substream);
+        debug!("outbound: {:?}", outbound_substream);
         self.inbound_substream = inbound_substream;
         self.outbound_substream = outbound_substream;
     }
@@ -225,7 +227,7 @@ impl ProtocolsHandler for RendezvousHandler {
             &self.outbound_substream
         );
         match std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned) {
-            InboundState::None => self.outbound_substream = OutboundState::None,
+            InboundState::None => self.inbound_substream = InboundState::None,
             InboundState::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
                     self.inbound_substream = InboundState::WaitForBehaviour(substream);
