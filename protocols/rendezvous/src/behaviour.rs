@@ -215,8 +215,8 @@ impl NetworkBehaviour for Rendezvous {
             Self::OutEvent,
         >,
     > {
+        debug!("polling behaviour events: {:?}", &self.events);
         if let Some(event) = self.events.pop_front() {
-            debug!("polling behaviour: {:?}", &event);
             return Poll::Ready(event);
         }
 

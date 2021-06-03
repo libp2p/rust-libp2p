@@ -45,8 +45,8 @@ struct RendezvousTest {
 }
 
 fn get_rand_listen_addr() -> Multiaddr {
-    let address_port = rand::random::<u64>();
-    let addr = format!("/memory/{}", address_port)
+    let address_port = rand::random::<u16>();
+    let addr = format!("/ip4/127.0.0.1/tcp/{}", address_port)
         .parse::<Multiaddr>()
         .unwrap();
 

@@ -3,16 +3,19 @@ use futures::Future;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::MemoryTransport;
-use libp2p_core::upgrade::SelectUpgrade;
+use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
 use libp2p_core::{identity, Executor, Multiaddr, PeerId, Transport};
 use libp2p_mplex::MplexConfig;
+use libp2p_noise as noise;
 use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
 use log::debug;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::time::Duration;
+
 /// An adaptor struct for libp2p that spawns futures into the current
 /// thread-local runtime.
 struct GlobalSpawnTokioExecutor;
@@ -40,20 +43,15 @@ where
 {
     let peer_id = PeerId::from(id_keys.public());
 
-    let dh_keys = Keypair::<X25519Spec>::new()
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&id_keys)
-        .expect("failed to create dh_keys");
-    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+        .unwrap();
 
-    let transport = MemoryTransport::default()
+    let transport = TcpConfig::new()
+        .nodelay(true)
         .upgrade(Version::V1)
-        .authenticate(noise)
-        .multiplex(SelectUpgrade::new(
-            YamuxConfig::default(),
-            MplexConfig::new(),
-        ))
-        .timeout(Duration::from_secs(5))
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(YamuxConfig::default())
         .boxed();
 
     let mut swarm: Swarm<B> = SwarmBuilder::new(transport, behaviour_fn(peer_id, id_keys), peer_id)
