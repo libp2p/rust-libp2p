@@ -34,7 +34,11 @@ use unsigned_varint::codec::UviBytes;
 
 const PROTOCOL_NAME: &[u8; 15] = b"/libp2p/connect";
 
-pub struct OutboundUpgrade {}
+// TODO: Should this be split up in two files? Inbound and outbound?
+
+pub struct OutboundUpgrade {
+    obs_addrs: Vec<Multiaddr>,
+}
 
 impl upgrade::UpgradeInfo for OutboundUpgrade {
     type Info = &'static [u8];
@@ -42,6 +46,14 @@ impl upgrade::UpgradeInfo for OutboundUpgrade {
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(PROTOCOL_NAME)
+    }
+}
+
+impl OutboundUpgrade {
+    pub fn new(obs_addrs: Vec<Multiaddr>) -> Self {
+        Self {
+            obs_addrs
+        }
     }
 }
 
@@ -53,7 +65,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = HolePunch {
             r#type: Some(hole_punch::Type::Connect.into()),
-            obs_addrs: vec![],
+            obs_addrs: self.obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
         let mut encoded_msg = Vec::new();
@@ -92,6 +104,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
                     .map_err(|_| OutboundUpgradeError::InvalidAddrs)?
             };
 
+            todo!("why not do the whole negotiation including the wait for 1/2 RTT in here?");
+
             Ok(Connect { obs_addrs })
         }
         .boxed()
@@ -110,7 +124,7 @@ impl upgrade::UpgradeInfo for InboundUpgrade {
 }
 
 impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
-    type Output = Sync;
+    type Output = InboundConnect;
     type Error = InboundUpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -128,6 +142,16 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
 
             let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
 
+            let obs_addrs = if obs_addrs.is_empty() {
+                return Err(InboundUpgradeError::NoAddresses);
+            } else {
+                obs_addrs
+                    .into_iter()
+                    .map(TryFrom::try_from)
+                    .collect::<Result<Vec<Multiaddr>, _>>()
+                    .map_err(|_| InboundUpgradeError::InvalidAddrs)?
+            };
+
             let r#type = hole_punch::Type::from_i32(r#type.unwrap())
                 .ok_or(InboundUpgradeError::ParseTypeField)?;
 
@@ -136,7 +160,10 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
                 hole_punch::Type::Sync => return Err(InboundUpgradeError::UnexpectedTypeSync),
             }
 
-            todo!()
+            Ok(InboundConnect {
+                substream,
+                obs_addrs,
+            })
         }
         .boxed()
     }
@@ -146,7 +173,10 @@ pub struct Connect {
     obs_addrs: Vec<Multiaddr>,
 }
 
-pub struct Sync {}
+pub struct InboundConnect {
+    substream: Framed<NegotiatedSubstream, UviBytes>,
+    obs_addrs: Vec<Multiaddr>,
+}
 
 #[derive(Debug)]
 pub enum OutboundUpgradeError {
@@ -233,6 +263,7 @@ impl error::Error for OutboundUpgradeError {
     }
 }
 
+// TODO: Are all of these needed?
 #[derive(Debug)]
 pub enum InboundUpgradeError {
     Decode(prost::DecodeError),
@@ -282,7 +313,7 @@ impl fmt::Display for InboundUpgradeError {
                 write!(f, "Invalid expiration timestamp in reservation.")
             }
             InboundUpgradeError::InvalidAddrs => {
-                write!(f, "Invalid addresses in reservation.")
+                write!(f, "Invalid addresses.")
             }
             InboundUpgradeError::ParseTypeField => {
                 write!(f, "Failed to parse response type field.")
@@ -314,6 +345,7 @@ impl error::Error for InboundUpgradeError {
             InboundUpgradeError::UnexpectedTypeConnect => None,
             InboundUpgradeError::UnexpectedTypeSync => None,
             InboundUpgradeError::ParseStatusField => None,
+            InboundUpgradeError::InvalidAddrs => None,
         }
     }
 }

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol;
-use libp2p_core::{upgrade, ConnectedPoint, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -29,10 +29,14 @@ use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
 pub enum In {
-    Connect {},
+    Connect { obs_addrs: Vec<Multiaddr> },
+    // TODO: Needs both the inbound stream and the observed addresses.
+    AcceptInboundConnect(()),
 }
 
-pub enum Event {}
+pub enum Event {
+    InboundConnect(protocol::InboundConnect),
+}
 
 // TODO: Detour through Prototype needed?
 pub struct Prototype {}
@@ -84,10 +88,13 @@ impl ProtocolsHandler for Handler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _inbound_circuit: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
+        inbound_connect: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        todo!()
+        self.queued_events
+            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnect(
+                inbound_connect,
+            )));
     }
 
     fn inject_fully_negotiated_outbound(
@@ -100,21 +107,22 @@ impl ProtocolsHandler for Handler {
 
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
-            In::Connect {} => {
+            In::Connect {obs_addrs} => {
                 self.queued_events
                     .push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(protocol::OutboundUpgrade {}, ()),
+                        protocol: SubstreamProtocol::new(protocol::OutboundUpgrade::new(obs_addrs), ()),
                     });
             }
+            In::AcceptInboundConnect(_) => todo!(),
         }
     }
 
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        _error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        todo!()
+        todo!("{:?}", error)
     }
 
     fn inject_dial_upgrade_error(

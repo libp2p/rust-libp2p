@@ -64,6 +64,8 @@ fn connect() {
 
     dst.listen_on(dst_relayed_addr.clone()).unwrap();
     dst.listen_on(dst_addr.clone()).unwrap();
+    // TODO: Needed?
+    dst.add_external_address(dst_addr.clone(), AddressScore::Infinite);
 
     println!("Wait for reservation");
     pool.run_until(wait_for_reservation(
@@ -76,6 +78,12 @@ fn connect() {
     spawn_swarm_on_pool(&pool, dst);
 
     let mut src = build_client();
+    let src_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    println!("src addr: {:?}", src_addr);
+    src.listen_on(src_addr.clone()).unwrap();
+    pool.run_until(wait_for_new_listen_addr(&mut src, &src_addr));
+    // TODO: Needed?
+    src.add_external_address(src_addr.clone(), AddressScore::Infinite);
 
     src.dial_addr(dst_relayed_addr.clone()).unwrap();
 
@@ -245,6 +253,15 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
             SwarmEvent::Dialing(_) => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::ConnectionEstablished { .. } => {}
+            e => panic!("{:?}", e),
+        }
+    }
+}
+
+async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
+    loop {
+        match client.next_event().await {
+            SwarmEvent::NewListenAddr(addr) if addr == *new_addr => break,
             e => panic!("{:?}", e),
         }
     }

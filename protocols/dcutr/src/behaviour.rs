@@ -76,7 +76,7 @@ impl NetworkBehaviour for Behaviour {
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: *peer_id,
                     handler: NotifyHandler::One(*connection_id),
-                    event: handler::In::Connect {  },
+                    event: handler::In::Connect { obs_addrs: vec![] },
                 });
         }
     }
@@ -102,7 +102,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _event_source: PeerId,
         _connection: ConnectionId,
-        _handler_event: handler::Event,
+        handler_event: handler::Event,
     ) {
         todo!()
     }
@@ -110,9 +110,24 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        _poll_parameters: &mut impl PollParameters,
+        poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<handler::In, Self::OutEvent>> {
-        if let Some(event) = self.queued_actions.pop_front() {
+        if let Some(mut event) = self.queued_actions.pop_front() {
+            // Set external addresses in [`AcceptReservationReq`].
+            if let NetworkBehaviourAction::NotifyHandler {
+                event: handler::In::Connect { ref mut obs_addrs, .. },
+                ..
+            } = &mut event
+            {
+                *obs_addrs = poll_parameters
+                    .external_addresses()
+                    .map(|a| {
+                        a.addr
+                            .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                    })
+                    .collect();
+            }
+
             return Poll::Ready(event);
         }
 
