@@ -1,4 +1,8 @@
-# 0.31.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Update dependencies.
+
+# 0.31.0 [2021-05-17]
 
 - Update to `snow` `v0.8.0` ([PR-2068]).
 
