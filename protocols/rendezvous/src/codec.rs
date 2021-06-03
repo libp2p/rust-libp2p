@@ -335,38 +335,6 @@ impl TryFrom<wire::Message> for Message {
                 namespace: ns.ok_or(ConversionError::MissingNamespace)?,
             },
             wire::Message {
-                r#type: Some(3),
-                discover: Some(Discover { ns, .. }),
-                ..
-            } => Message::Discover { namespace: ns },
-            wire::Message {
-                r#type: Some(4),
-                discover_response:
-                    Some(DiscoverResponse {
-                        registrations,
-                        status: Some(0),
-                        ..
-                    }),
-                ..
-            } => Message::DiscoverResponse {
-                registrations: registrations
-                    .into_iter()
-                    .map(|reggo| {
-                        Ok(Registration {
-                            namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?,
-                            record: AuthenticatedPeerRecord::from_signed_envelope(
-                                SignedEnvelope::from_protobuf_encoding(
-                                    &reggo
-                                        .signed_peer_record
-                                        .ok_or(ConversionError::MissingSignedPeerRecord)?,
-                                )?,
-                            )?,
-                            ttl: reggo.ttl.ok_or(ConversionError::MissingTtl)?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, ConversionError>>()?,
-            },
-            wire::Message {
                 r#type: Some(4),
                 discover_response:
                     Some(DiscoverResponse {
