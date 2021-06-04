@@ -1,132 +1,89 @@
+use futures::{channel::mpsc, prelude::*};
 use log::debug;
 pub mod harness;
-use crate::harness::{await_events_or_timeout, connect, new_swarm};
-use libp2p_core::{Multiaddr, PeerId};
-use libp2p_rendezvous::behaviour::{Event, Rendezvous};
-use libp2p_swarm::Swarm;
+use crate::harness::{get_rand_listen_addr, mk_transport};
+use futures::{SinkExt, StreamExt};
+use libp2p_core::identity::Keypair;
+use libp2p_core::Multiaddr;
+use libp2p_rendezvous::behaviour::Rendezvous;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use std::time::Duration;
 
-use libp2p_core::identity::Keypair;
+#[test]
+fn given_successful_registration_then_successful_discovery() {
+    let _ = env_logger::builder().is_test(true).try_init().unwrap();
 
-#[tokio::test]
-async fn given_successful_registration_then_successful_discovery() {
-    let mut test = RendezvousTest::setup().await;
+    let registration_keys = Keypair::generate_ed25519();
+    let registration_peer_id = registration_keys.public().into_peer_id();
 
-    let namespace = "some-namespace".to_string();
+    let rendezvous_keys = Keypair::generate_ed25519();
+    let rendezvoud_peer_id = rendezvous_keys.public().into_peer_id();
+    let rendezvous_addr = get_rand_listen_addr();
 
-    println!("registring");
+    let mut registration_swarm = Swarm::new(
+        mk_transport(registration_keys.clone()),
+        Rendezvous::new(registration_keys, vec![]),
+        registration_peer_id,
+    );
 
-    // register
-    test.registration_swarm
-        .behaviour_mut()
-        .register(namespace.clone(), test.rendezvous_peer_id);
+    let mut rendezvous_swarm = Swarm::new(
+        mk_transport(rendezvous_keys.clone()),
+        Rendezvous::new(rendezvous_keys, vec![rendezvous_addr.clone()]),
+        rendezvoud_peer_id,
+    );
 
-    test.assert_successful_registration(namespace.clone()).await;
+    let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
-    // println!("Registration worked!");
-    //
-    // // discover
-    // test.discovery_swarm
-    //     .behaviour_mut()
-    //     .discover(Some(namespace), test.rendezvous_peer_id);
-    //
-    // test.assert_successful_discovery().await;
-}
+    rendezvous_swarm.listen_on(rendezvous_addr).unwrap();
 
-struct RendezvousTest {
-    pub registration_swarm: Swarm<Rendezvous>,
-    pub registration_peer_id: PeerId,
-
-    pub discovery_swarm: Swarm<Rendezvous>,
-    pub discovery_peer_id: PeerId,
-
-    pub rendezvous_swarm: Swarm<Rendezvous>,
-    pub rendezvous_peer_id: PeerId,
-}
-
-fn get_rand_listen_addr() -> Multiaddr {
-    let address_port = rand::random::<u16>();
-    let addr = format!("/ip4/127.0.0.1/tcp/{}", address_port)
-        .parse::<Multiaddr>()
-        .unwrap();
-
-    addr
-}
-
-impl RendezvousTest {
-    pub async fn setup() -> Self {
-        let _ = env_logger::builder().is_test(true).try_init().unwrap();
-
-        let registration_keys = Keypair::generate_ed25519();
-        let discovery_keys = Keypair::generate_ed25519();
-        let rendezvous_keys = Keypair::generate_ed25519();
-
-        let registration_addr = get_rand_listen_addr();
-        let discovery_addr = get_rand_listen_addr();
-        let rendezvous_addr = get_rand_listen_addr();
-
-        let (mut registration_swarm, _, registration_peer_id) = new_swarm(
-            |_, _| Rendezvous::new(registration_keys.clone(), vec![registration_addr.clone()]),
-            registration_keys.clone(),
-            registration_addr.clone(),
-        );
-
-        let (mut discovery_swarm, _, discovery_peer_id) = new_swarm(
-            |_, _| Rendezvous::new(discovery_keys.clone(), vec![discovery_addr.clone()]),
-            discovery_keys.clone(),
-            discovery_addr.clone(),
-        );
-
-        let (mut rendezvous_swarm, _, rendezvous_peer_id) = new_swarm(
-            |_, _| Rendezvous::new(rendezvous_keys.clone(), vec![rendezvous_addr.clone()]),
-            rendezvous_keys.clone(),
-            rendezvous_addr.clone(),
-        );
-
-        connect(&mut rendezvous_swarm, &mut discovery_swarm).await;
-        connect(&mut rendezvous_swarm, &mut registration_swarm).await;
-
-        Self {
-            registration_swarm,
-            registration_peer_id,
-            discovery_swarm,
-            discovery_peer_id,
-            rendezvous_swarm,
-            rendezvous_peer_id,
-        }
-    }
-
-    pub async fn assert_successful_registration(&mut self, namespace: String) {
-        match await_events_or_timeout(self.rendezvous_swarm.next(), self.registration_swarm.next()).await {
-            (
-                rendezvous_swarm_event,
-                registration_swarm_event,
-            ) => {
-
-                debug!("{:?}", &rendezvous_swarm_event);
-                debug!("{:?}", &registration_swarm_event);
-                // TODO: Assertion against the actual peer record, pass the peer record in for assertion
-
-                assert!(matches!(rendezvous_swarm_event, Event::PeerRegistered { .. }));
-                assert!(matches!(registration_swarm_event, Event::RegisteredWithRendezvousNode { .. }));
+    let rendezvous_future = async move {
+        loop {
+            let next = rendezvous_swarm.next_event().await;
+            debug!("rendezvous swarm event: {:?}", next);
+            match next {
+                SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
+                SwarmEvent::ConnectionClosed {
+                    peer_id,
+                    endpoint,
+                    num_established,
+                    cause,
+                } => {
+                    debug!("connection closed: {:?}", peer_id);
+                    return;
+                }
+                _ => {}
             }
-            (rendezvous_swarm_event, registration_swarm_event) => panic!(
-                "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
-                rendezvous_swarm_event, registration_swarm_event
-            ),
         }
-    }
+    };
 
-    pub async fn assert_successful_discovery(&mut self) {
-        // TODO: Is it by design that there is no event emitted on the rendezvous side for discovery?
-
-        match tokio::time::timeout(Duration::from_secs(10), self.discovery_swarm.next())
-            .await
-            .expect("")
-        {
-            // TODO: Assert against the actual registration
-            Event::Discovered { .. } => {}
-            event => panic!("Discovery swarm emitted unexpected event {:?}", event),
+    let registration_future = async move {
+        registration_swarm
+            .dial_addr(rx.next().await.unwrap())
+            .unwrap();
+        loop {
+            let next = registration_swarm.next_event().await;
+            debug!("registration swarm event: {:?}", next);
+            match next {
+                SwarmEvent::Behaviour(
+                    libp2p_rendezvous::behaviour::Event::RegisteredWithRendezvousNode { .. },
+                ) => {
+                    debug!("registered with rendezvous node !!!!");
+                    return;
+                }
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    registration_swarm
+                        .behaviour_mut()
+                        .register("xmr-btc".to_string(), peer_id);
+                }
+                _ => {}
+            }
         }
-    }
+    };
+
+    let future = future::join(registration_future, rendezvous_future);
+
+    let dur = Duration::from_secs(5);
+    let timeout = async_std::future::timeout(dur, future);
+
+    let (a, b) = async_std::task::block_on(timeout).unwrap();
 }

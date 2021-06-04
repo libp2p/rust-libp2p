@@ -139,10 +139,10 @@ impl NetworkBehaviour for Rendezvous {
             Message::Register(new_registration) => {
                 let (namespace, ttl) = self.registrations.add(new_registration);
 
-                // // emit behaviour event
-                // self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                //     Event::PeerRegistered { peer_id, namespace },
-                // ));
+                // emit behaviour event
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerRegistered { peer_id, namespace },
+                ));
 
                 // notify the handler that to send a response
                 self.events
@@ -219,38 +219,6 @@ impl NetworkBehaviour for Rendezvous {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
-
-        // if let Some(event) = self.events.pop_front() {
-        //     return Poll::Ready(match event {
-        //         NetworkBehaviourAction::NotifyHandler {
-        //             peer_id,
-        //             handler,
-        //             event,
-        //         } => {
-        //             debug!("polling notifying handler: {:?}", &event);
-        //             return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-        //                 peer_id,
-        //                 event,
-        //                 handler,
-        //             });
-        //         }
-        //         NetworkBehaviourAction::GenerateEvent(e) => {
-        //             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(e));
-        //         }
-        //         NetworkBehaviourAction::DialAddress { address } => {
-        //             return Poll::Ready(NetworkBehaviourAction::DialAddress { address });
-        //         }
-        //         NetworkBehaviourAction::DialPeer { peer_id, condition } => {
-        //             return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition });
-        //         }
-        //         NetworkBehaviourAction::ReportObservedAddr { address, score } => {
-        //             return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr {
-        //                 address,
-        //                 score,
-        //             })
-        //         }
-        //     });
-        // }
 
         Poll::Pending
     }
