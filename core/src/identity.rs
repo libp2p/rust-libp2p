@@ -132,10 +132,10 @@ impl Keypair {
                 ed25519::Keypair::decode(&mut private_key.data).map(Keypair::Ed25519)
             },
             keys_proto::KeyType::Rsa => {
-                Err(DecodingError::new("Unsupported"))
+                Err(DecodingError::new("Decoding RSA key from Protobuf is unsupported."))
             },
             keys_proto::KeyType::Secp256k1 => {
-                Err(DecodingError::new("Unsupported"))
+                Err(DecodingError::new("Decoding Secp256k1 key from Protobuf is unsupported."))
             },
         }
     }
