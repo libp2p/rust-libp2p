@@ -42,12 +42,7 @@ fn given_successful_registration_then_successful_discovery() {
             debug!("rendezvous swarm event: {:?}", next);
             match next {
                 SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
-                SwarmEvent::ConnectionClosed {
-                    peer_id,
-                    endpoint,
-                    num_established,
-                    cause,
-                } => {
+                SwarmEvent::ConnectionClosed { peer_id, .. } => {
                     debug!("connection closed: {:?}", peer_id);
                     return;
                 }
