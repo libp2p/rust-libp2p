@@ -234,10 +234,10 @@ impl ProtocolsHandler for RendezvousHandler {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
                 }
                 Poll::Ready(Some(Err(e))) => {
-                    error!("Error when sending outbound: {:?}", e);
+                    panic!("Error when sending outbound: {:?}", e);
                 }
                 Poll::Ready(None) => {
-                    error!("Honestly no idea what to do if this happens");
+                    panic!("Honestly no idea what to do if this happens");
                 }
                 Poll::Pending => {
                     self.inbound_substream = InboundState::Reading(substream);
@@ -248,16 +248,20 @@ impl ProtocolsHandler for RendezvousHandler {
             }
             InboundState::PendingSend(mut substream, message) => {
                 match substream.poll_ready_unpin(cx) {
-                    Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
+                    Poll::Ready(Ok(())) => match substream.start_send_unpin(message.clone()) {
                         Ok(()) => {
                             self.inbound_substream = InboundState::PendingFlush(substream);
+                            // todo: remove this line/ figure out why i need to do this to keep it
+                            return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(
+                                message,
+                            )));
                         }
                         Err(e) => {
-                            return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                            panic!("pending send from inbound error: {:?}", e);
                         }
                     },
                     Poll::Ready(Err(e)) => {
-                        return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                        panic!("pending send from inbound error: {:?}", e);
                     }
                     Poll::Pending => {
                         self.keep_alive = KeepAlive::Yes;
@@ -269,7 +273,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 Poll::Ready(Ok(())) => {
                     self.inbound_substream = InboundState::Closing(substream);
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(ProtocolsHandlerEvent::Close(e)),
+                Poll::Ready(Err(e)) => panic!("pending send from inbound error: {:?}", e),
                 Poll::Pending => {
                     self.keep_alive = KeepAlive::Yes;
                     self.inbound_substream = InboundState::PendingFlush(substream);
@@ -286,7 +290,7 @@ impl ProtocolsHandler for RendezvousHandler {
                     self.inbound_substream = InboundState::Closing(substream);
                 }
             },
-            InboundState::Poisoned => self.outbound_substream = OutboundState::None,
+            InboundState::Poisoned => panic!("inbound poisoned"),
         }
 
         match std::mem::replace(&mut self.outbound_substream, OutboundState::Poisoned) {
@@ -307,12 +311,11 @@ impl ProtocolsHandler for RendezvousHandler {
                             self.outbound_substream = OutboundState::PendingFlush(substream);
                         }
                         Err(e) => {
-                            error!("Error when sending outbound: {:?}", e);
-                            return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                            panic!("Error when sending outbound: {:?}", e);
                         }
                     },
                     Poll::Ready(Err(e)) => {
-                        return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                        panic!("Error when sending outbound: {:?}", e);
                     }
                     Poll::Pending => {
                         self.keep_alive = KeepAlive::Yes;
@@ -325,8 +328,7 @@ impl ProtocolsHandler for RendezvousHandler {
                     self.outbound_substream = OutboundState::WaitForRemote(substream)
                 }
                 Poll::Ready(Err(e)) => {
-                    error!("Error when flushing outbound: {:?}", e);
-                    return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                    panic!("Error when flushing outbound: {:?}", e);
                 }
                 Poll::Pending => {
                     self.keep_alive = KeepAlive::Yes;
@@ -339,13 +341,13 @@ impl ProtocolsHandler for RendezvousHandler {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
                 }
                 Poll::Ready(Some(Err(e))) => {
-                    self.outbound_substream = OutboundState::Closing(substream);
-                    error!("Error when receiving message from outbound: {:?}", e)
+                    panic!("Error when receiving message from outbound: {:?}", e)
                 }
                 Poll::Ready(None) => {
-                    error!("Honestly no idea what to do if this happens");
+                    panic!("Honestly no idea what to do if this happens");
                 }
                 Poll::Pending => {
+                    self.keep_alive = KeepAlive::Yes;
                     self.outbound_substream = OutboundState::WaitForRemote(substream);
                 }
             },
@@ -361,10 +363,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 }
             },
             OutboundState::Poisoned => {
-                self.outbound_substream = {
-                    error!("outbound poisoned");
-                    OutboundState::Poisoned
-                }
+                panic!("outbound poisoned");
             }
         }
 

@@ -139,10 +139,10 @@ impl NetworkBehaviour for Rendezvous {
             Message::Register(new_registration) => {
                 let (namespace, ttl) = self.registrations.add(new_registration);
 
-                // emit behaviour event
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::PeerRegistered { peer_id, namespace },
-                ));
+                // // emit behaviour event
+                // self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                //     Event::PeerRegistered { peer_id, namespace },
+                // ));
 
                 // notify the handler that to send a response
                 self.events

@@ -3,7 +3,7 @@ use libp2p_core::{peer_record, signed_envelope, AuthenticatedPeerRecord, SignedE
 use std::convert::{TryFrom, TryInto};
 use unsigned_varint::codec::UviBytes;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Register(NewRegistration),
     RegisterResponse {
@@ -30,7 +30,7 @@ pub enum Message {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewRegistration {
     pub namespace: String,
     pub record: AuthenticatedPeerRecord,
@@ -63,7 +63,7 @@ pub struct Registration {
     pub ttl: i64, // TODO THEZ: This is useless as a relative value, need registration timestamp, this needs to be a unix timestamp or this is relative in remaining seconds
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ErrorCode {
     InvalidNamespace,
     InvalidSignedPeerRecord,
