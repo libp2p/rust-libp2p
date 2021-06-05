@@ -47,7 +47,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > the corresponding local ID has the role `Endpoint::Listener`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct LocalStreamId {
-    num: u32,
+    num: u64,
     role: Endpoint,
 }
 
@@ -63,7 +63,7 @@ impl fmt::Display for LocalStreamId {
 impl Hash for LocalStreamId {
     #![allow(clippy::derive_hash_xor_eq)]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u32(self.num);
+        state.write_u64(self.num);
     }
 }
 
@@ -76,17 +76,17 @@ impl nohash_hasher::IsEnabled for LocalStreamId {}
 /// [`RemoteStreamId::into_local()`].
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct RemoteStreamId {
-    num: u32,
+    num: u64,
     role: Endpoint,
 }
 
 impl LocalStreamId {
-    pub fn dialer(num: u32) -> Self {
+    pub fn dialer(num: u64) -> Self {
         Self { num, role: Endpoint::Dialer }
     }
 
     #[cfg(test)]
-    pub fn listener(num: u32) -> Self {
+    pub fn listener(num: u64) -> Self {
         Self { num, role: Endpoint::Listener }
     }
 
@@ -107,11 +107,11 @@ impl LocalStreamId {
 }
 
 impl RemoteStreamId {
-    fn dialer(num: u32) -> Self {
+    fn dialer(num: u64) -> Self {
         Self { num, role: Endpoint::Dialer }
     }
 
-    fn listener(num: u32) -> Self {
+    fn listener(num: u64) -> Self {
         Self { num, role: Endpoint::Listener }
     }
 
@@ -146,15 +146,15 @@ impl Frame<RemoteStreamId> {
 }
 
 pub struct Codec {
-    varint_decoder: codec::Uvi<u32>,
+    varint_decoder: codec::Uvi<u64>,
     decoder_state: CodecDecodeState,
 }
 
 #[derive(Debug, Clone)]
 enum CodecDecodeState {
     Begin,
-    HasHeader(u32),
-    HasHeaderAndLen(u32, usize),
+    HasHeader(u64),
+    HasHeaderAndLen(u64, usize),
     Poisoned,
 }
 
@@ -210,7 +210,7 @@ impl Decoder for Codec {
                     }
 
                     let buf = src.split_to(len);
-                    let num = (header >> 3) as u32;
+                    let num = (header >> 3) as u64;
                     let out = match header & 7 {
                         0 => Frame::Open { stream_id: RemoteStreamId::dialer(num) },
                         1 => Frame::Data { stream_id: RemoteStreamId::listener(num), data: buf.freeze() },
