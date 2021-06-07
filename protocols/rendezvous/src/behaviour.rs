@@ -13,6 +13,7 @@ use std::task::{Context, Poll};
 pub const DOMAIN: &str = "libp2p-rendezvous";
 
 pub struct Rendezvous {
+    role: String,
     events: VecDeque<NetworkBehaviourAction<Input, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
@@ -20,7 +21,7 @@ pub struct Rendezvous {
 }
 
 impl Rendezvous {
-    pub fn new(key_pair: Keypair, listen_addresses: Vec<Multiaddr>) -> Self {
+    pub fn new(key_pair: Keypair, listen_addresses: Vec<Multiaddr>, role: String) -> Self {
         let peer_record = PeerRecord {
             peer_id: key_pair.public().into_peer_id(),
             seq: 0,
@@ -28,6 +29,7 @@ impl Rendezvous {
         };
 
         Self {
+            role,
             events: Default::default(),
             registrations: Registrations::new(),
             key_pair,
@@ -135,7 +137,7 @@ impl NetworkBehaviour for Rendezvous {
         _connection: ConnectionId,
         event: crate::handler::HandlerEvent,
     ) {
-        debug!("behaviour::inject_event {:?}", &event);
+        debug!("{}: behaviour::inject_event {:?}", &self.role, &event);
         match event {
             crate::handler::HandlerEvent::Message(msg) => {
                 match msg {
@@ -226,7 +228,10 @@ impl NetworkBehaviour for Rendezvous {
             Self::OutEvent,
         >,
     > {
-        debug!("polling behaviour events: {:?}", &self.events);
+        debug!(
+            " {}: polling behaviour events: {:?}",
+            &self.role, &self.events
+        );
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

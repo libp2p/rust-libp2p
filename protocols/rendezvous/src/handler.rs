@@ -207,7 +207,8 @@ impl ProtocolsHandler for RendezvousHandler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        //todo: fix this
+        KeepAlive::Yes
     }
 
     fn poll(
@@ -233,6 +234,7 @@ impl ProtocolsHandler for RendezvousHandler {
             InboundState::None => self.inbound_substream = InboundState::None,
             InboundState::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
+                    debug!("read message from inbound {:?}", msg);
                     self.inbound_substream = InboundState::WaitForBehaviour(substream);
                     if let Message::Register(..)
                     | Message::Discover { .. }
@@ -264,6 +266,7 @@ impl ProtocolsHandler for RendezvousHandler {
                         Ok(()) => {
                             self.inbound_substream = InboundState::PendingFlush(substream);
                             // todo: remove this line/ figure out why i need to do this to keep it
+                            // todo: move the flush code into here as start_send_unpin does not send/does not trigger IO/wake
                             return Poll::Ready(ProtocolsHandlerEvent::Custom(
                                 HandlerEvent::ResponseSent,
                             ));
