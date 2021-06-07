@@ -105,7 +105,6 @@ pub enum Event {
         peer_id: PeerId,
         namespace: String,
     },
-    ResponseSent,
 }
 
 impl NetworkBehaviour for Rendezvous {
@@ -138,83 +137,73 @@ impl NetworkBehaviour for Rendezvous {
         event: crate::handler::HandlerEvent,
     ) {
         debug!("{}: behaviour::inject_event {:?}", &self.role, &event);
-        match event {
-            crate::handler::HandlerEvent::Message(msg) => {
-                match msg {
-                    Message::Register(new_registration) => {
-                        let (namespace, ttl) = self.registrations.add(new_registration);
+        match event.0 {
+            Message::Register(new_registration) => {
+                let (namespace, ttl) = self.registrations.add(new_registration);
 
-                        // notify the handler that to send a response
-                        self.events
-                            .push_back(NetworkBehaviourAction::NotifyHandler {
-                                peer_id,
-                                handler: NotifyHandler::Any,
-                                event: Input::RegisterResponse { ttl },
-                            });
+                // notify the handler that to send a response
+                self.events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        handler: NotifyHandler::Any,
+                        event: Input::RegisterResponse { ttl },
+                    });
 
-                        // emit behaviour event
-                        self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            Event::PeerRegistered { peer_id, namespace },
-                        ));
-                    }
-                    Message::RegisterResponse { ttl } => {
-                        self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            Event::RegisteredWithRendezvousNode {
-                                rendezvous_node: peer_id,
-                                ttl,
+                // emit behaviour event
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerRegistered { peer_id, namespace },
+                ));
+            }
+            Message::RegisterResponse { ttl } => self.events.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::RegisteredWithRendezvousNode {
+                    rendezvous_node: peer_id,
+                    ttl,
+                }),
+            ),
+            Message::FailedToRegister { error } => self.events.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::FailedToRegisterWithRendezvousNode {
+                    rendezvous_node: peer_id,
+                    err_code: error,
+                }),
+            ),
+            Message::Unregister { namespace } => {
+                self.registrations.remove(namespace, peer_id);
+                // TODO: Should send unregister response?
+            }
+            Message::Discover { namespace } => {
+                let registrations = self.registrations.get(namespace);
+
+                if let Some(registrations) = registrations {
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::Any,
+                            event: Input::DiscoverResponse {
+                                discovered: registrations,
                             },
-                        ))
-                    }
-                    Message::FailedToRegister { error } => {
-                        self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            Event::FailedToRegisterWithRendezvousNode {
-                                rendezvous_node: peer_id,
-                                err_code: error,
-                            },
-                        ))
-                    }
-                    Message::Unregister { namespace } => {
-                        self.registrations.remove(namespace, peer_id);
-                        // TODO: Should send unregister response?
-                    }
-                    Message::Discover { namespace } => {
-                        let registrations = self.registrations.get(namespace);
-
-                        if let Some(registrations) = registrations {
-                            self.events
-                                .push_back(NetworkBehaviourAction::NotifyHandler {
-                                    peer_id,
-                                    handler: NotifyHandler::Any,
-                                    event: Input::DiscoverResponse {
-                                        discovered: registrations,
-                                    },
-                                })
-                        } else {
-                            self.events
-                                .push_back(NetworkBehaviourAction::NotifyHandler {
-                                    peer_id,
-                                    handler: NotifyHandler::Any,
-                                    event: Input::DiscoverResponse { discovered: vec![] },
-                                })
-                        }
-                    }
-                    Message::DiscoverResponse { registrations } => self.events.push_back(
-                        NetworkBehaviourAction::GenerateEvent(Event::Discovered {
-                            rendezvous_node: peer_id,
-                            registrations,
-                        }),
-                    ),
-                    Message::FailedToDiscover { error } => self.events.push_back(
-                        NetworkBehaviourAction::GenerateEvent(Event::FailedToDiscover {
-                            rendezvous_node: peer_id,
-                            err_code: error,
-                        }),
-                    ),
+                        })
+                } else {
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::Any,
+                            event: Input::DiscoverResponse { discovered: vec![] },
+                        })
                 }
             }
-            crate::handler::HandlerEvent::ResponseSent => self
-                .events
-                .push_back(NetworkBehaviourAction::GenerateEvent(Event::ResponseSent)),
+            Message::DiscoverResponse { registrations } => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Discovered {
+                        rendezvous_node: peer_id,
+                        registrations,
+                    }))
+            }
+            Message::FailedToDiscover { error } => self.events.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::FailedToDiscover {
+                    rendezvous_node: peer_id,
+                    err_code: error,
+                }),
+            ),
         }
     }
 

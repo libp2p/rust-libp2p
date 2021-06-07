@@ -34,10 +34,7 @@ impl RendezvousHandler {
 }
 
 #[derive(Debug)]
-pub enum HandlerEvent {
-    Message(Message),
-    ResponseSent,
-}
+pub struct HandlerEvent(pub Message);
 
 #[derive(Debug)]
 pub enum Input {
@@ -78,12 +75,11 @@ enum InboundState {
 
 impl InboundState {
     // TODO: See if we can refactor this such that we don't need to assign `self` in so many branches
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ProtocolsHandlerEvent<
-        protocol::Rendezvous,
-        Message,
-        HandlerEvent,
-        crate::codec::Error,
-    >> {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, HandlerEvent, crate::codec::Error>>
+    {
         loop {
             match std::mem::replace(self, InboundState::Poisoned) {
                 InboundState::None => {
@@ -100,9 +96,7 @@ impl InboundState {
                         | Message::Discover { .. }
                         | Message::Unregister { .. } = msg
                         {
-                            return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent::Message(
-                                msg,
-                            )));
+                            return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
                         } else {
                             panic!("Invalid inbound message");
                         }
@@ -129,9 +123,9 @@ impl InboundState {
                                 *self = InboundState::PendingFlush(substream);
                                 // todo: remove this line/ figure out why i need to do this to keep it
                                 // todo: move the flush code into here as start_send_unpin does not send/does not trigger IO/wake
-                                return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                                    HandlerEvent::ResponseSent,
-                                ));
+                                return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(
+                                    message,
+                                )));
                             }
                             Err(e) => {
                                 panic!("pending send from inbound error: {:?}", e);
@@ -189,12 +183,11 @@ enum OutboundState {
 }
 
 impl OutboundState {
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ProtocolsHandlerEvent<
-        protocol::Rendezvous,
-        Message,
-        HandlerEvent,
-        crate::codec::Error,
-    >> {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, HandlerEvent, crate::codec::Error>>
+    {
         loop {
             match std::mem::replace(self, OutboundState::Poisoned) {
                 OutboundState::None => {
@@ -230,44 +223,46 @@ impl OutboundState {
                         }
                     }
                 }
-                OutboundState::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
-                    Poll::Ready(Ok(())) => {
-                        *self = OutboundState::WaitForRemote(substream)
-                    }
-                    Poll::Ready(Err(e)) => {
-                        panic!("Error when flushing outbound: {:?}", e);
-                    }
-                    Poll::Pending => {
-                        *self = OutboundState::PendingFlush(substream);
-                        return Poll::Pending;
-                    }
-                },
-                OutboundState::WaitForRemote(mut substream) => match substream.poll_next_unpin(cx) {
-                    Poll::Ready(Some(Ok(msg))) => {
-                        *self = OutboundState::Closing(substream);
-                        if let Message::DiscoverResponse { .. }
-                        | Message::RegisterResponse { .. }
-                        | Message::FailedToDiscover { .. }
-                        | Message::FailedToRegister { .. } = msg
-                        {
-                            return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent::Message(
-                                msg,
-                            )));
-                        } else {
-                            panic!("Invalid inbound message");
+                OutboundState::PendingFlush(mut substream) => {
+                    match substream.poll_flush_unpin(cx) {
+                        Poll::Ready(Ok(())) => *self = OutboundState::WaitForRemote(substream),
+                        Poll::Ready(Err(e)) => {
+                            panic!("Error when flushing outbound: {:?}", e);
+                        }
+                        Poll::Pending => {
+                            *self = OutboundState::PendingFlush(substream);
+                            return Poll::Pending;
                         }
                     }
-                    Poll::Ready(Some(Err(e))) => {
-                        panic!("Error when receiving message from outbound: {:?}", e)
+                }
+                OutboundState::WaitForRemote(mut substream) => {
+                    match substream.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(msg))) => {
+                            *self = OutboundState::Closing(substream);
+                            if let Message::DiscoverResponse { .. }
+                            | Message::RegisterResponse { .. }
+                            | Message::FailedToDiscover { .. }
+                            | Message::FailedToRegister { .. } = msg
+                            {
+                                return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(
+                                    msg,
+                                )));
+                            } else {
+                                panic!("Invalid inbound message");
+                            }
+                        }
+                        Poll::Ready(Some(Err(e))) => {
+                            panic!("Error when receiving message from outbound: {:?}", e)
+                        }
+                        Poll::Ready(None) => {
+                            panic!("Honestly no idea what to do if this happens");
+                        }
+                        Poll::Pending => {
+                            *self = OutboundState::WaitForRemote(substream);
+                            return Poll::Pending;
+                        }
                     }
-                    Poll::Ready(None) => {
-                        panic!("Honestly no idea what to do if this happens");
-                    }
-                    Poll::Pending => {
-                        *self = OutboundState::WaitForRemote(substream);
-                        return Poll::Pending;
-                    }
-                },
+                }
                 OutboundState::Closing(mut substream) => match substream.poll_close_unpin(cx) {
                     Poll::Ready(..) => {
                         *self = OutboundState::None;
@@ -337,11 +332,11 @@ impl ProtocolsHandler for RendezvousHandler {
             (
                 Input::RegisterRequest {
                     request:
-                    NewRegistration {
-                        namespace,
-                        record,
-                        ttl,
-                    },
+                        NewRegistration {
+                            namespace,
+                            record,
+                            ttl,
+                        },
                 },
                 inbound,
                 OutboundState::None,
