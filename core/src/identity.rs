@@ -115,6 +115,37 @@ impl Keypair {
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
         }
     }
+
+    /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
+        use prost::Message;
+
+        let mut private_key = keys_proto::PrivateKey::decode(bytes)
+            .map_err(|e| DecodingError::new("Protobuf").source(e))
+            .map(zeroize::Zeroizing::new)?;
+
+        let key_type = keys_proto::KeyType::from_i32(private_key.r#type)
+            .ok_or_else(|| DecodingError::new(format!("unknown key type: {}", private_key.r#type)))?;
+
+        match key_type {
+            keys_proto::KeyType::Ed25519 => {
+                ed25519::Keypair::decode(&mut private_key.data).map(Keypair::Ed25519)
+            },
+            keys_proto::KeyType::Rsa => {
+                Err(DecodingError::new("Decoding RSA key from Protobuf is unsupported."))
+            },
+            keys_proto::KeyType::Secp256k1 => {
+                Err(DecodingError::new("Decoding Secp256k1 key from Protobuf is unsupported."))
+            },
+        }
+    }
+}
+
+impl zeroize::Zeroize for keys_proto::PrivateKey {
+    fn zeroize(&mut self) {
+        self.r#type.zeroize();
+        self.data.zeroize();
+    }
 }
 
 /// The public key of a node's identity keypair.
@@ -219,3 +250,22 @@ impl PublicKey {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn keypair_from_protobuf_encoding() {
+        // E.g. retrieved from an IPFS config file.
+        let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
+        let expected_peer_id = PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
+
+        let encoded = base64::decode(base_64_encoded).unwrap();
+
+        let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
+        let peer_id = keypair.public().into_peer_id();
+
+        assert_eq!(expected_peer_id, peer_id);
+    }
+}
