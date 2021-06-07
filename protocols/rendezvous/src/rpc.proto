@@ -12,14 +12,14 @@ message Message {
   }
 
   enum ResponseStatus {
-    OK                            = 0;
-    E_INVALID_NAMESPACE           = 100;
-    E_INVALID_SIGNED_PEER_RECORD  = 101;
-    E_INVALID_TTL                 = 102;
-    E_INVALID_COOKIE              = 103;
-    E_NOT_AUTHORIZED              = 200;
-    E_INTERNAL_ERROR              = 300;
-    E_UNAVAILABLE                 = 400;
+    OK = 0;
+    E_INVALID_NAMESPACE = 100;
+    E_INVALID_SIGNED_PEER_RECORD = 101;
+    E_INVALID_TTL = 102;
+    E_INVALID_COOKIE = 103;
+    E_NOT_AUTHORIZED = 200;
+    E_INTERNAL_ERROR = 300;
+    E_UNAVAILABLE = 400;
   }
 
   message Register {

@@ -115,7 +115,16 @@ impl RendezvousTest {
     }
 
     pub async fn assert_successful_registration(&mut self, namespace: String) {
-        match await_events_or_timeout(self.rendezvous_swarm.next_event(), self.registration_swarm.next_event()).await {
+        let rendezvous_swarm = &mut self.rendezvous_swarm;
+        let reggo_swarm = &mut self.registration_swarm;
+
+        match await_events_or_timeout(async {
+            let event = rendezvous_swarm.next_event().await;
+            dbg!(event)
+        }, async {
+            let event = reggo_swarm.next_event().await;
+            dbg!(event)
+        }).await {
             (
                 rendezvous_swarm_event,
                 registration_swarm_event,

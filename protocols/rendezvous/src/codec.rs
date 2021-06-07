@@ -146,10 +146,10 @@ impl From<Message> for wire::Message {
 
         match message {
             Message::Register(NewRegistration {
-                namespace,
-                record,
-                ttl,
-            }) => wire::Message {
+                                  namespace,
+                                  record,
+                                  ttl,
+                              }) => wire::Message {
                 r#type: Some(MessageType::Register.into()),
                 register: Some(Register {
                     ns: Some(namespace),
@@ -257,11 +257,11 @@ impl TryFrom<wire::Message> for Message {
             wire::Message {
                 r#type: Some(0),
                 register:
-                    Some(Register {
-                        ns,
-                        ttl,
-                        signed_peer_record: Some(signed_peer_record),
-                    }),
+                Some(Register {
+                         ns,
+                         ttl,
+                         signed_peer_record: Some(signed_peer_record),
+                     }),
                 ..
             } => Message::Register(NewRegistration {
                 namespace: ns.ok_or(ConversionError::MissingNamespace)?,
@@ -273,11 +273,11 @@ impl TryFrom<wire::Message> for Message {
             wire::Message {
                 r#type: Some(1),
                 register_response:
-                    Some(RegisterResponse {
-                        status: Some(0),
-                        ttl,
-                        ..
-                    }),
+                Some(RegisterResponse {
+                         status: Some(0),
+                         ttl,
+                         ..
+                     }),
                 ..
             } => Message::RegisterResponse {
                 ttl: ttl.ok_or(ConversionError::MissingTtl)?,
@@ -290,11 +290,11 @@ impl TryFrom<wire::Message> for Message {
             wire::Message {
                 r#type: Some(4),
                 discover_response:
-                    Some(DiscoverResponse {
-                        registrations,
-                        status: Some(0),
-                        ..
-                    }),
+                Some(DiscoverResponse {
+                         registrations,
+                         status: Some(0),
+                         ..
+                     }),
                 ..
             } => Message::DiscoverResponse {
                 registrations: registrations
@@ -317,10 +317,10 @@ impl TryFrom<wire::Message> for Message {
             wire::Message {
                 r#type: Some(1),
                 register_response:
-                    Some(RegisterResponse {
-                        status: Some(error_code),
-                        ..
-                    }),
+                Some(RegisterResponse {
+                         status: Some(error_code),
+                         ..
+                     }),
                 ..
             } => Message::FailedToRegister {
                 error: wire::message::ResponseStatus::from_i32(error_code)
@@ -337,10 +337,10 @@ impl TryFrom<wire::Message> for Message {
             wire::Message {
                 r#type: Some(4),
                 discover_response:
-                    Some(DiscoverResponse {
-                        status: Some(error_code),
-                        ..
-                    }),
+                Some(DiscoverResponse {
+                         status: Some(error_code),
+                         ..
+                     }),
                 ..
             } => Message::FailedToDiscover {
                 error: wire::message::ResponseStatus::from_i32(error_code)

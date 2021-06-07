@@ -96,39 +96,42 @@ where
     <BA as NetworkBehaviour>::OutEvent: Debug,
     <BB as NetworkBehaviour>::OutEvent: Debug,
 {
-    let mut alice_connected = false;
-    let mut bob_connected = false;
-
-    while !alice_connected && !bob_connected {
-        let (recv_event, dial_event) =
-            future::join(receiver.next_event(), dialer.next_event()).await;
-
-        match recv_event {
-            SwarmEvent::ConnectionEstablished { .. } => {
-                alice_connected = true;
-            }
-            SwarmEvent::NewListenAddr(addr) => {
-                dialer.dial_addr(addr).unwrap();
-            }
-            SwarmEvent::Behaviour(event) => {
-                panic!(
-                    "alice unexpectedly emitted a behaviour event during connection: {:?}",
-                    event
-                );
-            }
-            _ => {}
-        }
-        match dial_event {
-            SwarmEvent::ConnectionEstablished { .. } => {
-                bob_connected = true;
-            }
-            SwarmEvent::Behaviour(event) => {
-                panic!(
-                    "bob unexpectedly emitted a behaviour event during connection: {:?}",
-                    event
-                );
-            }
-            _ => {}
+    loop {
+        if let SwarmEvent::NewListenAddr(addr) = receiver.next_event().await {
+            dialer.dial_addr(addr).unwrap();
+            break;
         }
     }
+
+    future::join(async move {
+        loop {
+            match receiver.next_event().await {
+                SwarmEvent::ConnectionEstablished { .. } => {
+                    break;
+                }
+                SwarmEvent::Behaviour(event) => {
+                    panic!(
+                        "receiver unexpectedly emitted a behaviour event during connection: {:?}",
+                        event
+                    );
+                }
+                _ => {}
+            }
+        }
+    }, async move {
+        loop {
+            match dialer.next_event().await {
+                SwarmEvent::ConnectionEstablished { .. } => {
+                    break;
+                }
+                SwarmEvent::Behaviour(event) => {
+                    panic!(
+                        "dialer unexpectedly emitted a behaviour event during connection: {:?}",
+                        event
+                    );
+                }
+                _ => {}
+            }
+        }
+    }).await;
 }
