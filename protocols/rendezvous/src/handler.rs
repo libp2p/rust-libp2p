@@ -77,6 +77,7 @@ enum InboundState {
 }
 
 impl InboundState {
+    // TODO: See if we can refactor this such that we don't need to assign `self` in so many branches
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ProtocolsHandlerEvent<
         protocol::Rendezvous,
         Message,
