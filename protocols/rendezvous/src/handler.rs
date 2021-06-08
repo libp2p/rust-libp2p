@@ -410,8 +410,6 @@ impl ProtocolsHandler for RendezvousHandler {
             _ => unreachable!("Handler in invalid state"),
         };
 
-        debug!("inbound: {:?}", inbound_substream);
-        debug!("outbound: {:?}", outbound_substream);
         self.inbound_substream = inbound_substream;
         self.outbound_substream = outbound_substream;
     }
