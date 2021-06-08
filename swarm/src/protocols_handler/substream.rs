@@ -227,7 +227,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+    use crate::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
     use libp2p_core::connection::ConnectionId;
     use libp2p_core::{Multiaddr, PeerId};
     use std::task::{Context, Poll};
@@ -294,7 +294,33 @@ mod tests {
         }
 
         fn inject_event(&mut self, peer_id: PeerId, connection: ConnectionId, event: OutEvent<()>) {
-            todo!()
+            let substream_id = match event {
+                OutEvent::Message { substream, message } => substream,
+            };
+
+            let unique_id_of_substream = (peer_id, connection, substream_id);
+
+            // ------- how to open a new substream
+
+            let make_new_substream = NetworkBehaviourAction::<_, ()>::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::Any,
+                event: InEvent::<_, ()>::NewSubstream { open_info: () },
+            };
+
+            // ------- how to notify a specific substream
+
+            let (peer_id, connection_id, substream_id) =
+                todo!("grab 'unique-id' from a hashmap in self of some sorts");
+
+            let notify_specific_substream = NetworkBehaviourAction::<_, ()>::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(connection_id),
+                event: InEvent::<(), _>::NotifySubstream {
+                    substream: substream_id,
+                    message: (),
+                },
+            };
         }
 
         fn poll(
