@@ -30,7 +30,6 @@ prost-build = "0.7"
 
 [dev-dependencies]
 env_logger = "0.8.3"
-hex = "0.4.2"
 structopt = "0.3.21"
 libp2p = { path = "../.." }
 libp2p-kad = { path = "../kad" }
