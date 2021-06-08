@@ -10,11 +10,12 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.29", path = "../../core" }
-libp2p-swarm = { version = "0.30", path = "../../swarm" }
-futures = "0.3.1"
 asynchronous-codec = "0.6"
 bytes = "1"
+futures = "0.3.1"
+futures-timer = "3.0"
+libp2p-core = { version = "0.29", path = "../../core" }
+libp2p-swarm = { version = "0.30", path = "../../swarm" }
 prost = "0.7"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 

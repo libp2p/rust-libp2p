@@ -100,11 +100,30 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_event(
         &mut self,
-        _event_source: PeerId,
-        _connection: ConnectionId,
+        event_source: PeerId,
+        connection: ConnectionId,
         handler_event: handler::Event,
     ) {
-        todo!()
+        match handler_event {
+            handler::Event::InboundConnectReq(inbound_connect) => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: event_source,
+                        handler: NotifyHandler::One(connection),
+                        event: handler::In::AcceptInboundConnect {
+                            inbound_connect,
+                            obs_addrs: vec![],
+                        },
+                    });
+            }
+            handler::Event::InboundConnectNeg(remote_addrs) => {
+                self.queued_actions.push_back(NetworkBehaviourAction::DialAddress {
+                    // TODO: Handle empty addresses.
+                    // TODO: What about the other addresses?
+                    address: remote_addrs.into_iter().next().unwrap(),
+                });
+            }
+        }
     }
 
     fn poll(
@@ -113,9 +132,19 @@ impl NetworkBehaviour for Behaviour {
         poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<handler::In, Self::OutEvent>> {
         if let Some(mut event) = self.queued_actions.pop_front() {
-            // Set external addresses in [`AcceptReservationReq`].
+            // Set obs addresses.
             if let NetworkBehaviourAction::NotifyHandler {
-                event: handler::In::Connect { ref mut obs_addrs, .. },
+                event:
+                    handler::In::Connect {
+                        ref mut obs_addrs, ..
+                    },
+                ..
+            }
+            | NetworkBehaviourAction::NotifyHandler {
+                event:
+                    handler::In::AcceptInboundConnect {
+                        ref mut obs_addrs, ..
+                    },
                 ..
             } = &mut event
             {

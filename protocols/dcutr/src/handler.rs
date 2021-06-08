@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol;
+use futures::future::{BoxFuture, FutureExt};
+use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
@@ -29,13 +31,21 @@ use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
 pub enum In {
-    Connect { obs_addrs: Vec<Multiaddr> },
+    Connect {
+        obs_addrs: Vec<Multiaddr>,
+    },
     // TODO: Needs both the inbound stream and the observed addresses.
-    AcceptInboundConnect(()),
+    AcceptInboundConnect {
+        obs_addrs: Vec<Multiaddr>,
+        inbound_connect: protocol::InboundConnect,
+    },
 }
 
 pub enum Event {
-    InboundConnect(protocol::InboundConnect),
+    InboundConnectReq(protocol::InboundConnect),
+    // TODO: Rename to InboundConnectNegotiated?
+    InboundConnectNeg(Vec<Multiaddr>),
+    OutboundConnectNeg(Vec<Multiaddr>),
 }
 
 // TODO: Detour through Prototype needed?
@@ -53,6 +63,7 @@ impl IntoProtocolsHandler for Prototype {
     fn into_handler(self, _remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
         Handler {
             queued_events: Default::default(),
+            inbound_connects: Default::default(),
         }
     }
 
@@ -71,6 +82,9 @@ pub struct Handler {
             <Self as ProtocolsHandler>::Error,
         >,
     >,
+
+    inbound_connects:
+        FuturesUnordered<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::InboundUpgradeError>>>,
 }
 
 impl ProtocolsHandler for Handler {
@@ -92,28 +106,40 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
     ) {
         self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnect(
+            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnectReq(
                 inbound_connect,
             )));
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _output: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
+        remote_addrs: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
-        todo!()
+        self.queued_events
+            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnectReq(
+                inbound_connect,
+            )));
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
-            In::Connect {obs_addrs} => {
+            In::Connect { obs_addrs } => {
                 self.queued_events
                     .push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(protocol::OutboundUpgrade::new(obs_addrs), ()),
+                        protocol: SubstreamProtocol::new(
+                            protocol::OutboundUpgrade::new(obs_addrs),
+                            (),
+                        ),
                     });
             }
-            In::AcceptInboundConnect(_) => todo!(),
+            In::AcceptInboundConnect {
+                inbound_connect,
+                obs_addrs,
+            } => {
+                self.inbound_connects
+                    .push(inbound_connect.accept(obs_addrs).boxed());
+            }
         }
     }
 
@@ -141,7 +167,7 @@ impl ProtocolsHandler for Handler {
 
     fn poll(
         &mut self,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
@@ -153,6 +179,10 @@ impl ProtocolsHandler for Handler {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        while let Poll::Ready(Some(remote_addrs)) = self.inbound_connects.poll_next_unpin(cx) {
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::InboundConnectNeg(remote_addrs.unwrap())))
         }
 
         Poll::Pending

@@ -20,7 +20,7 @@
 
 use crate::message_proto::{hole_punch, HolePunch};
 use asynchronous_codec::{Framed, FramedParts};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
@@ -31,6 +31,8 @@ use std::fmt;
 use std::io::Cursor;
 use std::iter;
 use unsigned_varint::codec::UviBytes;
+use std::time::{Duration, Instant};
+use futures_timer::Delay;
 
 const PROTOCOL_NAME: &[u8; 15] = b"/libp2p/connect";
 
@@ -51,9 +53,7 @@ impl upgrade::UpgradeInfo for OutboundUpgrade {
 
 impl OutboundUpgrade {
     pub fn new(obs_addrs: Vec<Multiaddr>) -> Self {
-        Self {
-            obs_addrs
-        }
+        Self { obs_addrs }
     }
 }
 
@@ -68,7 +68,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
             obs_addrs: self.obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
-        let mut encoded_msg = Vec::new();
+        let mut encoded_msg = BytesMut::new();
         msg.encode(&mut encoded_msg)
             // TODO: Double check. Safe to panic here?
             .expect("all the mandatory fields are always filled; QED");
@@ -79,14 +79,21 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(encoded_msg)).await?;
+            substream.send(encoded_msg.freeze()).await?;
+
+            // TODO: Should we do this before or after flushing?
+            let sent_time = Instant::now();
+
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
                 .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
+            let rtt = sent_time.elapsed();
+
             let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
 
+            // TODO: Unwrap safe here?
             let r#type = hole_punch::Type::from_i32(r#type.unwrap())
                 .ok_or(OutboundUpgradeError::ParseTypeField)?;
             match r#type {
@@ -104,78 +111,24 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
                     .map_err(|_| OutboundUpgradeError::InvalidAddrs)?
             };
 
-            todo!("why not do the whole negotiation including the wait for 1/2 RTT in here?");
+            let msg = HolePunch {
+                r#type: Some(hole_punch::Type::Sync.into()),
+                obs_addrs: vec![],
+            };
+
+            let mut encoded_msg = BytesMut::new();
+            msg.encode(&mut encoded_msg)
+            // TODO: Double check. Safe to panic here?
+                .expect("all the mandatory fields are always filled; QED");
+
+            substream.send(encoded_msg.freeze()).await?;
+
+            Delay::new(rtt / 2).await;
 
             Ok(Connect { obs_addrs })
         }
         .boxed()
     }
-}
-
-pub struct InboundUpgrade {}
-
-impl upgrade::UpgradeInfo for InboundUpgrade {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(PROTOCOL_NAME)
-    }
-}
-
-impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
-    type Output = InboundConnect;
-    type Error = InboundUpgradeError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let codec = UviBytes::<bytes::Bytes>::default();
-        // TODO: Needed?
-        // codec.set_max_len(MAX_MESSAGE_SIZE);
-        let mut substream = Framed::new(substream, codec);
-
-        async move {
-            let msg: bytes::BytesMut = substream
-                .next()
-                .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
-
-            let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
-
-            let obs_addrs = if obs_addrs.is_empty() {
-                return Err(InboundUpgradeError::NoAddresses);
-            } else {
-                obs_addrs
-                    .into_iter()
-                    .map(TryFrom::try_from)
-                    .collect::<Result<Vec<Multiaddr>, _>>()
-                    .map_err(|_| InboundUpgradeError::InvalidAddrs)?
-            };
-
-            let r#type = hole_punch::Type::from_i32(r#type.unwrap())
-                .ok_or(InboundUpgradeError::ParseTypeField)?;
-
-            match r#type {
-                hole_punch::Type::Connect => {}
-                hole_punch::Type::Sync => return Err(InboundUpgradeError::UnexpectedTypeSync),
-            }
-
-            Ok(InboundConnect {
-                substream,
-                obs_addrs,
-            })
-        }
-        .boxed()
-    }
-}
-
-pub struct Connect {
-    obs_addrs: Vec<Multiaddr>,
-}
-
-pub struct InboundConnect {
-    substream: Framed<NegotiatedSubstream, UviBytes>,
-    obs_addrs: Vec<Multiaddr>,
 }
 
 #[derive(Debug)]
@@ -260,6 +213,110 @@ impl error::Error for OutboundUpgradeError {
             OutboundUpgradeError::UnexpectedTypeSync => None,
             OutboundUpgradeError::ParseStatusField => None,
         }
+    }
+}
+
+pub struct InboundUpgrade {}
+
+impl upgrade::UpgradeInfo for InboundUpgrade {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(PROTOCOL_NAME)
+    }
+}
+
+impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
+    type Output = InboundConnect;
+    type Error = InboundUpgradeError;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+    fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+        let codec = UviBytes::default();
+        // TODO: Needed?
+        // codec.set_max_len(MAX_MESSAGE_SIZE);
+        let mut substream = Framed::new(substream, codec);
+
+        async move {
+            let msg: bytes::BytesMut = substream
+                .next()
+                .await
+                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+
+            let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
+
+            let obs_addrs = if obs_addrs.is_empty() {
+                return Err(InboundUpgradeError::NoAddresses);
+            } else {
+                obs_addrs
+                    .into_iter()
+                    .map(TryFrom::try_from)
+                    .collect::<Result<Vec<Multiaddr>, _>>()
+                    .map_err(|_| InboundUpgradeError::InvalidAddrs)?
+            };
+
+            let r#type = hole_punch::Type::from_i32(r#type.unwrap())
+                .ok_or(InboundUpgradeError::ParseTypeField)?;
+
+            match r#type {
+                hole_punch::Type::Connect => {}
+                hole_punch::Type::Sync => return Err(InboundUpgradeError::UnexpectedTypeSync),
+            }
+
+            Ok(InboundConnect {
+                substream,
+                remote_obs_addrs: obs_addrs,
+            })
+        }
+        .boxed()
+    }
+}
+
+// TODO: Should we rename this to OutboundConnect?
+pub struct Connect {
+    obs_addrs: Vec<Multiaddr>,
+}
+
+pub struct InboundConnect {
+    substream: Framed<NegotiatedSubstream, UviBytes>,
+    remote_obs_addrs: Vec<Multiaddr>,
+}
+
+impl InboundConnect {
+    // TODO: Should this really use InboundUpgradeError?
+    pub async fn accept(
+        mut self,
+        local_obs_addrs: Vec<Multiaddr>,
+    ) -> Result<Vec<Multiaddr>, InboundUpgradeError> {
+        let msg = HolePunch {
+            r#type: Some(hole_punch::Type::Connect.into()),
+            obs_addrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
+        };
+
+        let mut encoded_msg = BytesMut::new();
+        msg.encode(&mut encoded_msg)
+            // TODO: Double check. Safe to panic here?
+            .expect("all the mandatory fields are always filled; QED");
+
+        self.substream.send(encoded_msg.freeze()).await?;
+        let msg: bytes::BytesMut = self
+            .substream
+            .next()
+            .await
+            .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+
+        let HolePunch { r#type, .. } = HolePunch::decode(Cursor::new(msg))?;
+
+        // TODO: Unwrap safe here?
+        let r#type = hole_punch::Type::from_i32(r#type.unwrap())
+            .ok_or(InboundUpgradeError::ParseTypeField)?;
+        match r#type {
+            hole_punch::Type::Connect => return Err(InboundUpgradeError::UnexpectedTypeConnect),
+            hole_punch::Type::Sync => {}
+        }
+
+        Ok(self.remote_obs_addrs)
     }
 }
 
