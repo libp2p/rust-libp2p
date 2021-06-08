@@ -65,18 +65,21 @@ enum Next<S, E> {
     Continue { next_state: S },
 }
 
-/// State of the inbound substream, opened either by us or by the remote.
+/// The state of an inbound substream (i.e. the remote node opened it).
 enum InboundState {
+    /// There is no substream.
     None,
-    /// Waiting for behaviour to respond to the inbound substream
+    /// We are in the process of reading a message from the substream.
     Reading(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// Waiting for behaviour to respond to the inbound substream
+    /// We read a message, dispatched it to the behaviour and are waiting for the response.
     WaitForBehaviour(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// Waiting to send response to remote
+    /// We are in the process of sending a response.
     PendingSend(Framed<NegotiatedSubstream, RendezvousCodec>, Message),
+    /// We started sending and are currently flushing the data out.
     PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
+    /// We've sent the message and are now closing down the substream.
     Closing(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// An error occurred during processing.
+    /// Something went seriously wrong.
     Poisoned,
 }
 
@@ -177,19 +180,23 @@ impl InboundState {
     }
 }
 
-/// State of the outbound substream, opened either by us or by the remote.
+/// The state of an outbound substream (i.e. we opened it).
 enum OutboundState {
+    /// There is no substream.
     None,
+    /// We got a message to send from the behaviour.
     Start(Message),
+    /// We've requested a substream and are waiting for it to be set up.
     WaitingUpgrade,
-    /// Waiting to send a message to the remote.
+    /// We got the substream, now we need to send the message.
     PendingSend(Framed<NegotiatedSubstream, RendezvousCodec>, Message),
-    /// Waiting to flush the substream so that the data arrives to the remote.
+    /// We sent the message, now we need to flush the data out.
     PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// Waiting for remote to respond on the outbound substream
+    /// We are waiting for the response from the remote.
     WaitForRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
+    /// We got a message from the remote and dispatched it to the behaviour, now we are closing down the substream.
     Closing(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// An error occurred during processing.
+    /// Something went seriously wrong.
     Poisoned,
 }
 
