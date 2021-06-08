@@ -44,6 +44,7 @@ mod node_handler;
 mod one_shot;
 mod select;
 pub mod multi;
+mod substream;
 
 pub use crate::upgrade::{
     InboundUpgradeSend,
