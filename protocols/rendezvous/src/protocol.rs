@@ -7,11 +7,15 @@ use log::debug;
 use std::{future, iter};
 use void::Void;
 
+pub fn new() -> Rendezvous {
+    Rendezvous::new()
+}
+
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Rendezvous;
 
 impl Rendezvous {
-    pub fn new() -> Rendezvous {
+    fn new() -> Rendezvous {
         Rendezvous
     }
 }

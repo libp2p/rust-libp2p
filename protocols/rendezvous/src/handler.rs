@@ -1,6 +1,5 @@
 use crate::codec::{Message, Registration};
 use crate::codec::{NewRegistration, RendezvousCodec};
-use crate::protocol::Rendezvous;
 use crate::{codec, protocol};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
@@ -238,7 +237,7 @@ impl Advance for Outbound {
         match self {
             Outbound::Start(msg) => Next::Return {
                 poll: Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(Rendezvous, msg),
+                    protocol: SubstreamProtocol::new(protocol::new(), msg),
                 }),
                 next_state: Outbound::WaitingUpgrade,
             },
@@ -323,7 +322,7 @@ impl ProtocolsHandler for RendezvousHandler {
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         debug!("creating substream protocol");
-        SubstreamProtocol::new(protocol::Rendezvous::new(), ())
+        SubstreamProtocol::new(protocol::new(), ())
     }
 
     fn inject_fully_negotiated_inbound(
