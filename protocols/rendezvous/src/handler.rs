@@ -11,9 +11,9 @@ use libp2p_swarm::{
 };
 use log::debug;
 use log::error;
-use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::task::{Context, Poll};
+use std::{fmt, mem};
 use void::Void;
 
 #[derive(Debug)]
@@ -89,7 +89,7 @@ impl InboundState {
         cx: &mut Context<'_>,
     ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>> {
         loop {
-            let next = match std::mem::replace(self, InboundState::Poisoned) {
+            let next = match mem::replace(self, InboundState::Poisoned) {
                 InboundState::None => Next::Return {
                     poll: Poll::Pending,
                     next_state: InboundState::None,
@@ -206,7 +206,7 @@ impl OutboundState {
         cx: &mut Context<'_>,
     ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>> {
         loop {
-            let next = match std::mem::replace(self, OutboundState::Poisoned) {
+            let next = match mem::replace(self, OutboundState::Poisoned) {
                 OutboundState::None => Next::Return {
                     poll: Poll::Pending,
                     next_state: OutboundState::None,
@@ -355,8 +355,8 @@ impl ProtocolsHandler for RendezvousHandler {
         debug!("injecting event into handler from behaviour: {:?}", &req);
         let (inbound_substream, outbound_substream) = match (
             req,
-            std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
-            std::mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
+            mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
+            mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
         ) {
             (InEvent::RegisterRequest { request: reggo }, inbound, OutboundState::None) => {
                 (inbound, OutboundState::Start(Message::Register(reggo)))
