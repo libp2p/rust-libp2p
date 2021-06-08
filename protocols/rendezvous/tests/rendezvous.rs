@@ -72,25 +72,11 @@ impl RendezvousTest {
     }
 
     pub async fn assert_successful_registration(&mut self, namespace: String) {
-        let rendezvous_swarm = &mut self.rendezvous_swarm;
-        let reggo_swarm = &mut self.registration_swarm;
-
-        match await_events_or_timeout(async {
-            let event = rendezvous_swarm.next_event().await;
-            dbg!(event)
-        }, async {
-            let event = reggo_swarm.next_event().await;
-            dbg!(event)
-        }).await {
+        match await_events_or_timeout(self.rendezvous_swarm.next(), self.registration_swarm.next()).await {
             (
-                rendezvous_swarm_event,
-                registration_swarm_event,
+                Event::PeerRegistered { .. },
+                Event::RegisteredWithRendezvousNode { .. },
             ) => {
-
-                // TODO: Assertion against the actual peer record, pass the peer record in for assertion
-
-                assert!(matches!(rendezvous_swarm_event, SwarmEvent::Behaviour(Event::PeerRegistered { .. })));
-                assert!(matches!(registration_swarm_event, SwarmEvent::Behaviour(Event::RegisteredWithRendezvousNode { .. })));
             }
             (rendezvous_swarm_event, registration_swarm_event) => panic!(
                 "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
