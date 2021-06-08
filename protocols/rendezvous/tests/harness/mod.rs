@@ -1,8 +1,6 @@
 use async_trait::async_trait;
 use futures::future;
-use futures::future::Either;
 use futures::Future;
-use futures::FutureExt;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::MemoryTransport;
@@ -10,10 +8,7 @@ use libp2p_core::upgrade::SelectUpgrade;
 use libp2p_core::{identity, Executor, Multiaddr, PeerId, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
-use libp2p_swarm::{
-    AddressScore, ExpandedSwarm, IntoProtocolsHandler, NetworkBehaviour, ProtocolsHandler, Swarm,
-    SwarmBuilder, SwarmEvent,
-};
+use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::pin::Pin;

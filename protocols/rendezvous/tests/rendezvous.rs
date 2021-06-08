@@ -1,13 +1,8 @@
 pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
-use libp2p_core::identity::Keypair;
-use libp2p_core::network::Peer;
-use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId};
 use libp2p_rendezvous::behaviour::{Event, Rendezvous};
-use libp2p_swarm::SwarmEvent;
-use libp2p_swarm::{AddressScore, Swarm};
-use std::str::FromStr;
+use libp2p_swarm::Swarm;
 use std::time::Duration;
 
 #[tokio::test]
