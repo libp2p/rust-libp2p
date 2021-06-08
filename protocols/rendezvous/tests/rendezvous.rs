@@ -5,8 +5,8 @@ use libp2p_core::identity::Keypair;
 use libp2p_core::network::Peer;
 use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId};
 use libp2p_rendezvous::behaviour::{Event, Rendezvous};
-use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmEvent;
+use libp2p_swarm::{AddressScore, Swarm};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -63,37 +63,22 @@ impl RendezvousTest {
         let rendezvous_addr = get_rand_listen_addr();
 
         let (mut registration_swarm, _, registration_peer_id) = new_swarm(
-            |_, identity| {
-                Rendezvous::new(
-                    identity,
-                    vec![registration_addr.clone()],
-                    "Registration".to_string(),
-                )
-            },
+            |_, identity| Rendezvous::new(identity, "Registration".to_string()),
             registration_addr.clone(),
         );
+        registration_swarm.add_external_address(registration_addr, AddressScore::Infinite);
 
         let (mut discovery_swarm, _, discovery_peer_id) = new_swarm(
-            |_, identity| {
-                Rendezvous::new(
-                    identity,
-                    vec![discovery_addr.clone()],
-                    "Discovery".to_string(),
-                )
-            },
+            |_, identity| Rendezvous::new(identity, "Discovery".to_string()),
             discovery_addr.clone(),
         );
+        discovery_swarm.add_external_address(discovery_addr, AddressScore::Infinite);
 
         let (mut rendezvous_swarm, _, rendezvous_peer_id) = new_swarm(
-            |_, identity| {
-                Rendezvous::new(
-                    identity,
-                    vec![rendezvous_addr.clone()],
-                    "Rendezvous".to_string(),
-                )
-            },
+            |_, identity| Rendezvous::new(identity, "Rendezvous".to_string()),
             rendezvous_addr.clone(),
         );
+        rendezvous_swarm.add_external_address(rendezvous_addr, AddressScore::Infinite);
 
         //connect(&mut rendezvous_swarm, &mut discovery_swarm).await;
         connect(&mut rendezvous_swarm, &mut registration_swarm).await;

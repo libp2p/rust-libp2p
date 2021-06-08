@@ -17,29 +17,30 @@ pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<Input, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
-    peer_record: PeerRecord,
+    external_addresses: Vec<Multiaddr>,
 }
 
 impl Rendezvous {
-    pub fn new(key_pair: Keypair, listen_addresses: Vec<Multiaddr>, role: String) -> Self {
-        let peer_record = PeerRecord {
-            peer_id: key_pair.public().into_peer_id(),
-            seq: 0,
-            addresses: listen_addresses,
-        };
-
+    pub fn new(key_pair: Keypair, role: String) -> Self {
         Self {
             role,
             events: Default::default(),
             registrations: Registrations::new(),
             key_pair,
-            peer_record,
+            external_addresses: vec![],
         }
     }
 
+    // TODO: Make it possible to filter for specific external-addresses (like onion addresses-only f.e.)
     pub fn register(&mut self, namespace: String, rendezvous_node: PeerId) {
-        let authenticated_peer_record =
-            AuthenticatedPeerRecord::from_record(self.key_pair.clone(), self.peer_record.clone());
+        let authenticated_peer_record = AuthenticatedPeerRecord::from_record(
+            self.key_pair.clone(),
+            PeerRecord {
+                peer_id: self.key_pair.public().into_peer_id(),
+                seq: 0, // TODO: should be current unix timestamp
+                addresses: self.external_addresses.clone(),
+            },
+        );
 
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -210,13 +211,17 @@ impl NetworkBehaviour for Rendezvous {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
+        poll_params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
+        // Update our external addresses based on the Swarm's current knowledge.
+        // It doesn't make sense to register addresses on which we are not reachable, hence this should not be configurable from the outside.
+        self.external_addresses = poll_params.external_addresses().map(|r| r.addr).collect();
+
         debug!(
             " {}: polling behaviour events: {:?}",
             &self.role, &self.events
