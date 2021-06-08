@@ -1,4 +1,5 @@
 pub mod harness;
+
 use crate::harness::{await_events_or_timeout, connect, new_swarm};
 use libp2p_core::identity::Keypair;
 use libp2p_core::network::Peer;
@@ -57,47 +58,40 @@ fn get_rand_listen_addr() -> Multiaddr {
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let registration_keys = Keypair::generate_ed25519();
-        let discovery_keys = Keypair::generate_ed25519();
-        let rendezvous_keys = Keypair::generate_ed25519();
-
         let registration_addr = get_rand_listen_addr();
         let discovery_addr = get_rand_listen_addr();
         let rendezvous_addr = get_rand_listen_addr();
 
         let (mut registration_swarm, _, registration_peer_id) = new_swarm(
-            |_, _| {
+            |_, identity| {
                 Rendezvous::new(
-                    registration_keys.clone(),
+                    identity,
                     vec![registration_addr.clone()],
                     "Registration".to_string(),
                 )
             },
-            registration_keys.clone(),
             registration_addr.clone(),
         );
 
         let (mut discovery_swarm, _, discovery_peer_id) = new_swarm(
-            |_, _| {
+            |_, identity| {
                 Rendezvous::new(
-                    discovery_keys.clone(),
+                    identity,
                     vec![discovery_addr.clone()],
                     "Discovery".to_string(),
                 )
             },
-            discovery_keys.clone(),
             discovery_addr.clone(),
         );
 
         let (mut rendezvous_swarm, _, rendezvous_peer_id) = new_swarm(
-            |_, _| {
+            |_, identity| {
                 Rendezvous::new(
-                    rendezvous_keys.clone(),
+                    identity,
                     vec![rendezvous_addr.clone()],
                     "Rendezvous".to_string(),
                 )
             },
-            rendezvous_keys.clone(),
             rendezvous_addr.clone(),
         );
 

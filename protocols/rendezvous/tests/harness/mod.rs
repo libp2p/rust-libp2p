@@ -34,16 +34,16 @@ pub struct Actor<B: NetworkBehaviour> {
 
 pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
     behaviour_fn: F,
-    id_keys: identity::Keypair,
     listen_address: Multiaddr,
 ) -> (Swarm<B>, Multiaddr, PeerId)
 where
     B: NetworkBehaviour,
 {
-    let peer_id = PeerId::from(id_keys.public());
+    let identity = identity::Keypair::generate_ed25519();
+    let peer_id = PeerId::from(identity.public());
 
     let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
+        .into_authentic(&identity)
         .expect("failed to create dh_keys");
     let noise = NoiseConfig::xx(dh_keys).into_authenticated();
 
@@ -58,9 +58,10 @@ where
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let mut swarm: Swarm<B> = SwarmBuilder::new(transport, behaviour_fn(peer_id, id_keys), peer_id)
-        .executor(Box::new(GlobalSpawnTokioExecutor))
-        .build();
+    let mut swarm: Swarm<B> =
+        SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
+            .executor(Box::new(GlobalSpawnTokioExecutor))
+            .build();
 
     Swarm::listen_on(&mut swarm, listen_address.clone()).unwrap();
 
@@ -103,35 +104,39 @@ where
         }
     }
 
-    future::join(async move {
-        loop {
-            match receiver.next_event().await {
-                SwarmEvent::ConnectionEstablished { .. } => {
-                    break;
-                }
-                SwarmEvent::Behaviour(event) => {
-                    panic!(
+    future::join(
+        async move {
+            loop {
+                match receiver.next_event().await {
+                    SwarmEvent::ConnectionEstablished { .. } => {
+                        break;
+                    }
+                    SwarmEvent::Behaviour(event) => {
+                        panic!(
                         "receiver unexpectedly emitted a behaviour event during connection: {:?}",
                         event
                     );
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
-        }
-    }, async move {
-        loop {
-            match dialer.next_event().await {
-                SwarmEvent::ConnectionEstablished { .. } => {
-                    break;
+        },
+        async move {
+            loop {
+                match dialer.next_event().await {
+                    SwarmEvent::ConnectionEstablished { .. } => {
+                        break;
+                    }
+                    SwarmEvent::Behaviour(event) => {
+                        panic!(
+                            "dialer unexpectedly emitted a behaviour event during connection: {:?}",
+                            event
+                        );
+                    }
+                    _ => {}
                 }
-                SwarmEvent::Behaviour(event) => {
-                    panic!(
-                        "dialer unexpectedly emitted a behaviour event during connection: {:?}",
-                        event
-                    );
-                }
-                _ => {}
             }
-        }
-    }).await;
+        },
+    )
+    .await;
 }
