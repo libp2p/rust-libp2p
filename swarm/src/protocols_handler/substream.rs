@@ -3,7 +3,8 @@ use crate::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use futures::future;
+use futures::future::BoxFuture;
+use futures::{future, FutureExt};
 use libp2p_core::upgrade::FromFnUpgrade;
 use libp2p_core::Endpoint;
 use std::collections::{HashMap, VecDeque};
@@ -21,6 +22,60 @@ pub trait SubstreamHandler {
 
     fn inject_event(&mut self, event: Self::InEvent);
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::OutEvent>>; // None means done
+}
+
+pub struct OneshotPushSubstream<M> {
+    future: BoxFuture<'static, Option<M>>,
+    done: bool,
+}
+
+impl<M> SubstreamHandler for OneshotPushSubstream<M> {
+    type InEvent = ();
+    type OutEvent = Option<M>; // Some means inbound read a message, None means outbound sent a message
+    type OutboundOpenInfo = M;
+
+    fn new_inbound(mut substream: NegotiatedSubstream) -> Self {
+        Self {
+            future: async move {
+                // let _result = libp2p_core::upgrade::read_one(&mut substream, 1024).await;
+
+                let message = todo!("deserialize message");
+
+                Some(message)
+            }
+            .boxed(),
+            done: false,
+        }
+    }
+
+    fn new_outbound(mut substream: NegotiatedSubstream, open_info: Self::OutboundOpenInfo) -> Self {
+        Self {
+            future: async move {
+                // let bytes = todo!("serialize message");
+                // libp2p_core::upgrade::write_one(&mut substream, bytes).await;
+
+                None
+            }
+            .boxed(),
+            done: false,
+        }
+    }
+
+    fn inject_event(&mut self, _: Self::InEvent) {
+        unreachable!()
+    }
+
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::OutEvent>> {
+        if self.done {
+            // avoid poll-after-ready
+            return Poll::Ready(None);
+        }
+
+        let message = futures::ready!(self.future.poll_unpin(cx));
+        self.done = true;
+
+        Poll::Ready(Some(message))
+    }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
