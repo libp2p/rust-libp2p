@@ -20,9 +20,10 @@ async fn given_successful_registration_then_successful_discovery() {
     println!("registring");
 
     // register
-    test.registration_swarm
-        .behaviour_mut()
-        .register(namespace.clone(), test.rendezvous_peer_id);
+    test.registration_swarm.behaviour_mut().register(
+        namespace.clone(),
+        test.rendezvous_swarm.local_peer_id().clone(),
+    );
 
     test.assert_successful_registration(namespace.clone()).await;
 
@@ -38,13 +39,8 @@ async fn given_successful_registration_then_successful_discovery() {
 
 struct RendezvousTest {
     pub registration_swarm: Swarm<Rendezvous>,
-    pub registration_peer_id: PeerId,
-
     pub discovery_swarm: Swarm<Rendezvous>,
-    pub discovery_peer_id: PeerId,
-
     pub rendezvous_swarm: Swarm<Rendezvous>,
-    pub rendezvous_peer_id: PeerId,
 }
 
 fn get_rand_listen_addr() -> Multiaddr {
@@ -62,19 +58,19 @@ impl RendezvousTest {
         let discovery_addr = get_rand_listen_addr();
         let rendezvous_addr = get_rand_listen_addr();
 
-        let (mut registration_swarm, _, registration_peer_id) = new_swarm(
+        let (mut registration_swarm, _) = new_swarm(
             |_, identity| Rendezvous::new(identity, "Registration".to_string()),
             registration_addr.clone(),
         );
         registration_swarm.add_external_address(registration_addr, AddressScore::Infinite);
 
-        let (mut discovery_swarm, _, discovery_peer_id) = new_swarm(
+        let (mut discovery_swarm, _) = new_swarm(
             |_, identity| Rendezvous::new(identity, "Discovery".to_string()),
             discovery_addr.clone(),
         );
         discovery_swarm.add_external_address(discovery_addr, AddressScore::Infinite);
 
-        let (mut rendezvous_swarm, _, rendezvous_peer_id) = new_swarm(
+        let (mut rendezvous_swarm, _) = new_swarm(
             |_, identity| Rendezvous::new(identity, "Rendezvous".to_string()),
             rendezvous_addr.clone(),
         );
@@ -85,11 +81,8 @@ impl RendezvousTest {
 
         Self {
             registration_swarm,
-            registration_peer_id,
             discovery_swarm,
-            discovery_peer_id,
             rendezvous_swarm,
-            rendezvous_peer_id,
         }
     }
 

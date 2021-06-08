@@ -35,7 +35,7 @@ pub struct Actor<B: NetworkBehaviour> {
 pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
     behaviour_fn: F,
     listen_address: Multiaddr,
-) -> (Swarm<B>, Multiaddr, PeerId)
+) -> (Swarm<B>, Multiaddr)
 where
     B: NetworkBehaviour,
 {
@@ -65,7 +65,7 @@ where
 
     Swarm::listen_on(&mut swarm, listen_address.clone()).unwrap();
 
-    (swarm, listen_address, peer_id)
+    (swarm, listen_address)
 }
 
 pub async fn await_events_or_timeout<A, B>(
