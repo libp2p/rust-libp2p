@@ -18,16 +18,16 @@ use void::Void;
 
 #[derive(Debug)]
 pub struct RendezvousHandler {
-    outbound: OutboundState,
-    inbound: InboundState,
+    outbound: SubstreamState<Outbound>,
+    inbound: SubstreamState<Inbound>,
     keep_alive: KeepAlive,
 }
 
 impl RendezvousHandler {
     pub fn new() -> Self {
         Self {
-            outbound: OutboundState::None,
-            inbound: InboundState::None,
+            outbound: SubstreamState::None,
+            inbound: SubstreamState::None,
             keep_alive: KeepAlive::Yes,
         }
     }
@@ -57,18 +57,70 @@ pub enum InEvent {
     },
 }
 
-/// Defines what should happen next after polling an [`InboundState`] or [`OutboundState`].
+#[derive(Debug)]
+enum SubstreamState<S> {
+    /// There is no substream.
+    None,
+    /// The substream is in an active state.
+    Active(S),
+    /// Something went seriously wrong.
+    Poisoned,
+}
+
+/// Advances a state machine.
+trait Advance: Sized {
+    type Event;
+
+    fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event>;
+}
+
+/// Defines the results of advancing a state machine.
 enum Next<S, E> {
     /// Return from the `poll` function, either because are `Ready` or there is no more work to do (`Pending`).
     Return { poll: Poll<E>, next_state: S },
     /// Continue with polling the state.
     Continue { next_state: S },
+    /// The state machine finished.
+    Done,
+}
+
+impl<S, E> SubstreamState<S>
+where
+    S: Advance<Event = E>,
+{
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<E> {
+        loop {
+            let next = match mem::replace(self, SubstreamState::Poisoned) {
+                SubstreamState::None => {
+                    *self = SubstreamState::None;
+                    return Poll::Pending;
+                }
+                SubstreamState::Active(state) => state.advance(cx),
+                SubstreamState::Poisoned => {
+                    unreachable!("reached poisoned state")
+                }
+            };
+
+            match next {
+                Next::Continue { next_state } => {
+                    *self = SubstreamState::Active(next_state);
+                    continue;
+                }
+                Next::Return { poll, next_state } => {
+                    *self = SubstreamState::Active(next_state);
+                    return poll;
+                }
+                Next::Done => {
+                    *self = SubstreamState::None;
+                    return Poll::Pending;
+                }
+            }
+        }
+    }
 }
 
 /// The state of an inbound substream (i.e. the remote node opened it).
-enum InboundState {
-    /// There is no substream.
-    None,
+enum Inbound {
     /// We are in the process of reading a message from the substream.
     Reading(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We read a message, dispatched it to the behaviour and are waiting for the response.
@@ -79,111 +131,10 @@ enum InboundState {
     PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We've sent the message and are now closing down the substream.
     Closing(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// Something went seriously wrong.
-    Poisoned,
-}
-
-impl InboundState {
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>> {
-        loop {
-            let next = match mem::replace(self, InboundState::Poisoned) {
-                InboundState::None => Next::Return {
-                    poll: Poll::Pending,
-                    next_state: InboundState::None,
-                },
-                InboundState::Reading(mut substream) => match substream.poll_next_unpin(cx) {
-                    Poll::Ready(Some(Ok(msg))) => {
-                        debug!("read message from inbound {:?}", msg);
-
-                        if let Message::Register(..)
-                        | Message::Discover { .. }
-                        | Message::Unregister { .. } = msg
-                        {
-                            Next::Return {
-                                poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
-                                next_state: InboundState::WaitForBehaviour(substream),
-                            }
-                        } else {
-                            panic!("Invalid inbound message");
-                        }
-                    }
-                    Poll::Ready(Some(Err(e))) => {
-                        panic!("Error when sending outbound: {:?}", e);
-                    }
-                    Poll::Ready(None) => {
-                        panic!("Honestly no idea what to do if this happens");
-                    }
-                    Poll::Pending => Next::Return {
-                        poll: Poll::Pending,
-                        next_state: InboundState::Reading(substream),
-                    },
-                },
-                InboundState::WaitForBehaviour(substream) => Next::Return {
-                    poll: Poll::Pending,
-                    next_state: InboundState::WaitForBehaviour(substream),
-                },
-                InboundState::PendingSend(mut substream, message) => {
-                    match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
-                            Ok(()) => Next::Continue {
-                                next_state: InboundState::PendingFlush(substream),
-                            },
-                            Err(e) => {
-                                panic!("pending send from inbound error: {:?}", e);
-                            }
-                        },
-                        Poll::Ready(Err(e)) => {
-                            panic!("pending send from inbound error: {:?}", e);
-                        }
-                        Poll::Pending => Next::Return {
-                            poll: Poll::Pending,
-                            next_state: InboundState::PendingSend(substream, message),
-                        },
-                    }
-                }
-                InboundState::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
-                    Poll::Ready(Ok(())) => Next::Continue {
-                        next_state: InboundState::Closing(substream),
-                    },
-                    Poll::Ready(Err(e)) => panic!("pending send from inbound error: {:?}", e),
-                    Poll::Pending => Next::Return {
-                        poll: Poll::Pending,
-                        next_state: InboundState::PendingFlush(substream),
-                    },
-                },
-                InboundState::Closing(mut substream) => match substream.poll_close_unpin(cx) {
-                    Poll::Ready(..) => Next::Return {
-                        poll: Poll::Pending,
-                        next_state: InboundState::None,
-                    },
-                    Poll::Pending => Next::Return {
-                        poll: Poll::Pending,
-                        next_state: InboundState::Closing(substream),
-                    },
-                },
-                InboundState::Poisoned => panic!("inbound poisoned"),
-            };
-
-            match next {
-                Next::Return { poll, next_state } => {
-                    *self = next_state;
-                    return poll;
-                }
-                Next::Continue { next_state } => {
-                    *self = next_state;
-                }
-            }
-        }
-    }
 }
 
 /// The state of an outbound substream (i.e. we opened it).
-enum OutboundState {
-    /// There is no substream.
-    None,
+enum Outbound {
     /// We got a message to send from the behaviour.
     Start(Message),
     /// We've requested a substream and are waiting for it to be set up.
@@ -196,116 +147,167 @@ enum OutboundState {
     WaitForRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We got a message from the remote and dispatched it to the behaviour, now we are closing down the substream.
     Closing(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// Something went seriously wrong.
-    Poisoned,
 }
 
-impl OutboundState {
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>> {
-        loop {
-            let next = match mem::replace(self, OutboundState::Poisoned) {
-                OutboundState::None => Next::Return {
-                    poll: Poll::Pending,
-                    next_state: OutboundState::None,
-                },
-                OutboundState::Start(msg) => Next::Return {
-                    poll: Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(Rendezvous, msg),
-                    }),
-                    next_state: OutboundState::WaitingUpgrade,
-                },
-                OutboundState::WaitingUpgrade => Next::Return {
-                    poll: Poll::Pending,
-                    next_state: OutboundState::WaitingUpgrade,
-                },
-                OutboundState::PendingSend(mut substream, message) => {
-                    match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
-                            Ok(()) => Next::Continue {
-                                next_state: OutboundState::PendingFlush(substream),
-                            },
-                            Err(e) => {
-                                panic!("Error when sending outbound: {:?}", e);
-                            }
-                        },
-                        Poll::Ready(Err(e)) => {
-                            panic!("Error when sending outbound: {:?}", e);
-                        }
-                        Poll::Pending => Next::Return {
-                            poll: Poll::Pending,
-                            next_state: OutboundState::PendingSend(substream, message),
-                        },
-                    }
-                }
-                OutboundState::PendingFlush(mut substream) => {
-                    match substream.poll_flush_unpin(cx) {
-                        Poll::Ready(Ok(())) => Next::Continue {
-                            next_state: OutboundState::WaitForRemote(substream),
-                        },
-                        Poll::Ready(Err(e)) => {
-                            panic!("Error when flushing outbound: {:?}", e);
-                        }
-                        Poll::Pending => Next::Return {
-                            poll: Poll::Pending,
-                            next_state: OutboundState::PendingFlush(substream),
-                        },
-                    }
-                }
-                OutboundState::WaitForRemote(mut substream) => {
-                    match substream.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(msg))) => {
-                            if let Message::DiscoverResponse { .. }
-                            | Message::RegisterResponse { .. }
-                            | Message::FailedToDiscover { .. }
-                            | Message::FailedToRegister { .. } = msg
-                            {
-                                Next::Return {
-                                    poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
-                                    next_state: OutboundState::Closing(substream),
-                                }
-                            } else {
-                                panic!("Invalid inbound message");
-                            }
-                        }
-                        Poll::Ready(Some(Err(e))) => {
-                            panic!("Error when receiving message from outbound: {:?}", e)
-                        }
-                        Poll::Ready(None) => {
-                            panic!("Honestly no idea what to do if this happens");
-                        }
-                        Poll::Pending => Next::Return {
-                            poll: Poll::Pending,
-                            next_state: OutboundState::WaitForRemote(substream),
-                        },
-                    }
-                }
-                OutboundState::Closing(mut substream) => match substream.poll_close_unpin(cx) {
-                    Poll::Ready(..) => Next::Return {
-                        poll: Poll::Pending,
-                        next_state: OutboundState::None,
-                    },
-                    Poll::Pending => Next::Return {
-                        poll: Poll::Pending,
-                        next_state: OutboundState::Closing(substream),
-                    },
-                },
-                OutboundState::Poisoned => {
-                    panic!("outbound poisoned");
-                }
-            };
+impl Advance for Inbound {
+    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>;
 
-            match next {
-                Next::Return { poll, next_state } => {
-                    *self = next_state;
-                    return poll;
+    fn advance(
+        self,
+        cx: &mut Context<'_>,
+    ) -> Next<Self, ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>>
+    {
+        match self {
+            Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(msg))) => {
+                    debug!("read message from inbound {:?}", msg);
+
+                    if let Message::Register(..)
+                    | Message::Discover { .. }
+                    | Message::Unregister { .. } = msg
+                    {
+                        Next::Return {
+                            poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
+                            next_state: Inbound::WaitForBehaviour(substream),
+                        }
+                    } else {
+                        panic!("Invalid inbound message");
+                    }
                 }
-                Next::Continue { next_state } => {
-                    *self = next_state;
+                Poll::Ready(Some(Err(e))) => {
+                    panic!("Error when sending outbound: {:?}", e);
                 }
-            }
+                Poll::Ready(None) => {
+                    panic!("Honestly no idea what to do if this happens");
+                }
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Inbound::Reading(substream),
+                },
+            },
+            Inbound::WaitForBehaviour(substream) => Next::Return {
+                poll: Poll::Pending,
+                next_state: Inbound::WaitForBehaviour(substream),
+            },
+            Inbound::PendingSend(mut substream, message) => match substream.poll_ready_unpin(cx) {
+                Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
+                    Ok(()) => Next::Continue {
+                        next_state: Inbound::PendingFlush(substream),
+                    },
+                    Err(e) => {
+                        panic!("pending send from inbound error: {:?}", e);
+                    }
+                },
+                Poll::Ready(Err(e)) => {
+                    panic!("pending send from inbound error: {:?}", e);
+                }
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Inbound::PendingSend(substream, message),
+                },
+            },
+            Inbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
+                Poll::Ready(Ok(())) => Next::Continue {
+                    next_state: Inbound::Closing(substream),
+                },
+                Poll::Ready(Err(e)) => panic!("pending send from inbound error: {:?}", e),
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Inbound::PendingFlush(substream),
+                },
+            },
+            Inbound::Closing(mut substream) => match substream.poll_close_unpin(cx) {
+                Poll::Ready(..) => Next::Done,
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Inbound::Closing(substream),
+                },
+            },
+        }
+    }
+}
+
+impl Advance for Outbound {
+    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>;
+
+    fn advance(
+        self,
+        cx: &mut Context<'_>,
+    ) -> Next<Self, ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>>
+    {
+        match self {
+            Outbound::Start(msg) => Next::Return {
+                poll: Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(Rendezvous, msg),
+                }),
+                next_state: Outbound::WaitingUpgrade,
+            },
+            Outbound::WaitingUpgrade => Next::Return {
+                poll: Poll::Pending,
+                next_state: Outbound::WaitingUpgrade,
+            },
+            Outbound::PendingSend(mut substream, message) => match substream.poll_ready_unpin(cx) {
+                Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
+                    Ok(()) => Next::Continue {
+                        next_state: Outbound::PendingFlush(substream),
+                    },
+                    Err(e) => {
+                        panic!("Error when sending outbound: {:?}", e);
+                    }
+                },
+                Poll::Ready(Err(e)) => {
+                    panic!("Error when sending outbound: {:?}", e);
+                }
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Outbound::PendingSend(substream, message),
+                },
+            },
+            Outbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
+                Poll::Ready(Ok(())) => Next::Continue {
+                    next_state: Outbound::WaitForRemote(substream),
+                },
+                Poll::Ready(Err(e)) => {
+                    panic!("Error when flushing outbound: {:?}", e);
+                }
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Outbound::PendingFlush(substream),
+                },
+            },
+            Outbound::WaitForRemote(mut substream) => match substream.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(msg))) => {
+                    if let Message::DiscoverResponse { .. }
+                    | Message::RegisterResponse { .. }
+                    | Message::FailedToDiscover { .. }
+                    | Message::FailedToRegister { .. } = msg
+                    {
+                        Next::Return {
+                            poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
+                            next_state: Outbound::Closing(substream),
+                        }
+                    } else {
+                        panic!("Invalid inbound message");
+                    }
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    panic!("Error when receiving message from outbound: {:?}", e)
+                }
+                Poll::Ready(None) => {
+                    panic!("Honestly no idea what to do if this happens");
+                }
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Outbound::WaitForRemote(substream),
+                },
+            },
+            Outbound::Closing(mut substream) => match substream.poll_close_unpin(cx) {
+                Poll::Ready(..) => Next::Done,
+                Poll::Pending => Next::Return {
+                    poll: Poll::Pending,
+                    next_state: Outbound::Closing(substream),
+                },
+            },
         }
     }
 }
@@ -330,8 +332,8 @@ impl ProtocolsHandler for RendezvousHandler {
         _msg: Self::InboundOpenInfo,
     ) {
         debug!("injected inbound");
-        if let InboundState::None = self.inbound {
-            self.inbound = InboundState::Reading(substream);
+        if let SubstreamState::None = self.inbound {
+            self.inbound = SubstreamState::Active(Inbound::Reading(substream));
         } else {
             unreachable!("Invalid inbound state")
         }
@@ -343,8 +345,8 @@ impl ProtocolsHandler for RendezvousHandler {
         msg: Self::OutboundOpenInfo,
     ) {
         debug!("injected outbound");
-        if let OutboundState::WaitingUpgrade = self.outbound {
-            self.outbound = OutboundState::PendingSend(substream, msg);
+        if let SubstreamState::Active(Outbound::WaitingUpgrade) = self.outbound {
+            self.outbound = SubstreamState::Active(Outbound::PendingSend(substream, msg));
         } else {
             unreachable!("Invalid outbound state")
         }
@@ -355,39 +357,43 @@ impl ProtocolsHandler for RendezvousHandler {
         debug!("injecting event into handler from behaviour: {:?}", &req);
         let (inbound, outbound) = match (
             req,
-            mem::replace(&mut self.inbound, InboundState::Poisoned),
-            mem::replace(&mut self.outbound, OutboundState::Poisoned),
+            mem::replace(&mut self.inbound, SubstreamState::Poisoned),
+            mem::replace(&mut self.outbound, SubstreamState::Poisoned),
         ) {
-            (InEvent::RegisterRequest { request: reggo }, inbound, OutboundState::None) => {
-                (inbound, OutboundState::Start(Message::Register(reggo)))
-            }
-            (InEvent::UnregisterRequest { namespace }, inbound, OutboundState::None) => (
+            (InEvent::RegisterRequest { request: reggo }, inbound, SubstreamState::None) => (
                 inbound,
-                OutboundState::Start(Message::Unregister { namespace }),
+                SubstreamState::Active(Outbound::Start(Message::Register(reggo))),
             ),
-            (InEvent::DiscoverRequest { namespace }, inbound, OutboundState::None) => (
+            (InEvent::UnregisterRequest { namespace }, inbound, SubstreamState::None) => (
                 inbound,
-                OutboundState::Start(Message::Discover { namespace }),
+                SubstreamState::Active(Outbound::Start(Message::Unregister { namespace })),
+            ),
+            (InEvent::DiscoverRequest { namespace }, inbound, SubstreamState::None) => (
+                inbound,
+                SubstreamState::Active(Outbound::Start(Message::Discover { namespace })),
             ),
             (
                 InEvent::RegisterResponse { ttl },
-                InboundState::WaitForBehaviour(substream),
+                SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
                 outbound,
             ) => (
-                InboundState::PendingSend(substream, Message::RegisterResponse { ttl }),
+                SubstreamState::Active(Inbound::PendingSend(
+                    substream,
+                    Message::RegisterResponse { ttl },
+                )),
                 outbound,
             ),
             (
                 InEvent::DiscoverResponse { discovered },
-                InboundState::WaitForBehaviour(substream),
+                SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
                 outbound,
             ) => (
-                InboundState::PendingSend(
+                SubstreamState::Active(Inbound::PendingSend(
                     substream,
                     Message::DiscoverResponse {
                         registrations: discovered,
                     },
-                ),
+                )),
                 outbound,
             ),
             _ => unreachable!("Handler in invalid state"),
@@ -436,31 +442,27 @@ impl ProtocolsHandler for RendezvousHandler {
     }
 }
 
-impl Debug for OutboundState {
+impl Debug for Outbound {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            OutboundState::None => f.write_str("none"),
-            OutboundState::Start(_) => f.write_str("start"),
-            OutboundState::WaitingUpgrade => f.write_str("waiting_upgrade"),
-            OutboundState::PendingSend(_, _) => f.write_str("pending_send"),
-            OutboundState::PendingFlush(_) => f.write_str("pending_flush"),
-            OutboundState::WaitForRemote(_) => f.write_str("waiting_for_remote"),
-            OutboundState::Closing(_) => f.write_str("closing"),
-            OutboundState::Poisoned => f.write_str("poisoned"),
+            Outbound::Start(_) => f.write_str("start"),
+            Outbound::WaitingUpgrade => f.write_str("waiting_upgrade"),
+            Outbound::PendingSend(_, _) => f.write_str("pending_send"),
+            Outbound::PendingFlush(_) => f.write_str("pending_flush"),
+            Outbound::WaitForRemote(_) => f.write_str("waiting_for_remote"),
+            Outbound::Closing(_) => f.write_str("closing"),
         }
     }
 }
 
-impl Debug for InboundState {
+impl Debug for Inbound {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            InboundState::None => f.write_str("none"),
-            InboundState::Reading(_) => f.write_str("reading"),
-            InboundState::PendingSend(_, _) => f.write_str("pending_send"),
-            InboundState::PendingFlush(_) => f.write_str("pending_flush"),
-            InboundState::WaitForBehaviour(_) => f.write_str("waiting_for_behaviour"),
-            InboundState::Closing(_) => f.write_str("closing"),
-            InboundState::Poisoned => f.write_str("poisoned"),
+            Inbound::Reading(_) => f.write_str("reading"),
+            Inbound::PendingSend(_, _) => f.write_str("pending_send"),
+            Inbound::PendingFlush(_) => f.write_str("pending_flush"),
+            Inbound::WaitForBehaviour(_) => f.write_str("waiting_for_behaviour"),
+            Inbound::Closing(_) => f.write_str("closing"),
         }
     }
 }
