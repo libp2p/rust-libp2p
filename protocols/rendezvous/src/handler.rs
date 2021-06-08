@@ -358,36 +358,16 @@ impl ProtocolsHandler for RendezvousHandler {
             std::mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
             std::mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
         ) {
-            (
-                InEvent::RegisterRequest {
-                    request:
-                        NewRegistration {
-                            namespace,
-                            record,
-                            ttl,
-                        },
-                },
-                inbound,
-                OutboundState::None,
-            ) => (
-                inbound,
-                OutboundState::Start(Message::Register(NewRegistration::new(
-                    namespace.clone(),
-                    record,
-                    ttl,
-                ))),
-            ),
+            (InEvent::RegisterRequest { request: reggo }, inbound, OutboundState::None) => {
+                (inbound, OutboundState::Start(Message::Register(reggo)))
+            }
             (InEvent::UnregisterRequest { namespace }, inbound, OutboundState::None) => (
                 inbound,
-                OutboundState::Start(Message::Unregister {
-                    namespace: namespace.clone(),
-                }),
+                OutboundState::Start(Message::Unregister { namespace }),
             ),
             (InEvent::DiscoverRequest { namespace }, inbound, OutboundState::None) => (
                 inbound,
-                OutboundState::Start(Message::Discover {
-                    namespace: namespace.clone(),
-                }),
+                OutboundState::Start(Message::Discover { namespace }),
             ),
             (
                 InEvent::RegisterResponse { ttl },
@@ -401,12 +381,15 @@ impl ProtocolsHandler for RendezvousHandler {
                 InEvent::DiscoverResponse { discovered },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
-            ) => {
-                let msg = Message::DiscoverResponse {
-                    registrations: discovered,
-                };
-                (InboundState::PendingSend(substream, msg), outbound)
-            }
+            ) => (
+                InboundState::PendingSend(
+                    substream,
+                    Message::DiscoverResponse {
+                        registrations: discovered,
+                    },
+                ),
+                outbound,
+            ),
             _ => unreachable!("Handler in invalid state"),
         };
 
