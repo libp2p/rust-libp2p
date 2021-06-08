@@ -314,10 +314,10 @@ impl ProtocolsHandler for RendezvousHandler {
     type InEvent = InEvent;
     type OutEvent = OutEvent;
     type Error = codec::Error;
-    type InboundOpenInfo = ();
     type InboundProtocol = protocol::Rendezvous;
-    type OutboundOpenInfo = Message;
     type OutboundProtocol = protocol::Rendezvous;
+    type InboundOpenInfo = ();
+    type OutboundOpenInfo = Message;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         debug!("creating substream protocol");
