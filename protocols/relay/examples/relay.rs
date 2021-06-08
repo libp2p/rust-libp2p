@@ -56,6 +56,7 @@
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
+use libp2p::dns::DnsConfig;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
@@ -71,8 +72,6 @@ use structopt::StructOpt;
 
 // Listen on all interfaces and whatever port the OS assigns
 const DEFAULT_RELAY_ADDRESS: &str = "/ip4/0.0.0.0/tcp/0";
-const RELAY_ADDRESS_KEY: &str = "RELAY_ADDRESS";
-const CLIENT_LISTEN_ADDRESS_KEY: &str = "CLIENT_LISTEN_ADDRESS";
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -81,18 +80,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("opt: {:?}", opt);
 
     // Create a static known PeerId based on given secret
-    let local_key: identity::Keypair = generate_ed25519(opt.deterministic_peer_secret);
+    let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let tcp_transport = TcpConfig::new();
+    let transport = block_on(DnsConfig::system(TcpConfig::new()))?;
 
     let relay_config = RelayConfig {
         connection_idle_timeout: Duration::from_secs(10 * 60),
         ..Default::default()
     };
     let (relay_wrapped_transport, relay_behaviour) =
-        libp2p_relay::new_transport_and_behaviour(relay_config, tcp_transport);
+        libp2p_relay::new_transport_and_behaviour(relay_config, transport);
 
     let behaviour = Behaviour {
         relay: relay_behaviour,
@@ -144,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         for addr in Swarm::listeners(&swarm) {
                             println!("Listening on {:?}", addr);
                             listening = true;
-                            publish_listener_peer(addr, &opt.mode, local_peer_id);
+                            print_listener_peer(addr, &opt.mode, local_peer_id);
                         }
                     }
                     break;
@@ -155,23 +154,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     }))
 }
 
-fn publish_listener_peer(addr: &libp2p::Multiaddr, mode: &Mode, local_peer_id: PeerId) -> () {
+fn print_listener_peer(addr: &libp2p::Multiaddr, mode: &Mode, local_peer_id: PeerId) -> () {
     match mode {
         Mode::Relay => {
-            let address = format!("{}/p2p/{}/p2p-circuit", addr, local_peer_id);
-            set_shared_data(RELAY_ADDRESS_KEY, &address);
+            println!(
+                "Peer that act as Relay can access on: `{}/p2p/{}/p2p-circuit`",
+                addr, local_peer_id
+            );
         }
         Mode::ClientListen => {
-            let address = format!("/p2p/{}/{}", addr, local_peer_id);
-            set_shared_data(CLIENT_LISTEN_ADDRESS_KEY, &address);
+            println!(
+                "Peer that act as Client Listen can access on: `/p2p/{}/{}`",
+                addr, local_peer_id
+            );
         }
         Mode::ClientDial => {}
     }
 }
 
-fn generate_ed25519(deterministic_peer_secret: u8) -> identity::Keypair {
+fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     let mut bytes = [0u8; 32];
-    bytes[0] = deterministic_peer_secret;
+    bytes[0] = secret_key_seed;
 
     let secret_key = ed25519::SecretKey::from_bytes(&mut bytes)
         .expect("this returns `Err` only if the length is wrong; the length is correct; qed");
@@ -193,12 +196,7 @@ fn get_relay_address(opt: &Opt) -> String {
 fn get_relay_peer_address(opt: &Opt) -> String {
     match &opt.address {
         Some(address) => address.clone(),
-        None => {
-            match get_shared_data(RELAY_ADDRESS_KEY) {
-                Some(address) => address,
-                None => panic!("Please provide relayed listen address such as: <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit"),
-            }
-        }
+        None => panic!("Please provide relayed listen address such as: <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit"),
     }
 }
 
@@ -206,30 +204,8 @@ fn get_relay_peer_address(opt: &Opt) -> String {
 fn get_client_listen_address(opt: &Opt) -> String {
     match &opt.address {
         Some(address) => address.clone(),
-        None => {
-            match get_shared_data(CLIENT_LISTEN_ADDRESS_KEY) {
-                Some(address) => address.to_string(),
-                None => panic!("Please provide client listen address such as: <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/p2p/<peer-id-listening-relay-client>"),
-            }
-        }
+        None => panic!("Please provide client listen address such as: <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/p2p/<peer-id-listening-relay-client>")
     }
-}
-
-/// Placeholder to publish the peer address based on given key
-fn set_shared_data(key: &str, value: &str) -> () {
-    println!(
-        "TODO publish to KAD or discovery service ... Set the key: {} data to:{}",
-        key, value
-    );
-}
-
-/// Placeholder to get the peer information based on given key
-fn get_shared_data(key: &str) -> Option<String> {
-    println!(
-        "TODO get the data related to key: {} from KAD or discovery service.",
-        key
-    );
-    None
 }
 
 #[derive(NetworkBehaviour)]
@@ -294,7 +270,7 @@ struct Opt {
 
     /// Fixed value to generate deterministic peer id
     #[structopt(short = "d")]
-    deterministic_peer_secret: u8,
+    secret_key_seed: u8,
 
     /// The listening address
     #[structopt(long)]
