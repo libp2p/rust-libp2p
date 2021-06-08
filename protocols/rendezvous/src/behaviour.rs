@@ -60,6 +60,7 @@ impl Rendezvous {
                 handler: NotifyHandler::Any,
             });
     }
+
     pub fn discover(&mut self, ns: Option<String>, rendezvous_node: PeerId) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
