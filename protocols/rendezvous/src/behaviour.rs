@@ -172,25 +172,16 @@ impl NetworkBehaviour for Rendezvous {
                 // TODO: Should send unregister response?
             }
             Message::Discover { namespace } => {
-                let registrations = self.registrations.get(namespace);
+                let registrations = self.registrations.get(namespace).unwrap_or_default();
 
-                if let Some(registrations) = registrations {
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::Any,
-                            event: Input::DiscoverResponse {
-                                discovered: registrations,
-                            },
-                        })
-                } else {
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::Any,
-                            event: Input::DiscoverResponse { discovered: vec![] },
-                        })
-                }
+                self.events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        handler: NotifyHandler::Any,
+                        event: Input::DiscoverResponse {
+                            discovered: registrations,
+                        },
+                    })
             }
             Message::DiscoverResponse { registrations } => {
                 self.events
