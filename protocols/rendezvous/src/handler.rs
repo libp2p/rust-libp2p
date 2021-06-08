@@ -33,8 +33,7 @@ impl RendezvousHandler {
     }
 }
 
-#[derive(Debug)]
-pub struct HandlerEvent(pub Message);
+pub type OutEvent = Message;
 
 #[derive(Debug)]
 pub enum InEvent {
@@ -78,7 +77,7 @@ impl InboundState {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, HandlerEvent, crate::codec::Error>>
+    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, crate::codec::Error>>
     {
         loop {
             match std::mem::replace(self, InboundState::Poisoned) {
@@ -96,7 +95,7 @@ impl InboundState {
                         | Message::Discover { .. }
                         | Message::Unregister { .. } = msg
                         {
-                            return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(msg)));
+                            return Poll::Ready(ProtocolsHandlerEvent::Custom(msg));
                         } else {
                             panic!("Invalid inbound message");
                         }
@@ -181,7 +180,7 @@ impl OutboundState {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, HandlerEvent, crate::codec::Error>>
+    ) -> Poll<ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, crate::codec::Error>>
     {
         loop {
             match std::mem::replace(self, OutboundState::Poisoned) {
@@ -239,9 +238,7 @@ impl OutboundState {
                             | Message::FailedToDiscover { .. }
                             | Message::FailedToRegister { .. } = msg
                             {
-                                return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(
-                                    msg,
-                                )));
+                                return Poll::Ready(ProtocolsHandlerEvent::Custom(msg));
                             } else {
                                 panic!("Invalid inbound message");
                             }
@@ -278,7 +275,7 @@ impl OutboundState {
 
 impl ProtocolsHandler for RendezvousHandler {
     type InEvent = InEvent;
-    type OutEvent = HandlerEvent;
+    type OutEvent = OutEvent;
     type Error = crate::codec::Error;
     type InboundOpenInfo = ();
     type InboundProtocol = protocol::Rendezvous;

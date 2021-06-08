@@ -1,4 +1,5 @@
 use crate::codec::{ErrorCode, Message, NewRegistration, Registration};
+use crate::handler;
 use crate::handler::{InEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::Keypair;
@@ -136,9 +137,9 @@ impl NetworkBehaviour for Rendezvous {
         &mut self,
         peer_id: PeerId,
         _connection: ConnectionId,
-        event: crate::handler::HandlerEvent,
+        message: handler::OutEvent,
     ) {
-        match event.0 {
+        match message {
             Message::Register(new_registration) => {
                 let (namespace, ttl) = self.registrations.add(new_registration);
 
