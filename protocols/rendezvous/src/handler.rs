@@ -118,7 +118,7 @@ impl InboundState {
                 }
                 InboundState::PendingSend(mut substream, message) => {
                     match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(message.clone()) {
+                        Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
                             Ok(()) => {
                                 *self = InboundState::PendingFlush(substream);
                             }

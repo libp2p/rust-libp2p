@@ -80,6 +80,10 @@ pub enum Event {
         rendezvous_node: PeerId,
         registrations: Vec<Registration>,
     },
+    AnsweredDiscoverRequest {
+        enquirer: PeerId,
+        registrations: Vec<Registration>,
+    },
     FailedToDiscover {
         rendezvous_node: PeerId,
         err_code: ErrorCode,
@@ -99,11 +103,11 @@ pub enum Event {
         // TODO: get the namespace in as well, needs association between the registration request and the response
     },
     PeerRegistered {
-        peer_id: PeerId,
+        peer: PeerId,
         namespace: String,
     },
     PeerUnregistered {
-        peer_id: PeerId,
+        peer: PeerId,
         namespace: String,
     },
 }
@@ -152,7 +156,10 @@ impl NetworkBehaviour for Rendezvous {
 
                 // emit behaviour event
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::PeerRegistered { peer_id, namespace },
+                    Event::PeerRegistered {
+                        peer: peer_id,
+                        namespace,
+                    },
                 ));
             }
             Message::RegisterResponse { ttl } => self.events.push_back(
@@ -179,9 +186,15 @@ impl NetworkBehaviour for Rendezvous {
                         peer_id,
                         handler: NotifyHandler::Any,
                         event: Input::DiscoverResponse {
-                            discovered: registrations,
+                            discovered: registrations.clone(),
                         },
-                    })
+                    });
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::AnsweredDiscoverRequest {
+                        enquirer: peer_id,
+                        registrations,
+                    },
+                ));
             }
             Message::DiscoverResponse { registrations } => {
                 self.events

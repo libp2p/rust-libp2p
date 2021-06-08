@@ -217,8 +217,10 @@ impl From<Message> for wire::Message {
                         .into_iter()
                         .map(|reggo| Register {
                             ns: Some(reggo.namespace),
-                            ttl: None,
-                            signed_peer_record: None,
+                            ttl: Some(reggo.ttl),
+                            signed_peer_record: Some(
+                                reggo.record.into_signed_envelope().into_protobuf_encoding(),
+                            ),
                         })
                         .collect(),
                     status: Some(ResponseStatus::Ok.into()),
