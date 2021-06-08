@@ -1,6 +1,6 @@
 pub mod harness;
 
-use crate::harness::{await_events_or_timeout, connect, new_swarm};
+use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::identity::Keypair;
 use libp2p_core::network::Peer;
 use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId};
@@ -43,41 +43,26 @@ struct RendezvousTest {
     pub rendezvous_swarm: Swarm<Rendezvous>,
 }
 
-fn get_rand_listen_addr() -> Multiaddr {
-    let address_port = rand::random::<u64>();
-    let addr = format!("/memory/{}", address_port)
-        .parse::<Multiaddr>()
-        .unwrap();
-
-    addr
-}
-
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let registration_addr = get_rand_listen_addr();
-        let discovery_addr = get_rand_listen_addr();
-        let rendezvous_addr = get_rand_listen_addr();
+        let mut registration_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, "Registration".to_string()));
+        registration_swarm.listen_on_random_memory_address().await;
 
-        let (mut registration_swarm, _) = new_swarm(
-            |_, identity| Rendezvous::new(identity, "Registration".to_string()),
-            registration_addr.clone(),
-        );
-        registration_swarm.add_external_address(registration_addr, AddressScore::Infinite);
+        let mut discovery_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, "Discovery".to_string()));
+        discovery_swarm.listen_on_random_memory_address().await;
 
-        let (mut discovery_swarm, _) = new_swarm(
-            |_, identity| Rendezvous::new(identity, "Discovery".to_string()),
-            discovery_addr.clone(),
-        );
-        discovery_swarm.add_external_address(discovery_addr, AddressScore::Infinite);
+        let mut rendezvous_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, "Rendezvous".to_string()));
+        rendezvous_swarm.listen_on_random_memory_address().await;
 
-        let (mut rendezvous_swarm, _) = new_swarm(
-            |_, identity| Rendezvous::new(identity, "Rendezvous".to_string()),
-            rendezvous_addr.clone(),
-        );
-        rendezvous_swarm.add_external_address(rendezvous_addr, AddressScore::Infinite);
-
-        //connect(&mut rendezvous_swarm, &mut discovery_swarm).await;
-        connect(&mut rendezvous_swarm, &mut registration_swarm).await;
+        registration_swarm
+            .block_on_connection(&mut rendezvous_swarm)
+            .await;
+        discovery_swarm
+            .block_on_connection(&mut rendezvous_swarm)
+            .await;
 
         Self {
             registration_swarm,

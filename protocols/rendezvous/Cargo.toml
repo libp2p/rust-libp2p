@@ -29,6 +29,7 @@ rand = "0.8"
 async-std = "1.6.2"
 env_logger = "0.8"
 tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+async-trait = "0.1"
 
 [build-dependencies]
 prost-build = "0.7"

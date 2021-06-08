@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use futures::future;
 use futures::Future;
 use libp2p_core::muxing::StreamMuxerBox;
@@ -8,7 +9,8 @@ use libp2p_core::{identity, Executor, Multiaddr, PeerId, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{self, Keypair, NoiseConfig, X25519Spec};
 use libp2p_swarm::{
-    IntoProtocolsHandler, NetworkBehaviour, ProtocolsHandler, Swarm, SwarmBuilder, SwarmEvent,
+    AddressScore, ExpandedSwarm, IntoProtocolsHandler, NetworkBehaviour, ProtocolsHandler, Swarm,
+    SwarmBuilder, SwarmEvent,
 };
 use libp2p_yamux::YamuxConfig;
 use std::fmt::Debug;
@@ -27,10 +29,10 @@ impl Executor for GlobalSpawnTokioExecutor {
 
 pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
     behaviour_fn: F,
-    listen_address: Multiaddr,
-) -> (Swarm<B>, Multiaddr)
+) -> Swarm<B>
 where
     B: NetworkBehaviour,
+    <B as NetworkBehaviour>::OutEvent: Debug,
 {
     let identity = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(identity.public());
@@ -51,14 +53,18 @@ where
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let mut swarm: Swarm<B> =
-        SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
-            .executor(Box::new(GlobalSpawnTokioExecutor))
-            .build();
+    SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
+        .executor(Box::new(GlobalSpawnTokioExecutor))
+        .build()
+}
 
-    Swarm::listen_on(&mut swarm, listen_address.clone()).unwrap();
+fn get_rand_memory_address() -> Multiaddr {
+    let address_port = rand::random::<u64>();
+    let addr = format!("/memory/{}", address_port)
+        .parse::<Multiaddr>()
+        .unwrap();
 
-    (swarm, listen_address)
+    addr
 }
 
 pub async fn await_events_or_timeout<A, B>(
@@ -73,63 +79,98 @@ pub async fn await_events_or_timeout<A, B>(
     .expect("network behaviours to emit an event within 10 seconds")
 }
 
-/// Connects two swarms with each other.
-///
-/// This assumes the transport that is in use can be used by Bob to connect to
-/// the listen address that is emitted by Alice. In other words, they have to be
-/// on the same network. The memory transport used by the above `new_swarm`
-/// function fulfills this.
-///
-/// We also assume that the swarms don't emit any behaviour events during the
-/// connection phase. Any event emitted is considered a bug from this functions
-/// PoV because they would be lost.
-pub async fn connect<BA, BB>(receiver: &mut Swarm<BA>, dialer: &mut Swarm<BB>)
+/// An extension trait for [`Swarm`] that makes it easier to set up a network of [`Swarm`]s for tests.
+#[async_trait]
+pub trait SwarmExt {
+    /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
+    async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
+    where
+        T: NetworkBehaviour,
+        <T as NetworkBehaviour>::OutEvent: Debug;
+
+    /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
+    async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
+}
+
+#[async_trait]
+impl<B> SwarmExt for Swarm<B>
 where
-    BA: NetworkBehaviour,
-    BB: NetworkBehaviour,
-    <BA as NetworkBehaviour>::OutEvent: Debug,
-    <BB as NetworkBehaviour>::OutEvent: Debug,
+    B: NetworkBehaviour,
+    <B as NetworkBehaviour>::OutEvent: Debug,
 {
-    loop {
-        if let SwarmEvent::NewListenAddr(addr) = receiver.next_event().await {
-            dialer.dial_addr(addr).unwrap();
-            break;
+    async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
+    where
+        T: NetworkBehaviour,
+        <T as NetworkBehaviour>::OutEvent: Debug,
+    {
+        let addr_to_dial = other.external_addresses().next().unwrap().addr.clone();
+
+        self.dial_addr(addr_to_dial.clone()).unwrap();
+
+        let mut dialer_done = false;
+        let mut listener_done = false;
+
+        loop {
+            let dialer_event_fut = self.next_event();
+
+            tokio::select! {
+                dialer_event = dialer_event_fut => {
+                    match dialer_event {
+                        SwarmEvent::ConnectionEstablished { .. } => {
+                            dialer_done = true;
+                        }
+                        SwarmEvent::UnknownPeerUnreachableAddr { address, error } if address == addr_to_dial => {
+                            panic!("Failed to dial address {}: {}", addr_to_dial, error)
+                        }
+                        other => {
+                            log::debug!("Ignoring {:?}", other);
+                        }
+                    }
+                },
+                listener_event = other.next_event() => {
+                    match listener_event {
+                        SwarmEvent::ConnectionEstablished { .. } => {
+                            listener_done = true;
+                        }
+                        SwarmEvent::IncomingConnectionError { error, .. } => {
+                            panic!("Failure in incoming connection {}", error);
+                        }
+                        other => {
+                            log::debug!("Ignoring {:?}", other);
+                        }
+                    }
+                }
+            }
+
+            if dialer_done && listener_done {
+                return;
+            }
         }
     }
 
-    future::join(
-        async move {
-            loop {
-                match receiver.next_event().await {
-                    SwarmEvent::ConnectionEstablished { .. } => {
-                        break;
-                    }
-                    SwarmEvent::Behaviour(event) => {
-                        panic!(
-                        "receiver unexpectedly emitted a behaviour event during connection: {:?}",
-                        event
+    async fn listen_on_random_memory_address(&mut self) -> Multiaddr {
+        let multiaddr = get_rand_memory_address();
+
+        self.listen_on(multiaddr.clone()).unwrap();
+
+        // block until we are actually listening
+        loop {
+            match self.next_event().await {
+                SwarmEvent::NewListenAddr(addr) if addr == multiaddr => {
+                    break;
+                }
+                other => {
+                    log::debug!(
+                        "Ignoring {:?} while waiting for listening to succeed",
+                        other
                     );
-                    }
-                    _ => {}
                 }
             }
-        },
-        async move {
-            loop {
-                match dialer.next_event().await {
-                    SwarmEvent::ConnectionEstablished { .. } => {
-                        break;
-                    }
-                    SwarmEvent::Behaviour(event) => {
-                        panic!(
-                            "dialer unexpectedly emitted a behaviour event during connection: {:?}",
-                            event
-                        );
-                    }
-                    _ => {}
-                }
-            }
-        },
-    )
-    .await;
+        }
+
+        // Memory addresses are externally reachable because they all share the same memory-space.
+        self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
+
+        multiaddr
+    }
 }
