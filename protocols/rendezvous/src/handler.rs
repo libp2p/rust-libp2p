@@ -121,11 +121,6 @@ impl InboundState {
                         Poll::Ready(Ok(())) => match substream.start_send_unpin(message.clone()) {
                             Ok(()) => {
                                 *self = InboundState::PendingFlush(substream);
-                                // todo: remove this line/ figure out why i need to do this to keep it
-                                // todo: move the flush code into here as start_send_unpin does not send/does not trigger IO/wake
-                                return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent(
-                                    message,
-                                )));
                             }
                             Err(e) => {
                                 panic!("pending send from inbound error: {:?}", e);
