@@ -25,13 +25,6 @@ impl Executor for GlobalSpawnTokioExecutor {
     }
 }
 
-#[allow(missing_debug_implementations)]
-pub struct Actor<B: NetworkBehaviour> {
-    pub swarm: Swarm<B>,
-    pub addr: Multiaddr,
-    pub peer_id: PeerId,
-}
-
 pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
     behaviour_fn: F,
     listen_address: Multiaddr,
