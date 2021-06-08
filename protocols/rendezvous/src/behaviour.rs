@@ -10,10 +10,7 @@ use log::debug;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
-pub const DOMAIN: &str = "libp2p-rendezvous";
-
 pub struct Rendezvous {
-    role: String,
     events: VecDeque<NetworkBehaviourAction<Input, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
@@ -21,9 +18,8 @@ pub struct Rendezvous {
 }
 
 impl Rendezvous {
-    pub fn new(key_pair: Keypair, role: String) -> Self {
+    pub fn new(key_pair: Keypair) -> Self {
         Self {
-            role,
             events: Default::default(),
             registrations: Registrations::new(),
             key_pair,
@@ -141,7 +137,6 @@ impl NetworkBehaviour for Rendezvous {
         _connection: ConnectionId,
         event: crate::handler::HandlerEvent,
     ) {
-        debug!("{}: behaviour::inject_event {:?}", &self.role, &event);
         match event.0 {
             Message::Register(new_registration) => {
                 let (namespace, ttl) = self.registrations.add(new_registration);
@@ -226,10 +221,6 @@ impl NetworkBehaviour for Rendezvous {
         // It doesn't make sense to register addresses on which we are not reachable, hence this should not be configurable from the outside.
         self.external_addresses = poll_params.external_addresses().map(|r| r.addr).collect();
 
-        debug!(
-            " {}: polling behaviour events: {:?}",
-            &self.role, &self.events
-        );
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

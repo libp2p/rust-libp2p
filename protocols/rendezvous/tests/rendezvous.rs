@@ -33,16 +33,13 @@ struct RendezvousTest {
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut registration_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, "Registration".to_string()));
+        let mut registration_swarm = new_swarm(|_, identity| Rendezvous::new(identity));
         registration_swarm.listen_on_random_memory_address().await;
 
-        let mut discovery_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, "Discovery".to_string()));
+        let mut discovery_swarm = new_swarm(|_, identity| Rendezvous::new(identity));
         discovery_swarm.listen_on_random_memory_address().await;
 
-        let mut rendezvous_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, "Rendezvous".to_string()));
+        let mut rendezvous_swarm = new_swarm(|_, identity| Rendezvous::new(identity));
         rendezvous_swarm.listen_on_random_memory_address().await;
 
         registration_swarm
