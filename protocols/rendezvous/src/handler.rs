@@ -37,7 +37,7 @@ impl RendezvousHandler {
 pub struct HandlerEvent(pub Message);
 
 #[derive(Debug)]
-pub enum Input {
+pub enum InEvent {
     RegisterRequest {
         request: NewRegistration,
     },
@@ -277,7 +277,7 @@ impl OutboundState {
 }
 
 impl ProtocolsHandler for RendezvousHandler {
-    type InEvent = Input;
+    type InEvent = InEvent;
     type OutEvent = HandlerEvent;
     type Error = crate::codec::Error;
     type InboundOpenInfo = ();
@@ -317,7 +317,7 @@ impl ProtocolsHandler for RendezvousHandler {
     }
 
     // event injected from NotifyHandler
-    fn inject_event(&mut self, req: Input) {
+    fn inject_event(&mut self, req: InEvent) {
         debug!("injecting event into handler from behaviour: {:?}", &req);
         let (inbound_substream, outbound_substream) = match (
             req,
@@ -325,7 +325,7 @@ impl ProtocolsHandler for RendezvousHandler {
             std::mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
         ) {
             (
-                Input::RegisterRequest {
+                InEvent::RegisterRequest {
                     request:
                         NewRegistration {
                             namespace,
@@ -343,20 +343,20 @@ impl ProtocolsHandler for RendezvousHandler {
                     ttl,
                 ))),
             ),
-            (Input::UnregisterRequest { namespace }, inbound, OutboundState::None) => (
+            (InEvent::UnregisterRequest { namespace }, inbound, OutboundState::None) => (
                 inbound,
                 OutboundState::Start(Message::Unregister {
                     namespace: namespace.clone(),
                 }),
             ),
-            (Input::DiscoverRequest { namespace }, inbound, OutboundState::None) => (
+            (InEvent::DiscoverRequest { namespace }, inbound, OutboundState::None) => (
                 inbound,
                 OutboundState::Start(Message::Discover {
                     namespace: namespace.clone(),
                 }),
             ),
             (
-                Input::RegisterResponse { ttl },
+                InEvent::RegisterResponse { ttl },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
             ) => (
@@ -364,7 +364,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 outbound,
             ),
             (
-                Input::DiscoverResponse { discovered },
+                InEvent::DiscoverResponse { discovered },
                 InboundState::WaitForBehaviour(substream),
                 outbound,
             ) => {

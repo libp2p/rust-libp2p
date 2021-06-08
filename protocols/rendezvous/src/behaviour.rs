@@ -1,5 +1,5 @@
 use crate::codec::{ErrorCode, Message, NewRegistration, Registration};
-use crate::handler::{Input, RendezvousHandler};
+use crate::handler::{InEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId, PeerRecord};
@@ -11,7 +11,7 @@ use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
 pub struct Rendezvous {
-    events: VecDeque<NetworkBehaviourAction<Input, Event>>,
+    events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
     external_addresses: Vec<Multiaddr>,
@@ -41,7 +41,7 @@ impl Rendezvous {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: Input::RegisterRequest {
+                event: InEvent::RegisterRequest {
                     request: NewRegistration {
                         namespace,
                         record: authenticated_peer_record,
@@ -56,7 +56,7 @@ impl Rendezvous {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: Input::UnregisterRequest { namespace },
+                event: InEvent::UnregisterRequest { namespace },
                 handler: NotifyHandler::Any,
             });
     }
@@ -65,7 +65,7 @@ impl Rendezvous {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: Input::DiscoverRequest { namespace: ns },
+                event: InEvent::DiscoverRequest { namespace: ns },
                 handler: NotifyHandler::Any,
             });
     }
@@ -147,7 +147,7 @@ impl NetworkBehaviour for Rendezvous {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::RegisterResponse { ttl },
+                        event: InEvent::RegisterResponse { ttl },
                     });
 
                 // emit behaviour event
@@ -181,7 +181,7 @@ impl NetworkBehaviour for Rendezvous {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
-                        event: Input::DiscoverResponse {
+                        event: InEvent::DiscoverResponse {
                             discovered: registrations.clone(),
                         },
                     });
