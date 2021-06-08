@@ -18,16 +18,16 @@ use void::Void;
 
 #[derive(Debug)]
 pub struct RendezvousHandler {
-    outbound_substream: OutboundState,
-    inbound_substream: InboundState,
+    outbound: OutboundState,
+    inbound: InboundState,
     keep_alive: KeepAlive,
 }
 
 impl RendezvousHandler {
     pub fn new() -> Self {
         Self {
-            outbound_substream: OutboundState::None,
-            inbound_substream: InboundState::None,
+            outbound: OutboundState::None,
+            inbound: InboundState::None,
             keep_alive: KeepAlive::Yes,
         }
     }
@@ -330,8 +330,8 @@ impl ProtocolsHandler for RendezvousHandler {
         _msg: Self::InboundOpenInfo,
     ) {
         debug!("injected inbound");
-        if let InboundState::None = self.inbound_substream {
-            self.inbound_substream = InboundState::Reading(substream);
+        if let InboundState::None = self.inbound {
+            self.inbound = InboundState::Reading(substream);
         } else {
             unreachable!("Invalid inbound state")
         }
@@ -343,8 +343,8 @@ impl ProtocolsHandler for RendezvousHandler {
         msg: Self::OutboundOpenInfo,
     ) {
         debug!("injected outbound");
-        if let OutboundState::WaitingUpgrade = self.outbound_substream {
-            self.outbound_substream = OutboundState::PendingSend(substream, msg);
+        if let OutboundState::WaitingUpgrade = self.outbound {
+            self.outbound = OutboundState::PendingSend(substream, msg);
         } else {
             unreachable!("Invalid outbound state")
         }
@@ -353,10 +353,10 @@ impl ProtocolsHandler for RendezvousHandler {
     // event injected from NotifyHandler
     fn inject_event(&mut self, req: InEvent) {
         debug!("injecting event into handler from behaviour: {:?}", &req);
-        let (inbound_substream, outbound_substream) = match (
+        let (inbound, outbound) = match (
             req,
-            mem::replace(&mut self.inbound_substream, InboundState::Poisoned),
-            mem::replace(&mut self.outbound_substream, OutboundState::Poisoned),
+            mem::replace(&mut self.inbound, InboundState::Poisoned),
+            mem::replace(&mut self.outbound, OutboundState::Poisoned),
         ) {
             (InEvent::RegisterRequest { request: reggo }, inbound, OutboundState::None) => {
                 (inbound, OutboundState::Start(Message::Register(reggo)))
@@ -393,8 +393,8 @@ impl ProtocolsHandler for RendezvousHandler {
             _ => unreachable!("Handler in invalid state"),
         };
 
-        self.inbound_substream = inbound_substream;
-        self.outbound_substream = outbound_substream;
+        self.inbound = inbound;
+        self.outbound = outbound;
     }
 
     fn inject_dial_upgrade_error(
@@ -421,20 +421,14 @@ impl ProtocolsHandler for RendezvousHandler {
             Self::Error,
         >,
     > {
-        debug!(
-            "polling handler: inbound_state: {:?}",
-            &self.inbound_substream
-        );
-        debug!(
-            "polling handler: outbound_state {:?}",
-            &self.outbound_substream
-        );
+        debug!("polling handler: inbound_state: {:?}", &self.inbound);
+        debug!("polling handler: outbound_state {:?}", &self.outbound);
 
-        if let Poll::Ready(event) = self.inbound_substream.poll(cx) {
+        if let Poll::Ready(event) = self.inbound.poll(cx) {
             return Poll::Ready(event);
         }
 
-        if let Poll::Ready(event) = self.outbound_substream.poll(cx) {
+        if let Poll::Ready(event) = self.outbound.poll(cx) {
             return Poll::Ready(event);
         }
 
