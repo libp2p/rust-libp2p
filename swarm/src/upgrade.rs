@@ -21,7 +21,7 @@
 use crate::NegotiatedSubstream;
 
 use futures::prelude::*;
-use libp2p_core::upgrade;
+use libp2p_core::upgrade::{self, SimOpenRole};
 
 /// Implemented automatically on all types that implement [`UpgradeInfo`](upgrade::UpgradeInfo)
 /// and `Send + 'static`.
@@ -66,7 +66,7 @@ pub trait OutboundUpgradeSend: UpgradeInfoSend {
     type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
 
     /// Equivalent to [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
-    fn upgrade_outbound(self, socket: NegotiatedSubstream, info: Self::Info) -> Self::Future;
+    fn upgrade_outbound(self, socket: NegotiatedSubstream, info: Self::Info, role: SimOpenRole) -> Self::Future;
 }
 
 impl<T, TInfo> OutboundUpgradeSend for T
@@ -81,8 +81,8 @@ where
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_outbound(self, socket: NegotiatedSubstream, info: TInfo) -> Self::Future {
-        upgrade::OutboundUpgrade::upgrade_outbound(self, socket, info)
+    fn upgrade_outbound(self, socket: NegotiatedSubstream, info: TInfo, role: SimOpenRole) -> Self::Future {
+        upgrade::OutboundUpgrade::upgrade_outbound(self, socket, info, role)
     }
 }
 
@@ -142,8 +142,8 @@ impl<T: OutboundUpgradeSend> upgrade::OutboundUpgrade<NegotiatedSubstream> for S
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_outbound(self, socket: NegotiatedSubstream, info: T::Info) -> Self::Future {
-        OutboundUpgradeSend::upgrade_outbound(self.0, socket, info)
+    fn upgrade_outbound(self, socket: NegotiatedSubstream, info: T::Info, role: SimOpenRole) -> Self::Future {
+        OutboundUpgradeSend::upgrade_outbound(self.0, socket, info, role)
     }
 }
 

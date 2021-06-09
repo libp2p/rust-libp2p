@@ -37,7 +37,7 @@ use crate::upgrade::{
 };
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_core::upgrade::{ProtocolName, UpgradeError, NegotiationError, ProtocolError};
+use libp2p_core::upgrade::{ProtocolName, UpgradeError, NegotiationError, ProtocolError, SimOpenRole};
 use rand::Rng;
 use std::{
     cmp,
@@ -437,10 +437,10 @@ where
     type Error  = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info, role: SimOpenRole) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
-        upgrade.upgrade_outbound(resource, info)
+        upgrade.upgrade_outbound(resource, info, role)
             .map(move |out| {
                 match out {
                     Ok(o) => Ok((key, o)),

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo}};
+use crate::{Endpoint, upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, SimOpenRole, UpgradeInfo}};
 
 use futures::prelude::*;
 use std::iter;
@@ -51,7 +51,7 @@ pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrad
 where
     // Note: these bounds are there in order to help the compiler infer types
     P: ProtocolName + Clone,
-    F: FnOnce(C, Endpoint) -> Fut,
+    F: FnOnce(C, Endpoint, SimOpenRole) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
     FromFnUpgrade { protocol_name, fun }
@@ -81,7 +81,7 @@ where
 impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
-    F: FnOnce(C, Endpoint) -> Fut,
+    F: FnOnce(C, Endpoint, SimOpenRole) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
     type Output = Out;
@@ -89,21 +89,21 @@ where
     type Future = Fut;
 
     fn upgrade_inbound(self, sock: C, _: Self::Info) -> Self::Future {
-        (self.fun)(sock, Endpoint::Listener)
+        (self.fun)(sock, Endpoint::Listener, SimOpenRole::Responder)
     }
 }
 
 impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
-    F: FnOnce(C, Endpoint) -> Fut,
+    F: FnOnce(C, Endpoint, SimOpenRole) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
     type Output = Out;
     type Error = Err;
     type Future = Fut;
 
-    fn upgrade_outbound(self, sock: C, _: Self::Info) -> Self::Future {
-        (self.fun)(sock, Endpoint::Dialer)
+    fn upgrade_outbound(self, sock: C, _: Self::Info, role: SimOpenRole) -> Self::Future {
+        (self.fun)(sock, Endpoint::Dialer, role)
     }
 }

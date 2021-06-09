@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use futures::future;
 use std::iter;
 use void::Void;
@@ -52,7 +52,7 @@ impl<C> OutboundUpgrade<C> for DeniedUpgrade {
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, _: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         future::pending()
     }
 }

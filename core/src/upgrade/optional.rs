@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 
 /// Upgrade that can be disabled at runtime.
 ///
@@ -76,9 +76,9 @@ where
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info, role: SimOpenRole) -> Self::Future {
         if let Some(inner) = self.0 {
-            inner.upgrade_outbound(sock, info)
+            inner.upgrade_outbound(sock, info, role)
         } else {
             panic!("Bad API usage; a protocol has been negotiated while this struct contains None")
         }

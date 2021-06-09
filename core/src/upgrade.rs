@@ -70,7 +70,7 @@ mod transfer;
 use futures::future::Future;
 
 pub use crate::Negotiated;
-pub use multistream_select::{Version, NegotiatedComplete, NegotiationError, ProtocolError};
+pub use multistream_select::{Version, NegotiatedComplete, NegotiationError, ProtocolError, SimOpenRole};
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
@@ -195,7 +195,7 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
+    fn upgrade_outbound(self, socket: C, info: Self::Info, role: SimOpenRole) -> Self::Future;
 }
 
 /// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement
@@ -221,4 +221,3 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
 }
 
 impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
-

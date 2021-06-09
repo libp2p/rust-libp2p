@@ -162,7 +162,7 @@ where
         upgrade: U
     },
     Upgrade {
-        future: Pin<Box<U::Future>>
+        future: Pin<Box<U::Future>>,
     },
     Undefined
 }
@@ -185,7 +185,7 @@ where
         loop {
             match mem::replace(&mut self.inner, OutboundUpgradeApplyState::Undefined) {
                 OutboundUpgradeApplyState::Init { mut future, upgrade } => {
-                    let (info, connection) = match Future::poll(Pin::new(&mut future), cx)? {
+                    let (info, role, connection) = match Future::poll(Pin::new(&mut future), cx)? {
                         Poll::Ready(x) => x,
                         Poll::Pending => {
                             self.inner = OutboundUpgradeApplyState::Init { future, upgrade };
@@ -193,7 +193,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_outbound(connection, info.0))
+                        future: Box::pin(upgrade.upgrade_outbound(connection, info.0, role)),
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
@@ -230,4 +230,3 @@ impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
         self.0.protocol_name()
     }
 }
-
