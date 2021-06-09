@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
 use open_metrics_client::metrics::family::Family;
 use open_metrics_client::registry::Registry;
@@ -26,7 +27,7 @@ pub struct Metrics {
     connections_incoming: Counter,
     connections_incoming_error: Counter,
 
-    connections_established: Counter,
+    connections_established: Family<ConnectionEstablishedLabeles, Counter>,
     connections_closed: Counter,
 
     new_listen_addr: Counter,
@@ -107,7 +108,7 @@ impl Metrics {
             Box::new(connected_to_banned_peer.clone()),
         );
 
-        let connections_established = Counter::default();
+        let connections_established = Family::default();
         sub_registry.register(
             "connections_established",
             "Number of connections established",
@@ -143,8 +144,13 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
     fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
         match event {
             libp2p_swarm::SwarmEvent::Behaviour(_) => {}
-            libp2p_swarm::SwarmEvent::ConnectionEstablished { .. } => {
-                self.swarm.connections_established.inc();
+            libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, .. } => {
+                self.swarm
+                    .connections_established
+                    .get_or_create(&ConnectionEstablishedLabeles {
+                        role: endpoint.into(),
+                    })
+                    .inc();
             }
             libp2p_swarm::SwarmEvent::ConnectionClosed { .. } => {
                 self.swarm.connections_closed.inc();
@@ -185,6 +191,26 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             libp2p_swarm::SwarmEvent::Dialing(_) => {
                 self.swarm.dial_attempt.inc();
             }
+        }
+    }
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct ConnectionEstablishedLabeles {
+    role: Role,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+enum Role {
+    Dialer,
+    Listener,
+}
+
+impl From<&libp2p_core::ConnectedPoint> for Role {
+    fn from(point: &libp2p_core::ConnectedPoint) -> Self {
+        match point {
+            libp2p_core::ConnectedPoint::Dialer { .. } => Role::Dialer,
+            libp2p_core::ConnectedPoint::Listener { .. } => Role::Listener,
         }
     }
 }
