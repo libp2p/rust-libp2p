@@ -36,6 +36,7 @@
 //!    --features="floodsub mplex noise tcp-tokio mdns"
 //! ```
 
+use futures::StreamExt;
 use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
@@ -49,7 +50,6 @@ use libp2p::{
     Multiaddr,
     NetworkBehaviour,
     PeerId,
-    Swarm,
     Transport,
 };
 use std::error::Error;
@@ -162,10 +162,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::select! {
             line = stdin.next_line() => {
                 let line = line?.expect("stdin closed");
-                swarm.behaviour_mut().floodsub.publish(topic, line.as_bytes());
+                swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.as_bytes());
             }
             event = swarm.next() => {
-                if let Some(SwarmEvent::NewListenAddr(addr)) {
+                if let Some(SwarmEvent::NewListenAddr(addr)) = event {
                     println!("Listening on {:?}", addr);
                 }
             }
