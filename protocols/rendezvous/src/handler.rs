@@ -1,4 +1,4 @@
-use crate::codec::{Message, Registration};
+use crate::codec::{ErrorCode, Message, Registration};
 use crate::codec::{NewRegistration, RendezvousCodec};
 use crate::{codec, protocol};
 use asynchronous_codec::Framed;
@@ -38,6 +38,9 @@ pub type OutEvent = Message;
 pub enum InEvent {
     RegisterRequest {
         request: NewRegistration,
+    },
+    DeclineRegisterRequest {
+        error: ErrorCode,
     },
     UnregisterRequest {
         namespace: String,
@@ -379,6 +382,17 @@ impl ProtocolsHandler for RendezvousHandler {
                 SubstreamState::Active(Inbound::PendingSend(
                     substream,
                     Message::RegisterResponse { ttl },
+                )),
+                outbound,
+            ),
+            (
+                InEvent::DeclineRegisterRequest { error },
+                SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
+                outbound,
+            ) => (
+                SubstreamState::Active(Inbound::PendingSend(
+                    substream,
+                    Message::FailedToRegister { error },
                 )),
                 outbound,
             ),

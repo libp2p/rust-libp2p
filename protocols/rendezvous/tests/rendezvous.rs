@@ -3,7 +3,7 @@ pub mod harness;
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::PeerId;
 use libp2p_rendezvous::behaviour::{Event, Rendezvous};
-use libp2p_rendezvous::codec::DEFAULT_TTL;
+use libp2p_rendezvous::codec::{ErrorCode, DEFAULT_TTL};
 use libp2p_swarm::Swarm;
 
 #[tokio::test]
@@ -87,21 +87,53 @@ async fn given_successful_registration_then_refresh_ttl() {
     .await;
 }
 
+#[tokio::test]
+async fn given_invalid_ttl_then_unsuccessful_registration() {
+    env_logger::init();
+    let mut test = RendezvousTest::setup().await;
+
+    let namespace = "some-namespace".to_string();
+
+    let _ = test.registration_swarm.behaviour_mut().register(
+        namespace.clone(),
+        test.rendezvous_swarm.local_peer_id().clone(),
+        Some(100_000),
+    );
+
+    match await_events_or_timeout(test.rendezvous_swarm.next(), test.registration_swarm.next()).await {
+        (
+            Event::DeclinedRegisterRequest { .. },
+            Event::FailedToRegisterWithRendezvousNode {  err_code, .. },
+        ) => {
+            assert_eq!(err_code, ErrorCode::InvalidTtl);
+        }
+        (rendezvous_swarm_event, registration_swarm_event) => panic!(
+            "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
+            rendezvous_swarm_event, registration_swarm_event
+        ),
+    }
+}
+
 struct RendezvousTest {
     pub registration_swarm: Swarm<Rendezvous>,
     pub discovery_swarm: Swarm<Rendezvous>,
     pub rendezvous_swarm: Swarm<Rendezvous>,
 }
 
+const DEFAULT_TTL_UPPER_BOUND: i64 = 56_000;
+
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut registration_swarm = new_swarm(|_, identity| Rendezvous::new(identity));
+        let mut registration_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         registration_swarm.listen_on_random_memory_address().await;
 
-        let mut discovery_swarm = new_swarm(|_, identity| Rendezvous::new(identity));
+        let mut discovery_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         discovery_swarm.listen_on_random_memory_address().await;
 
-        let mut rendezvous_swarm = new_swarm(|_, identity| Rendezvous::new(identity));
+        let mut rendezvous_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         rendezvous_swarm.listen_on_random_memory_address().await;
 
         registration_swarm

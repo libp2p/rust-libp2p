@@ -20,10 +20,10 @@ pub struct Rendezvous {
 }
 
 impl Rendezvous {
-    pub fn new(key_pair: Keypair) -> Self {
+    pub fn new(key_pair: Keypair, ttl_upper_board: i64) -> Self {
         Self {
             events: Default::default(),
-            registrations: Registrations::new(),
+            registrations: Registrations::new(ttl_upper_board),
             key_pair,
             external_addresses: vec![],
         }
@@ -149,23 +149,36 @@ impl NetworkBehaviour for Rendezvous {
     ) {
         match message {
             Message::Register(new_registration) => {
-                let (namespace, ttl) = self.registrations.add(new_registration);
+                if let Ok((namespace, ttl)) = self.registrations.add(new_registration) {
+                    // notify the handler that to send a response
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::Any,
+                            event: InEvent::RegisterResponse { ttl },
+                        });
 
-                // notify the handler that to send a response
-                self.events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::Any,
-                        event: InEvent::RegisterResponse { ttl },
-                    });
+                    // emit behaviour event
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::PeerRegistered {
+                            peer: peer_id,
+                            namespace,
+                        },
+                    ));
+                } else {
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::Any,
+                            event: InEvent::DeclineRegisterRequest {
+                                error: ErrorCode::InvalidTtl,
+                            },
+                        });
 
-                // emit behaviour event
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::PeerRegistered {
-                        peer: peer_id,
-                        namespace,
-                    },
-                ));
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::DeclinedRegisterRequest { peer: peer_id },
+                    ));
+                }
             }
             Message::RegisterResponse { ttl } => self.events.push_back(
                 NetworkBehaviourAction::GenerateEvent(Event::RegisteredWithRendezvousNode {
@@ -245,33 +258,49 @@ impl NetworkBehaviour for Rendezvous {
 // TODO: Unit Tests
 pub struct Registrations {
     registrations_for_namespace: HashMap<String, HashMap<PeerId, Registration>>,
+    ttl_upper_bound: i64,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RegistrationError {
+    #[error("Requested TTL: {requested} is greater than upper bound: {upper_bound} ")]
+    TTLGreaterThanUpperBound { upper_bound: i64, requested: i64 },
 }
 
 impl Registrations {
-    pub fn new() -> Self {
+    pub fn new(ttl_upper_bound: i64) -> Self {
         Self {
             registrations_for_namespace: Default::default(),
+            ttl_upper_bound,
         }
     }
 
-    pub fn add(&mut self, new_registration: NewRegistration) -> (String, i64) {
+    pub fn add(
+        &mut self,
+        new_registration: NewRegistration,
+    ) -> Result<(String, i64), RegistrationError> {
         let ttl = new_registration.effective_ttl();
-        let namespace = new_registration.namespace;
-
-        self.registrations_for_namespace
-            .entry(namespace.clone())
-            .or_insert_with(|| HashMap::new())
-            .insert(
-                new_registration.record.peer_id(),
-                Registration {
-                    namespace: namespace.clone(),
-                    record: new_registration.record,
-                    ttl,
-                    timestamp: SystemTime::now(),
-                },
-            );
-
-        (namespace, ttl)
+        if ttl < self.ttl_upper_bound {
+            let namespace = new_registration.namespace;
+            self.registrations_for_namespace
+                .entry(namespace.clone())
+                .or_insert_with(|| HashMap::new())
+                .insert(
+                    new_registration.record.peer_id(),
+                    Registration {
+                        namespace: namespace.clone(),
+                        record: new_registration.record,
+                        ttl,
+                        timestamp: SystemTime::now(),
+                    },
+                );
+            Ok((namespace, ttl))
+        } else {
+            Err(RegistrationError::TTLGreaterThanUpperBound {
+                upper_bound: self.ttl_upper_bound,
+                requested: ttl,
+            })
+        }
     }
 
     pub fn remove(&mut self, namespace: String, peer_id: PeerId) {

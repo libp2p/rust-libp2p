@@ -65,7 +65,7 @@ pub struct Registration {
     pub timestamp: SystemTime,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ErrorCode {
     InvalidNamespace,
     InvalidSignedPeerRecord,
