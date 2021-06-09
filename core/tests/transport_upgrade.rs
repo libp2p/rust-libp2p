@@ -23,7 +23,7 @@ mod util;
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{Transport, MemoryTransport};
-use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade, SimOpenRole};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
@@ -68,7 +68,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         Box::pin(async move {
             socket.write_all(b"hello").await.unwrap();
             socket.flush().await.unwrap();
@@ -136,4 +136,3 @@ fn upgrade_pipeline() {
     async_std::task::spawn(server);
     async_std::task::block_on(client);
 }
-
