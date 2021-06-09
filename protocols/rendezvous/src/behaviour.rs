@@ -10,6 +10,7 @@ use libp2p_swarm::{
 use log::debug;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
+use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
@@ -29,12 +30,17 @@ impl Rendezvous {
     }
 
     // TODO: Make it possible to filter for specific external-addresses (like onion addresses-only f.e.)
-    pub fn register(&mut self, namespace: String, rendezvous_node: PeerId, ttl: Option<i64>) {
+    pub fn register(
+        &mut self,
+        namespace: String,
+        rendezvous_node: PeerId,
+        ttl: Option<i64>,
+    ) -> Result<(), SystemTimeError> {
         let authenticated_peer_record = AuthenticatedPeerRecord::from_record(
             self.key_pair.clone(),
             PeerRecord {
                 peer_id: self.key_pair.public().into_peer_id(),
-                seq: 0, // TODO: should be current unix timestamp
+                seq: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
                 addresses: self.external_addresses.clone(),
             },
         );
@@ -51,6 +57,8 @@ impl Rendezvous {
                 },
                 handler: NotifyHandler::Any,
             });
+
+        Ok(())
     }
 
     pub fn unregister(&mut self, namespace: String, rendezvous_node: PeerId) {

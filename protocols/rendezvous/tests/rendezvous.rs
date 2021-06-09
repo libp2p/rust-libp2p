@@ -13,7 +13,7 @@ async fn given_successful_registration_then_successful_discovery() {
 
     let namespace = "some-namespace".to_string();
 
-    test.registration_swarm.behaviour_mut().register(
+    let _ = test.registration_swarm.behaviour_mut().register(
         namespace.clone(),
         test.rendezvous_swarm.local_peer_id().clone(),
         None,
