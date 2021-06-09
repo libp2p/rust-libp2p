@@ -267,6 +267,7 @@ impl Registrations {
                     namespace: namespace.clone(),
                     record: new_registration.record,
                     ttl,
+                    timestamp: SystemTime::now(),
                 },
             );
 

@@ -1,6 +1,7 @@
 use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, AuthenticatedPeerRecord, SignedEnvelope};
 use std::convert::{TryFrom, TryInto};
+use std::time::SystemTime;
 use unsigned_varint::codec::UviBytes;
 
 #[derive(Debug, Clone)]
@@ -60,7 +61,8 @@ impl NewRegistration {
 pub struct Registration {
     pub namespace: String,
     pub record: AuthenticatedPeerRecord,
-    pub ttl: i64, // TODO THEZ: This is useless as a relative value, need registration timestamp, this needs to be a unix timestamp or this is relative in remaining seconds
+    pub ttl: i64,
+    pub timestamp: SystemTime,
 }
 
 #[derive(Debug, Clone)]
@@ -312,6 +314,7 @@ impl TryFrom<wire::Message> for Message {
                                 )?,
                             )?,
                             ttl: reggo.ttl.ok_or(ConversionError::MissingTtl)?,
+                            timestamp: SystemTime::now(),
                         })
                     })
                     .collect::<Result<Vec<_>, ConversionError>>()?,
