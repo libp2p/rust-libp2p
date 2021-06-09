@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo}};
+use crate::{Endpoint, upgrade::{ProtocolName, Role, Upgrade}};
 
 use futures::prelude::*;
 use std::iter;
@@ -66,44 +66,25 @@ pub struct FromFnUpgrade<P, F> {
     fun: F,
 }
 
-impl<P, F> UpgradeInfo for FromFnUpgrade<P, F>
+impl<C, P, F, Fut, Err, Out> Upgrade<C> for FromFnUpgrade<P, F>
 where
-    P: ProtocolName + Clone,
+    P: ProtocolName + Clone + Send + 'static,
+    F: FnOnce(C, Role) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<Out, Err>> + Send + 'static,
+    Out: Send + 'static,
+    Err: Send + 'static,
 {
     type Info = P;
     type InfoIter = iter::Once<P>;
+    type Output = Out;
+    type Error = Err;
+    type Future = Fut;
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(self.protocol_name.clone())
     }
-}
 
-impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
-where
-    P: ProtocolName + Clone,
-    F: FnOnce(C, Endpoint) -> Fut,
-    Fut: Future<Output = Result<Out, Err>>,
-{
-    type Output = Out;
-    type Error = Err;
-    type Future = Fut;
-
-    fn upgrade_inbound(self, sock: C, _: Self::Info) -> Self::Future {
-        (self.fun)(sock, Endpoint::Listener)
-    }
-}
-
-impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
-where
-    P: ProtocolName + Clone,
-    F: FnOnce(C, Endpoint) -> Fut,
-    Fut: Future<Output = Result<Out, Err>>,
-{
-    type Output = Out;
-    type Error = Err;
-    type Future = Fut;
-
-    fn upgrade_outbound(self, sock: C, _: Self::Info) -> Self::Future {
-        (self.fun)(sock, Endpoint::Dialer)
+    fn upgrade(self, sock: C, _: Self::Info, role: Role) -> Self::Future {
+        (self.fun)(sock, role)
     }
 }

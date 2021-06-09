@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{Role, Upgrade};
 
 /// Upgrade that can be disabled at runtime.
 ///
@@ -39,46 +39,24 @@ impl<T> OptionalUpgrade<T> {
     }
 }
 
-impl<T> UpgradeInfo for OptionalUpgrade<T>
+impl<T, C> Upgrade<C> for OptionalUpgrade<T>
 where
-    T: UpgradeInfo,
+    T: Upgrade<C>,
+    <T::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type Info = T::Info;
     type InfoIter = Iter<<T::InfoIter as IntoIterator>::IntoIter>;
+    type Output = T::Output;
+    type Error = T::Error;
+    type Future = T::Future;
 
     fn protocol_info(&self) -> Self::InfoIter {
         Iter(self.0.as_ref().map(|p| p.protocol_info().into_iter()))
     }
-}
 
-impl<C, T> InboundUpgrade<C> for OptionalUpgrade<T>
-where
-    T: InboundUpgrade<C>,
-{
-    type Output = T::Output;
-    type Error = T::Error;
-    type Future = T::Future;
-
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade(self, sock: C, info: Self::Info, role: Role) -> Self::Future {
         if let Some(inner) = self.0 {
-            inner.upgrade_inbound(sock, info)
-        } else {
-            panic!("Bad API usage; a protocol has been negotiated while this struct contains None")
-        }
-    }
-}
-
-impl<C, T> OutboundUpgrade<C> for OptionalUpgrade<T>
-where
-    T: OutboundUpgrade<C>,
-{
-    type Output = T::Output;
-    type Error = T::Error;
-    type Future = T::Future;
-
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
-        if let Some(inner) = self.0 {
-            inner.upgrade_outbound(sock, info)
+            inner.upgrade(sock, info, role)
         } else {
             panic!("Bad API usage; a protocol has been negotiated while this struct contains None")
         }

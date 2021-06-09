@@ -20,7 +20,7 @@
 
 use crate::{
     either::{EitherOutput, EitherError, EitherFuture2, EitherName},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{Role, Upgrade},
 };
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
@@ -39,52 +39,30 @@ impl<A, B> SelectUpgrade<A, B> {
     }
 }
 
-impl<A, B> UpgradeInfo for SelectUpgrade<A, B>
+impl<A, B, C> Upgrade<C> for SelectUpgrade<A, B>
 where
-    A: UpgradeInfo,
-    B: UpgradeInfo
+    A: Upgrade<C>,
+    B: Upgrade<C>,
+    <A::InfoIter as IntoIterator>::IntoIter: Send,
+    <B::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type Info = EitherName<A::Info, B::Info>;
     type InfoIter = InfoIterChain<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter
     >;
+    type Output = EitherOutput<A::Output, B::Output>;
+    type Error = EitherError<A::Error, B::Error>;
+    type Future = EitherFuture2<A::Future, B::Future>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         InfoIterChain(self.0.protocol_info().into_iter(), self.1.protocol_info().into_iter())
     }
-}
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectUpgrade<A, B>
-where
-    A: InboundUpgrade<C, Output = TA, Error = EA>,
-    B: InboundUpgrade<C, Output = TB, Error = EB>,
-{
-    type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
-
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade(self, sock: C, info: Self::Info, role: Role) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info))
-        }
-    }
-}
-
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for SelectUpgrade<A, B>
-where
-    A: OutboundUpgrade<C, Output = TA, Error = EA>,
-    B: OutboundUpgrade<C, Output = TB, Error = EB>,
-{
-    type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
-
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
-        match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info))
+            EitherName::A(info) => EitherFuture2::A(self.0.upgrade(sock, info, role)),
+            EitherName::B(info) => EitherFuture2::B(self.1.upgrade(sock, info, role))
         }
     }
 }
@@ -117,4 +95,3 @@ where
         (min1.saturating_add(min2), max)
     }
 }
-
