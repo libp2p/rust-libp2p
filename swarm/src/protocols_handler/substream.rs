@@ -174,8 +174,15 @@ where
         match event {
             InEvent::NewSubstream { open_info } => self.new_substreams.push_back(open_info),
             InEvent::NotifySubstream { substream, message } => {
-                // find substream in hash maps
-                // call `inject_event` on substream (for this we need to define a trait for the state)
+                match self.substreams.get_mut(&substream) {
+                    Some(handler) => {
+                        handler.inject_event(message);
+                    }
+                    None => {
+                        log::debug!("Substream with ID {} not found", substream.0);
+                        // TODO: Implement Display for SubstreamId
+                    }
+                }
             }
         }
     }
