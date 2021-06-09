@@ -45,16 +45,12 @@ mod one_shot;
 mod select;
 pub mod multi;
 
-pub use crate::upgrade::{
-    InboundUpgradeSend,
-    OutboundUpgradeSend,
-    UpgradeInfoSend,
-};
-
+use crate::NegotiatedSubstream;
 use libp2p_core::{
     ConnectedPoint,
     Multiaddr,
     PeerId,
+    Upgrade,
     upgrade::UpgradeError,
 };
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
@@ -107,9 +103,9 @@ pub trait ProtocolsHandler: Send + 'static {
     /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
-    type InboundProtocol: InboundUpgradeSend;
+    type InboundProtocol: Upgrade<NegotiatedSubstream>;
     /// The outbound upgrade for the protocol(s) used by the handler.
-    type OutboundProtocol: OutboundUpgradeSend;
+    type OutboundProtocol: Upgrade<NegotiatedSubstream>;
     /// The type of additional information returned from `listen_protocol`.
     type InboundOpenInfo: Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
@@ -127,7 +123,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        protocol: <Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         info: Self::InboundOpenInfo
     );
 
@@ -137,7 +133,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// [`ProtocolsHandlerEvent::OutboundSubstreamRequest`].
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         info: Self::OutboundOpenInfo
     );
 
@@ -152,7 +148,7 @@ pub trait ProtocolsHandler: Send + 'static {
         &mut self,
         info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgradeSend>::Error
+            <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Error
         >
     );
 
@@ -160,7 +156,7 @@ pub trait ProtocolsHandler: Send + 'static {
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
+        _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Error>
     ) {}
 
     /// Returns until when the connection should be kept alive.

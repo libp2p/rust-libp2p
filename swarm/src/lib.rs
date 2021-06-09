@@ -57,7 +57,6 @@ mod behaviour;
 mod registry;
 #[cfg(test)]
 mod test;
-mod upgrade;
 
 pub mod protocols_handler;
 pub mod toggle;
@@ -121,14 +120,13 @@ use libp2p_core::{
         NetworkConfig,
         peer::ConnectedPeer,
     },
-    upgrade::{ProtocolName},
+    upgrade::{ProtocolName, Upgrade},
 };
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
 use std::num::{NonZeroU32, NonZeroUsize};
-use upgrade::UpgradeInfoSend as _;
 
 /// Contains the state of the network, plus the way it should behave.
 pub type Swarm<TBehaviour> = ExpandedSwarm<
@@ -259,6 +257,8 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
 pub struct ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
+    <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     network: Network<
         transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -297,17 +297,22 @@ impl<TBehaviour, TInEvent, TOutEvent, THandler> Unpin for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
+    <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
 }
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr>
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-      TInEvent: Send + 'static,
-      TOutEvent: Send + 'static,
-      THandler: IntoProtocolsHandler + Send + 'static,
-      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
-      THandleErr: error::Error + Send + 'static,
+where
+    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
+    THandler: IntoProtocolsHandler + Send + 'static,
+    THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
+    THandleErr: error::Error + Send + 'static,
+    <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     /// Builds a new `Swarm`.
     pub fn new(
@@ -843,11 +848,14 @@ where
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler> Stream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-      THandler: IntoProtocolsHandler + Send + 'static,
-      TInEvent: Send + 'static,
-      TOutEvent: Send + 'static,
-      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+where
+    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+    THandler: IntoProtocolsHandler + Send + 'static,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
+    THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+    <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type Item = TBehaviour::OutEvent;
 
@@ -864,11 +872,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 /// the stream of behaviour events never terminates, so we can implement fused for it
 impl<TBehaviour, TInEvent, TOutEvent, THandler> FusedStream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-      THandler: IntoProtocolsHandler + Send + 'static,
-      TInEvent: Send + 'static,
-      TOutEvent: Send + 'static,
-      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+where
+    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+    THandler: IntoProtocolsHandler + Send + 'static,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
+    THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+    <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     fn is_terminated(&self) -> bool {
         false
@@ -917,7 +928,10 @@ pub struct SwarmBuilder<TBehaviour> {
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
-where TBehaviour: NetworkBehaviour,
+where
+    TBehaviour: NetworkBehaviour,
+    <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{SendWrapper, InboundUpgradeSend, OutboundUpgradeSend};
+use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -32,6 +32,7 @@ use libp2p_core::{
     ConnectedPoint,
     Multiaddr,
     PeerId,
+    Upgrade,
     either::{EitherError, EitherOutput},
     upgrade::{EitherUpgrade, SelectUpgrade, UpgradeError, NegotiationError, ProtocolError}
 };
@@ -60,6 +61,10 @@ impl<TProto1, TProto2> IntoProtocolsHandler for IntoProtocolsHandlerSelect<TProt
 where
     TProto1: IntoProtocolsHandler,
     TProto2: IntoProtocolsHandler,
+    <<<TProto1::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<TProto1::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<TProto2::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<TProto2::Handler as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type Handler = ProtocolsHandlerSelect<TProto1::Handler, TProto2::Handler>;
 
@@ -71,7 +76,7 @@ where
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        SelectUpgrade::new(SendWrapper(self.proto1.inbound_protocol()), SendWrapper(self.proto2.inbound_protocol()))
+        SelectUpgrade::new(self.proto1.inbound_protocol(), self.proto2.inbound_protocol())
     }
 }
 
@@ -98,12 +103,16 @@ impl<TProto1, TProto2> ProtocolsHandler for ProtocolsHandlerSelect<TProto1, TPro
 where
     TProto1: ProtocolsHandler,
     TProto2: ProtocolsHandler,
+    <<<TProto1 as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<TProto1 as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<TProto2 as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<<TProto2 as ProtocolsHandler>::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
     type Error = EitherError<TProto1::Error, TProto2::Error>;
-    type InboundProtocol = SelectUpgrade<SendWrapper<<TProto1 as ProtocolsHandler>::InboundProtocol>, SendWrapper<<TProto2 as ProtocolsHandler>::InboundProtocol>>;
-    type OutboundProtocol = EitherUpgrade<SendWrapper<TProto1::OutboundProtocol>, SendWrapper<TProto2::OutboundProtocol>>;
+    type InboundProtocol = SelectUpgrade<<TProto1 as ProtocolsHandler>::InboundProtocol, <TProto2 as ProtocolsHandler>::InboundProtocol>;
+    type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
     type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
 
@@ -113,11 +122,11 @@ where
         let timeout = *std::cmp::max(proto1.timeout(), proto2.timeout());
         let (u1, i1) = proto1.into_upgrade();
         let (u2, i2) = proto2.into_upgrade();
-        let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
+        let choice = SelectUpgrade::new(u1, u2);
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
 
-    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output, endpoint: Self::OutboundOpenInfo) {
+    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
         match (protocol, endpoint) {
             (EitherOutput::First(protocol), EitherOutput::First(info)) =>
                 self.proto1.inject_fully_negotiated_outbound(protocol, info),
@@ -130,7 +139,7 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output, (i1, i2): Self::InboundOpenInfo) {
+    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Output, (i1, i2): Self::InboundOpenInfo) {
         match protocol {
             EitherOutput::First(protocol) =>
                 self.proto1.inject_fully_negotiated_inbound(protocol, i1),
@@ -151,7 +160,7 @@ where
         self.proto2.inject_address_change(new_address)
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {
         match (info, error) {
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timer) => {
                 self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)
@@ -186,7 +195,7 @@ where
         }
     }
 
-    fn inject_listen_upgrade_error(&mut self, (i1, i2): Self::InboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+    fn inject_listen_upgrade_error(&mut self, (i1, i2): Self::InboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {
         match error {
             ProtocolsHandlerUpgrErr::Timer => {
                 self.proto1.inject_listen_upgrade_error(i1, ProtocolsHandlerUpgrErr::Timer);
@@ -247,7 +256,7 @@ where
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
-                        .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                        .map_upgrade(|u| EitherUpgrade::A(u))
                         .map_info(EitherOutput::First)
                 });
             },
@@ -264,7 +273,7 @@ where
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
-                        .map_upgrade(|u| EitherUpgrade::B(SendWrapper(u)))
+                        .map_upgrade(|u| EitherUpgrade::B(u))
                         .map_info(EitherOutput::Second)
                 });
             },

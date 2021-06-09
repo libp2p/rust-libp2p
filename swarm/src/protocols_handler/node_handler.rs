@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::SendWrapper;
+use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
     KeepAlive,
     ProtocolsHandler,
@@ -32,6 +32,7 @@ use futures::stream::FuturesUnordered;
 use libp2p_core::{
     Multiaddr,
     Connected,
+    Upgrade,
     connection::{
         ConnectionHandler,
         ConnectionHandlerEvent,
@@ -40,7 +41,7 @@ use libp2p_core::{
         SubstreamEndpoint,
     },
     muxing::StreamMuxerBox,
-    upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError}
+    upgrade::{self, Role, UpgradeApply, UpgradeError, Version}
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::{Delay, Instant};
@@ -79,6 +80,8 @@ impl<TIntoProtoHandler, TProtoHandler> IntoConnectionHandler
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
     TProtoHandler: ProtocolsHandler,
+    <<TProtoHandler::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<TProtoHandler::OutboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
 
@@ -107,16 +110,16 @@ where
     /// Futures that upgrade incoming substreams.
     negotiating_in: FuturesUnordered<SubstreamUpgrade<
         TProtoHandler::InboundOpenInfo,
-        InboundUpgradeApply<Substream<StreamMuxerBox>, SendWrapper<TProtoHandler::InboundProtocol>>,
+        UpgradeApply<Substream<StreamMuxerBox>, TProtoHandler::InboundProtocol>,
     >>,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<SubstreamUpgrade<
         TProtoHandler::OutboundOpenInfo,
-        OutboundUpgradeApply<Substream<StreamMuxerBox>, SendWrapper<TProtoHandler::OutboundProtocol>>,
+        UpgradeApply<Substream<StreamMuxerBox>, TProtoHandler::OutboundProtocol>,
     >>,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, SendWrapper<TProtoHandler::OutboundProtocol>)>,
+    queued_dial_upgrades: Vec<(u64, TProtoHandler::OutboundProtocol)>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
@@ -247,7 +250,7 @@ where
                 let protocol = self.handler.listen_protocol();
                 let timeout = *protocol.timeout();
                 let (upgrade, user_data) = protocol.into_upgrade();
-                let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
+                let upgrade = upgrade::apply(substream, upgrade, Role::Responder, Version::V1);
                 let timeout = Delay::new(timeout);
                 self.negotiating_in.push(SubstreamUpgrade {
                     user_data: Some(user_data),
@@ -276,7 +279,7 @@ where
                         version = v;
                     }
                 }
-                let upgrade = upgrade::apply_outbound(substream, upgrade, version);
+                let upgrade = upgrade::apply(substream, upgrade, Role::Initiator, version);
                 let timeout = Delay::new(timeout);
                 self.negotiating_out.push(SubstreamUpgrade {
                     user_data: Some(user_data),
@@ -338,7 +341,7 @@ where
                 let timeout = *protocol.timeout();
                 self.unique_dial_upgrade_id += 1;
                 let (upgrade, info) = protocol.into_upgrade();
-                self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
+                self.queued_dial_upgrades.push((id, upgrade));
                 return Poll::Ready(Ok(
                     ConnectionHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));

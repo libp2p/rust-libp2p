@@ -26,7 +26,7 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade}};
+use libp2p_core::{Multiaddr, upgrade::{Upgrade, DeniedUpgrade}};
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -59,14 +59,14 @@ impl ProtocolsHandler for DummyProtocolsHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        _: <Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo
     ) {
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
+        _: <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo
     ) {
     }
@@ -75,9 +75,9 @@ impl ProtocolsHandler for DummyProtocolsHandler {
 
     fn inject_address_change(&mut self, _: &Multiaddr) {}
 
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error>) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {}
 
-    fn inject_listen_upgrade_error(&mut self, _: Self::InboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error>) {}
+    fn inject_listen_upgrade_error(&mut self, _: Self::InboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive

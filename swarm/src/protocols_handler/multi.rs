@@ -30,14 +30,9 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr,
     SubstreamProtocol
 };
-use crate::upgrade::{
-    InboundUpgradeSend,
-    OutboundUpgradeSend,
-    UpgradeInfoSend
-};
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_core::upgrade::{ProtocolName, UpgradeError, NegotiationError, ProtocolError};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, Upgrade};
+use libp2p_core::upgrade::{ProtocolName, UpgradeError, NegotiationError, ProtocolError, Role};
 use rand::Rng;
 use std::{
     cmp,
@@ -90,13 +85,13 @@ impl<K, H> ProtocolsHandler for MultiHandler<K, H>
 where
     K: Clone + Hash + Eq + Send + 'static,
     H: ProtocolsHandler,
-    H::InboundProtocol: InboundUpgradeSend,
-    H::OutboundProtocol: OutboundUpgradeSend
+    H::InboundProtocol: Upgrade<NegotiatedSubstream>,
+    H::OutboundProtocol: Upgrade<NegotiatedSubstream>
 {
     type InEvent = (K, <H as ProtocolsHandler>::InEvent);
     type OutEvent = (K, <H as ProtocolsHandler>::OutEvent);
     type Error = <H as ProtocolsHandler>::Error;
-    type InboundProtocol = Upgrade<K, <H as ProtocolsHandler>::InboundProtocol>;
+    type InboundProtocol = ProtocolsUpgrade<K, <H as ProtocolsHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ProtocolsHandler>::OutboundProtocol;
     type InboundOpenInfo = Info<K, <H as ProtocolsHandler>::InboundOpenInfo>;
     type OutboundOpenInfo = (K, <H as ProtocolsHandler>::OutboundOpenInfo);
@@ -109,7 +104,7 @@ where
                 let (upgrade, info) = proto.into_upgrade();
                 (key.clone(), (upgrade, info, timeout))
             })
-            .fold((Upgrade::new(), Info::new(), Duration::from_secs(0)),
+            .fold((ProtocolsUpgrade::new(), Info::new(), Duration::from_secs(0)),
                 |(mut upg, mut inf, mut timeout), (k, (u, i, t))| {
                     upg.upgrades.push((k.clone(), u));
                     inf.infos.push((k, i));
@@ -122,7 +117,7 @@ where
 
     fn inject_fully_negotiated_outbound (
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         (key, arg): Self::OutboundOpenInfo
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
@@ -134,7 +129,7 @@ where
 
     fn inject_fully_negotiated_inbound (
         &mut self,
-        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        (key, arg): <Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         mut info: Self::InboundOpenInfo
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
@@ -163,7 +158,7 @@ where
     fn inject_dial_upgrade_error (
         &mut self,
         (key, arg): Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>
+        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Error>
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_dial_upgrade_error(arg, error)
@@ -175,7 +170,7 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         mut info: Self::InboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
+        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Error>
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timer =>
@@ -326,7 +321,7 @@ where
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        Upgrade {
+        ProtocolsUpgrade {
             upgrades: self.handlers.iter()
                 .map(|(k, h)| (k.clone(), h.inbound_protocol()))
                 .collect()
@@ -365,17 +360,17 @@ impl<K: Eq, I> Info<K, I> {
 
 /// Inbound and outbound upgrade for all `ProtocolsHandler`s.
 #[derive(Clone)]
-pub struct Upgrade<K, H> {
+pub struct ProtocolsUpgrade<K, H> {
     upgrades: Vec<(K, H)>
 }
 
-impl<K, H> Upgrade<K, H> {
+impl<K, H> ProtocolsUpgrade<K, H> {
     fn new() -> Self {
-        Upgrade { upgrades: Vec::new() }
+        ProtocolsUpgrade { upgrades: Vec::new() }
     }
 }
 
-impl<K, H> fmt::Debug for Upgrade<K, H>
+impl<K, H> fmt::Debug for ProtocolsUpgrade<K, H>
 where
     K: fmt::Debug + Eq + Hash,
     H: fmt::Debug
@@ -387,13 +382,16 @@ where
     }
 }
 
-impl<K, H> UpgradeInfoSend for Upgrade<K, H>
+impl<K, H> Upgrade<NegotiatedSubstream> for ProtocolsUpgrade<K, H>
 where
-    H: UpgradeInfoSend,
+    H: Upgrade<NegotiatedSubstream>,
     K: Send + 'static
 {
     type Info = IndexedProtoName<H::Info>;
     type InfoIter = std::vec::IntoIter<Self::Info>;
+    type Output = (K, <H as Upgrade<NegotiatedSubstream>>::Output);
+    type Error  = (K, <H as Upgrade<NegotiatedSubstream>>::Error);
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         self.upgrades.iter().enumerate()
@@ -403,44 +401,11 @@ where
             .collect::<Vec<_>>()
             .into_iter()
     }
-}
 
-impl<K, H> InboundUpgradeSend for Upgrade<K, H>
-where
-    H: InboundUpgradeSend,
-    K: Send + 'static
-{
-    type Output = (K, <H as InboundUpgradeSend>::Output);
-    type Error  = (K, <H as InboundUpgradeSend>::Error);
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade(mut self, resource: NegotiatedSubstream, info: Self::Info, role: Role) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
-        upgrade.upgrade_inbound(resource, info)
-            .map(move |out| {
-                match out {
-                    Ok(o) => Ok((key, o)),
-                    Err(e) => Err((key, e))
-                }
-            })
-            .boxed()
-    }
-}
-
-impl<K, H> OutboundUpgradeSend for Upgrade<K, H>
-where
-    H: OutboundUpgradeSend,
-    K: Send + 'static
-{
-    type Output = (K, <H as OutboundUpgradeSend>::Output);
-    type Error  = (K, <H as OutboundUpgradeSend>::Error);
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
-        let IndexedProtoName(index, info) = info;
-        let (key, upgrade) = self.upgrades.remove(index);
-        upgrade.upgrade_outbound(resource, info)
+        upgrade.upgrade(resource, info, role)
             .map(move |out| {
                 match out {
                     Ok(o) => Ok((key, o)),
@@ -455,7 +420,7 @@ where
 fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtonameError>
 where
     I: Iterator<Item = T>,
-    T: UpgradeInfoSend
+    T: Upgrade<NegotiatedSubstream>
 {
     let mut set = HashSet::new();
     for infos in iter {

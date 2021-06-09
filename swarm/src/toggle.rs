@@ -18,8 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters};
-use crate::upgrade::{SendWrapper, InboundUpgradeSend, OutboundUpgradeSend};
+use crate::{NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters};
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -33,6 +32,7 @@ use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
+    Upgrade,
     connection::{ConnectionId, ListenerId},
     either::{EitherError, EitherOutput},
     upgrade::{DeniedUpgrade, EitherUpgrade}
@@ -71,7 +71,8 @@ impl<TBehaviour> From<Option<TBehaviour>> for Toggle<TBehaviour> {
 
 impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
-    TBehaviour: NetworkBehaviour
+    TBehaviour: NetworkBehaviour,
+    <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type ProtocolsHandler = ToggleIntoProtoHandler<TBehaviour::ProtocolsHandler>;
     type OutEvent = TBehaviour::OutEvent;
@@ -210,7 +211,8 @@ pub struct ToggleIntoProtoHandler<TInner> {
 
 impl<TInner> IntoProtocolsHandler for ToggleIntoProtoHandler<TInner>
 where
-    TInner: IntoProtocolsHandler
+    TInner: IntoProtocolsHandler,
+    <<<<TInner as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type Handler = ToggleProtoHandler<TInner::Handler>;
 
@@ -222,9 +224,9 @@ where
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
+            EitherUpgrade::A(inner.inbound_protocol())
         } else {
-            EitherUpgrade::B(SendWrapper(DeniedUpgrade))
+            EitherUpgrade::B(DeniedUpgrade)
         }
     }
 }
@@ -237,11 +239,12 @@ pub struct ToggleProtoHandler<TInner> {
 impl<TInner> ProtocolsHandler for ToggleProtoHandler<TInner>
 where
     TInner: ProtocolsHandler,
+    <<<TInner as ProtocolsHandler>::InboundProtocol as Upgrade<NegotiatedSubstream>>::InfoIter as IntoIterator>::IntoIter: Send,
 {
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
     type Error = TInner::Error;
-    type InboundProtocol = EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
+    type InboundProtocol = EitherUpgrade<TInner::InboundProtocol, DeniedUpgrade>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
     type InboundOpenInfo = Either<TInner::InboundOpenInfo, ()>;
@@ -249,16 +252,16 @@ where
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         if let Some(inner) = self.inner.as_ref() {
             inner.listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                .map_upgrade(|u| EitherUpgrade::A(u))
                 .map_info(Either::Left)
         } else {
-            SubstreamProtocol::new(EitherUpgrade::B(SendWrapper(DeniedUpgrade)), Either::Right(()))
+            SubstreamProtocol::new(EitherUpgrade::B(DeniedUpgrade), Either::Right(()))
         }
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        out: <Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         info: Self::InboundOpenInfo
     ) {
         let out = match out {
@@ -277,7 +280,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
+        out: <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
@@ -295,12 +298,12 @@ where
         }
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
     }
 
-    fn inject_listen_upgrade_error(&mut self, info: Self::InboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+    fn inject_listen_upgrade_error(&mut self, info: Self::InboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {
         let (inner, info) = match (self.inner.as_mut(), info) {
             (Some(inner), Either::Left(info)) => (inner, info),
             // Ignore listen upgrade errors in disabled state.

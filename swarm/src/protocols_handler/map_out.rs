@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -26,7 +26,7 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use libp2p_core::Multiaddr;
+use libp2p_core::{Multiaddr, Upgrade};
 use std::task::{Context, Poll};
 
 /// Wrapper around a protocol handler that turns the output event into something else.
@@ -66,7 +66,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        protocol: <Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         info: Self::InboundOpenInfo
     ) {
         self.inner.inject_fully_negotiated_inbound(protocol, info)
@@ -74,7 +74,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.inject_fully_negotiated_outbound(protocol, info)
@@ -88,11 +88,11 @@ where
         self.inner.inject_address_change(addr)
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
 
-    fn inject_listen_upgrade_error(&mut self, info: Self::InboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+    fn inject_listen_upgrade_error(&mut self, info: Self::InboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as Upgrade<NegotiatedSubstream>>::Error>) {
         self.inner.inject_listen_upgrade_error(info, error)
     }
 
