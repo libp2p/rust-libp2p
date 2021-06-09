@@ -29,7 +29,7 @@ impl Rendezvous {
     }
 
     // TODO: Make it possible to filter for specific external-addresses (like onion addresses-only f.e.)
-    pub fn register(&mut self, namespace: String, rendezvous_node: PeerId) {
+    pub fn register(&mut self, namespace: String, rendezvous_node: PeerId, ttl: Option<i64>) {
         let authenticated_peer_record = AuthenticatedPeerRecord::from_record(
             self.key_pair.clone(),
             PeerRecord {
@@ -46,7 +46,7 @@ impl Rendezvous {
                     request: NewRegistration {
                         namespace,
                         record: authenticated_peer_record,
-                        ttl: None,
+                        ttl,
                     },
                 },
                 handler: NotifyHandler::Any,
