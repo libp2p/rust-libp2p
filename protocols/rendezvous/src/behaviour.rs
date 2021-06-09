@@ -76,11 +76,11 @@ impl Rendezvous {
 pub enum Event {
     Discovered {
         rendezvous_node: PeerId,
-        registrations: Vec<Registration>,
+        registrations: HashMap<(String, PeerId), Registration>,
     },
     AnsweredDiscoverRequest {
         enquirer: PeerId,
-        registrations: Vec<Registration>,
+        registrations: HashMap<(String, PeerId), Registration>,
     },
     FailedToDiscover {
         rendezvous_node: PeerId,
@@ -176,14 +176,14 @@ impl NetworkBehaviour for Rendezvous {
                 // TODO: Should send unregister response?
             }
             Message::Discover { namespace } => {
-                let registrations = self.registrations.get(namespace).unwrap_or_default();
+                let registrations = self.registrations.get(namespace);
 
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
                         event: InEvent::DiscoverResponse {
-                            discovered: registrations.clone(),
+                            discovered: registrations.values().cloned().collect(),
                         },
                     });
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -197,7 +197,10 @@ impl NetworkBehaviour for Rendezvous {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Discovered {
                         rendezvous_node: peer_id,
-                        registrations,
+                        registrations: registrations
+                            .iter()
+                            .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
+                            .collect(),
                     }))
             }
             Message::FailedToDiscover { error } => self.events.push_back(
@@ -268,21 +271,19 @@ impl Registrations {
         }
     }
 
-    pub fn get(&mut self, namespace: Option<String>) -> Option<Vec<Registration>> {
+    pub fn get(&mut self, namespace: Option<String>) -> HashMap<(String, PeerId), Registration> {
         if self.registrations_for_namespace.is_empty() {
-            return None;
+            return HashMap::new();
         }
 
         if let Some(namespace) = namespace {
             if let Some(registrations) = self.registrations_for_namespace.get(&namespace) {
-                Some(
-                    registrations
-                        .values()
-                        .cloned()
-                        .collect::<Vec<Registration>>(),
-                )
+                registrations
+                    .values()
+                    .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
+                    .collect::<HashMap<(String, PeerId), Registration>>()
             } else {
-                None
+                HashMap::new()
             }
         } else {
             let discovered = self
@@ -291,13 +292,13 @@ impl Registrations {
                 .map(|(_, registrations)| {
                     registrations
                         .values()
-                        .cloned()
-                        .collect::<Vec<Registration>>()
+                        .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
+                        .collect::<HashMap<(String, PeerId), Registration>>()
                 })
                 .flatten()
-                .collect::<Vec<Registration>>();
+                .collect::<HashMap<(String, PeerId), Registration>>();
 
-            Some(discovered)
+            discovered
         }
     }
 }
