@@ -35,6 +35,58 @@ async fn given_successful_registration_then_successful_discovery() {
     .await;
 }
 
+#[tokio::test]
+async fn given_successful_registration_then_refresh_ttl() {
+    env_logger::init();
+    let mut test = RendezvousTest::setup().await;
+
+    let namespace = "some-namespace".to_string();
+
+    let refesh_ttl = 10_000;
+
+    let _ = test.registration_swarm.behaviour_mut().register(
+        namespace.clone(),
+        test.rendezvous_swarm.local_peer_id().clone(),
+        None,
+    );
+
+    test.assert_successful_registration(namespace.clone(), DEFAULT_TTL)
+        .await;
+
+    test.discovery_swarm.behaviour_mut().discover(
+        Some(namespace.clone()),
+        test.rendezvous_swarm.local_peer_id().clone(),
+    );
+
+    test.assert_successful_discovery(
+        namespace.clone(),
+        DEFAULT_TTL,
+        test.registration_swarm.local_peer_id().clone(),
+    )
+    .await;
+
+    let _ = test.registration_swarm.behaviour_mut().register(
+        namespace.clone(),
+        test.rendezvous_swarm.local_peer_id().clone(),
+        Some(refesh_ttl),
+    );
+
+    test.assert_successful_registration(namespace.clone(), refesh_ttl)
+        .await;
+
+    test.discovery_swarm.behaviour_mut().discover(
+        Some(namespace.clone()),
+        test.rendezvous_swarm.local_peer_id().clone(),
+    );
+
+    test.assert_successful_discovery(
+        namespace.clone(),
+        refesh_ttl,
+        test.registration_swarm.local_peer_id().clone(),
+    )
+    .await;
+}
+
 struct RendezvousTest {
     pub registration_swarm: Swarm<Rendezvous>,
     pub discovery_swarm: Swarm<Rendezvous>,
