@@ -27,7 +27,7 @@ use crate::RequestId;
 use crate::codec::RequestResponseCodec;
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
 use std::io;
@@ -158,7 +158,7 @@ where
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(mut self, mut io: NegotiatedSubstream, protocol: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, mut io: NegotiatedSubstream, protocol: Self::Info, _: SimOpenRole) -> Self::Future {
         async move {
             let write = self.codec.write_request(&protocol, &mut io, self.request);
             write.await?;

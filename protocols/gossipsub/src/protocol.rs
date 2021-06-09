@@ -34,7 +34,7 @@ use futures::future;
 use futures::prelude::*;
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use libp2p_core::{
-    identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
+    identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, SimOpenRole, UpgradeInfo,
 };
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
@@ -152,7 +152,7 @@ where
     type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info, _: SimOpenRole) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use bytes::Bytes;
 use futures::prelude::*;
 use std::{iter, sync::Arc};
@@ -89,7 +89,7 @@ where
     type Error = E;
     type Future = O;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket)
     }

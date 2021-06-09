@@ -33,7 +33,7 @@ use crate::record::{self, Record};
 use futures::prelude::*;
 use asynchronous_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use prost::Message;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
@@ -224,7 +224,7 @@ where
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, incoming: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         let mut codec = UviBytes::default();
         codec.set_max_len(self.max_packet_size);
 

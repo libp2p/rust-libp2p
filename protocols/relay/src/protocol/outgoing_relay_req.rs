@@ -24,7 +24,7 @@ use asynchronous_codec::{Framed, FramedParts};
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{upgrade, Multiaddr, PeerId};
+use libp2p_core::{upgrade, Multiaddr, PeerId, SimOpenRole};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::{error, fmt, iter};
@@ -72,7 +72,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
     type Error = OutgoingRelayReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info, _: SimOpenRole) -> Self::Future {
         let OutgoingRelayReq {
             src_id,
             dst_id,

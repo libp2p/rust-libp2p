@@ -67,7 +67,7 @@ pub use protocol::{Protocol, ProtocolParams, IX, IK, XX};
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 
 use futures::prelude::*;
-use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade, SimOpenRole};
 use std::pin::Pin;
 use zeroize::Zeroize;
 
@@ -203,15 +203,35 @@ where
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self.params.into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
-        handshake::rt1_initiator(socket, session,
-                                 self.dh_keys.into_identity(),
-                                 IdentityExchange::Mutual,
-                                 self.legacy)
+    fn upgrade_outbound(self, socket: T, _: Self::Info, role: SimOpenRole) -> Self::Future {
+        match role {
+            SimOpenRole::Initiator => {
+                let session = self.params.into_builder()
+                    .local_private_key(self.dh_keys.secret().as_ref())
+                    .build_initiator()
+                    .map_err(NoiseError::from);
+                handshake::rt1_initiator(
+                    socket,
+                    session,
+                    self.dh_keys.into_identity(),
+                    IdentityExchange::Mutual,
+                    self.legacy,
+                )
+            }
+            SimOpenRole::Responder => {
+                let session = self.params.into_builder()
+                    .local_private_key(self.dh_keys.secret().as_ref())
+                    .build_responder()
+                    .map_err(NoiseError::from);
+                handshake::rt1_responder(
+                    socket,
+                    session,
+                    self.dh_keys.into_identity(),
+                    IdentityExchange::Mutual,
+                    self.legacy,
+                )
+            }
+        }
     }
 }
 
@@ -249,15 +269,35 @@ where
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self.params.into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
-        handshake::rt15_initiator(socket, session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Mutual,
-            self.legacy)
+    fn upgrade_outbound(self, socket: T, _: Self::Info, role: SimOpenRole) -> Self::Future {
+        match role {
+            SimOpenRole::Initiator => {
+                let session = self.params.into_builder()
+                    .local_private_key(self.dh_keys.secret().as_ref())
+                    .build_initiator()
+                    .map_err(NoiseError::from);
+                handshake::rt15_initiator(
+                    socket,
+                    session,
+                    self.dh_keys.into_identity(),
+                    IdentityExchange::Mutual,
+                    self.legacy,
+                )
+            }
+            SimOpenRole::Responder => {
+                let session = self.params.into_builder()
+                    .local_private_key(self.dh_keys.secret().as_ref())
+                    .build_responder()
+                    .map_err(NoiseError::from);
+                handshake::rt15_responder(
+                    socket,
+                    session,
+                    self.dh_keys.into_identity(),
+                    IdentityExchange::Mutual,
+                    self.legacy,
+                )
+            }
+        }
     }
 }
 
@@ -295,16 +335,36 @@ where
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self.params.into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .remote_public_key(self.remote.0.as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
-        handshake::rt1_initiator(socket, session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Send { remote: self.remote.1 },
-            self.legacy)
+    fn upgrade_outbound(self, socket: T, _: Self::Info, role: SimOpenRole) -> Self::Future {
+        match role {
+            SimOpenRole::Initiator => {
+                let session = self.params.into_builder()
+                    .local_private_key(self.dh_keys.secret().as_ref())
+                    .remote_public_key(self.remote.0.as_ref())
+                    .build_initiator()
+                    .map_err(NoiseError::from);
+                handshake::rt1_initiator(
+                    socket,
+                    session,
+                    self.dh_keys.into_identity(),
+                    IdentityExchange::Send { remote: self.remote.1 },
+                    self.legacy,
+                )
+            }
+            SimOpenRole::Responder => {
+                let session = self.params.into_builder()
+                    .local_private_key(self.dh_keys.secret().as_ref())
+                    .build_responder()
+                    .map_err(NoiseError::from);
+                handshake::rt1_responder(
+                    socket,
+                    session,
+                    self.dh_keys.into_identity(),
+                    IdentityExchange::Receive,
+                    self.legacy,
+                )
+            }
+        }
     }
 }
 
@@ -374,8 +434,8 @@ where
     type Error = NoiseError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
-        Box::pin(self.config.upgrade_outbound(socket, info)
+    fn upgrade_outbound(self, socket: T, info: Self::Info, role: SimOpenRole) -> Self::Future {
+        Box::pin(self.config.upgrade_outbound(socket, info, role)
             .and_then(|(remote, io)| match remote {
                 RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
                 _ => future::err(NoiseError::AuthenticationFailed)

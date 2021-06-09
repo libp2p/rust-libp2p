@@ -23,7 +23,7 @@
 
 use futures::{future, prelude::*, ready, stream::{BoxStream, LocalBoxStream}};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{fmt, io, iter, pin::Pin, task::{Context, Poll}};
 use thiserror::Error;
@@ -334,8 +334,12 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        let mode = self.mode.unwrap_or(yamux::Mode::Client);
+    fn upgrade_outbound(self, io: C, _: Self::Info, role: SimOpenRole) -> Self::Future {
+        let mode = match role {
+            SimOpenRole::Initiator => yamux::Mode::Client,
+            SimOpenRole::Responder => yamux::Mode::Server,
+        };
+        let mode = self.mode.unwrap_or(mode);
         future::ready(Ok(Yamux::new(io, self.inner, mode)))
     }
 }
@@ -348,9 +352,13 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, io: C, _: Self::Info, role: SimOpenRole) -> Self::Future {
+        let mode = match role {
+            SimOpenRole::Initiator => yamux::Mode::Client,
+            SimOpenRole::Responder => yamux::Mode::Server,
+        };
         let cfg = self.0;
-        let mode = cfg.mode.unwrap_or(yamux::Mode::Client);
+        let mode = cfg.mode.unwrap_or(mode);
         future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
     }
 }

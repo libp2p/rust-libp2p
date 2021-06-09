@@ -30,7 +30,7 @@ use bytes::Bytes;
 use libp2p_core::{
     StreamMuxer,
     muxing::StreamMuxerEvent,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    upgrade::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo},
 };
 use parking_lot::Mutex;
 use futures::{prelude::*, future, ready};
@@ -67,7 +67,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         future::ready(Ok(Multiplex {
             io: Mutex::new(io::Multiplexed::new(socket, self))
         }))

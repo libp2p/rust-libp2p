@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{prelude::*, ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use std::{io, iter, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
@@ -65,7 +65,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, w: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, w: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         future::ok(DeflateOutput::new(w, self.compression))
     }
 }

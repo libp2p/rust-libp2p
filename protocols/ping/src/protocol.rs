@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo};
 use libp2p_swarm::NegotiatedSubstream;
 use rand::{distributions, prelude::*};
 use std::{io, iter, time::Duration};
@@ -74,7 +74,7 @@ impl OutboundUpgrade<NegotiatedSubstream> for Ping {
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, stream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, stream: NegotiatedSubstream, _: Self::Info, _: SimOpenRole) -> Self::Future {
         future::ok(stream)
     }
 }

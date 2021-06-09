@@ -20,7 +20,7 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo, PeerId, upgrade};
 use prost::Message;
 use std::{error, fmt, io, iter, pin::Pin};
 use futures::{Future, io::{AsyncRead, AsyncWrite}};
@@ -163,7 +163,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info, _: SimOpenRole) -> Self::Future {
         Box::pin(async move {
             let bytes = self.into_bytes();
             upgrade::write_one(&mut socket, bytes).await?;

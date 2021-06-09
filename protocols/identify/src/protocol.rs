@@ -23,7 +23,7 @@ use futures::prelude::*;
 use libp2p_core::{
     Multiaddr,
     PublicKey,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, SimOpenRole, UpgradeInfo}
 };
 use log::{debug, trace};
 use prost::Message;
@@ -122,7 +122,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         recv(socket).boxed()
     }
 }
@@ -157,7 +157,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info, _: SimOpenRole) -> Self::Future {
         send(socket, self.0.0).boxed()
     }
 }
