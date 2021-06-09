@@ -53,7 +53,7 @@ use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
-use libp2p::{gossipsub, identity, PeerId};
+use libp2p::{gossipsub, identity, swarm::SwarmEvent, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
@@ -104,7 +104,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // add an explicit peer if one was provided
         if let Some(explicit) = std::env::args().nth(2) {
-            let explicit = explicit.clone();
             match explicit.parse() {
                 Ok(id) => gossipsub.add_explicit_peer(&id),
                 Err(err) => println!("Failed to parse explicit peer id: {:?}", err),
@@ -136,7 +135,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Kick it off
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
@@ -152,30 +150,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(gossip_event)) => match gossip_event {
-                    GossipsubEvent::Message {
+                Poll::Ready(Some(event)) => match event {
+                    SwarmEvent::Behaviour(GossipsubEvent::Message {
                         propagation_source: peer_id,
                         message_id: id,
                         message,
-                    } => println!(
+                    }) => println!(
                         "Got message: {} with id: {} from peer: {:?}",
                         String::from_utf8_lossy(&message.data),
                         id,
                         peer_id
                     ),
+                    SwarmEvent::NewListenAddr(addr) => {
+                        println!("Listening on {:?}", addr);
+                    }
                     _ => {}
                 },
                 Poll::Ready(None) | Poll::Pending => break,
             }
         }
-
-        if !listening {
-            for addr in libp2p::Swarm::listeners(&swarm) {
-                println!("Listening on {:?}", addr);
-                listening = true;
-            }
-        }
-
         Poll::Pending
     }))
 }

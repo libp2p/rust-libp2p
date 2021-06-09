@@ -495,10 +495,10 @@ mod tests {
 
         let listen_addr = async_std::task::block_on(async {
             loop {
-                let swarm1_fut = swarm1.next_event();
+                let swarm1_fut = swarm1.next();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    Some(SwarmEvent::NewListenAddr(addr)) => return addr,
                     _ => {}
                 }
             }
@@ -511,9 +511,9 @@ mod tests {
         // either `Identified` event arrives correctly.
         async_std::task::block_on(async move {
             loop {
-                let swarm1_fut = swarm1.next();
+                let swarm1_fut = swarm1.behaviour_next();
                 pin_mut!(swarm1_fut);
-                let swarm2_fut = swarm2.next();
+                let swarm2_fut = swarm2.behaviour_next();
                 pin_mut!(swarm2_fut);
 
                 match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
@@ -568,7 +568,7 @@ mod tests {
 
         let listen_addr = async_std::task::block_on(async {
             loop {
-                let swarm1_fut = swarm1.next_event();
+                let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
                     SwarmEvent::NewListenAddr(addr) => return addr,
@@ -581,8 +581,8 @@ mod tests {
 
         async_std::task::block_on(async move {
             loop {
-                let swarm1_fut = swarm1.next_event();
-                let swarm2_fut = swarm2.next_event();
+                let swarm1_fut = swarm1.select_next_some();
+                let swarm2_fut = swarm2.select_next_some();
 
                 {
                     pin_mut!(swarm1_fut);

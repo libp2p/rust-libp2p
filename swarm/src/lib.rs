@@ -475,23 +475,15 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         &mut self.behaviour
     }
 
-    /// Returns the next event that happens in the `Swarm`.
-    ///
-    /// Includes events from the `NetworkBehaviour` but also events about the connections status.
-    pub async fn next_event(&mut self) -> SwarmEvent<TBehaviour::OutEvent, THandleErr> {
-        future::poll_fn(move |cx| ExpandedSwarm::poll_next_event(Pin::new(self), cx)).await
-    }
-
     /// Returns the next event produced by the [`NetworkBehaviour`].
-    pub async fn next(&mut self) -> TBehaviour::OutEvent {
-        future::poll_fn(move |cx| {
-            loop {
-                let event = futures::ready!(ExpandedSwarm::poll_next_event(Pin::new(self), cx));
-                if let SwarmEvent::Behaviour(event) = event {
-                    return Poll::Ready(event);
-                }
+    pub async fn behaviour_next(&mut self) -> TBehaviour::OutEvent {
+        future::poll_fn(move |cx| loop {
+            let event = futures::ready!(ExpandedSwarm::poll_next_event(Pin::new(self), cx));
+            if let SwarmEvent::Behaviour(event) = event {
+                return Poll::Ready(event);
             }
-        }).await
+        })
+        .await
     }
 
     /// Internal function used by everything event-related.
@@ -841,23 +833,27 @@ where
         })
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler> Stream for
-    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-      THandler: IntoProtocolsHandler + Send + 'static,
-      TInEvent: Send + 'static,
-      TOutEvent: Send + 'static,
-      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+
+
+/// Stream of events that are happening in the `Swarm`.
+///
+/// Includes events from the `NetworkBehaviour` but also events about the connections status and listeners.
+impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream
+    for ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
+where
+    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+    THandler: IntoProtocolsHandler + Send + 'static,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
+    THandler::Handler:
+        ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
+    THandleErr: error::Error + Send + 'static,
 {
-    type Item = TBehaviour::OutEvent;
+    type Item = SwarmEvent<TBehaviour::OutEvent, THandleErr>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        loop {
-            let event = futures::ready!(ExpandedSwarm::poll_next_event(self.as_mut(), cx));
-            if let SwarmEvent::Behaviour(event) = event {
-                return Poll::Ready(Some(event));
-            }
-        }
+        let event = futures::ready!(ExpandedSwarm::poll_next_event(self.as_mut(), cx));
+        Poll::Ready(Some(event))
     }
 }
 

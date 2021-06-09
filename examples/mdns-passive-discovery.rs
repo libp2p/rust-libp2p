@@ -18,7 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p::{identity, mdns::{Mdns, MdnsConfig, MdnsEvent}, PeerId, Swarm};
+use libp2p::{
+    identity,
+    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    PeerId, Swarm,
+};
 use std::error::Error;
 
 #[async_std::main]
@@ -43,7 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     loop {
-        match swarm.next().await {
+        match swarm.behaviour_next().await {
             MdnsEvent::Discovered(peers) => {
                 for (peer, addr) in peers {
                     println!("discovered {} {}", peer, addr);

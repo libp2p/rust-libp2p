@@ -52,7 +52,7 @@ fn is_response_outbound() {
 
     let request_id1 = swarm1.behaviour_mut().send_request(&offline_peer, ping.clone());
 
-    match futures::executor::block_on(swarm1.next()) {
+    match futures::executor::block_on(swarm1.behaviour_next()) {
         RequestResponseEvent::OutboundFailure{peer, request_id: req_id, error: _error} => {
             assert_eq!(&offline_peer, &peer);
             assert_eq!(req_id, request_id1);
@@ -93,7 +93,7 @@ fn ping_protocol() {
 
     let peer1 = async move {
         loop {
-            match swarm1.next_event().await {
+            match swarm1.select_next_some().await {
                 SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
                 SwarmEvent::Behaviour(RequestResponseEvent::Message {
                     peer,
@@ -124,7 +124,7 @@ fn ping_protocol() {
         assert!(swarm2.behaviour().is_pending_outbound(&peer1_id, &req_id));
 
         loop {
-            match swarm2.next().await {
+            match swarm2.behaviour_next().await {
                 RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Response { request_id, response }
@@ -176,7 +176,7 @@ fn emits_inbound_connection_closed_failure() {
         // Wait for swarm 1 to receive request by swarm 2.
         let _channel = loop {
             futures::select!(
-                event = swarm1.next().fuse() => match event {
+                event = swarm1.behaviour_next().fuse() => match event {
                     RequestResponseEvent::Message {
                         peer,
                         message: RequestResponseMessage::Request { request, channel, .. }
@@ -187,14 +187,14 @@ fn emits_inbound_connection_closed_failure() {
                     },
                     e => panic!("Peer1: Unexpected event: {:?}", e)
                 },
-                event = swarm2.next().fuse() => panic!("Peer2: Unexpected event: {:?}", event),
+                event = swarm2.behaviour_next().fuse() => panic!("Peer2: Unexpected event: {:?}", event),
             )
         };
 
         // Drop swarm 2 in order for the connection between swarm 1 and 2 to close.
         drop(swarm2);
 
-        match swarm1.next().await {
+        match swarm1.behaviour_next().await {
             RequestResponseEvent::InboundFailure { error: InboundFailure::ConnectionClosed, ..} => {},
             e => panic!("Peer1: Unexpected event: {:?}", e)
         }
@@ -234,7 +234,7 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
         // Wait for swarm 1 to receive request by swarm 2.
         let event = loop {
             futures::select!(
-                event = swarm1.next().fuse() => if let RequestResponseEvent::Message {
+                event = swarm1.behaviour_next().fuse() => if let RequestResponseEvent::Message {
                      peer,
                      message: RequestResponseMessage::Request { request, channel, .. }
                  } = event {
@@ -244,7 +244,7 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
                     drop(channel);
                     continue;
                 },
-                event = swarm2.next().fuse() => {
+                event = swarm2.behaviour_next().fuse() => {
                     break event;
                 },
             )
@@ -290,7 +290,7 @@ fn ping_protocol_throttled() {
 
     let peer1 = async move {
         for i in 1 .. {
-            match swarm1.next_event().await {
+            match swarm1.select_next_some().await {
                 SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
                 SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
@@ -332,7 +332,7 @@ fn ping_protocol_throttled() {
                 }
                 blocked = true;
             }
-            match swarm2.next().await {
+            match swarm2.behaviour_next().await {
                 throttled::Event::ResumeSending(peer) => {
                     assert_eq!(peer, peer1_id);
                     blocked = false

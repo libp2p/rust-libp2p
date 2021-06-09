@@ -299,9 +299,9 @@ fn event_process_false() {
 
         // check that the event is bubbled up all the way to swarm
         let _ = async {
-            match _swarm.next().await {
-                BehaviourOutEvent::Ping(_) => {},
-                BehaviourOutEvent::Identify(_) => {},
+            match _swarm.behaviour_next().await {
+                BehaviourOutEvent::Ping(_) => {}
+                BehaviourOutEvent::Identify(_) => {}
             }
         };
     }
