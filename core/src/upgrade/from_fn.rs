@@ -33,7 +33,7 @@ use std::iter;
 /// # use std::io;
 /// let _transport = MemoryTransport::default()
 ///     .and_then(move |out, cp| {
-///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock, endpoint| async move {
+///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock, endpoint, _| async move {
 ///             if endpoint.is_dialer() {
 ///                 upgrade::write_one(&mut sock, "some handshake data").await?;
 ///             } else {
