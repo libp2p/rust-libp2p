@@ -78,7 +78,7 @@ impl<M> SubstreamHandler for OneshotPushSubstream<M> {
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub struct SubstreamId(u64);
 
 type ProtocolUpgradeFn = Box<
@@ -224,8 +224,30 @@ where
             });
         }
 
-        // TODO poll all inbound streams
-        // TODO poll all outbound streams
+        let substream_ids = self.substreams.keys().copied().collect::<Vec<_>>();
+
+        for id in substream_ids {
+            let mut handler = self
+                .substreams
+                .remove(&id)
+                .expect("we just got the key out of the map");
+
+            match handler.poll(cx) {
+                Poll::Ready(Some(event)) => {
+                    self.substreams.insert(id, handler);
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(OutEvent::Message {
+                        substream: id,
+                        message: event,
+                    }));
+                }
+                Poll::Pending => {
+                    self.substreams.insert(id, handler);
+                }
+                Poll::Ready(None) => {
+                    log::debug!("Substream handler {} finished", id.0);
+                }
+            }
+        }
 
         Poll::Pending
     }
