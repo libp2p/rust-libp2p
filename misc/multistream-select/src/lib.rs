@@ -96,7 +96,7 @@ mod tests;
 
 pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
 pub use self::protocol::ProtocolError;
-pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
+pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture, SimOpenRole};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
 
 /// Supported multistream-select versions.
