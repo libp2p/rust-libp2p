@@ -203,7 +203,7 @@ impl NetworkBehaviour for Rendezvous {
             Message::Discover { namespace } => {
                 let (registrations, _) = self.registrations.get(namespace, None);
 
-                let discovered = registrations.collect::<Vec<_>>();
+                let discovered = registrations.cloned().collect::<Vec<_>>();
 
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -344,28 +344,24 @@ impl Registrations {
         &mut self,
         discover_namespace: Option<String>,
         _: Option<Cookie>,
-    ) -> (impl Iterator<Item = Registration> + '_, Cookie) {
-        let discovered = self
-            .registrations_for_peer
-            .iter()
-            .filter_map({
-                let reggos = &self.registrations;
+    ) -> (impl Iterator<Item = &Registration> + '_, Cookie) {
+        let discovered = self.registrations_for_peer.iter().filter_map({
+            let reggos = &self.registrations;
 
-                move |((_, namespace), registration_id)| {
-                    let registration = reggos
-                        .get(registration_id)
-                        .expect("bad internal data structure");
+            move |((_, namespace), registration_id)| {
+                let registration = reggos
+                    .get(registration_id)
+                    .expect("bad internal data structure");
 
-                    match discover_namespace.as_ref() {
-                        Some(discover_namespace) if discover_namespace == namespace => {
-                            Some(registration)
-                        }
-                        Some(_) => None,
-                        None => Some(registration),
+                match discover_namespace.as_ref() {
+                    Some(discover_namespace) if discover_namespace == namespace => {
+                        Some(registration)
                     }
+                    Some(_) => None,
+                    None => Some(registration),
                 }
-            })
-            .cloned();
+            }
+        });
 
         (discovered, Cookie {})
     }
@@ -410,7 +406,7 @@ mod tests {
         let (discover, _) = registrations.get(Some("foo".to_owned()), None);
 
         assert_eq!(
-            discover.map(|r| r.namespace).collect::<Vec<_>>(),
+            discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
             vec!["foo"]
         );
     }
@@ -427,7 +423,7 @@ mod tests {
         let (discover, _) = registrations.get(Some("foo".to_owned()), None);
 
         assert_eq!(
-            discover.map(|r| r.namespace).collect::<Vec<_>>(),
+            discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
             vec!["foo"]
         );
     }
