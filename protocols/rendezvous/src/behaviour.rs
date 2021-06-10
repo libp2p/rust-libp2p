@@ -261,7 +261,14 @@ impl NetworkBehaviour for Rendezvous {
     }
 }
 
-pub struct Cookie {}
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
+pub struct Cookie(Uuid);
+
+impl Cookie {
+    fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 struct RegistrationId(Uuid);
@@ -276,6 +283,7 @@ impl RegistrationId {
 pub struct Registrations {
     registrations_for_peer: HashMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
+    cookies: HashMap<Cookie, Vec<RegistrationId>>,
     ttl_upper_bound: i64,
 }
 
@@ -291,6 +299,7 @@ impl Registrations {
             registrations_for_peer: Default::default(),
             registrations: Default::default(),
             ttl_upper_bound,
+            cookies: Default::default(),
         }
     }
 
@@ -343,27 +352,43 @@ impl Registrations {
     pub fn get(
         &mut self,
         discover_namespace: Option<String>,
-        _: Option<Cookie>,
+        cookie: Option<Cookie>,
     ) -> (impl Iterator<Item = &Registration> + '_, Cookie) {
-        let discovered = self.registrations_for_peer.iter().filter_map({
-            let reggos = &self.registrations;
+        let reggos_of_last_discover = cookie
+            .and_then(|cookie| self.cookies.get(&cookie))
+            .cloned()
+            .unwrap_or_default();
 
-            move |((_, namespace), registration_id)| {
-                let registration = reggos
-                    .get(registration_id)
-                    .expect("bad internal data structure");
-
-                match discover_namespace.as_ref() {
-                    Some(discover_namespace) if discover_namespace == namespace => {
-                        Some(registration)
+        let ids = self
+            .registrations_for_peer
+            .iter()
+            .filter_map({
+                move |((_, namespace), registration_id)| {
+                    if reggos_of_last_discover.contains(registration_id) {
+                        return None;
                     }
-                    Some(_) => None,
-                    None => Some(registration),
-                }
-            }
-        });
 
-        (discovered, Cookie {})
+                    match discover_namespace.as_ref() {
+                        Some(discover_namespace) if discover_namespace == namespace => {
+                            Some(registration_id)
+                        }
+                        Some(_) => None,
+                        None => Some(registration_id),
+                    }
+                }
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let new_cookie = Cookie::new();
+        self.cookies.insert(new_cookie, ids.clone());
+
+        let reggos = &self.registrations;
+        let registrations = ids
+            .into_iter()
+            .map(move |id| reggos.get(&id).expect("bad internal datastructure"));
+
+        (registrations, new_cookie)
     }
 }
 
