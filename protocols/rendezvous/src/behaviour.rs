@@ -367,6 +367,36 @@ mod tests {
         assert_eq!(subsequent_discover.len(), 0);
     }
 
+    #[test]
+    fn given_registrations_when_discover_all_then_all_are_returned() {
+        let mut registrations = Registrations::new();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (discover, _) = registrations.get(None, None);
+
+        assert_eq!(discover.len(), 2);
+    }
+
+    #[test]
+    fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
+    {
+        let mut registrations = Registrations::new();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("bar"));
+
+        let (discover, _) = registrations.get(Some("foo".to_owned()), None);
+
+        assert_eq!(discover.len(), 1);
+        assert_eq!(
+            discover
+                .values()
+                .map(|r| r.namespace.as_str())
+                .collect::<Vec<_>>(),
+            vec!["foo"]
+        );
+    }
+
     fn new_dummy_registration(namespace: &str) -> NewRegistration {
         let identity = identity::Keypair::generate_ed25519();
         let record = PeerRecord {
