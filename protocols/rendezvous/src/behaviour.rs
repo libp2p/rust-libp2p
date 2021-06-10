@@ -151,13 +151,15 @@ impl NetworkBehaviour for Rendezvous {
     ) {
         match message {
             Message::Register(new_registration) => {
-                if let Ok((namespace, ttl)) = self.registrations.add(new_registration) {
+                let namespace = new_registration.namespace.clone();
+
+                if let Ok(effective_ttl) = self.registrations.add(new_registration) {
                     // notify the handler that to send a response
                     self.events
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::Any,
-                            event: InEvent::RegisterResponse { ttl },
+                            event: InEvent::RegisterResponse { ttl: effective_ttl },
                         });
 
                     // emit behaviour event
@@ -283,10 +285,7 @@ impl Registrations {
         }
     }
 
-    pub fn add(
-        &mut self,
-        new_registration: NewRegistration,
-    ) -> Result<(String, i64), RegistrationError> {
+    pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, RegistrationError> {
         let ttl = new_registration.effective_ttl();
         if ttl < self.ttl_upper_bound {
             let namespace = new_registration.namespace;
@@ -315,7 +314,7 @@ impl Registrations {
                     timestamp: SystemTime::now(),
                 },
             );
-            Ok((namespace, ttl))
+            Ok(ttl)
         } else {
             Err(RegistrationError::TTLGreaterThanUpperBound {
                 upper_bound: self.ttl_upper_bound,
