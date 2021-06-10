@@ -40,11 +40,11 @@ impl Cookie {
         Self(Uuid::new_v4())
     }
 
-    pub fn into_protobuf_encoding(self) -> Vec<u8> {
+    pub fn into_wire_encoding(self) -> Vec<u8> {
         self.0.as_bytes().to_vec()
     }
 
-    pub fn from_protobuf_encoding(bytes: Vec<u8>) -> Result<Self, InvalidCookie> {
+    pub fn from_wire_encoding(bytes: Vec<u8>) -> Result<Self, InvalidCookie> {
         let bytes = <[u8; 16]>::try_from(bytes).map_err(|_| InvalidCookie)?;
         let uuid = Uuid::from_bytes(bytes);
 
@@ -229,7 +229,7 @@ impl From<Message> for wire::Message {
                 r#type: Some(MessageType::Discover.into()),
                 discover: Some(Discover {
                     ns: namespace,
-                    cookie: cookie.map(|cookie| cookie.into_protobuf_encoding()),
+                    cookie: cookie.map(|cookie| cookie.into_wire_encoding()),
                     limit: None,
                 }),
                 register: None,
@@ -255,7 +255,7 @@ impl From<Message> for wire::Message {
                         .collect(),
                     status: Some(ResponseStatus::Ok.into()),
                     status_text: None,
-                    cookie: Some(cookie.into_protobuf_encoding()),
+                    cookie: Some(cookie.into_wire_encoding()),
                 }),
                 register: None,
                 discover: None,
@@ -350,7 +350,7 @@ impl TryFrom<wire::Message> for Message {
                         })
                     })
                     .collect::<Result<Vec<_>, ConversionError>>()?,
-                cookie: Cookie::from_protobuf_encoding(cookie)?,
+                cookie: Cookie::from_wire_encoding(cookie)?,
             },
             wire::Message {
                 r#type: Some(1),
