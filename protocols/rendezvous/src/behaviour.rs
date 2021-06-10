@@ -1,4 +1,4 @@
-use crate::codec::{ErrorCode, Message, NewRegistration, Registration};
+use crate::codec::{Cookie, ErrorCode, Message, NewRegistration, Registration};
 use crate::handler;
 use crate::handler::{InEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
@@ -87,6 +87,7 @@ pub enum Event {
     Discovered {
         rendezvous_node: PeerId,
         registrations: HashMap<(String, PeerId), Registration>,
+        cookie: Cookie,
     },
     AnsweredDiscoverRequest {
         enquirer: PeerId,
@@ -200,8 +201,8 @@ impl NetworkBehaviour for Rendezvous {
                 self.registrations.remove(namespace, peer_id);
                 // TODO: Should send unregister response?
             }
-            Message::Discover { namespace } => {
-                let (registrations, _) = self.registrations.get(namespace, None);
+            Message::Discover { namespace, cookie } => {
+                let (registrations, cookie) = self.registrations.get(namespace, cookie);
 
                 let discovered = registrations.cloned().collect::<Vec<_>>();
 
@@ -211,6 +212,7 @@ impl NetworkBehaviour for Rendezvous {
                         handler: NotifyHandler::Any,
                         event: InEvent::DiscoverResponse {
                             discovered: discovered.clone(),
+                            cookie,
                         },
                     });
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -220,16 +222,19 @@ impl NetworkBehaviour for Rendezvous {
                     },
                 ));
             }
-            Message::DiscoverResponse { registrations } => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Discovered {
-                        rendezvous_node: peer_id,
-                        registrations: registrations
-                            .iter()
-                            .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
-                            .collect(),
-                    }))
-            }
+            Message::DiscoverResponse {
+                registrations,
+                cookie,
+            } => self
+                .events
+                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Discovered {
+                    rendezvous_node: peer_id,
+                    registrations: registrations
+                        .iter()
+                        .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
+                        .collect(),
+                    cookie,
+                })),
             Message::FailedToDiscover { error } => self.events.push_back(
                 NetworkBehaviourAction::GenerateEvent(Event::FailedToDiscover {
                     rendezvous_node: peer_id,
@@ -258,15 +263,6 @@ impl NetworkBehaviour for Rendezvous {
         }
 
         Poll::Pending
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
-pub struct Cookie(Uuid);
-
-impl Cookie {
-    fn new() -> Self {
-        Self(Uuid::new_v4())
     }
 }
 
@@ -457,9 +453,9 @@ mod tests {
 
     #[test]
     fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
-        let mut registrations = Registrations::new();
-        registrations.add(new_dummy_registration("foo"));
-        registrations.add(new_dummy_registration("foo"));
+        let mut registrations = Registrations::new(7201);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
 
         let (initial_discover, cookie1) = registrations.get(None, None);
         assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);

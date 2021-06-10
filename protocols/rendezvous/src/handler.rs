@@ -1,4 +1,4 @@
-use crate::codec::{ErrorCode, Message, Registration};
+use crate::codec::{Cookie, ErrorCode, Message, Registration};
 use crate::codec::{NewRegistration, RendezvousCodec};
 use crate::{codec, protocol};
 use asynchronous_codec::Framed;
@@ -56,6 +56,7 @@ pub enum InEvent {
     },
     DiscoverResponse {
         discovered: Vec<Registration>,
+        cookie: Cookie,
     },
 }
 
@@ -177,7 +178,8 @@ impl Advance for Inbound {
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
-                    panic!("Error when sending outbound: {:?}", e);
+                    // TODO: investigate the error here and send an appropriate error response
+                    panic!("Error when reading inbound: {:?}", e);
                 }
                 Poll::Ready(None) => {
                     panic!("Honestly no idea what to do if this happens");
@@ -372,7 +374,10 @@ impl ProtocolsHandler for RendezvousHandler {
             ),
             (InEvent::DiscoverRequest { namespace }, inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::Start(Message::Discover { namespace })),
+                SubstreamState::Active(Outbound::Start(Message::Discover {
+                    namespace,
+                    cookie: None,
+                })),
             ),
             (
                 InEvent::RegisterResponse { ttl },
@@ -397,7 +402,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 outbound,
             ),
             (
-                InEvent::DiscoverResponse { discovered },
+                InEvent::DiscoverResponse { discovered, cookie },
                 SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
                 outbound,
             ) => (
@@ -405,6 +410,7 @@ impl ProtocolsHandler for RendezvousHandler {
                     substream,
                     Message::DiscoverResponse {
                         registrations: discovered,
+                        cookie,
                     },
                 )),
                 outbound,

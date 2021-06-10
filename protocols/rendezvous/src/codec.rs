@@ -3,6 +3,7 @@ use libp2p_core::{peer_record, signed_envelope, AuthenticatedPeerRecord, SignedE
 use std::convert::{TryFrom, TryInto};
 use std::time::SystemTime;
 use unsigned_varint::codec::UviBytes;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -20,16 +21,40 @@ pub enum Message {
     Discover {
         namespace: Option<String>,
         // TODO limit: Option<i64>
-        // TODO cookie: Option<Vec<u8>
+        cookie: Option<Cookie>,
     },
     DiscoverResponse {
         registrations: Vec<Registration>,
-        // TODO cookie: Option<Vec<u8>
+        cookie: Cookie,
     },
     FailedToDiscover {
         error: ErrorCode,
     },
 }
+
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
+pub struct Cookie(Uuid);
+
+impl Cookie {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn into_protobuf_encoding(self) -> Vec<u8> {
+        self.0.as_bytes().to_vec()
+    }
+
+    pub fn from_protobuf_encoding(bytes: Vec<u8>) -> Result<Self, InvalidCookie> {
+        let bytes = <[u8; 16]>::try_from(bytes).map_err(|_| InvalidCookie)?;
+        let uuid = Uuid::from_bytes(bytes);
+
+        Ok(Self(uuid))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("The cookie was malformed")]
+pub struct InvalidCookie;
 
 #[derive(Debug, Clone)]
 pub struct NewRegistration {
@@ -200,11 +225,11 @@ impl From<Message> for wire::Message {
                 discover: None,
                 discover_response: None,
             },
-            Message::Discover { namespace } => wire::Message {
+            Message::Discover { namespace, cookie } => wire::Message {
                 r#type: Some(MessageType::Discover.into()),
                 discover: Some(Discover {
                     ns: namespace,
-                    cookie: None,
+                    cookie: cookie.map(|cookie| cookie.into_protobuf_encoding()),
                     limit: None,
                 }),
                 register: None,
@@ -212,7 +237,10 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 discover_response: None,
             },
-            Message::DiscoverResponse { registrations } => wire::Message {
+            Message::DiscoverResponse {
+                registrations,
+                cookie,
+            } => wire::Message {
                 r#type: Some(MessageType::DiscoverResponse.into()),
                 discover_response: Some(DiscoverResponse {
                     registrations: registrations
@@ -227,7 +255,7 @@ impl From<Message> for wire::Message {
                         .collect(),
                     status: Some(ResponseStatus::Ok.into()),
                     status_text: None,
-                    cookie: None,
+                    cookie: Some(cookie.into_protobuf_encoding()),
                 }),
                 register: None,
                 discover: None,
@@ -290,13 +318,17 @@ impl TryFrom<wire::Message> for Message {
                 r#type: Some(3),
                 discover: Some(Discover { ns, .. }),
                 ..
-            } => Message::Discover { namespace: ns },
+            } => Message::Discover {
+                namespace: ns,
+                cookie: None,
+            },
             wire::Message {
                 r#type: Some(4),
                 discover_response:
                     Some(DiscoverResponse {
                         registrations,
                         status: Some(0),
+                        cookie: Some(cookie),
                         ..
                     }),
                 ..
@@ -318,6 +350,7 @@ impl TryFrom<wire::Message> for Message {
                         })
                     })
                     .collect::<Result<Vec<_>, ConversionError>>()?,
+                cookie: Cookie::from_protobuf_encoding(cookie)?,
             },
             wire::Message {
                 r#type: Some(1),
@@ -375,6 +408,8 @@ pub enum ConversionError {
     BadSignedEnvelope(#[from] signed_envelope::DecodingError),
     #[error("Failed to decode envelope as signed peer record")]
     BadSignedPeerRecord(#[from] peer_record::FromEnvelopeError),
+    #[error(transparent)]
+    BadCookie(#[from] InvalidCookie),
 }
 
 impl TryFrom<wire::message::ResponseStatus> for ErrorCode {
