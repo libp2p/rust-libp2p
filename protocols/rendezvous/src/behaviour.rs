@@ -354,7 +354,7 @@ impl Registrations {
         discover_namespace: Option<String>,
         cookie: Option<Cookie>,
     ) -> (impl Iterator<Item = &Registration> + '_, Cookie) {
-        let reggos_of_last_discover = cookie
+        let mut reggos_of_last_discover = cookie
             .and_then(|cookie| self.cookies.get(&cookie))
             .cloned()
             .unwrap_or_default();
@@ -363,7 +363,7 @@ impl Registrations {
             .registrations_for_peer
             .iter()
             .filter_map({
-                move |((_, namespace), registration_id)| {
+                |((_, namespace), registration_id)| {
                     if reggos_of_last_discover.contains(registration_id) {
                         return None;
                     }
@@ -380,8 +380,10 @@ impl Registrations {
             .cloned()
             .collect::<Vec<_>>();
 
+        reggos_of_last_discover.extend_from_slice(&ids);
+
         let new_cookie = Cookie::new();
-        self.cookies.insert(new_cookie, ids.clone());
+        self.cookies.insert(new_cookie, reggos_of_last_discover);
 
         let reggos = &self.registrations;
         let registrations = ids
@@ -451,6 +453,22 @@ mod tests {
             discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
             vec!["foo"]
         );
+    }
+
+    #[test]
+    fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
+        let mut registrations = Registrations::new();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (initial_discover, cookie1) = registrations.get(None, None);
+        assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
+
+        let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1));
+        assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
+
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie2));
+        assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
     }
 
     fn new_dummy_registration(namespace: &str) -> NewRegistration {
