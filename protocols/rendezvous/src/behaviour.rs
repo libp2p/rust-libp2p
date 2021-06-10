@@ -154,36 +154,37 @@ impl NetworkBehaviour for Rendezvous {
             Message::Register(new_registration) => {
                 let namespace = new_registration.namespace.clone();
 
-                if let Ok(effective_ttl) = self.registrations.add(new_registration) {
-                    // notify the handler that to send a response
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::Any,
-                            event: InEvent::RegisterResponse { ttl: effective_ttl },
-                        });
-
-                    // emit behaviour event
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::PeerRegistered {
-                            peer: peer_id,
-                            namespace,
-                        },
-                    ));
-                } else {
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::Any,
-                            event: InEvent::DeclineRegisterRequest {
-                                error: ErrorCode::InvalidTtl,
+                let events = match self.registrations.add(new_registration) {
+                    Ok(effective_ttl) => {
+                        vec![
+                            NetworkBehaviourAction::NotifyHandler {
+                                peer_id,
+                                handler: NotifyHandler::Any,
+                                event: InEvent::RegisterResponse { ttl: effective_ttl },
                             },
-                        });
+                            NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered {
+                                peer: peer_id,
+                                namespace,
+                            }),
+                        ]
+                    }
+                    Err(RegistrationError::TTLGreaterThanUpperBound { .. }) => {
+                        vec![
+                            NetworkBehaviourAction::NotifyHandler {
+                                peer_id,
+                                handler: NotifyHandler::Any,
+                                event: InEvent::DeclineRegisterRequest {
+                                    error: ErrorCode::InvalidTtl,
+                                },
+                            },
+                            NetworkBehaviourAction::GenerateEvent(Event::DeclinedRegisterRequest {
+                                peer: peer_id,
+                            }),
+                        ]
+                    }
+                };
 
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::DeclinedRegisterRequest { peer: peer_id },
-                    ));
-                }
+                self.events.extend(events);
             }
             Message::RegisterResponse { ttl } => self.events.push_back(
                 NetworkBehaviourAction::GenerateEvent(Event::RegisteredWithRendezvousNode {
