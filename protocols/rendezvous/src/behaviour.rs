@@ -197,7 +197,7 @@ impl NetworkBehaviour for Rendezvous {
                 // TODO: Should send unregister response?
             }
             Message::Discover { namespace } => {
-                let registrations = self.registrations.get(namespace);
+                let (registrations, _) = self.registrations.get(namespace, None);
 
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -255,6 +255,8 @@ impl NetworkBehaviour for Rendezvous {
     }
 }
 
+pub struct Cookie {}
+
 // TODO: Unit Tests
 pub struct Registrations {
     registrations_for_namespace: HashMap<String, HashMap<PeerId, Registration>>,
@@ -309,12 +311,16 @@ impl Registrations {
         }
     }
 
-    pub fn get(&mut self, namespace: Option<String>) -> HashMap<(String, PeerId), Registration> {
+    pub fn get(
+        &mut self,
+        namespace: Option<String>,
+        _: Option<Cookie>,
+    ) -> (HashMap<(String, PeerId), Registration>, Cookie) {
         if self.registrations_for_namespace.is_empty() {
-            return HashMap::new();
+            return (HashMap::new(), Cookie {});
         }
 
-        if let Some(namespace) = namespace {
+        let discovered = if let Some(namespace) = namespace {
             if let Some(registrations) = self.registrations_for_namespace.get(&namespace) {
                 registrations
                     .values()
@@ -337,6 +343,42 @@ impl Registrations {
                 .collect::<HashMap<(String, PeerId), Registration>>();
 
             discovered
-        }
+        };
+
+        (discovered, Cookie {})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p_core::identity;
+
+    #[test]
+    fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
+        let mut registrations = Registrations::new();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (initial_discover, cookie) = registrations.get(None, None);
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie));
+
+        assert_eq!(initial_discover.len(), 2);
+        assert_eq!(subsequent_discover.len(), 0);
+    }
+
+    fn new_dummy_registration(namespace: &str) -> NewRegistration {
+        let identity = identity::Keypair::generate_ed25519();
+        let record = PeerRecord {
+            peer_id: identity.public().into_peer_id(),
+            seq: 0,
+            addresses: vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()],
+        };
+
+        NewRegistration::new(
+            namespace.to_owned(),
+            AuthenticatedPeerRecord::from_record(identity, record),
+            None,
+        )
     }
 }
