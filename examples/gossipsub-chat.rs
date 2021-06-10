@@ -104,6 +104,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // add an explicit peer if one was provided
         if let Some(explicit) = std::env::args().nth(2) {
+            let explicit = explicit.clone();
             match explicit.parse() {
                 Ok(id) => gossipsub.add_explicit_peer(&id),
                 Err(err) => println!("Failed to parse explicit peer id: {:?}", err),
@@ -169,6 +170,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Ready(None) | Poll::Pending => break,
             }
         }
+
         Poll::Pending
     }))
 }

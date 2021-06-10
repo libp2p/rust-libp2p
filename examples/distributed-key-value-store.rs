@@ -44,19 +44,26 @@ use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
-    record::Key, AddProviderOk, Kademlia, KademliaEvent, PeerRecord, PutRecordOk, QueryResult,
-    Quorum, Record,
+    AddProviderOk,
+    Kademlia,
+    KademliaEvent,
+    PeerRecord,
+    PutRecordOk,
+    QueryResult,
+    Quorum,
+    Record,
+    record::Key,
 };
 use libp2p::{
-    development_transport, identity,
+    NetworkBehaviour,
+    PeerId,
+    Swarm,
+    development_transport,
+    identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
-    NetworkBehaviour, PeerId, Swarm,
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent}
 };
-use std::{
-    error::Error,
-    task::{Context, Poll},
-};
+use std::{error::Error, task::{Context, Poll}};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -73,7 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour {
         kademlia: Kademlia<MemoryStore>,
-        mdns: Mdns,
+        mdns: Mdns
     }
 
     impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
@@ -105,11 +112,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         eprintln!("Failed to get providers: {:?}", err);
                     }
                     QueryResult::GetRecord(Ok(ok)) => {
-                        for PeerRecord {
-                            record: Record { key, value, .. },
-                            ..
-                        } in ok.records
-                        {
+                        for PeerRecord { record: Record { key, value, .. }, ..} in ok.records {
                             println!(
                                 "Got record {:?} {:?}",
                                 std::str::from_utf8(key.as_ref()).unwrap(),
@@ -130,8 +133,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         eprintln!("Failed to put record: {:?}", err);
                     }
                     QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
-                        println!(
-                            "Successfully put provider record {:?}",
+                        println!("Successfully put provider record {:?}",
                             std::str::from_utf8(key.as_ref()).unwrap()
                         );
                     }
@@ -139,7 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         eprintln!("Failed to put provider record: {:?}", err);
                     }
                     _ => {}
-                },
+                }
                 _ => {}
             }
         }
@@ -165,11 +167,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => {
-                    handle_input_line(&mut swarm.behaviour_mut().kademlia, line)
-                }
+                Poll::Ready(Some(line)) => handle_input_line(&mut swarm.behaviour_mut().kademlia, line),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break,
+                Poll::Pending => break
             }
         }
         loop {
@@ -209,7 +209,7 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                     Some(key) => Key::new(&key),
                     None => {
                         eprintln!("Expected key");
-                        return;
+                        return
                     }
                 }
             };
@@ -240,10 +240,8 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                 publisher: None,
                 expires: None,
             };
-            kademlia
-                .put_record(record, Quorum::One)
-                .expect("Failed to store record locally.");
-        }
+            kademlia.put_record(record, Quorum::One).expect("Failed to store record locally.");
+        },
         Some("PUT_PROVIDER") => {
             let key = {
                 match args.next() {
@@ -255,9 +253,7 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                 }
             };
 
-            kademlia
-                .start_providing(key)
-                .expect("Failed to start providing key");
+            kademlia.start_providing(key).expect("Failed to start providing key");
         }
         _ => {
             eprintln!("expected GET, GET_PROVIDERS, PUT or PUT_PROVIDER");

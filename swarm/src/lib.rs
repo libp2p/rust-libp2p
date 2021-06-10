@@ -477,13 +477,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
     /// Returns the next event produced by the [`NetworkBehaviour`].
     pub async fn behaviour_next(&mut self) -> TBehaviour::OutEvent {
-        future::poll_fn(move |cx| loop {
-            let event = futures::ready!(ExpandedSwarm::poll_next_event(Pin::new(self), cx));
-            if let SwarmEvent::Behaviour(event) = event {
-                return Poll::Ready(event);
+        future::poll_fn(move |cx| {
+            loop {
+                let event = futures::ready!(ExpandedSwarm::poll_next_event(Pin::new(self), cx));
+                if let SwarmEvent::Behaviour(event) = event {
+                    return Poll::Ready(event);
+                }
             }
-        })
-        .await
+        }).await
     }
 
     /// Internal function used by everything event-related.
@@ -833,21 +834,15 @@ where
         })
 }
 
-
-
-/// Stream of events that are happening in the `Swarm`.
-///
-/// Includes events from the `NetworkBehaviour` but also events about the connections status and listeners.
-impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream
-    for ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where
-    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-    THandler: IntoProtocolsHandler + Send + 'static,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    THandler::Handler:
+impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
+where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+      THandler: IntoProtocolsHandler + Send + 'static,
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      THandler::Handler: 
         ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
-    THandleErr: error::Error + Send + 'static,
+      THandleErr: error::Error + Send + 'static,
 {
     type Item = SwarmEvent<TBehaviour::OutEvent, THandleErr>;
 

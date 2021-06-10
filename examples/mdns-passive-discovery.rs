@@ -18,11 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p::{
-    identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
-    PeerId, Swarm,
-};
+use libp2p::{identity, mdns::{Mdns, MdnsConfig, MdnsEvent}, PeerId, Swarm};
 use std::error::Error;
 
 #[async_std::main]
