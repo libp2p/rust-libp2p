@@ -203,7 +203,10 @@ impl NetworkBehaviour for Rendezvous {
                 // TODO: Should send unregister response?
             }
             Message::Discover { namespace, cookie } => {
-                let (registrations, cookie) = self.registrations.get(namespace, cookie);
+                let (registrations, cookie) = self
+                    .registrations
+                    .get(namespace, cookie)
+                    .expect("TODO: error handling: send back bad cookie");
 
                 let discovered = registrations.cloned().collect::<Vec<_>>();
 
@@ -349,7 +352,20 @@ impl Registrations {
         &mut self,
         discover_namespace: Option<String>,
         cookie: Option<Cookie>,
-    ) -> (impl Iterator<Item = &Registration> + '_, Cookie) {
+    ) -> Result<(impl Iterator<Item = &Registration> + '_, Cookie), CookieNamespaceMismatch> {
+        let cookie_namespace = cookie.as_ref().and_then(|cookie| cookie.namespace());
+
+        match (discover_namespace.as_ref(), cookie_namespace) {
+            // discover all namespace but cookie is specific to a namespace? => bad
+            (None, Some(_)) => return Err(CookieNamespaceMismatch),
+            // discover for a namespace but cookie is for a different namesapce? => bad
+            (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
+                return Err(CookieNamespaceMismatch)
+            }
+            // every other combination is fine
+            _ => {}
+        }
+
         let mut reggos_of_last_discover = cookie
             .and_then(|cookie| self.cookies.get(&cookie))
             .cloned()
@@ -378,17 +394,25 @@ impl Registrations {
 
         reggos_of_last_discover.extend_from_slice(&ids);
 
-        let new_cookie = Cookie::new();
-        self.cookies.insert(new_cookie, reggos_of_last_discover);
+        let new_cookie = discover_namespace
+            .map(Cookie::for_namespace)
+            .unwrap_or_else(|| Cookie::for_all_namespaces());
+        self.cookies
+            .insert(new_cookie.clone(), reggos_of_last_discover);
 
         let reggos = &self.registrations;
         let registrations = ids
             .into_iter()
             .map(move |id| reggos.get(&id).expect("bad internal datastructure"));
 
-        (registrations, new_cookie)
+        Ok((registrations, new_cookie))
     }
 }
+
+// TODO: Be more specific in what the bad combination was?
+#[derive(Debug, thiserror::Error, Eq, PartialEq)]
+#[error("The provided cookie is not valid for a DISCOVER request for the given namespace")]
+pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
@@ -401,10 +425,10 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
-        let (initial_discover, cookie) = registrations.get(None, None);
+        let (initial_discover, cookie) = registrations.get(None, None).unwrap();
         assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
 
-        let (subsequent_discover, _) = registrations.get(None, Some(cookie));
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie)).unwrap();
         assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
     }
 
@@ -414,7 +438,7 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
-        let (discover, _) = registrations.get(None, None);
+        let (discover, _) = registrations.get(None, None).unwrap();
 
         assert_eq!(discover.collect::<Vec<_>>().len(), 2);
     }
@@ -426,7 +450,7 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
 
-        let (discover, _) = registrations.get(Some("foo".to_owned()), None);
+        let (discover, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
 
         assert_eq!(
             discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
@@ -443,7 +467,7 @@ mod tests {
             .unwrap();
         registrations.add(new_registration("foo", alice)).unwrap();
 
-        let (discover, _) = registrations.get(Some("foo".to_owned()), None);
+        let (discover, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
 
         assert_eq!(
             discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
@@ -457,14 +481,26 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
-        let (initial_discover, cookie1) = registrations.get(None, None);
+        let (initial_discover, cookie1) = registrations.get(None, None).unwrap();
         assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
 
-        let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1));
+        let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1)).unwrap();
         assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
 
-        let (subsequent_discover, _) = registrations.get(None, Some(cookie2));
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie2)).unwrap();
         assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
+    }
+
+    #[test]
+    fn cookie_from_different_discover_request_is_not_valid() {
+        let mut registrations = Registrations::new(7200);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("bar")).unwrap();
+
+        let (_, foo_discover_cookie) = registrations.get(Some("foo".to_owned()), None).unwrap();
+        let result = registrations.get(Some("bar".to_owned()), Some(foo_discover_cookie));
+
+        assert!(matches!(result, Err(CookieNamespaceMismatch)))
     }
 
     fn new_dummy_registration(namespace: &str) -> NewRegistration {

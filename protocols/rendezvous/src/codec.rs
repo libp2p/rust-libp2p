@@ -32,23 +32,65 @@ pub enum Message {
     },
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
-pub struct Cookie(Uuid);
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+pub struct Cookie {
+    id: Uuid,
+    namespace: Option<String>,
+}
 
 impl Cookie {
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
+    /// Construct a new [`Cookie`] for a given namespace.
+    ///
+    /// This cookie will only be valid for subsequent DISCOVER requests targeting the same namespace.
+    pub fn for_namespace(namespace: String) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            namespace: Some(namespace),
+        }
+    }
+
+    /// Construct a new [`Cookie`] for a DISCOVER request that inquires about all namespaces.
+    pub fn for_all_namespaces() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            namespace: None,
+        }
     }
 
     pub fn into_wire_encoding(self) -> Vec<u8> {
-        self.0.as_bytes().to_vec()
+        let namespace = self.namespace.unwrap_or_default();
+
+        let mut buffer = Vec::with_capacity(16 + namespace.len());
+        buffer.extend_from_slice(self.id.as_bytes());
+        buffer.extend_from_slice(namespace.as_bytes());
+
+        buffer
     }
 
-    pub fn from_wire_encoding(bytes: Vec<u8>) -> Result<Self, InvalidCookie> {
+    pub fn from_wire_encoding(mut bytes: Vec<u8>) -> Result<Self, InvalidCookie> {
+        // check length early to avoid panic during slicing
+        if bytes.len() < 16 {
+            return Err(InvalidCookie);
+        }
+
+        let namespace = bytes.split_off(16);
+        let namespace = if namespace.len() == 0 {
+            None
+        } else {
+            Some(String::from_utf8(namespace).map_err(|_| InvalidCookie)?)
+        };
+
         let bytes = <[u8; 16]>::try_from(bytes).map_err(|_| InvalidCookie)?;
         let uuid = Uuid::from_bytes(bytes);
 
-        Ok(Self(uuid))
+        Ok(Self {
+            id: uuid,
+            namespace,
+        })
+    }
+
+    pub fn namespace(&self) -> Option<&str> {
+        self.namespace.as_deref()
     }
 }
 
@@ -461,4 +503,28 @@ pub struct NotAnError;
 
 mod wire {
     include!(concat!(env!("OUT_DIR"), "/rendezvous.pb.rs"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookie_wire_encoding_roundtrip() {
+        let cookie = Cookie::for_namespace("foo".to_owned());
+
+        let bytes = cookie.clone().into_wire_encoding();
+        let parsed = Cookie::from_wire_encoding(bytes).unwrap();
+
+        assert_eq!(parsed, cookie);
+    }
+
+    #[test]
+    fn cookie_wire_encoding_length() {
+        let cookie = Cookie::for_namespace("foo".to_owned());
+
+        let bytes = cookie.into_wire_encoding();
+
+        assert_eq!(bytes.len(), 16 + 3)
+    }
 }
