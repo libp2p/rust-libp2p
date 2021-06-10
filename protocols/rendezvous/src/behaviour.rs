@@ -301,40 +301,40 @@ impl Registrations {
 
     pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, RegistrationError> {
         let ttl = new_registration.effective_ttl();
-        if ttl <= self.ttl_upper_bound {
-            let namespace = new_registration.namespace;
-            let registration_id = RegistrationId::new();
-
-            match self
-                .registrations_for_peer
-                .entry((new_registration.record.peer_id(), namespace.clone()))
-            {
-                Entry::Occupied(mut occupied) => {
-                    let old_registration = occupied.insert(registration_id);
-
-                    self.registrations.remove(&old_registration);
-                }
-                Entry::Vacant(vacant) => {
-                    vacant.insert(registration_id);
-                }
-            }
-
-            self.registrations.insert(
-                registration_id,
-                Registration {
-                    namespace: namespace.clone(),
-                    record: new_registration.record,
-                    ttl,
-                    timestamp: SystemTime::now(),
-                },
-            );
-            Ok(ttl)
-        } else {
-            Err(RegistrationError::TTLGreaterThanUpperBound {
+        if ttl > self.ttl_upper_bound {
+            return Err(RegistrationError::TTLGreaterThanUpperBound {
                 upper_bound: self.ttl_upper_bound,
                 requested: ttl,
-            })
+            });
         }
+
+        let namespace = new_registration.namespace;
+        let registration_id = RegistrationId::new();
+
+        match self
+            .registrations_for_peer
+            .entry((new_registration.record.peer_id(), namespace.clone()))
+        {
+            Entry::Occupied(mut occupied) => {
+                let old_registration = occupied.insert(registration_id);
+
+                self.registrations.remove(&old_registration);
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(registration_id);
+            }
+        }
+
+        self.registrations.insert(
+            registration_id,
+            Registration {
+                namespace: namespace.clone(),
+                record: new_registration.record,
+                ttl,
+                timestamp: SystemTime::now(),
+            },
+        );
+        Ok(ttl)
     }
 
     pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
