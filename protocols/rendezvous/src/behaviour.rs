@@ -381,8 +381,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn given_reregistration_old_registration_is_discarded() {
+        let alice = identity::Keypair::generate_ed25519();
+        let mut registrations = Registrations::new();
+        registrations.add(new_registration("foo", alice.clone()));
+        registrations.add(new_registration("foo", alice));
+
+        let (discover, _) = registrations.get(Some("foo".to_owned()), None);
+
+        assert_eq!(
+            discover.map(|r| r.namespace).collect::<Vec<_>>(),
+            vec!["foo"]
+        );
+    }
+
     fn new_dummy_registration(namespace: &str) -> NewRegistration {
         let identity = identity::Keypair::generate_ed25519();
+
+        new_registration(namespace, identity)
+    }
+
+    fn new_registration(namespace: &str, identity: identity::Keypair) -> NewRegistration {
         let record = PeerRecord {
             peer_id: identity.public().into_peer_id(),
             seq: 0,
