@@ -8,9 +8,11 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::debug;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
+use uuid::Uuid;
 
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
@@ -261,7 +263,8 @@ pub struct Cookie {}
 
 // TODO: Unit Tests
 pub struct Registrations {
-    registrations_for_namespace: HashMap<String, HashMap<PeerId, Registration>>,
+    registrations_for_peer: HashMap<(PeerId, String), Uuid>,
+    registrations: HashMap<Uuid, Registration>,
     ttl_upper_bound: i64,
 }
 
@@ -274,7 +277,8 @@ pub enum RegistrationError {
 impl Registrations {
     pub fn new(ttl_upper_bound: i64) -> Self {
         Self {
-            registrations_for_namespace: Default::default(),
+            registrations_for_peer: Default::default(),
+            registrations: Default::default(),
             ttl_upper_bound,
         }
     }
@@ -286,18 +290,31 @@ impl Registrations {
         let ttl = new_registration.effective_ttl();
         if ttl < self.ttl_upper_bound {
             let namespace = new_registration.namespace;
-            self.registrations_for_namespace
-                .entry(namespace.clone())
-                .or_insert_with(|| HashMap::new())
-                .insert(
-                    new_registration.record.peer_id(),
-                    Registration {
-                        namespace: namespace.clone(),
-                        record: new_registration.record,
-                        ttl,
-                        timestamp: SystemTime::now(),
-                    },
-                );
+            let registration_id = Uuid::new_v4();
+
+            match self
+                .registrations_for_peer
+                .entry((new_registration.record.peer_id(), namespace.clone()))
+            {
+                Entry::Occupied(mut occupied) => {
+                    let old_registration = occupied.insert(registration_id);
+
+                    self.registrations.remove(&old_registration);
+                }
+                Entry::Vacant(vacant) => {
+                    vacant.insert(registration_id);
+                }
+            }
+
+            self.registrations.insert(
+                registration_id,
+                Registration {
+                    namespace: namespace.clone(),
+                    record: new_registration.record,
+                    ttl,
+                    timestamp: SystemTime::now(),
+                },
+            );
             Ok((namespace, ttl))
         } else {
             Err(RegistrationError::TTLGreaterThanUpperBound {
@@ -308,8 +325,10 @@ impl Registrations {
     }
 
     pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
-        if let Some(registrations) = self.registrations_for_namespace.get_mut(&namespace) {
-            registrations.remove(&peer_id);
+        let reggo_to_remove = self.registrations_for_peer.remove(&(peer_id, namespace));
+
+        if let Some(reggo_to_remove) = reggo_to_remove {
+            self.registrations.remove(&reggo_to_remove);
         }
     }
 
@@ -319,18 +338,25 @@ impl Registrations {
         _: Option<Cookie>,
     ) -> (impl Iterator<Item = Registration> + '_, Cookie) {
         let discovered = self
-            .registrations_for_namespace
+            .registrations_for_peer
             .iter()
-            .filter_map(
-                move |(namespace, registrations)| match discover_namespace.as_ref() {
-                    Some(discover_namespace) if discover_namespace == namespace => {
-                        Some(registrations.values())
+            .filter_map({
+                let reggos = &self.registrations;
+
+                move |((_, namespace), registration_id)| {
+                    let registration = reggos
+                        .get(registration_id)
+                        .expect("bad internal data structure");
+
+                    match discover_namespace.as_ref() {
+                        Some(discover_namespace) if discover_namespace == namespace => {
+                            Some(registration)
+                        }
+                        Some(_) => None,
+                        None => Some(registration),
                     }
-                    Some(_) => None,
-                    None => Some(registrations.values()),
-                },
-            )
-            .flatten()
+                }
+            })
             .cloned();
 
         (discovered, Cookie {})
@@ -344,9 +370,9 @@ mod tests {
 
     #[test]
     fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
-        let mut registrations = Registrations::new();
-        registrations.add(new_dummy_registration("foo"));
-        registrations.add(new_dummy_registration("foo"));
+        let mut registrations = Registrations::new(7201);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
 
         let (initial_discover, cookie) = registrations.get(None, None);
         assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
@@ -357,9 +383,9 @@ mod tests {
 
     #[test]
     fn given_registrations_when_discover_all_then_all_are_returned() {
-        let mut registrations = Registrations::new();
-        registrations.add(new_dummy_registration("foo"));
-        registrations.add(new_dummy_registration("foo"));
+        let mut registrations = Registrations::new(7201);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
 
         let (discover, _) = registrations.get(None, None);
 
@@ -369,9 +395,9 @@ mod tests {
     #[test]
     fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
     {
-        let mut registrations = Registrations::new();
-        registrations.add(new_dummy_registration("foo"));
-        registrations.add(new_dummy_registration("bar"));
+        let mut registrations = Registrations::new(7201);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("bar")).unwrap();
 
         let (discover, _) = registrations.get(Some("foo".to_owned()), None);
 
@@ -384,9 +410,11 @@ mod tests {
     #[test]
     fn given_reregistration_old_registration_is_discarded() {
         let alice = identity::Keypair::generate_ed25519();
-        let mut registrations = Registrations::new();
-        registrations.add(new_registration("foo", alice.clone()));
-        registrations.add(new_registration("foo", alice));
+        let mut registrations = Registrations::new(7201);
+        registrations
+            .add(new_registration("foo", alice.clone()))
+            .unwrap();
+        registrations.add(new_registration("foo", alice)).unwrap();
 
         let (discover, _) = registrations.get(Some("foo".to_owned()), None);
 
