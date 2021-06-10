@@ -263,10 +263,19 @@ impl NetworkBehaviour for Rendezvous {
 
 pub struct Cookie {}
 
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
+struct RegistrationId(Uuid);
+
+impl RegistrationId {
+    fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
 // TODO: Unit Tests
 pub struct Registrations {
-    registrations_for_peer: HashMap<(PeerId, String), Uuid>,
-    registrations: HashMap<Uuid, Registration>,
+    registrations_for_peer: HashMap<(PeerId, String), RegistrationId>,
+    registrations: HashMap<RegistrationId, Registration>,
     ttl_upper_bound: i64,
 }
 
@@ -289,7 +298,7 @@ impl Registrations {
         let ttl = new_registration.effective_ttl();
         if ttl < self.ttl_upper_bound {
             let namespace = new_registration.namespace;
-            let registration_id = Uuid::new_v4();
+            let registration_id = RegistrationId::new();
 
             match self
                 .registrations_for_peer
