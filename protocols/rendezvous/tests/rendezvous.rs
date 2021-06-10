@@ -8,7 +8,7 @@ use libp2p_swarm::Swarm;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
-    env_logger::init();
+    let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
     let namespace = "some-namespace".to_string();
@@ -37,7 +37,7 @@ async fn given_successful_registration_then_successful_discovery() {
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_ttl() {
-    env_logger::init();
+    let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
     let namespace = "some-namespace".to_string();
@@ -89,7 +89,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 
 #[tokio::test]
 async fn given_invalid_ttl_then_unsuccessful_registration() {
-    env_logger::init();
+    let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
     let namespace = "some-namespace".to_string();
