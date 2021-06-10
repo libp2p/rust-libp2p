@@ -25,7 +25,7 @@ use open_metrics_client::registry::Registry;
 
 pub struct Metrics {
     connections_incoming: Counter,
-    connections_incoming_error: Counter,
+    connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabeles, Counter>,
     connections_closed: Counter,
@@ -52,7 +52,7 @@ impl Metrics {
             Box::new(connections_incoming.clone()),
         );
 
-        let connections_incoming_error = Counter::default();
+        let connections_incoming_error = Family::default();
         sub_registry.register(
             "connections_incoming_error",
             "Number of incoming connection errors",
@@ -158,8 +158,13 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             libp2p_swarm::SwarmEvent::IncomingConnection { .. } => {
                 self.swarm.connections_incoming.inc();
             }
-            libp2p_swarm::SwarmEvent::IncomingConnectionError { .. } => {
-                self.swarm.connections_incoming_error.inc();
+            libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
+                self.swarm
+                    .connections_incoming_error
+                    .get_or_create(&IncomingConnectionErrorLabels {
+                        error: error.into(),
+                    })
+                    .inc();
             }
             libp2p_swarm::SwarmEvent::BannedPeer { .. } => {
                 self.swarm.connected_to_banned_peer.inc();
@@ -211,6 +216,42 @@ impl From<&libp2p_core::ConnectedPoint> for Role {
         match point {
             libp2p_core::ConnectedPoint::Dialer { .. } => Role::Dialer,
             libp2p_core::ConnectedPoint::Listener { .. } => Role::Listener,
+        }
+    }
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct IncomingConnectionErrorLabels {
+    error: PendingConnectionError,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+enum PendingConnectionError {
+    InvalidPeerId,
+    TransportErrorMultiaddrNotSupported,
+    TransportErrorOther,
+    ConnectionLimit,
+    Io,
+}
+
+impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>>
+    for PendingConnectionError
+{
+    fn from(point: &libp2p_core::connection::PendingConnectionError<TTransErr>) -> Self {
+        match point {
+            libp2p_core::connection::PendingConnectionError::InvalidPeerId => {
+                PendingConnectionError::InvalidPeerId
+            }
+            libp2p_core::connection::PendingConnectionError::Transport(
+                libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
+            ) => PendingConnectionError::TransportErrorMultiaddrNotSupported,
+            libp2p_core::connection::PendingConnectionError::Transport(
+                libp2p_core::transport::TransportError::Other(_),
+            ) => PendingConnectionError::TransportErrorOther,
+            libp2p_core::connection::PendingConnectionError::ConnectionLimit(_) => {
+                PendingConnectionError::ConnectionLimit
+            }
+            libp2p_core::connection::PendingConnectionError::IO(_) => PendingConnectionError::Io,
         }
     }
 }
