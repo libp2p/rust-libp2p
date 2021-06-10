@@ -88,7 +88,7 @@ pub enum Event {
     },
     AnsweredDiscoverRequest {
         enquirer: PeerId,
-        registrations: HashMap<(String, PeerId), Registration>,
+        registrations: Vec<Registration>,
     },
     FailedToDiscover {
         rendezvous_node: PeerId,
@@ -199,18 +199,20 @@ impl NetworkBehaviour for Rendezvous {
             Message::Discover { namespace } => {
                 let (registrations, _) = self.registrations.get(namespace, None);
 
+                let discovered = registrations.collect::<Vec<_>>();
+
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::Any,
                         event: InEvent::DiscoverResponse {
-                            discovered: registrations.values().cloned().collect(),
+                            discovered: discovered.clone(),
                         },
                     });
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                     Event::AnsweredDiscoverRequest {
                         enquirer: peer_id,
-                        registrations,
+                        registrations: discovered,
                     },
                 ));
             }
@@ -313,37 +315,23 @@ impl Registrations {
 
     pub fn get(
         &mut self,
-        namespace: Option<String>,
+        discover_namespace: Option<String>,
         _: Option<Cookie>,
-    ) -> (HashMap<(String, PeerId), Registration>, Cookie) {
-        if self.registrations_for_namespace.is_empty() {
-            return (HashMap::new(), Cookie {});
-        }
-
-        let discovered = if let Some(namespace) = namespace {
-            if let Some(registrations) = self.registrations_for_namespace.get(&namespace) {
-                registrations
-                    .values()
-                    .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
-                    .collect::<HashMap<(String, PeerId), Registration>>()
-            } else {
-                HashMap::new()
-            }
-        } else {
-            let discovered = self
-                .registrations_for_namespace
-                .iter()
-                .map(|(_, registrations)| {
-                    registrations
-                        .values()
-                        .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
-                        .collect::<HashMap<(String, PeerId), Registration>>()
-                })
-                .flatten()
-                .collect::<HashMap<(String, PeerId), Registration>>();
-
-            discovered
-        };
+    ) -> (impl Iterator<Item = Registration> + '_, Cookie) {
+        let discovered = self
+            .registrations_for_namespace
+            .iter()
+            .filter_map(
+                move |(namespace, registrations)| match discover_namespace.as_ref() {
+                    Some(discover_namespace) if discover_namespace == namespace => {
+                        Some(registrations.values())
+                    }
+                    Some(_) => None,
+                    None => Some(registrations.values()),
+                },
+            )
+            .flatten()
+            .cloned();
 
         (discovered, Cookie {})
     }
@@ -361,10 +349,10 @@ mod tests {
         registrations.add(new_dummy_registration("foo"));
 
         let (initial_discover, cookie) = registrations.get(None, None);
-        let (subsequent_discover, _) = registrations.get(None, Some(cookie));
+        assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
 
-        assert_eq!(initial_discover.len(), 2);
-        assert_eq!(subsequent_discover.len(), 0);
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie));
+        assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
     }
 
     #[test]
@@ -375,7 +363,7 @@ mod tests {
 
         let (discover, _) = registrations.get(None, None);
 
-        assert_eq!(discover.len(), 2);
+        assert_eq!(discover.collect::<Vec<_>>().len(), 2);
     }
 
     #[test]
@@ -387,12 +375,8 @@ mod tests {
 
         let (discover, _) = registrations.get(Some("foo".to_owned()), None);
 
-        assert_eq!(discover.len(), 1);
         assert_eq!(
-            discover
-                .values()
-                .map(|r| r.namespace.as_str())
-                .collect::<Vec<_>>(),
+            discover.map(|r| r.namespace).collect::<Vec<_>>(),
             vec!["foo"]
         );
     }
