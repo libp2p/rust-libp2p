@@ -276,7 +276,6 @@ impl RegistrationId {
     }
 }
 
-// TODO: Unit Tests
 pub struct Registrations {
     registrations_for_peer: HashMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
