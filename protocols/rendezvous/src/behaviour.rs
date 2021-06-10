@@ -301,7 +301,7 @@ impl Registrations {
 
     pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, RegistrationError> {
         let ttl = new_registration.effective_ttl();
-        if ttl < self.ttl_upper_bound {
+        if ttl <= self.ttl_upper_bound {
             let namespace = new_registration.namespace;
             let registration_id = RegistrationId::new();
 
@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
-        let mut registrations = Registrations::new(7201);
+        let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn given_registrations_when_discover_all_then_all_are_returned() {
-        let mut registrations = Registrations::new(7201);
+        let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
@@ -422,7 +422,7 @@ mod tests {
     #[test]
     fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
     {
-        let mut registrations = Registrations::new(7201);
+        let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
 
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn given_reregistration_old_registration_is_discarded() {
         let alice = identity::Keypair::generate_ed25519();
-        let mut registrations = Registrations::new(7201);
+        let mut registrations = Registrations::new(7200);
         registrations
             .add(new_registration("foo", alice.clone()))
             .unwrap();
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
-        let mut registrations = Registrations::new(7201);
+        let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
