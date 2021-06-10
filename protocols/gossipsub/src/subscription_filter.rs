@@ -20,7 +20,7 @@
 
 use crate::types::GossipsubSubscription;
 use crate::TopicHash;
-use log::info;
+use log::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub trait TopicSubscriptionFilter {
@@ -66,7 +66,7 @@ pub trait TopicSubscriptionFilter {
             if self.allow_incoming_subscription(s) {
                 true
             } else {
-                info!("Filtered incoming subscription {:?}", s);
+                debug!("Filtered incoming subscription {:?}", s);
                 false
             }
         });
