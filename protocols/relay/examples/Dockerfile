@@ -1,5 +1,5 @@
 # 1: Build the exe
-FROM rust:latest as builder
+FROM rust:1 as builder
 LABEL Name=libp2p-relay Version=0.0.1
 # 1a: Prepare for static linking
 RUN apt-get update && \
