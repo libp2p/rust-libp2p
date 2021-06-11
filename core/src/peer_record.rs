@@ -8,6 +8,60 @@ const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";
 
 // TODO: docs
+#[derive(Debug)]
+pub struct AuthenticatedPeerRecord {
+    inner: PeerRecord,
+
+    /// A signed envelope containing the above inner [`PeerRecord`].
+    ///
+    /// If this [`AuthenticatedPeerRecord`] was constructed from a [`SignedEnvelope`], this is the original instance.
+    /// If this [`AuthenticatedPeerRecord`] was created by [`authenticating`](PeerRecord::authenticate) an existing [`PeerRecord`], then this is a pre-computed [`SignedEnvelope`] to make it easier to send an [`AuthenticatedPeerRecord`] across the wire.
+    envelope: SignedEnvelope,
+}
+
+impl AuthenticatedPeerRecord {
+    // TODO: docs
+    pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
+        let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+        let record = PeerRecord::from_protobuf_encoding(payload)?;
+
+        Ok(Self {
+            inner: record,
+            envelope,
+        })
+    }
+
+    pub fn from_record(key: Keypair, record: PeerRecord) -> Self {
+        let envelope = record.clone().wrap_in_envelope(key);
+
+        Self {
+            inner: record,
+            envelope,
+        }
+    }
+
+    pub fn to_signed_envelope(&self) -> SignedEnvelope {
+        self.envelope.clone()
+    }
+
+    pub fn into_signed_envelope(self) -> SignedEnvelope {
+        self.envelope
+    }
+
+    pub fn peer_id(&self) -> PeerId {
+        self.inner.peer_id
+    }
+
+    pub fn seq(&self) -> u64 {
+        self.inner.seq
+    }
+
+    pub fn addresses(&self) -> &[Multiaddr] {
+        self.inner.addresses.as_slice()
+    }
+}
+
+// TODO: docs
 #[derive(Debug, PartialEq, Clone)]
 pub struct PeerRecord {
     pub peer_id: PeerId,
@@ -122,60 +176,6 @@ impl std::error::Error for DecodingError {
             DecodingError::InvalidPeerId(inner) => Some(inner),
             DecodingError::InvalidMultiaddr(inner) => Some(inner),
         }
-    }
-}
-
-// TODO: docs
-#[derive(Debug)]
-pub struct AuthenticatedPeerRecord {
-    inner: PeerRecord,
-
-    /// A signed envelope containing the above inner [`PeerRecord`].
-    ///
-    /// If this [`AuthenticatedPeerRecord`] was constructed from a [`SignedEnvelope`], this is the original instance.
-    /// If this [`AuthenticatedPeerRecord`] was created by [`authenticating`](PeerRecord::authenticate) an existing [`PeerRecord`], then this is a pre-computed [`SignedEnvelope`] to make it easier to send an [`AuthenticatedPeerRecord`] across the wire.
-    envelope: SignedEnvelope,
-}
-
-impl AuthenticatedPeerRecord {
-    // TODO: docs
-    pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = PeerRecord::from_protobuf_encoding(payload)?;
-
-        Ok(Self {
-            inner: record,
-            envelope,
-        })
-    }
-
-    pub fn from_record(key: Keypair, record: PeerRecord) -> Self {
-        let envelope = record.clone().wrap_in_envelope(key);
-
-        Self {
-            inner: record,
-            envelope,
-        }
-    }
-
-    pub fn to_signed_envelope(&self) -> SignedEnvelope {
-        self.envelope.clone()
-    }
-
-    pub fn into_signed_envelope(self) -> SignedEnvelope {
-        self.envelope
-    }
-
-    pub fn peer_id(&self) -> PeerId {
-        self.inner.peer_id
-    }
-
-    pub fn seq(&self) -> u64 {
-        self.inner.seq
-    }
-
-    pub fn addresses(&self) -> &[Multiaddr] {
-        self.inner.addresses.as_slice()
     }
 }
 
