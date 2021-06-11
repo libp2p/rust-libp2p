@@ -475,18 +475,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         &mut self.behaviour
     }
 
-    /// Returns the next event produced by the [`NetworkBehaviour`].
-    pub async fn behaviour_next(&mut self) -> TBehaviour::OutEvent {
-        future::poll_fn(move |cx| {
-            loop {
-                let event = futures::ready!(ExpandedSwarm::poll_next_event(Pin::new(self), cx));
-                if let SwarmEvent::Behaviour(event) = event {
-                    return Poll::Ready(event);
-                }
-            }
-        }).await
-    }
-
     /// Internal function used by everything event-related.
     ///
     /// Polls the `Swarm` for the next event.
@@ -834,6 +822,10 @@ where
         })
 }
 
+/// Stream of events that are happening in the `Swarm`. 
+/// Includes events from the `NetworkBehaviour` but also events about the connections status and listeners.
+///
+/// This stream is infinite and it is guarenteed that `Stream::poll_next will never return `Poll::Ready(None)`.
 impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
@@ -847,12 +839,13 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     type Item = SwarmEvent<TBehaviour::OutEvent, THandleErr>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let event = futures::ready!(ExpandedSwarm::poll_next_event(self.as_mut(), cx));
-        Poll::Ready(Some(event))
+        self.as_mut()
+            .poll_next_event(cx)
+            .map(Some)
     }
 }
 
-/// the stream of behaviour events never terminates, so we can implement fused for it
+/// The stream of swarm events never terminates, so we can implement fused for it.
 impl<TBehaviour, TInEvent, TOutEvent, THandler> FusedStream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,

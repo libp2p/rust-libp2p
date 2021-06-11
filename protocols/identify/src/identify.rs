@@ -511,13 +511,16 @@ mod tests {
         // either `Identified` event arrives correctly.
         async_std::task::block_on(async move {
             loop {
-                let swarm1_fut = swarm1.behaviour_next();
+                let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
-                let swarm2_fut = swarm2.behaviour_next();
+                let swarm2_fut = swarm2.select_next_some();
                 pin_mut!(swarm2_fut);
 
                 match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
-                    future::Either::Left(IdentifyEvent::Received { info, .. }) => {
+                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received { 
+                        info, 
+                        ..
+                    })) => {
                         assert_eq!(info.public_key, pubkey2);
                         assert_eq!(info.protocol_version, "c");
                         assert_eq!(info.agent_version, "d");
@@ -525,7 +528,10 @@ mod tests {
                         assert!(info.listen_addrs.is_empty());
                         return;
                     }
-                    future::Either::Right(IdentifyEvent::Received { info, .. }) => {
+                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received { 
+                        info, 
+                        ..
+                    })) => {
                         assert_eq!(info.public_key, pubkey1);
                         assert_eq!(info.protocol_version, "a");
                         assert_eq!(info.agent_version, "b");

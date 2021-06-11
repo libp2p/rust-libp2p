@@ -82,14 +82,20 @@ fn ping_pong() {
             swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
 
             loop {
-                match swarm2.behaviour_next().await {
-                    PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                match swarm2.select_next_some().await {
+                    SwarmEvent::Behaviour(PingEvent { 
+                        peer, 
+                        result: Ok(PingSuccess::Ping { rtt }) 
+                    }) => {
                         count2 -= 1;
                         if count2 == 0 {
                             return (pid2.clone(), peer, rtt)
                         }
                     },
-                    PingEvent { result: Err(e), .. } => panic!("Ping failure: {:?}", e),
+                    SwarmEvent::Behaviour(PingEvent { 
+                        result: Err(e), 
+                        .. 
+                    }) => panic!("Ping failure: {:?}", e),
                     _ => {}
                 }
             }
