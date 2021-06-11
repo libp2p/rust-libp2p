@@ -56,7 +56,7 @@ impl PeerRecord {
     }
 
     // TODO: docs
-    pub fn warp_in_envelope(self, key: Keypair) -> SignedEnvelope {
+    pub fn wrap_in_envelope(self, key: Keypair) -> SignedEnvelope {
         if key.public().into_peer_id() != self.peer_id {
             panic!("bad key")
         }
@@ -154,7 +154,7 @@ impl AuthenticatedPeerRecord {
     }
 
     pub fn from_record(key: Keypair, record: PeerRecord) -> Self {
-        let envelope = record.clone().warp_in_envelope(key);
+        let envelope = record.clone().wrap_in_envelope(key);
 
         Self {
             inner: record,
@@ -246,7 +246,7 @@ mod tests {
             addresses: vec![HOME.parse().unwrap()],
         };
 
-        let envelope = record.clone().warp_in_envelope(identity);
+        let envelope = record.clone().wrap_in_envelope(identity);
         let authenticated = AuthenticatedPeerRecord::from_signed_envelope(envelope).unwrap();
 
         assert_eq!(authenticated, record)
