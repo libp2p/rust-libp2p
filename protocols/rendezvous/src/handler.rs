@@ -78,8 +78,8 @@ enum Next<S, E> {
     Return { poll: Poll<E>, next_state: S },
     /// Continue with polling the state.
     Continue { next_state: S },
-    /// The state machine finished.
-    Done,
+    /// The state machine finished gracefully.
+    Done { final_event: Option<E> },
 }
 
 impl<S, E> SubstreamState<S>
@@ -108,8 +108,12 @@ where
                     *self = SubstreamState::Active(next_state);
                     return poll;
                 }
-                Next::Done => {
+                Next::Done { final_event } => {
                     *self = SubstreamState::None;
+                    if let Some(final_event) = final_event {
+                        return Poll::Ready(final_event);
+                    }
+
                     return Poll::Pending;
                 }
             }
@@ -143,12 +147,25 @@ enum Outbound {
     PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We are waiting for the response from the remote.
     PendingRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
-    /// We got a message from the remote and dispatched it to the behaviour, now we are closing down the substream.
+    /// We are closing down the substream.
     PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
 }
 
+/// Errors that can occur while interacting with a substream.
+#[derive(Debug, thiserror::Error)]
+pub enum SubstreamError {
+    #[error("Reading message {0:?} at this stage is a protocol violation")]
+    BadMessage(Message),
+    #[error("Failed to write message to substream")]
+    WriteMessage(#[source] codec::Error),
+    #[error("Failed to read message from substream")]
+    ReadMessage(#[source] codec::Error),
+    #[error("Substream ended unexpectedly mid-protocol")]
+    UnexpectedEndOfStream,
+}
+
 impl Advance for Inbound {
-    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>;
+    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, SubstreamError>;
 
     fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event> {
         match self {
@@ -162,21 +179,24 @@ impl Advance for Inbound {
                             next_state: Inbound::PendingBehaviour(substream),
                         },
                         // receiving these messages on an inbound substream is a protocol violation
-                        Message::DiscoverResponse { .. }
-                        | Message::RegisterResponse { .. }
-                        | Message::FailedToDiscover { .. }
-                        | Message::FailedToRegister { .. } => Next::Continue {
-                            next_state: Inbound::PendingClose(substream),
+                        m @ Message::DiscoverResponse { .. }
+                        | m @ Message::RegisterResponse { .. }
+                        | m @ Message::FailedToDiscover { .. }
+                        | m @ Message::FailedToRegister { .. } => Next::Done {
+                            final_event: Some(ProtocolsHandlerEvent::Close(
+                                SubstreamError::BadMessage(m),
+                            )),
                         },
                     }
                 }
-                Poll::Ready(Some(Err(e))) => {
-                    // TODO: investigate the error here and send an appropriate error response
-                    panic!("Error when reading inbound: {:?}", e);
-                }
-                Poll::Ready(None) => {
-                    panic!("Honestly no idea what to do if this happens");
-                }
+                Poll::Ready(Some(Err(e))) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(SubstreamError::ReadMessage(e))),
+                },
+                Poll::Ready(None) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(
+                        SubstreamError::UnexpectedEndOfStream,
+                    )),
+                },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Inbound::Reading(substream),
@@ -191,13 +211,17 @@ impl Advance for Inbound {
                     Ok(()) => Next::Continue {
                         next_state: Inbound::PendingFlush(substream),
                     },
-                    Err(e) => {
-                        panic!("pending send from inbound error: {:?}", e);
-                    }
+                    Err(e) => Next::Done {
+                        final_event: Some(ProtocolsHandlerEvent::Close(
+                            SubstreamError::WriteMessage(e),
+                        )),
+                    },
                 },
-                Poll::Ready(Err(e)) => {
-                    panic!("pending send from inbound error: {:?}", e);
-                }
+                Poll::Ready(Err(e)) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(SubstreamError::WriteMessage(
+                        e,
+                    ))),
+                },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Inbound::PendingSend(substream, message),
@@ -207,14 +231,18 @@ impl Advance for Inbound {
                 Poll::Ready(Ok(())) => Next::Continue {
                     next_state: Inbound::PendingClose(substream),
                 },
-                Poll::Ready(Err(e)) => panic!("pending send from inbound error: {:?}", e),
+                Poll::Ready(Err(e)) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(SubstreamError::WriteMessage(
+                        e,
+                    ))),
+                },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Inbound::PendingFlush(substream),
                 },
             },
             Inbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
-                Poll::Ready(..) => Next::Done,
+                Poll::Ready(..) => Next::Done { final_event: None },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Inbound::PendingClose(substream),
@@ -225,7 +253,7 @@ impl Advance for Inbound {
 }
 
 impl Advance for Outbound {
-    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>;
+    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, SubstreamError>;
 
     fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event> {
         match self {
@@ -244,19 +272,17 @@ impl Advance for Outbound {
                     Ok(()) => Next::Continue {
                         next_state: Outbound::PendingFlush(substream),
                     },
-                    Err(e) => {
-                        log::debug!("Failed to send message on outbound substream: {}", e);
-                        Next::Continue {
-                            next_state: Outbound::PendingClose(substream),
-                        }
-                    }
+                    Err(e) => Next::Done {
+                        final_event: Some(ProtocolsHandlerEvent::Close(
+                            SubstreamError::WriteMessage(e),
+                        )),
+                    },
                 },
-                Poll::Ready(Err(e)) => {
-                    log::debug!("Failed to send message on outbound substream: {}", e);
-                    Next::Continue {
-                        next_state: Outbound::PendingClose(substream),
-                    }
-                }
+                Poll::Ready(Err(e)) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(SubstreamError::WriteMessage(
+                        e,
+                    ))),
+                },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Outbound::PendingSend(substream, message),
@@ -266,12 +292,11 @@ impl Advance for Outbound {
                 Poll::Ready(Ok(())) => Next::Continue {
                     next_state: Outbound::PendingRemote(substream),
                 },
-                Poll::Ready(Err(e)) => {
-                    log::debug!("Failed to send message on outbound substream: {}", e);
-                    Next::Continue {
-                        next_state: Outbound::PendingClose(substream),
-                    }
-                }
+                Poll::Ready(Err(e)) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(SubstreamError::WriteMessage(
+                        e,
+                    ))),
+                },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Outbound::PendingFlush(substream),
@@ -288,30 +313,30 @@ impl Advance for Outbound {
                             next_state: Outbound::PendingClose(substream),
                         },
                         // receiving these messages on an outbound substream is a protocol violation
-                        Message::Register(_)
-                        | Message::Unregister { .. }
-                        | Message::Discover { .. } => Next::Continue {
-                            next_state: Outbound::PendingClose(substream),
+                        m @ Message::Register(_)
+                        | m @ Message::Unregister { .. }
+                        | m @ Message::Discover { .. } => Next::Done {
+                            final_event: Some(ProtocolsHandlerEvent::Close(
+                                SubstreamError::BadMessage(m),
+                            )),
                         },
                     }
                 }
-                Poll::Ready(Some(Err(e))) => {
-                    log::debug!("Failed to read message from substream: {}", e);
-                    Next::Continue {
-                        next_state: Outbound::PendingClose(substream),
-                    }
-                }
-                Poll::Ready(None) => {
-                    log::debug!("Unexpected EOF while waiting for response from remote");
-                    Next::Done
-                }
+                Poll::Ready(Some(Err(e))) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(SubstreamError::ReadMessage(e))),
+                },
+                Poll::Ready(None) => Next::Done {
+                    final_event: Some(ProtocolsHandlerEvent::Close(
+                        SubstreamError::UnexpectedEndOfStream,
+                    )),
+                },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Outbound::PendingRemote(substream),
                 },
             },
             Outbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
-                Poll::Ready(..) => Next::Done,
+                Poll::Ready(..) => Next::Done { final_event: None },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Outbound::PendingClose(substream),
@@ -324,7 +349,7 @@ impl Advance for Outbound {
 impl ProtocolsHandler for RendezvousHandler {
     type InEvent = InEvent;
     type OutEvent = OutEvent;
-    type Error = codec::Error;
+    type Error = SubstreamError;
     type InboundProtocol = protocol::Rendezvous;
     type OutboundProtocol = protocol::Rendezvous;
     type InboundOpenInfo = ();
