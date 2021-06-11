@@ -8,18 +8,14 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use log::debug;
-use log::error;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
+use std::mem;
 use std::task::{Context, Poll};
-use std::{fmt, mem};
 use void::Void;
 
-#[derive(Debug)]
 pub struct RendezvousHandler {
     outbound: SubstreamState<Outbound>,
     inbound: SubstreamState<Inbound>,
-    keep_alive: KeepAlive,
 }
 
 impl RendezvousHandler {
@@ -27,7 +23,6 @@ impl RendezvousHandler {
         Self {
             outbound: SubstreamState::None,
             inbound: SubstreamState::None,
-            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -163,8 +158,6 @@ impl Advance for Inbound {
         match self {
             Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
-                    debug!("read message from inbound {:?}", msg);
-
                     if let Message::Register(..)
                     | Message::Discover { .. }
                     | Message::Unregister { .. } = msg
@@ -326,7 +319,6 @@ impl ProtocolsHandler for RendezvousHandler {
     type OutboundOpenInfo = Message;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        debug!("creating substream protocol");
         SubstreamProtocol::new(protocol::new(), ())
     }
 
@@ -335,7 +327,6 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _msg: Self::InboundOpenInfo,
     ) {
-        debug!("injected inbound");
         if let SubstreamState::None = self.inbound {
             self.inbound = SubstreamState::Active(Inbound::Reading(substream));
         } else {
@@ -348,7 +339,6 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         msg: Self::OutboundOpenInfo,
     ) {
-        debug!("injected outbound");
         if let SubstreamState::Active(Outbound::WaitingUpgrade) = self.outbound {
             self.outbound = SubstreamState::Active(Outbound::PendingSend(substream, msg));
         } else {
@@ -358,7 +348,6 @@ impl ProtocolsHandler for RendezvousHandler {
 
     // event injected from NotifyHandler
     fn inject_event(&mut self, req: InEvent) {
-        debug!("injecting event into handler from behaviour: {:?}", &req);
         let (inbound, outbound) = match (
             req,
             mem::replace(&mut self.inbound, SubstreamState::Poisoned),
@@ -424,10 +413,9 @@ impl ProtocolsHandler for RendezvousHandler {
 
     fn inject_dial_upgrade_error(
         &mut self,
-        _info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<Void>,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<Void>,
     ) {
-        error!("Dial upgrade error {:?}", error);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -446,9 +434,6 @@ impl ProtocolsHandler for RendezvousHandler {
             Self::Error,
         >,
     > {
-        debug!("polling handler: inbound_state: {:?}", &self.inbound);
-        debug!("polling handler: outbound_state {:?}", &self.outbound);
-
         if let Poll::Ready(event) = self.inbound.poll(cx) {
             return Poll::Ready(event);
         }
@@ -458,30 +443,5 @@ impl ProtocolsHandler for RendezvousHandler {
         }
 
         Poll::Pending
-    }
-}
-
-impl Debug for Outbound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Outbound::Start(_) => f.write_str("start"),
-            Outbound::WaitingUpgrade => f.write_str("waiting_upgrade"),
-            Outbound::PendingSend(_, _) => f.write_str("pending_send"),
-            Outbound::PendingFlush(_) => f.write_str("pending_flush"),
-            Outbound::WaitForRemote(_) => f.write_str("waiting_for_remote"),
-            Outbound::Closing(_) => f.write_str("closing"),
-        }
-    }
-}
-
-impl Debug for Inbound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Inbound::Reading(_) => f.write_str("reading"),
-            Inbound::PendingSend(_, _) => f.write_str("pending_send"),
-            Inbound::PendingFlush(_) => f.write_str("pending_flush"),
-            Inbound::WaitForBehaviour(_) => f.write_str("waiting_for_behaviour"),
-            Inbound::Closing(_) => f.write_str("closing"),
-        }
     }
 }
