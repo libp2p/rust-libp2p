@@ -45,8 +45,7 @@ pub enum InEvent {
     },
     DiscoverRequest {
         namespace: Option<String>,
-        cookie: Option<Cookie>
-        // TODO limit: Option<i64>
+        cookie: Option<Cookie>, // TODO limit: Option<i64>
     },
     RegisterResponse {
         ttl: i64,
@@ -169,7 +168,8 @@ impl Advance for Inbound {
                 },
             },
             Inbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
-                Poll::Ready(..) => Next::Done { event: None },
+                Poll::Ready(Ok(())) => Next::Done { event: None },
+                Poll::Ready(Err(_)) => Next::Done { event: None }, // there is nothing we can do about an error during close
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Inbound::PendingClose(substream),
@@ -254,7 +254,8 @@ impl Advance for Outbound {
                 },
             },
             Outbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
-                Poll::Ready(..) => Next::Done { event: None },
+                Poll::Ready(Ok(())) => Next::Done { event: None },
+                Poll::Ready(Err(_)) => Next::Done { event: None }, // there is nothing we can do about an error during close
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
                     next_state: Outbound::PendingClose(substream),
@@ -318,10 +319,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ),
             (InEvent::DiscoverRequest { namespace, cookie }, inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::Start(Message::Discover {
-                    namespace,
-                    cookie,
-                })),
+                SubstreamState::Active(Outbound::Start(Message::Discover { namespace, cookie })),
             ),
             (
                 InEvent::RegisterResponse { ttl },
