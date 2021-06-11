@@ -24,7 +24,6 @@ use std::{
     collections::VecDeque,
     collections::{BTreeSet, HashMap},
     fmt,
-    iter::FromIterator,
     net::IpAddr,
     sync::Arc,
     task::{Context, Poll},
@@ -1246,7 +1245,7 @@ where
         if self.explicit_peers.contains(peer_id) {
             warn!("GRAFT: ignoring request from direct peer {}", peer_id);
             // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
-            to_prune_topics = HashSet::from_iter(topics.into_iter());
+            to_prune_topics = topics.into_iter().collect();
             // but don't PX
             do_px = false
         } else {
@@ -1779,15 +1778,12 @@ where
 
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source)
-                        && match self
-                            .connected_peers
-                            .get(propagation_source)
-                            .map(|v| &v.kind)
-                        {
-                            Some(PeerKind::Gossipsubv1_1) => true,
-                            Some(PeerKind::Gossipsub) => true,
-                            _ => false,
-                        }
+                        && matches!(
+                            self.connected_peers
+                                .get(propagation_source)
+                                .map(|v| &v.kind),
+                            Some(PeerKind::Gossipsubv1_1) | Some(PeerKind::Gossipsub)
+                        )
                         && !Self::score_below_threshold_from_scores(
                             &self.peer_score,
                             propagation_source,
@@ -1860,7 +1856,7 @@ where
         let topics_joined = topics_to_graft.iter().collect::<Vec<_>>();
         if !topics_joined.is_empty() {
             peer_added_to_mesh(
-                propagation_source.clone(),
+                *propagation_source,
                 topics_joined,
                 &self.mesh,
                 self.peer_topics.get(propagation_source),
@@ -2426,7 +2422,7 @@ where
                 remaining_prunes.push(prune);
                 // inform the handler
                 peer_removed_from_mesh(
-                    peer.clone(),
+                    *peer,
                     topic_hash,
                     &self.mesh,
                     self.peer_topics.get(&peer),
@@ -2647,7 +2643,7 @@ where
         // error and drop the message (all individual messages should be small enough to fit in the
         // max_transmit_size)
 
-        let messages = self.fragment_message(message.into())?;
+        let messages = self.fragment_message(message)?;
 
         for message in messages {
             self.events
@@ -2803,7 +2799,7 @@ where
             self.config.protocol_id_prefix().clone(),
             self.config.max_transmit_size(),
             self.config.validation_mode().clone(),
-            self.config.idle_timeout().clone(),
+            self.config.idle_timeout(),
             self.config.support_floodsub(),
         )
     }
@@ -3008,7 +3004,7 @@ where
                             if mesh_peers.contains(peer_id) {
                                 self.events
                                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                                        peer_id: peer_id.clone(),
+                                        peer_id: *peer_id,
                                         event: Arc::new(GossipsubHandlerIn::JoinedMesh),
                                         handler: NotifyHandler::One(connections.connections[0]),
                                     });
