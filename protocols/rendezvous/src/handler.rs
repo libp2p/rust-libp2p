@@ -56,6 +56,7 @@ pub enum OutEvent {
         error: ErrorCode,
     },
 }
+
 #[derive(Debug)]
 pub enum InEvent {
     RegisterRequest {
@@ -288,19 +289,21 @@ impl Advance for Outbound {
                     use OutEvent::*;
 
                     let event = match (sent_message, received_message) {
-                        (Register(registration), RegisterResponse { ttl }) => Registered {
+                        (Register(registration), RegisterResponse(Ok(ttl))) => Registered {
                             namespace: registration.namespace,
                             ttl,
                         },
-                        (Register(registration), FailedToRegister { error }) => RegisterFailed {
+                        (Register(registration), RegisterResponse(Err(error))) => RegisterFailed {
                             namespace: registration.namespace,
                             error,
                         },
-                        (Discover { .. }, DiscoverResponse(registrations, cookie)) => Discovered {
-                            registrations,
-                            cookie,
-                        },
-                        (Discover { namespace, .. }, FailedToDiscover { error }) => {
+                        (Discover { .. }, DiscoverResponse(Ok((registrations, cookie)))) => {
+                            Discovered {
+                                registrations,
+                                cookie,
+                            }
+                        }
+                        (Discover { namespace, .. }, DiscoverResponse(Err(error))) => {
                             DiscoverFailed { namespace, error }
                         }
                         (_, other) => {
@@ -407,7 +410,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
                     substream,
-                    Message::RegisterResponse { ttl },
+                    Message::RegisterResponse(Ok(ttl)),
                 )),
                 outbound,
             ),
@@ -418,7 +421,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
                     substream,
-                    Message::FailedToRegister { error },
+                    Message::RegisterResponse(Err(error)),
                 )),
                 outbound,
             ),
@@ -429,7 +432,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
                     substream,
-                    Message::DiscoverResponse(discovered, cookie),
+                    Message::DiscoverResponse(Ok((discovered, cookie))),
                 )),
                 outbound,
             ),

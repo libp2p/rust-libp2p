@@ -5,15 +5,12 @@ use std::time::SystemTime;
 use unsigned_varint::codec::UviBytes;
 use uuid::Uuid;
 
+pub type Ttl = i64;
+
 #[derive(Debug, Clone)]
 pub enum Message {
     Register(NewRegistration),
-    RegisterResponse {
-        ttl: i64,
-    },
-    FailedToRegister {
-        error: ErrorCode,
-    },
+    RegisterResponse(Result<Ttl, ErrorCode>),
     Unregister {
         namespace: String,
         // TODO: what is the `id` field here in the PB message
@@ -23,10 +20,7 @@ pub enum Message {
         // TODO limit: Option<i64>
         cookie: Option<Cookie>,
     },
-    DiscoverResponse(Vec<Registration>, Cookie),
-    FailedToDiscover {
-        error: ErrorCode,
-    },
+    DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
@@ -229,7 +223,7 @@ impl From<Message> for wire::Message {
                 discover: None,
                 discover_response: None,
             },
-            Message::RegisterResponse { ttl } => wire::Message {
+            Message::RegisterResponse(Ok(ttl)) => wire::Message {
                 r#type: Some(MessageType::RegisterResponse.into()),
                 register_response: Some(RegisterResponse {
                     status: Some(ResponseStatus::Ok.into()),
@@ -241,7 +235,7 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 discover_response: None,
             },
-            Message::FailedToRegister { error } => wire::Message {
+            Message::RegisterResponse(Err(error)) => wire::Message {
                 r#type: Some(MessageType::RegisterResponse.into()),
                 register_response: Some(RegisterResponse {
                     status: Some(ResponseStatus::from(error).into()),
@@ -276,7 +270,7 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 discover_response: None,
             },
-            Message::DiscoverResponse(registrations, cookie) => wire::Message {
+            Message::DiscoverResponse(Ok((registrations, cookie))) => wire::Message {
                 r#type: Some(MessageType::DiscoverResponse.into()),
                 discover_response: Some(DiscoverResponse {
                     registrations: registrations
@@ -298,7 +292,7 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 register_response: None,
             },
-            Message::FailedToDiscover { error } => wire::Message {
+            Message::DiscoverResponse(Err(error)) => wire::Message {
                 r#type: Some(MessageType::DiscoverResponse.into()),
                 discover_response: Some(DiscoverResponse {
                     registrations: Vec::new(),
@@ -347,9 +341,7 @@ impl TryFrom<wire::Message> for Message {
                         ..
                     }),
                 ..
-            } => Message::RegisterResponse {
-                ttl: ttl.ok_or(ConversionError::MissingTtl)?,
-            },
+            } => Message::RegisterResponse(Ok(ttl.ok_or(ConversionError::MissingTtl)?)),
             wire::Message {
                 r#type: Some(3),
                 discover: Some(Discover { ns, .. }),
@@ -368,8 +360,8 @@ impl TryFrom<wire::Message> for Message {
                         ..
                     }),
                 ..
-            } => Message::DiscoverResponse(
-                registrations
+            } => {
+                let registrations = registrations
                     .into_iter()
                     .map(|reggo| {
                         Ok(Registration {
@@ -385,9 +377,11 @@ impl TryFrom<wire::Message> for Message {
                             timestamp: SystemTime::now(),
                         })
                     })
-                    .collect::<Result<Vec<_>, ConversionError>>()?,
-                Cookie::from_wire_encoding(cookie)?,
-            ),
+                    .collect::<Result<Vec<_>, ConversionError>>()?;
+                let cookie = Cookie::from_wire_encoding(cookie)?;
+
+                Message::DiscoverResponse(Ok((registrations, cookie)))
+            }
             wire::Message {
                 r#type: Some(1),
                 register_response:
@@ -396,11 +390,12 @@ impl TryFrom<wire::Message> for Message {
                         ..
                     }),
                 ..
-            } => Message::FailedToRegister {
-                error: wire::message::ResponseStatus::from_i32(error_code)
+            } => {
+                let error = wire::message::ResponseStatus::from_i32(error_code)
                     .ok_or(ConversionError::BadStatusCode)?
-                    .try_into()?,
-            },
+                    .try_into()?;
+                Message::RegisterResponse(Err(error))
+            }
             wire::Message {
                 r#type: Some(2),
                 unregister: Some(Unregister { ns, .. }),
@@ -416,11 +411,12 @@ impl TryFrom<wire::Message> for Message {
                         ..
                     }),
                 ..
-            } => Message::FailedToDiscover {
-                error: wire::message::ResponseStatus::from_i32(error_code)
+            } => {
+                let error = wire::message::ResponseStatus::from_i32(error_code)
                     .ok_or(ConversionError::BadStatusCode)?
-                    .try_into()?,
-            },
+                    .try_into()?;
+                Message::DiscoverResponse(Err(error))
+            }
             _ => return Err(ConversionError::InconsistentWireMessage),
         };
 
