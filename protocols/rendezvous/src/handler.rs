@@ -365,7 +365,7 @@ impl ProtocolsHandler for RendezvousHandler {
         if let SubstreamState::None = self.inbound {
             self.inbound = SubstreamState::Active(Inbound::Reading(substream));
         } else {
-            unreachable!("Invalid inbound state")
+            unreachable!("Invalid inbound state") // TODO: this unreachable is not correct I believe
         }
     }
 
@@ -380,7 +380,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 to_send: msg,
             });
         } else {
-            unreachable!("Invalid outbound state")
+            unreachable!("Invalid outbound state") // TODO: this unreachable is not correct I believe
         }
     }
 
@@ -436,7 +436,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 )),
                 outbound,
             ),
-            _ => unreachable!("Handler in invalid state"),
+            _ => unreachable!("Handler in invalid state"), // TODO: this unreachable is not correct I believe
         };
 
         self.inbound = inbound;
