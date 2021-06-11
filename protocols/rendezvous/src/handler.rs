@@ -45,7 +45,6 @@ pub enum OutEvent {
     },
     DiscoverRequested {
         namespace: Option<String>,
-        // TODO limit: Option<i64>
         cookie: Option<Cookie>,
     },
     Discovered {
@@ -67,11 +66,10 @@ pub enum InEvent {
     },
     UnregisterRequest {
         namespace: String,
-        // TODO: what is the `id` field here in the PB message
     },
     DiscoverRequest {
         namespace: Option<String>,
-        cookie: Option<Cookie>, // TODO limit: Option<i64>
+        cookie: Option<Cookie>,
     },
     RegisterResponse {
         ttl: i64,
