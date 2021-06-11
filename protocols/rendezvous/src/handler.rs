@@ -253,11 +253,17 @@ impl Advance for Outbound {
                         next_state: Outbound::PendingFlush(substream),
                     },
                     Err(e) => {
-                        panic!("Error when sending outbound: {:?}", e);
+                        log::debug!("Failed to send message on outbound substream: {}", e);
+                        Next::Continue {
+                            next_state: Outbound::PendingClose(substream),
+                        }
                     }
                 },
                 Poll::Ready(Err(e)) => {
-                    panic!("Error when sending outbound: {:?}", e);
+                    log::debug!("Failed to send message on outbound substream: {}", e);
+                    Next::Continue {
+                        next_state: Outbound::PendingClose(substream),
+                    }
                 }
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
@@ -269,7 +275,10 @@ impl Advance for Outbound {
                     next_state: Outbound::PendingRemote(substream),
                 },
                 Poll::Ready(Err(e)) => {
-                    panic!("Error when flushing outbound: {:?}", e);
+                    log::debug!("Failed to send message on outbound substream: {}", e);
+                    Next::Continue {
+                        next_state: Outbound::PendingClose(substream),
+                    }
                 }
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
