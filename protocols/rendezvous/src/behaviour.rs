@@ -95,10 +95,6 @@ pub enum Event {
         registrations: HashMap<(String, PeerId), Registration>,
         cookie: Cookie,
     },
-    AnsweredDiscoverRequest {
-        enquirer: PeerId,
-        registrations: Vec<Registration>,
-    },
     FailedToDiscover {
         rendezvous_node: PeerId,
         err_code: ErrorCode,
@@ -112,6 +108,10 @@ pub enum Event {
         rendezvous_node: PeerId,
         err_code: ErrorCode,
         // TODO: get the namespace in as well, needs association between the registration request and the response
+    },
+    AnsweredDiscoverRequest {
+        enquirer: PeerId,
+        registrations: Vec<Registration>,
     },
     DeclinedRegisterRequest {
         peer: PeerId,
