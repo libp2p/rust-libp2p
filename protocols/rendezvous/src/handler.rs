@@ -158,16 +158,20 @@ impl Advance for Inbound {
         match self {
             Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
-                    if let Message::Register(..)
-                    | Message::Discover { .. }
-                    | Message::Unregister { .. } = msg
-                    {
-                        Next::Return {
+                    match msg {
+                        Message::Register(..)
+                        | Message::Discover { .. }
+                        | Message::Unregister { .. } => Next::Return {
                             poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
                             next_state: Inbound::PendingBehaviour(substream),
-                        }
-                    } else {
-                        panic!("Invalid inbound message");
+                        },
+                        // receiving these messages on an inbound substream is a protocol violation
+                        Message::DiscoverResponse { .. }
+                        | Message::RegisterResponse { .. }
+                        | Message::FailedToDiscover { .. }
+                        | Message::FailedToRegister { .. } => Next::Continue {
+                            next_state: Inbound::PendingClose(substream),
+                        },
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
@@ -274,17 +278,20 @@ impl Advance for Outbound {
             },
             Outbound::PendingRemote(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
-                    if let Message::DiscoverResponse { .. }
-                    | Message::RegisterResponse { .. }
-                    | Message::FailedToDiscover { .. }
-                    | Message::FailedToRegister { .. } = msg
-                    {
-                        Next::Return {
+                    match msg {
+                        Message::DiscoverResponse { .. }
+                        | Message::RegisterResponse { .. }
+                        | Message::FailedToDiscover { .. }
+                        | Message::FailedToRegister { .. } => Next::Return {
                             poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
                             next_state: Outbound::PendingClose(substream),
-                        }
-                    } else {
-                        panic!("Invalid inbound message");
+                        },
+                        // receiving these messages on an outbound substream is a protocol violation
+                        Message::Register(_)
+                        | Message::Unregister { .. }
+                        | Message::Discover { .. } => Next::Continue {
+                            next_state: Outbound::PendingClose(substream),
+                        },
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
