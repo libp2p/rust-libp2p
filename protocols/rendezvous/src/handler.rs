@@ -29,8 +29,34 @@ impl RendezvousHandler {
     }
 }
 
-pub type OutEvent = Message;
-
+#[derive(Debug, Clone)]
+pub enum OutEvent {
+    RegistrationRequested(NewRegistration),
+    Registered {
+        namespace: String,
+        ttl: i64,
+    },
+    RegisterFailed {
+        namespace: String,
+        error: ErrorCode,
+    },
+    UnregisterRequested {
+        namespace: String,
+    },
+    DiscoverRequested {
+        namespace: Option<String>,
+        // TODO limit: Option<i64>
+        cookie: Option<Cookie>,
+    },
+    Discovered {
+        registrations: Vec<Registration>,
+        cookie: Cookie,
+    },
+    DiscoverFailed {
+        namespace: Option<String>,
+        error: ErrorCode,
+    },
+}
 #[derive(Debug)]
 pub enum InEvent {
     RegisterRequest {
@@ -77,11 +103,20 @@ enum Outbound {
     /// We've requested a substream and are waiting for it to be set up.
     PendingSubstream,
     /// We got the substream, now we need to send the message.
-    PendingSend(Framed<NegotiatedSubstream, RendezvousCodec>, Message),
+    PendingSend {
+        substream: Framed<NegotiatedSubstream, RendezvousCodec>,
+        to_send: Message,
+    },
     /// We sent the message, now we need to flush the data out.
-    PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingFlush {
+        substream: Framed<NegotiatedSubstream, RendezvousCodec>,
+        sent_message: Message,
+    },
     /// We are waiting for the response from the remote.
-    PendingRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingRemote {
+        substream: Framed<NegotiatedSubstream, RendezvousCodec>,
+        sent_message: Message,
+    },
     /// We are closing down the substream.
     PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
 }
@@ -106,21 +141,26 @@ impl Advance for Inbound {
         match self {
             Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
-                    // TODO: Lift these patterns out once or-patterns hits stable (1.53)
-                    match msg {
-                        Message::Register(..)
-                        | Message::Discover { .. }
-                        | Message::Unregister { .. } => Next::Return {
-                            poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
-                            next_state: Inbound::PendingBehaviour(substream),
-                        },
-                        // receiving these messages on an inbound substream is a protocol violation
-                        m @ Message::DiscoverResponse { .. }
-                        | m @ Message::RegisterResponse { .. }
-                        | m @ Message::FailedToDiscover { .. }
-                        | m @ Message::FailedToRegister { .. } => Next::Done {
-                            event: Some(ProtocolsHandlerEvent::Close(Error::BadMessage(m))),
-                        },
+                    let event = match msg {
+                        Message::Register(new_registration) => {
+                            OutEvent::RegistrationRequested(new_registration)
+                        }
+                        Message::Discover { cookie, namespace } => {
+                            OutEvent::DiscoverRequested { cookie, namespace }
+                        }
+                        Message::Unregister { namespace } => {
+                            OutEvent::UnregisterRequested { namespace }
+                        }
+                        other => {
+                            return Next::Done {
+                                event: Some(ProtocolsHandlerEvent::Close(Error::BadMessage(other))),
+                            }
+                        }
+                    };
+
+                    Next::Return {
+                        poll: Poll::Ready(ProtocolsHandlerEvent::Custom(event)),
+                        next_state: Inbound::PendingBehaviour(substream),
                     }
                 }
                 Poll::Ready(Some(Err(e))) => Next::Done {
@@ -194,10 +234,16 @@ impl Advance for Outbound {
                 poll: Poll::Pending,
                 next_state: Outbound::PendingSubstream,
             },
-            Outbound::PendingSend(mut substream, message) => match substream.poll_ready_unpin(cx) {
-                Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
+            Outbound::PendingSend {
+                mut substream,
+                to_send: message,
+            } => match substream.poll_ready_unpin(cx) {
+                Poll::Ready(Ok(())) => match substream.start_send_unpin(message.clone()) {
                     Ok(()) => Next::Continue {
-                        next_state: Outbound::PendingFlush(substream),
+                        next_state: Outbound::PendingFlush {
+                            substream,
+                            sent_message: message,
+                        },
                     },
                     Err(e) => Next::Done {
                         event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
@@ -208,38 +254,67 @@ impl Advance for Outbound {
                 },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
-                    next_state: Outbound::PendingSend(substream, message),
+                    next_state: Outbound::PendingSend {
+                        substream,
+                        to_send: message,
+                    },
                 },
             },
-            Outbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
+            Outbound::PendingFlush {
+                mut substream,
+                sent_message,
+            } => match substream.poll_flush_unpin(cx) {
                 Poll::Ready(Ok(())) => Next::Continue {
-                    next_state: Outbound::PendingRemote(substream),
+                    next_state: Outbound::PendingRemote {
+                        substream,
+                        sent_message,
+                    },
                 },
                 Poll::Ready(Err(e)) => Next::Done {
                     event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
                 },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
-                    next_state: Outbound::PendingFlush(substream),
+                    next_state: Outbound::PendingFlush {
+                        substream,
+                        sent_message,
+                    },
                 },
             },
-            Outbound::PendingRemote(mut substream) => match substream.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(msg))) => {
-                    // TODO: Lift these patterns out once or-patterns hits stable (1.53)
-                    match msg {
-                        Message::DiscoverResponse { .. }
-                        | Message::RegisterResponse { .. }
-                        | Message::FailedToDiscover { .. }
-                        | Message::FailedToRegister { .. } => Next::Return {
-                            poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
-                            next_state: Outbound::PendingClose(substream),
+            Outbound::PendingRemote {
+                mut substream,
+                sent_message,
+            } => match substream.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(received_message))) => {
+                    use Message::*;
+                    use OutEvent::*;
+
+                    let event = match (sent_message, received_message) {
+                        (Register(registration), RegisterResponse { ttl }) => Registered {
+                            namespace: registration.namespace,
+                            ttl,
                         },
-                        // receiving these messages on an outbound substream is a protocol violation
-                        m @ Message::Register(_)
-                        | m @ Message::Unregister { .. }
-                        | m @ Message::Discover { .. } => Next::Done {
-                            event: Some(ProtocolsHandlerEvent::Close(Error::BadMessage(m))),
+                        (Register(registration), FailedToRegister { error }) => RegisterFailed {
+                            namespace: registration.namespace,
+                            error,
                         },
+                        (Discover { .. }, DiscoverResponse(registrations, cookie)) => Discovered {
+                            registrations,
+                            cookie,
+                        },
+                        (Discover { namespace, .. }, FailedToDiscover { error }) => {
+                            DiscoverFailed { namespace, error }
+                        }
+                        (_, other) => {
+                            return Next::Done {
+                                event: Some(ProtocolsHandlerEvent::Close(Error::BadMessage(other))),
+                            }
+                        }
+                    };
+
+                    Next::Return {
+                        poll: Poll::Ready(ProtocolsHandlerEvent::Custom(event)),
+                        next_state: Outbound::PendingClose(substream),
                     }
                 }
                 Poll::Ready(Some(Err(e))) => Next::Done {
@@ -250,7 +325,10 @@ impl Advance for Outbound {
                 },
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
-                    next_state: Outbound::PendingRemote(substream),
+                    next_state: Outbound::PendingRemote {
+                        substream,
+                        sent_message,
+                    },
                 },
             },
             Outbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
@@ -296,7 +374,10 @@ impl ProtocolsHandler for RendezvousHandler {
         msg: Self::OutboundOpenInfo,
     ) {
         if let SubstreamState::Active(Outbound::PendingSubstream) = self.outbound {
-            self.outbound = SubstreamState::Active(Outbound::PendingSend(substream, msg));
+            self.outbound = SubstreamState::Active(Outbound::PendingSend {
+                substream: substream,
+                to_send: msg,
+            });
         } else {
             unreachable!("Invalid outbound state")
         }
@@ -350,10 +431,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
                     substream,
-                    Message::DiscoverResponse {
-                        registrations: discovered,
-                        cookie,
-                    },
+                    Message::DiscoverResponse(discovered, cookie),
                 )),
                 outbound,
             ),

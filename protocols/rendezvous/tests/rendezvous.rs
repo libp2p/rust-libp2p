@@ -160,12 +160,13 @@ impl RendezvousTest {
     ) {
         match await_events_or_timeout(self.rendezvous_swarm.next(), self.registration_swarm.next()).await {
             (
-                Event::PeerRegistered { peer, namespace },
-                Event::Registered { rendezvous_node, ttl},
+                Event::PeerRegistered { peer, namespace: rendezvous_node_namespace },
+                Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace },
             ) => {
                 assert_eq!(&peer, self.registration_swarm.local_peer_id());
                 assert_eq!(&rendezvous_node, self.rendezvous_swarm.local_peer_id());
-                assert_eq!(namespace, expected_namespace);
+                assert_eq!(rendezvous_node_namespace, expected_namespace);
+                assert_eq!(register_node_namespace, expected_namespace);
                 assert_eq!(ttl, expected_ttl);
             }
             (rendezvous_swarm_event, registration_swarm_event) => panic!(

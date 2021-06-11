@@ -23,10 +23,7 @@ pub enum Message {
         // TODO limit: Option<i64>
         cookie: Option<Cookie>,
     },
-    DiscoverResponse {
-        registrations: Vec<Registration>,
-        cookie: Cookie,
-    },
+    DiscoverResponse(Vec<Registration>, Cookie),
     FailedToDiscover {
         error: ErrorCode,
     },
@@ -279,10 +276,7 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 discover_response: None,
             },
-            Message::DiscoverResponse {
-                registrations,
-                cookie,
-            } => wire::Message {
+            Message::DiscoverResponse(registrations, cookie) => wire::Message {
                 r#type: Some(MessageType::DiscoverResponse.into()),
                 discover_response: Some(DiscoverResponse {
                     registrations: registrations
@@ -374,8 +368,8 @@ impl TryFrom<wire::Message> for Message {
                         ..
                     }),
                 ..
-            } => Message::DiscoverResponse {
-                registrations: registrations
+            } => Message::DiscoverResponse(
+                registrations
                     .into_iter()
                     .map(|reggo| {
                         Ok(Registration {
@@ -392,8 +386,8 @@ impl TryFrom<wire::Message> for Message {
                         })
                     })
                     .collect::<Result<Vec<_>, ConversionError>>()?,
-                cookie: Cookie::from_wire_encoding(cookie)?,
-            },
+                Cookie::from_wire_encoding(cookie)?,
+            ),
             wire::Message {
                 r#type: Some(1),
                 register_response:

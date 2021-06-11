@@ -1,6 +1,6 @@
-use crate::codec::{Cookie, ErrorCode, Message, NewRegistration, Registration};
+use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
-use crate::handler::{InEvent, RendezvousHandler};
+use crate::handler::{InEvent, OutEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
@@ -107,15 +107,19 @@ pub enum Event {
     /// We failed to discover other nodes on the contained rendezvous node.
     DiscoverFailed {
         rendezvous_node: PeerId,
+        namespace: Option<String>,
         error: ErrorCode,
     },
     /// We successfully registered with the contained rendezvous node.
-    // TODO: get the namespace in as well, needs association between the registration request and the response
-    Registered { rendezvous_node: PeerId, ttl: i64 },
+    Registered {
+        rendezvous_node: PeerId,
+        ttl: i64,
+        namespace: String,
+    },
     /// We failed to register with the contained rendezvous node.
-    // TODO: get the namespace in as well, needs association between the registration request and the response
     RegisterFailed {
         rendezvous_node: PeerId,
+        namespace: String,
         error: ErrorCode,
     },
     /// We successfully served a discover request from a peer.
@@ -127,8 +131,11 @@ pub enum Event {
     // TODO: Include registration here
     PeerRegistered { peer: PeerId, namespace: String },
     /// We declined a registration from a peer.
-    // TODO: get the namespace in as well, needs association between the registration request and the response
-    PeerNotRegistered { peer: PeerId },
+    PeerNotRegistered {
+        peer: PeerId,
+        namespace: String,
+        error: ErrorCode,
+    },
     /// A peer successfully unregistered with us.
     PeerUnregistered { peer: PeerId, namespace: String },
 }
@@ -160,10 +167,10 @@ impl NetworkBehaviour for Rendezvous {
         &mut self,
         peer_id: PeerId,
         _connection: ConnectionId,
-        message: handler::OutEvent,
+        event: handler::OutEvent,
     ) {
-        match message {
-            Message::Register(new_registration) => {
+        match event {
+            OutEvent::RegistrationRequested(new_registration) => {
                 let namespace = new_registration.namespace.clone();
 
                 let events = match self.registrations.add(new_registration) {
@@ -181,16 +188,18 @@ impl NetworkBehaviour for Rendezvous {
                         ]
                     }
                     Err(TtlTooLong { .. }) => {
+                        let error = ErrorCode::InvalidTtl;
+
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::Any,
-                                event: InEvent::DeclineRegisterRequest {
-                                    error: ErrorCode::InvalidTtl,
-                                },
+                                event: InEvent::DeclineRegisterRequest { error },
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
                                 peer: peer_id,
+                                namespace,
+                                error,
                             }),
                         ]
                     }
@@ -198,24 +207,26 @@ impl NetworkBehaviour for Rendezvous {
 
                 self.events.extend(events);
             }
-            Message::RegisterResponse { ttl } => {
+            OutEvent::Registered { namespace, ttl } => {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Registered {
                         rendezvous_node: peer_id,
                         ttl,
+                        namespace,
                     }))
             }
-            Message::FailedToRegister { error } => self.events.push_back(
+            OutEvent::RegisterFailed { namespace, error } => self.events.push_back(
                 NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed {
                     rendezvous_node: peer_id,
+                    namespace,
                     error,
                 }),
             ),
-            Message::Unregister { namespace } => {
+            OutEvent::UnregisterRequested { namespace } => {
                 self.registrations.remove(namespace, peer_id);
                 // TODO: Should send unregister response?
             }
-            Message::Discover { namespace, cookie } => {
+            OutEvent::DiscoverRequested { namespace, cookie } => {
                 let (registrations, cookie) = self
                     .registrations
                     .get(namespace, cookie)
@@ -239,7 +250,7 @@ impl NetworkBehaviour for Rendezvous {
                     },
                 ));
             }
-            Message::DiscoverResponse {
+            OutEvent::Discovered {
                 registrations,
                 cookie,
             } => self
@@ -252,10 +263,11 @@ impl NetworkBehaviour for Rendezvous {
                         .collect(),
                     cookie,
                 })),
-            Message::FailedToDiscover { error } => self.events.push_back(
+            OutEvent::DiscoverFailed { namespace, error } => self.events.push_back(
                 NetworkBehaviourAction::GenerateEvent(Event::DiscoverFailed {
                     rendezvous_node: peer_id,
-                    error: error,
+                    namespace,
+                    error,
                 }),
             ),
         }
