@@ -464,7 +464,7 @@ impl ConversionError {
             ConversionError::BadCookie(_) => ErrorCode::InvalidCookie,
             ConversionError::MissingTtl => ErrorCode::InvalidTtl,
             ConversionError::InconsistentWireMessage => ErrorCode::InternalError,
-            ConversionError::BadStatusCode => ErrorCode::InternalError
+            ConversionError::BadStatusCode => ErrorCode::InternalError,
         }
     }
 }

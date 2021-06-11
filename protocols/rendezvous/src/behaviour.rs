@@ -70,11 +70,19 @@ impl Rendezvous {
             });
     }
 
-    pub fn discover(&mut self, ns: Option<String>, cookie: Option<Cookie>, rendezvous_node: PeerId) {
+    pub fn discover(
+        &mut self,
+        ns: Option<String>,
+        cookie: Option<Cookie>,
+        rendezvous_node: PeerId,
+    ) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: InEvent::DiscoverRequest { namespace: ns, cookie },
+                event: InEvent::DiscoverRequest {
+                    namespace: ns,
+                    cookie,
+                },
                 handler: NotifyHandler::Any,
             });
     }
@@ -90,41 +98,44 @@ pub enum RegisterError {
 
 #[derive(Debug)]
 pub enum Event {
+    /// We successfully discovered other nodes with using the contained rendezvous node.
     Discovered {
         rendezvous_node: PeerId,
         registrations: HashMap<(String, PeerId), Registration>,
         cookie: Cookie,
     },
+    /// We failed to discover other nodes on the contained rendezvous node.
     FailedToDiscover {
         rendezvous_node: PeerId,
         err_code: ErrorCode,
     },
-    RegisteredWithRendezvousNode {
+    /// We successfully registered with the contained rendezvous node.
+    Registered {
         rendezvous_node: PeerId,
         ttl: i64,
         // TODO: get the namespace in as well, needs association between the registration request and the response
     },
-    FailedToRegisterWithRendezvousNode {
+    /// We failed to register with the contained rendezvous node.
+    FailedToRegister {
         rendezvous_node: PeerId,
         err_code: ErrorCode,
         // TODO: get the namespace in as well, needs association between the registration request and the response
     },
+    /// We successfully served a discover request from a peer.
     AnsweredDiscoverRequest {
         enquirer: PeerId,
         registrations: Vec<Registration>,
     },
+    /// We declined a registration from a peer.
     DeclinedRegisterRequest {
         peer: PeerId,
         // TODO: get the namespace in as well, needs association between the registration request and the response
     },
-    PeerRegistered {
-        peer: PeerId,
-        namespace: String,
-    },
-    PeerUnregistered {
-        peer: PeerId,
-        namespace: String,
-    },
+    /// A peer successfully registered with us.
+    // TODO: Include registration here
+    PeerRegistered { peer: PeerId, namespace: String },
+    /// A peer successfully unregistered with us.
+    PeerUnregistered { peer: PeerId, namespace: String },
 }
 
 impl NetworkBehaviour for Rendezvous {
@@ -192,14 +203,15 @@ impl NetworkBehaviour for Rendezvous {
 
                 self.events.extend(events);
             }
-            Message::RegisterResponse { ttl } => self.events.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::RegisteredWithRendezvousNode {
-                    rendezvous_node: peer_id,
-                    ttl,
-                }),
-            ),
+            Message::RegisterResponse { ttl } => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Registered {
+                        rendezvous_node: peer_id,
+                        ttl,
+                    }))
+            }
             Message::FailedToRegister { error } => self.events.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::FailedToRegisterWithRendezvousNode {
+                NetworkBehaviourAction::GenerateEvent(Event::FailedToRegister {
                     rendezvous_node: peer_id,
                     err_code: error,
                 }),
