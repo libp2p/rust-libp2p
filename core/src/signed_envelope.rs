@@ -22,35 +22,7 @@ impl SignedEnvelope {
         payload_type: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<Self, SigningError> {
-        // TODO: fix duplication
-
-        let mut domain_sep_length_buffer = usize_buffer();
-        let domain_sep_length =
-            unsigned_varint::encode::usize(domain_separation.len(), &mut domain_sep_length_buffer);
-
-        let mut payload_type_length_buffer = usize_buffer();
-        let payload_type_length =
-            unsigned_varint::encode::usize(payload_type.len(), &mut payload_type_length_buffer);
-
-        let mut payload_length_buffer = usize_buffer();
-        let payload_length =
-            unsigned_varint::encode::usize(payload.len(), &mut payload_length_buffer);
-
-        let mut buffer = Vec::with_capacity(
-            domain_sep_length.len()
-                + domain_separation.len()
-                + payload_type_length.len()
-                + payload_type.len()
-                + payload_length.len()
-                + payload.len(),
-        );
-
-        buffer.extend_from_slice(domain_sep_length);
-        buffer.extend_from_slice(domain_separation.as_bytes());
-        buffer.extend_from_slice(payload_type_length);
-        buffer.extend_from_slice(payload_type.as_slice());
-        buffer.extend_from_slice(payload_length);
-        buffer.extend_from_slice(payload.as_slice());
+        let buffer = signature_payload(domain_separation, &payload_type, &payload);
 
         let signature = key.sign(&buffer)?;
 
@@ -64,35 +36,7 @@ impl SignedEnvelope {
 
     #[must_use]
     pub fn verify(&self, domain_separation: String) -> bool {
-        let mut domain_sep_length_buffer = usize_buffer();
-        let domain_sep_length =
-            unsigned_varint::encode::usize(domain_separation.len(), &mut domain_sep_length_buffer);
-
-        let mut payload_type_length_buffer = usize_buffer();
-        let payload_type_length = unsigned_varint::encode::usize(
-            self.payload_type.len(),
-            &mut payload_type_length_buffer,
-        );
-
-        let mut payload_length_buffer = usize_buffer();
-        let payload_length =
-            unsigned_varint::encode::usize(self.payload.len(), &mut payload_length_buffer);
-
-        let mut buffer = Vec::with_capacity(
-            domain_sep_length.len()
-                + domain_separation.len()
-                + payload_type_length.len()
-                + self.payload_type.len()
-                + payload_length.len()
-                + self.payload.len(),
-        );
-
-        buffer.extend_from_slice(domain_sep_length);
-        buffer.extend_from_slice(domain_separation.as_bytes());
-        buffer.extend_from_slice(payload_type_length);
-        buffer.extend_from_slice(self.payload_type.as_slice());
-        buffer.extend_from_slice(payload_length);
-        buffer.extend_from_slice(self.payload.as_slice());
+        let buffer = signature_payload(domain_separation, &self.payload_type, &self.payload);
 
         self.key.verify(&buffer, &self.signature)
     }
@@ -151,6 +95,37 @@ impl SignedEnvelope {
             signature: envelope.signature,
         })
     }
+}
+
+fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[u8]) -> Vec<u8> {
+    let mut domain_sep_length_buffer = usize_buffer();
+    let domain_sep_length =
+        unsigned_varint::encode::usize(domain_separation.len(), &mut domain_sep_length_buffer);
+
+    let mut payload_type_length_buffer = usize_buffer();
+    let payload_type_length =
+        unsigned_varint::encode::usize(payload_type.len(), &mut payload_type_length_buffer);
+
+    let mut payload_length_buffer = usize_buffer();
+    let payload_length = unsigned_varint::encode::usize(payload.len(), &mut payload_length_buffer);
+
+    let mut buffer = Vec::with_capacity(
+        domain_sep_length.len()
+            + domain_separation.len()
+            + payload_type_length.len()
+            + payload_type.len()
+            + payload_length.len()
+            + payload.len(),
+    );
+
+    buffer.extend_from_slice(domain_sep_length);
+    buffer.extend_from_slice(domain_separation.as_bytes());
+    buffer.extend_from_slice(payload_type_length);
+    buffer.extend_from_slice(payload_type);
+    buffer.extend_from_slice(payload_length);
+    buffer.extend_from_slice(payload);
+
+    buffer
 }
 
 #[derive(Debug)]
