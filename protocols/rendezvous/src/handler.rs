@@ -171,6 +171,7 @@ impl Advance for Inbound {
         match self {
             Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
+                    // TODO: Lift these patterns out once or-patterns hits stable (1.53)
                     match msg {
                         Message::Register(..)
                         | Message::Discover { .. }
@@ -304,6 +305,7 @@ impl Advance for Outbound {
             },
             Outbound::PendingRemote(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
+                    // TODO: Lift these patterns out once or-patterns hits stable (1.53)
                     match msg {
                         Message::DiscoverResponse { .. }
                         | Message::RegisterResponse { .. }
