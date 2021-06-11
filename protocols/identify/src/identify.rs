@@ -495,10 +495,10 @@ mod tests {
 
         let listen_addr = async_std::task::block_on(async {
             loop {
-                let swarm1_fut = swarm1.next();
+                let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
-                    Some(SwarmEvent::NewListenAddr(addr)) => return addr,
+                    SwarmEvent::NewListenAddr(addr) => return addr,
                     _ => {}
                 }
             }

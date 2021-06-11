@@ -155,8 +155,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let line = line?.expect("stdin closed");
                 swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.as_bytes());
             }
-            event = swarm.next() => {
-                if let Some(SwarmEvent::NewListenAddr(addr)) = event {
+            event = swarm.select_next_some() => {
+                if let SwarmEvent::NewListenAddr(addr) = event {
                     println!("Listening on {:?}", addr);
                 }
             }
