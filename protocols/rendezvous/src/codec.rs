@@ -454,6 +454,21 @@ pub enum ConversionError {
     BadCookie(#[from] InvalidCookie),
 }
 
+impl ConversionError {
+    pub fn to_error_code(&self) -> ErrorCode {
+        match self {
+            ConversionError::MissingNamespace => ErrorCode::InvalidNamespace,
+            ConversionError::MissingSignedPeerRecord => ErrorCode::InvalidSignedPeerRecord,
+            ConversionError::BadSignedEnvelope(_) => ErrorCode::InvalidSignedPeerRecord,
+            ConversionError::BadSignedPeerRecord(_) => ErrorCode::InvalidSignedPeerRecord,
+            ConversionError::BadCookie(_) => ErrorCode::InvalidCookie,
+            ConversionError::MissingTtl => ErrorCode::InvalidTtl,
+            ConversionError::InconsistentWireMessage => ErrorCode::InternalError,
+            ConversionError::BadStatusCode => ErrorCode::InternalError
+        }
+    }
+}
+
 impl TryFrom<wire::message::ResponseStatus> for ErrorCode {
     type Error = NotAnError;
 
