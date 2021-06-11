@@ -1,14 +1,16 @@
+use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
 use crate::{peer_record_proto, signed_envelope, Multiaddr, PeerId};
 use std::convert::TryInto;
 use std::fmt;
+use std::time::SystemTime;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";
 
 // TODO: docs
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct AuthenticatedPeerRecord {
     inner: PeerRecord,
 
@@ -31,13 +33,31 @@ impl AuthenticatedPeerRecord {
         })
     }
 
-    pub fn from_record(key: Keypair, record: PeerRecord) -> Self {
-        let envelope = record.clone().wrap_in_envelope(key);
+    pub fn new(key: Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
+        let secs_since_epoch = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("now() is never before UNIX_EPOCH")
+            .as_secs();
 
-        Self {
+        let record = PeerRecord {
+            peer_id: key.public().into_peer_id(),
+            seq: secs_since_epoch,
+            addresses,
+        };
+
+        let payload = record.clone().into_protobuf_encoding();
+
+        let envelope = SignedEnvelope::new(
+            key,
+            String::from(DOMAIN_SEP),
+            PAYLOAD_TYPE.as_bytes().to_vec(),
+            payload,
+        )?;
+
+        Ok(Self {
             inner: record,
             envelope,
-        }
+        })
     }
 
     pub fn to_signed_envelope(&self) -> SignedEnvelope {
@@ -63,7 +83,7 @@ impl AuthenticatedPeerRecord {
 
 // TODO: docs
 #[derive(Debug, PartialEq, Clone)]
-pub struct PeerRecord {
+struct PeerRecord {
     pub peer_id: PeerId,
     pub seq: u64,
     pub addresses: Vec<Multiaddr>,
@@ -71,7 +91,7 @@ pub struct PeerRecord {
 
 impl PeerRecord {
     // TODO: docs
-    pub fn into_protobuf_encoding(self) -> Vec<u8> {
+    fn into_protobuf_encoding(self) -> Vec<u8> {
         use prost::Message;
 
         let record = peer_record_proto::PeerRecord {
@@ -93,7 +113,7 @@ impl PeerRecord {
         buf
     }
 
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
+    fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
         use prost::Message;
 
         let record = peer_record_proto::PeerRecord::decode(bytes)?;
@@ -107,23 +127,6 @@ impl PeerRecord {
                 .map(|a| a.multiaddr.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
         })
-    }
-
-    // TODO: docs
-    pub fn wrap_in_envelope(self, key: Keypair) -> SignedEnvelope {
-        if key.public().into_peer_id() != self.peer_id {
-            panic!("bad key")
-        }
-
-        let payload = self.into_protobuf_encoding();
-
-        SignedEnvelope::new(
-            key,
-            String::from(DOMAIN_SEP),
-            PAYLOAD_TYPE.as_bytes().to_vec(),
-            payload,
-        )
-        .unwrap() // TODO: Error handling
     }
 }
 
@@ -179,18 +182,6 @@ impl std::error::Error for DecodingError {
     }
 }
 
-impl PartialEq<PeerRecord> for AuthenticatedPeerRecord {
-    fn eq(&self, other: &PeerRecord) -> bool {
-        self.inner.eq(other)
-    }
-}
-
-impl PartialEq<AuthenticatedPeerRecord> for PeerRecord {
-    fn eq(&self, other: &AuthenticatedPeerRecord) -> bool {
-        other.inner.eq(self)
-    }
-}
-
 #[derive(Debug)]
 pub enum FromEnvelopeError {
     BadPayload(signed_envelope::ReadPayloadError),
@@ -235,16 +226,13 @@ mod tests {
 
     #[test]
     fn roundtrip_envelope() {
-        let identity = Keypair::generate_ed25519();
-        let record = PeerRecord {
-            peer_id: identity.public().into_peer_id(),
-            seq: 0,
-            addresses: vec![HOME.parse().unwrap()],
-        };
+        let record =
+            AuthenticatedPeerRecord::new(Keypair::generate_ed25519(), vec![HOME.parse().unwrap()])
+                .unwrap();
 
-        let envelope = record.clone().wrap_in_envelope(identity);
-        let authenticated = AuthenticatedPeerRecord::from_signed_envelope(envelope).unwrap();
+        let envelope = record.to_signed_envelope();
+        let reconstructed = AuthenticatedPeerRecord::from_signed_envelope(envelope).unwrap();
 
-        assert_eq!(authenticated, record)
+        assert_eq!(reconstructed, record)
     }
 }

@@ -7,7 +7,7 @@ use std::fmt;
 use unsigned_varint::encode::usize_buffer;
 
 // TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SignedEnvelope {
     key: PublicKey,
     payload_type: Vec<u8>,
