@@ -1,165 +1,100 @@
+use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
 use crate::{peer_record_proto, signed_envelope, Multiaddr, PeerId};
 use std::convert::TryInto;
 use std::fmt;
+use std::time::SystemTime;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";
 
-// TODO: docs
+/// Represents a peer routing record.
+///
+/// Peer records are designed to be distributable and carry a signature by being wrapped in a signed envelope.
+/// For more information see RFC0003 of the libp2p specifications: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md
 #[derive(Debug, PartialEq, Clone)]
 pub struct PeerRecord {
-    pub peer_id: PeerId,
-    pub seq: u64,
-    pub addresses: Vec<Multiaddr>,
+    peer_id: PeerId,
+    seq: u64,
+    addresses: Vec<Multiaddr>,
+
+    /// A signed envelope representing this [`PeerRecord`].
+    ///
+    /// If this [`PeerRecord`] was constructed from a [`SignedEnvelope`], this is the original instance.
+    envelope: SignedEnvelope,
 }
 
 impl PeerRecord {
-    // TODO: docs
-    pub fn into_protobuf_encoding(self) -> Vec<u8> {
+    /// Attempt to re-construct a [`PeerRecord`] from a [`SignedEnvelope`].
+    ///
+    /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid signature and can hence be considered authenticated.
+    pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
         use prost::Message;
 
-        let record = peer_record_proto::PeerRecord {
-            peer_id: self.peer_id.to_bytes(),
-            seq: self.seq,
-            addresses: self
-                .addresses
-                .into_iter()
-                .map(|m| peer_record_proto::peer_record::AddressInfo {
-                    multiaddr: m.to_vec(),
-                })
-                .collect(),
-        };
+        let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+        let record = peer_record_proto::PeerRecord::decode(payload)?;
 
-        let mut buf = Vec::with_capacity(record.encoded_len());
-        record
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
-        buf
-    }
-
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
-        use prost::Message;
-
-        let record = peer_record_proto::PeerRecord::decode(bytes)?;
+        let peer_id = PeerId::from_bytes(&record.peer_id)?;
+        let seq = record.seq;
+        let addresses = record
+            .addresses
+            .into_iter()
+            .map(|a| a.multiaddr.try_into())
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            peer_id: PeerId::from_bytes(&record.peer_id)?,
-            seq: record.seq,
-            addresses: record
-                .addresses
-                .into_iter()
-                .map(|a| a.multiaddr.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+            peer_id,
+            seq,
+            addresses,
+            envelope,
         })
     }
 
-    // TODO: docs
-    pub fn warp_in_envelope(self, key: Keypair) -> SignedEnvelope {
-        if key.public().into_peer_id() != self.peer_id {
-            panic!("bad key")
-        }
+    /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key.
+    ///
+    /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
+    pub fn new(key: Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
+        use prost::Message;
 
-        let payload = self.into_protobuf_encoding();
+        let seq = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("now() is never before UNIX_EPOCH")
+            .as_secs();
+        let peer_id = key.public().into_peer_id();
 
-        SignedEnvelope::new(
+        let payload = {
+            let record = peer_record_proto::PeerRecord {
+                peer_id: peer_id.to_bytes(),
+                seq,
+                addresses: addresses
+                    .iter()
+                    .map(|m| peer_record_proto::peer_record::AddressInfo {
+                        multiaddr: m.to_vec(),
+                    })
+                    .collect(),
+            };
+
+            let mut buf = Vec::with_capacity(record.encoded_len());
+            record
+                .encode(&mut buf)
+                .expect("Vec<u8> provides capacity as needed");
+            buf
+        };
+
+        let envelope = SignedEnvelope::new(
             key,
             String::from(DOMAIN_SEP),
             PAYLOAD_TYPE.as_bytes().to_vec(),
             payload,
-        )
-        .unwrap() // TODO: Error handling
-    }
-
-    pub fn authenticate(self, key: Keypair) -> AuthenticatedPeerRecord {
-        AuthenticatedPeerRecord::from_record(key, self)
-    }
-}
-
-#[derive(Debug)]
-pub enum DecodingError {
-    /// Failed to decode the provided bytes as a [`PeerRecord`].
-    InvalidPeerRecord(prost::DecodeError),
-    /// Failed to decode the peer ID.
-    InvalidPeerId(multihash::Error),
-    /// Failed to decode a multi-address.
-    InvalidMultiaddr(multiaddr::Error),
-}
-
-impl From<prost::DecodeError> for DecodingError {
-    fn from(e: prost::DecodeError) -> Self {
-        Self::InvalidPeerRecord(e)
-    }
-}
-
-impl From<multihash::Error> for DecodingError {
-    fn from(e: multihash::Error) -> Self {
-        Self::InvalidPeerId(e)
-    }
-}
-
-impl From<multiaddr::Error> for DecodingError {
-    fn from(e: multiaddr::Error) -> Self {
-        Self::InvalidMultiaddr(e)
-    }
-}
-
-impl fmt::Display for DecodingError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DecodingError::InvalidPeerRecord(_) => {
-                write!(f, "Failed to decode bytes as PeerRecord")
-            }
-            DecodingError::InvalidPeerId(_) => write!(f, "Failed to decode bytes as PeerId"),
-            DecodingError::InvalidMultiaddr(_) => {
-                write!(f, "Failed to decode bytes as MultiAddress")
-            }
-        }
-    }
-}
-
-impl std::error::Error for DecodingError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            DecodingError::InvalidPeerRecord(inner) => Some(inner),
-            DecodingError::InvalidPeerId(inner) => Some(inner),
-            DecodingError::InvalidMultiaddr(inner) => Some(inner),
-        }
-    }
-}
-
-// TODO: docs
-#[derive(Debug, Clone)]
-pub struct AuthenticatedPeerRecord {
-    inner: PeerRecord,
-
-    /// A signed envelope containing the above inner [`PeerRecord`].
-    ///
-    /// If this [`AuthenticatedPeerRecord`] was constructed from a [`SignedEnvelope`], this is the original instance.
-    /// If this [`AuthenticatedPeerRecord`] was created by [`authenticating`](PeerRecord::authenticate) an existing [`PeerRecord`], then this is a pre-computed [`SignedEnvelope`] to make it easier to send an [`AuthenticatedPeerRecord`] across the wire.
-    envelope: SignedEnvelope,
-}
-
-impl AuthenticatedPeerRecord {
-    // TODO: docs
-    pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = PeerRecord::from_protobuf_encoding(payload)?;
+        )?;
 
         Ok(Self {
-            inner: record,
+            peer_id,
+            seq,
+            addresses,
             envelope,
         })
-    }
-
-    pub fn from_record(key: Keypair, record: PeerRecord) -> Self {
-        let envelope = record.clone().warp_in_envelope(key);
-
-        Self {
-            inner: record,
-            envelope,
-        }
     }
 
     pub fn to_signed_envelope(&self) -> SignedEnvelope {
@@ -171,34 +106,28 @@ impl AuthenticatedPeerRecord {
     }
 
     pub fn peer_id(&self) -> PeerId {
-        self.inner.peer_id
+        self.peer_id
     }
 
     pub fn seq(&self) -> u64 {
-        self.inner.seq
+        self.seq
     }
 
     pub fn addresses(&self) -> &[Multiaddr] {
-        self.inner.addresses.as_slice()
-    }
-}
-
-impl PartialEq<PeerRecord> for AuthenticatedPeerRecord {
-    fn eq(&self, other: &PeerRecord) -> bool {
-        self.inner.eq(other)
-    }
-}
-
-impl PartialEq<AuthenticatedPeerRecord> for PeerRecord {
-    fn eq(&self, other: &AuthenticatedPeerRecord) -> bool {
-        other.inner.eq(self)
+        self.addresses.as_slice()
     }
 }
 
 #[derive(Debug)]
 pub enum FromEnvelopeError {
+    /// Failed to extract the payload from the envelope.
     BadPayload(signed_envelope::ReadPayloadError),
-    InvalidPeerRecord(DecodingError),
+    /// Failed to decode the provided bytes as a [`PeerRecord`].
+    InvalidPeerRecord(prost::DecodeError),
+    /// Failed to decode the peer ID.
+    InvalidPeerId(multihash::Error),
+    /// Failed to decode a multi-address.
+    InvalidMultiaddr(multiaddr::Error),
 }
 
 impl From<signed_envelope::ReadPayloadError> for FromEnvelopeError {
@@ -207,9 +136,21 @@ impl From<signed_envelope::ReadPayloadError> for FromEnvelopeError {
     }
 }
 
-impl From<DecodingError> for FromEnvelopeError {
-    fn from(e: DecodingError) -> Self {
+impl From<prost::DecodeError> for FromEnvelopeError {
+    fn from(e: prost::DecodeError) -> Self {
         Self::InvalidPeerRecord(e)
+    }
+}
+
+impl From<multihash::Error> for FromEnvelopeError {
+    fn from(e: multihash::Error) -> Self {
+        Self::InvalidPeerId(e)
+    }
+}
+
+impl From<multiaddr::Error> for FromEnvelopeError {
+    fn from(e: multiaddr::Error) -> Self {
+        Self::InvalidMultiaddr(e)
     }
 }
 
@@ -217,7 +158,13 @@ impl fmt::Display for FromEnvelopeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadPayload(_) => write!(f, "Failed to extract payload from envelope"),
-            Self::InvalidPeerRecord(_) => write!(f, "Failed to decode payload as PeerRecord"),
+            Self::InvalidPeerRecord(_) => {
+                write!(f, "Failed to decode bytes as PeerRecord")
+            }
+            Self::InvalidPeerId(_) => write!(f, "Failed to decode bytes as PeerId"),
+            Self::InvalidMultiaddr(_) => {
+                write!(f, "Failed to decode bytes as MultiAddress")
+            }
         }
     }
 }
@@ -226,6 +173,8 @@ impl std::error::Error for FromEnvelopeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidPeerRecord(inner) => Some(inner),
+            Self::InvalidPeerId(inner) => Some(inner),
+            Self::InvalidMultiaddr(inner) => Some(inner),
             Self::BadPayload(inner) => Some(inner),
         }
     }
@@ -239,16 +188,12 @@ mod tests {
 
     #[test]
     fn roundtrip_envelope() {
-        let identity = Keypair::generate_ed25519();
-        let record = PeerRecord {
-            peer_id: identity.public().into_peer_id(),
-            seq: 0,
-            addresses: vec![HOME.parse().unwrap()],
-        };
+        let record =
+            PeerRecord::new(Keypair::generate_ed25519(), vec![HOME.parse().unwrap()]).unwrap();
 
-        let envelope = record.clone().warp_in_envelope(identity);
-        let authenticated = AuthenticatedPeerRecord::from_signed_envelope(envelope).unwrap();
+        let envelope = record.to_signed_envelope();
+        let reconstructed = PeerRecord::from_signed_envelope(envelope).unwrap();
 
-        assert_eq!(authenticated, record)
+        assert_eq!(reconstructed, record)
     }
 }

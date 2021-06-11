@@ -264,7 +264,7 @@ impl PeerScore {
                     let p3 = deficit * deficit;
                     topic_score += p3 * topic_params.mesh_message_deliveries_weight;
                     debug!(
-                        "The peer {} has a mesh message delivieries deficit of {} in topic\
+                        "The peer {} has a mesh message deliveries deficit of {} in topic\
                          {} and will get penalized by {}",
                         peer_id,
                         deficit,
@@ -726,7 +726,7 @@ impl PeerScore {
         match self.params.topics.entry(topic_hash.clone()) {
             Occupied(mut entry) => {
                 let first_message_deliveries_cap = params.first_message_deliveries_cap;
-                let mesh_message_delivieries_cap = params.mesh_message_deliveries_cap;
+                let mesh_message_deliveries_cap = params.mesh_message_deliveries_cap;
                 let old_params = entry.insert(params);
 
                 if old_params.first_message_deliveries_cap > first_message_deliveries_cap {
@@ -739,11 +739,11 @@ impl PeerScore {
                     }
                 }
 
-                if old_params.mesh_message_deliveries_cap > mesh_message_delivieries_cap {
+                if old_params.mesh_message_deliveries_cap > mesh_message_deliveries_cap {
                     for stats in self.peer_stats.values_mut() {
                         if let Some(tstats) = stats.topics.get_mut(&topic_hash) {
-                            if tstats.mesh_message_deliveries > mesh_message_delivieries_cap {
-                                tstats.mesh_message_deliveries = mesh_message_delivieries_cap;
+                            if tstats.mesh_message_deliveries > mesh_message_deliveries_cap {
+                                tstats.mesh_message_deliveries = mesh_message_deliveries_cap;
                             }
                         }
                     }

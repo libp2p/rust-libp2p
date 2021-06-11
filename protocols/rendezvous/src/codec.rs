@@ -1,5 +1,5 @@
 use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
-use libp2p_core::{peer_record, signed_envelope, AuthenticatedPeerRecord, SignedEnvelope};
+use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use std::convert::{TryFrom, TryInto};
 use std::time::SystemTime;
 use unsigned_varint::codec::UviBytes;
@@ -101,7 +101,7 @@ pub struct InvalidCookie;
 #[derive(Debug, Clone)]
 pub struct NewRegistration {
     pub namespace: String,
-    pub record: AuthenticatedPeerRecord,
+    pub record: PeerRecord,
     pub ttl: Option<i64>,
 }
 
@@ -111,7 +111,7 @@ pub struct NewRegistration {
 pub const DEFAULT_TTL: i64 = 60 * 60 * 2;
 
 impl NewRegistration {
-    pub fn new(namespace: String, record: AuthenticatedPeerRecord, ttl: Option<i64>) -> Self {
+    pub fn new(namespace: String, record: PeerRecord, ttl: Option<i64>) -> Self {
         Self {
             namespace,
             record,
@@ -127,7 +127,7 @@ impl NewRegistration {
 #[derive(Debug, Clone)]
 pub struct Registration {
     pub namespace: String,
-    pub record: AuthenticatedPeerRecord,
+    pub record: PeerRecord,
     pub ttl: i64,
     pub timestamp: SystemTime,
 }
@@ -340,7 +340,7 @@ impl TryFrom<wire::Message> for Message {
             } => Message::Register(NewRegistration {
                 namespace: ns.ok_or(ConversionError::MissingNamespace)?,
                 ttl,
-                record: AuthenticatedPeerRecord::from_signed_envelope(
+                record: PeerRecord::from_signed_envelope(
                     SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?,
                 )?,
             }),
@@ -380,7 +380,7 @@ impl TryFrom<wire::Message> for Message {
                     .map(|reggo| {
                         Ok(Registration {
                             namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?,
-                            record: AuthenticatedPeerRecord::from_signed_envelope(
+                            record: PeerRecord::from_signed_envelope(
                                 SignedEnvelope::from_protobuf_encoding(
                                     &reggo
                                         .signed_peer_record

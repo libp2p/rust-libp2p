@@ -36,10 +36,33 @@
 
 ## Utilities
 
-- [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 
 # `libp2p` facade crate
+
+## Version 0.39.0 [unreleased]
+
+- Update individual crates.
+    - `libp2p-core`
+    - `libp2p-deflate`
+    - `libp2p-dns`
+    - `libp2p-floodsub`
+    - `libp2p-gossipsub`
+    - `libp2p-identify`
+    - `libp2p-kad`
+    - `libp2p-mdns`
+    - `libp2p-mplex`
+    - `libp2p-noise`
+    - `libp2p-ping`
+    - `libp2p-plaintext`
+    - `libp2p-relay`
+    - `libp2p-request-response`
+    - `libp2p-swarm`
+    - `libp2p-tcp`
+    - `libp2p-uds`
+    - `libp2p-wasm-ext`
+    - `libp2p-websocket`
+    - `libp2p-yamux`
 
 ## Version 0.38.0 [2021-05-17]
 

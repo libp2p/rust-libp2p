@@ -75,7 +75,7 @@ pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, Pr
 pub use connection::{Connected, Endpoint, ConnectedPoint};
 pub use network::Network;
 pub use signed_envelope::SignedEnvelope;
-pub use peer_record::{AuthenticatedPeerRecord, PeerRecord};
+pub use peer_record::PeerRecord;
 
 use std::{future::Future, pin::Pin};
 

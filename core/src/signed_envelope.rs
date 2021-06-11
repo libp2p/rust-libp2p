@@ -1,13 +1,14 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::{identity, PublicKey};
-use prost::bytes::BufMut;
 use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
 
-// TODO: docs
-#[derive(Debug, Clone)]
+/// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
+///
+/// For more details see libp2p RFC0002: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+#[derive(Debug, Clone, PartialEq)]
 pub struct SignedEnvelope {
     key: PublicKey,
     payload_type: Vec<u8>,
@@ -16,42 +17,14 @@ pub struct SignedEnvelope {
 }
 
 impl SignedEnvelope {
-    // TODO: docs
+    /// Constructs a new [`SignedEnvelope`].
     pub fn new(
         key: Keypair,
         domain_separation: String,
         payload_type: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<Self, SigningError> {
-        // TODO: fix duplication
-
-        let mut domain_sep_length_buffer = usize_buffer();
-        let domain_sep_length =
-            unsigned_varint::encode::usize(domain_separation.len(), &mut domain_sep_length_buffer);
-
-        let mut payload_type_length_buffer = usize_buffer();
-        let payload_type_length =
-            unsigned_varint::encode::usize(payload_type.len(), &mut payload_type_length_buffer);
-
-        let mut payload_length_buffer = usize_buffer();
-        let payload_length =
-            unsigned_varint::encode::usize(payload.len(), &mut payload_length_buffer);
-
-        let mut buffer = Vec::with_capacity(
-            domain_sep_length.len()
-                + domain_separation.len()
-                + payload_type_length.len()
-                + payload_type.len()
-                + payload_length.len()
-                + payload.len(),
-        );
-
-        buffer.put(domain_sep_length);
-        buffer.put(domain_separation.as_bytes());
-        buffer.put(payload_type_length);
-        buffer.put(payload_type.as_slice());
-        buffer.put(payload_length);
-        buffer.put(payload.as_slice());
+        let buffer = signature_payload(domain_separation, &payload_type, &payload);
 
         let signature = key.sign(&buffer)?;
 
@@ -63,42 +36,18 @@ impl SignedEnvelope {
         })
     }
 
+    /// Verify this [`SignedEnvelope`] against the provided domain-separation string.
     #[must_use]
     pub fn verify(&self, domain_separation: String) -> bool {
-        let mut domain_sep_length_buffer = usize_buffer();
-        let domain_sep_length =
-            unsigned_varint::encode::usize(domain_separation.len(), &mut domain_sep_length_buffer);
-
-        let mut payload_type_length_buffer = usize_buffer();
-        let payload_type_length = unsigned_varint::encode::usize(
-            self.payload_type.len(),
-            &mut payload_type_length_buffer,
-        );
-
-        let mut payload_length_buffer = usize_buffer();
-        let payload_length =
-            unsigned_varint::encode::usize(self.payload.len(), &mut payload_length_buffer);
-
-        let mut buffer = Vec::with_capacity(
-            domain_sep_length.len()
-                + domain_separation.len()
-                + payload_type_length.len()
-                + self.payload_type.len()
-                + payload_length.len()
-                + self.payload.len(),
-        );
-
-        buffer.put(domain_sep_length);
-        buffer.put(domain_separation.as_bytes());
-        buffer.put(payload_type_length);
-        buffer.put(self.payload_type.as_slice());
-        buffer.put(payload_length);
-        buffer.put(self.payload.as_slice());
+        let buffer = signature_payload(domain_separation, &self.payload_type, &self.payload);
 
         self.key.verify(&buffer, &self.signature)
     }
 
-    // TODO: docs
+    /// Extract the payload of this [`SignedEnvelope`].
+    ///
+    /// You must provide the correct domain-separation string and expected payload type in order to get the payload.
+    /// This guards against accidental mis-use of the payload where the signature was created for a different purpose or payload type.
     pub fn payload(
         &self,
         domain_separation: String,
@@ -118,11 +67,7 @@ impl SignedEnvelope {
         Ok(&self.payload)
     }
 
-    // TODO: Do we need this?
-    // pub fn payload_unchecked(&self) -> Vec<u8> {
-    //
-    // }
-
+    /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
         use prost::Message;
 
@@ -137,9 +82,11 @@ impl SignedEnvelope {
         envelope
             .encode(&mut buf)
             .expect("Vec<u8> provides capacity as needed");
+
         buf
     }
 
+    /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
         use prost::Message;
 
@@ -154,6 +101,38 @@ impl SignedEnvelope {
     }
 }
 
+fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[u8]) -> Vec<u8> {
+    let mut domain_sep_length_buffer = usize_buffer();
+    let domain_sep_length =
+        unsigned_varint::encode::usize(domain_separation.len(), &mut domain_sep_length_buffer);
+
+    let mut payload_type_length_buffer = usize_buffer();
+    let payload_type_length =
+        unsigned_varint::encode::usize(payload_type.len(), &mut payload_type_length_buffer);
+
+    let mut payload_length_buffer = usize_buffer();
+    let payload_length = unsigned_varint::encode::usize(payload.len(), &mut payload_length_buffer);
+
+    let mut buffer = Vec::with_capacity(
+        domain_sep_length.len()
+            + domain_separation.len()
+            + payload_type_length.len()
+            + payload_type.len()
+            + payload_length.len()
+            + payload.len(),
+    );
+
+    buffer.extend_from_slice(domain_sep_length);
+    buffer.extend_from_slice(domain_separation.as_bytes());
+    buffer.extend_from_slice(payload_type_length);
+    buffer.extend_from_slice(payload_type);
+    buffer.extend_from_slice(payload_length);
+    buffer.extend_from_slice(payload);
+
+    buffer
+}
+
+/// Errors that occur whilst decoding a [`SignedEnvelope`] from its byte representation.
 #[derive(Debug)]
 pub enum DecodingError {
     /// Decoding the provided bytes as a signed envelope failed.
@@ -192,6 +171,7 @@ impl std::error::Error for DecodingError {
     }
 }
 
+/// Errors that occur whilst extracting the payload of a [`SignedEnvelope`].
 #[derive(Debug)]
 pub enum ReadPayloadError {
     /// The signature on the signed envelope does not verify with the provided domain separation string.

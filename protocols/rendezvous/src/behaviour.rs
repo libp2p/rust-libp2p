@@ -3,7 +3,7 @@ use crate::handler;
 use crate::handler::{InEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::Keypair;
-use libp2p_core::{AuthenticatedPeerRecord, Multiaddr, PeerId, PeerRecord};
+use libp2p_core::{Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
@@ -11,8 +11,9 @@ use log::debug;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
-use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
+use std::time::{SystemTime};
 use uuid::Uuid;
+use libp2p_core::identity::error::SigningError;
 
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
@@ -37,15 +38,11 @@ impl Rendezvous {
         namespace: String,
         rendezvous_node: PeerId,
         ttl: Option<i64>,
-    ) -> Result<(), SystemTimeError> {
-        let authenticated_peer_record = AuthenticatedPeerRecord::from_record(
+    ) -> Result<(), SigningError> {
+        let peer_record = PeerRecord::new(
             self.key_pair.clone(),
-            PeerRecord {
-                peer_id: self.key_pair.public().into_peer_id(),
-                seq: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
-                addresses: self.external_addresses.clone(),
-            },
-        );
+            self.external_addresses.clone()
+        )?;
 
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -53,7 +50,7 @@ impl Rendezvous {
                 event: InEvent::RegisterRequest {
                     request: NewRegistration {
                         namespace,
-                        record: authenticated_peer_record,
+                        record: peer_record,
                         ttl,
                     },
                 },
@@ -510,15 +507,9 @@ mod tests {
     }
 
     fn new_registration(namespace: &str, identity: identity::Keypair) -> NewRegistration {
-        let record = PeerRecord {
-            peer_id: identity.public().into_peer_id(),
-            seq: 0,
-            addresses: vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()],
-        };
-
         NewRegistration::new(
             namespace.to_owned(),
-            AuthenticatedPeerRecord::from_record(identity, record),
+            PeerRecord::new(identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
             None,
         )
     }
