@@ -301,7 +301,8 @@ impl Advance for Outbound {
                     }
                 }
                 Poll::Ready(None) => {
-                    panic!("Honestly no idea what to do if this happens");
+                    log::debug!("Unexpected EOF while waiting for response from remote");
+                    Next::Done
                 }
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
