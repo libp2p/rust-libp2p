@@ -1,7 +1,6 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::{identity, PublicKey};
-use prost::bytes::BufMut;
 use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
@@ -46,12 +45,12 @@ impl SignedEnvelope {
                 + payload.len(),
         );
 
-        buffer.put(domain_sep_length);
-        buffer.put(domain_separation.as_bytes());
-        buffer.put(payload_type_length);
-        buffer.put(payload_type.as_slice());
-        buffer.put(payload_length);
-        buffer.put(payload.as_slice());
+        buffer.extend_from_slice(domain_sep_length);
+        buffer.extend_from_slice(domain_separation.as_bytes());
+        buffer.extend_from_slice(payload_type_length);
+        buffer.extend_from_slice(payload_type.as_slice());
+        buffer.extend_from_slice(payload_length);
+        buffer.extend_from_slice(payload.as_slice());
 
         let signature = key.sign(&buffer)?;
 
@@ -88,12 +87,12 @@ impl SignedEnvelope {
                 + self.payload.len(),
         );
 
-        buffer.put(domain_sep_length);
-        buffer.put(domain_separation.as_bytes());
-        buffer.put(payload_type_length);
-        buffer.put(self.payload_type.as_slice());
-        buffer.put(payload_length);
-        buffer.put(self.payload.as_slice());
+        buffer.extend_from_slice(domain_sep_length);
+        buffer.extend_from_slice(domain_separation.as_bytes());
+        buffer.extend_from_slice(payload_type_length);
+        buffer.extend_from_slice(self.payload_type.as_slice());
+        buffer.extend_from_slice(payload_length);
+        buffer.extend_from_slice(self.payload.as_slice());
 
         self.key.verify(&buffer, &self.signature)
     }
