@@ -340,9 +340,9 @@ impl TryFrom<wire::Message> for Message {
             } => Message::Register(NewRegistration {
                 namespace: ns.ok_or(ConversionError::MissingNamespace)?,
                 ttl,
-                record: PeerRecord::from_signed_envelope(
-                    SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?,
-                )?,
+                record: PeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(
+                    &signed_peer_record,
+                )?)?,
             }),
             wire::Message {
                 r#type: Some(1),

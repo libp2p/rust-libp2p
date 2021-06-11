@@ -2,6 +2,7 @@ use crate::codec::{Cookie, ErrorCode, Message, NewRegistration, Registration};
 use crate::handler;
 use crate::handler::{InEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
+use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::{
@@ -11,9 +12,8 @@ use log::debug;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
-use std::time::{SystemTime};
+use std::time::SystemTime;
 use uuid::Uuid;
-use libp2p_core::identity::error::SigningError;
 
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
@@ -39,10 +39,7 @@ impl Rendezvous {
         rendezvous_node: PeerId,
         ttl: Option<i64>,
     ) -> Result<(), SigningError> {
-        let peer_record = PeerRecord::new(
-            self.key_pair.clone(),
-            self.external_addresses.clone()
-        )?;
+        let peer_record = PeerRecord::new(self.key_pair.clone(), self.external_addresses.clone())?;
 
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -165,7 +162,7 @@ impl NetworkBehaviour for Rendezvous {
                             }),
                         ]
                     }
-                    Err(RegistrationError::TTLGreaterThanUpperBound { .. }) => {
+                    Err(TtlTooLong { .. }) => {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
@@ -284,9 +281,10 @@ pub struct Registrations {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum RegistrationError {
-    #[error("Requested TTL: {requested} is greater than upper bound: {upper_bound} ")]
-    TTLGreaterThanUpperBound { upper_bound: i64, requested: i64 },
+#[error("Requested TTL {requested}s is longer than what we allow ({upper_bound}s)")]
+pub struct TtlTooLong {
+    upper_bound: i64,
+    requested: i64,
 }
 
 impl Registrations {
@@ -299,10 +297,10 @@ impl Registrations {
         }
     }
 
-    pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, RegistrationError> {
+    pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, TtlTooLong> {
         let ttl = new_registration.effective_ttl();
         if ttl > self.ttl_upper_bound {
-            return Err(RegistrationError::TTLGreaterThanUpperBound {
+            return Err(TtlTooLong {
                 upper_bound: self.ttl_upper_bound,
                 requested: ttl,
             });
