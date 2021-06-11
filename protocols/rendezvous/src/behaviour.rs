@@ -70,11 +70,11 @@ impl Rendezvous {
             });
     }
 
-    pub fn discover(&mut self, ns: Option<String>, rendezvous_node: PeerId) {
+    pub fn discover(&mut self, ns: Option<String>, cookie: Option<Cookie>, rendezvous_node: PeerId) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: InEvent::DiscoverRequest { namespace: ns },
+                event: InEvent::DiscoverRequest { namespace: ns, cookie },
                 handler: NotifyHandler::Any,
             });
     }

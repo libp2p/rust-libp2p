@@ -45,8 +45,8 @@ pub enum InEvent {
     },
     DiscoverRequest {
         namespace: Option<String>,
+        cookie: Option<Cookie>
         // TODO limit: Option<i64>
-        // TODO cookie: Option<Vec<u8>
     },
     RegisterResponse {
         ttl: i64,
@@ -316,11 +316,11 @@ impl ProtocolsHandler for RendezvousHandler {
                 inbound,
                 SubstreamState::Active(Outbound::Start(Message::Unregister { namespace })),
             ),
-            (InEvent::DiscoverRequest { namespace }, inbound, SubstreamState::None) => (
+            (InEvent::DiscoverRequest { namespace, cookie }, inbound, SubstreamState::None) => (
                 inbound,
                 SubstreamState::Active(Outbound::Start(Message::Discover {
                     namespace,
-                    cookie: None,
+                    cookie,
                 })),
             ),
             (
