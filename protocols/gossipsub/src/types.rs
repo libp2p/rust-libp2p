@@ -21,7 +21,7 @@
 //! A collection of types using the Gossipsub system.
 use crate::rpc_proto;
 use crate::TopicHash;
-use libp2p_core::PeerId;
+use libp2p_core::{connection::ConnectionId, PeerId};
 use std::fmt;
 use std::fmt::Debug;
 
@@ -79,6 +79,14 @@ declare_message_id_type!(MessageId, "MessageId");
 // decompressed traffic, it is beneficial to specify a `fast-message-id` that can identify and
 // filter duplicates quickly without performing the overhead of decompression.
 declare_message_id_type!(FastMessageId, "FastMessageId");
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeerConnections {
+    /// The kind of protocol the peer supports.
+    pub kind: PeerKind,
+    /// Its current connections.
+    pub connections: Vec<ConnectionId>,
+}
 
 /// Describes the types of peers that can exist in the gossipsub context.
 #[derive(Debug, Clone, PartialEq)]

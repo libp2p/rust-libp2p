@@ -1,3 +1,13 @@
+# 0.29.0 [unreleased]
+
+- Switch from `parity-multiaddr` to upstream `multiaddr`.
+
+- Update dependencies.
+
+- Implement `Keypair::from_protobuf_encoding` for ed25519 keys (see [PR 2090]).
+
+[PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090
+
 # 0.28.3 [2021-04-26]
 
 - Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
