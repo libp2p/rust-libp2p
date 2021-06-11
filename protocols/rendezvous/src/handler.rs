@@ -1,6 +1,8 @@
-use crate::codec::{Cookie, ErrorCode, Message, Registration};
-use crate::codec::{NewRegistration, RendezvousCodec};
-use crate::{codec, protocol};
+use crate::codec::{
+    self, Cookie, ErrorCode, Message, NewRegistration, Registration, RendezvousCodec,
+};
+use crate::protocol;
+use crate::substream::{Advance, Next, SubstreamState};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade};
@@ -53,72 +55,6 @@ pub enum InEvent {
         discovered: Vec<Registration>,
         cookie: Cookie,
     },
-}
-
-#[derive(Debug)]
-enum SubstreamState<S> {
-    /// There is no substream.
-    None,
-    /// The substream is in an active state.
-    Active(S),
-    /// Something went seriously wrong.
-    Poisoned,
-}
-
-/// Advances a state machine.
-trait Advance: Sized {
-    type Event;
-
-    fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event>;
-}
-
-/// Defines the results of advancing a state machine.
-enum Next<S, E> {
-    /// Return from the `poll` function, either because are `Ready` or there is no more work to do (`Pending`).
-    Return { poll: Poll<E>, next_state: S },
-    /// Continue with polling the state.
-    Continue { next_state: S },
-    /// The state machine finished gracefully.
-    Done { event: Option<E> },
-}
-
-impl<S, E> SubstreamState<S>
-where
-    S: Advance<Event = E>,
-{
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<E> {
-        loop {
-            let next = match mem::replace(self, SubstreamState::Poisoned) {
-                SubstreamState::None => {
-                    *self = SubstreamState::None;
-                    return Poll::Pending;
-                }
-                SubstreamState::Active(state) => state.advance(cx),
-                SubstreamState::Poisoned => {
-                    unreachable!("reached poisoned state")
-                }
-            };
-
-            match next {
-                Next::Continue { next_state } => {
-                    *self = SubstreamState::Active(next_state);
-                    continue;
-                }
-                Next::Return { poll, next_state } => {
-                    *self = SubstreamState::Active(next_state);
-                    return poll;
-                }
-                Next::Done { event: final_event } => {
-                    *self = SubstreamState::None;
-                    if let Some(final_event) = final_event {
-                        return Poll::Ready(final_event);
-                    }
-
-                    return Poll::Pending;
-                }
-            }
-        }
-    }
 }
 
 /// The state of an inbound substream (i.e. the remote node opened it).
