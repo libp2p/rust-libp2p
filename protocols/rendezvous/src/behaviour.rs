@@ -38,7 +38,11 @@ impl Rendezvous {
         namespace: String,
         rendezvous_node: PeerId,
         ttl: Option<i64>,
-    ) -> Result<(), SigningError> {
+    ) -> Result<(), RegisterError> {
+        if self.external_addresses.is_empty() {
+            return Err(RegisterError::NoExternalAddresses);
+        }
+
         let peer_record = PeerRecord::new(self.key_pair.clone(), self.external_addresses.clone())?;
 
         self.events
@@ -74,6 +78,14 @@ impl Rendezvous {
                 handler: NotifyHandler::Any,
             });
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RegisterError {
+    #[error("We don't know about any externally reachable addresses of ours")]
+    NoExternalAddresses,
+    #[error("Failed to make a new PeerRecord")]
+    FailedToMakeRecord(#[from] SigningError),
 }
 
 #[derive(Debug)]
