@@ -71,10 +71,6 @@ impl PeerRecord {
         )
         .unwrap() // TODO: Error handling
     }
-
-    pub fn authenticate(self, key: Keypair) -> AuthenticatedPeerRecord {
-        AuthenticatedPeerRecord::from_record(key, self)
-    }
 }
 
 #[derive(Debug)]
