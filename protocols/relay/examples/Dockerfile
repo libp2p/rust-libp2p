@@ -7,10 +7,9 @@ RUN apt-get update && \
     apt-get install -y musl-tools && \
     rustup target add x86_64-unknown-linux-musl
 # 1b: Download and compile Rust dependencies (and store as a separate Docker layer)
-RUN USER=root cargo new rust-libp2p
 WORKDIR /usr/src/libp2p
 
-COPY . /usr/src/libp2p
+COPY . .
 RUN cargo build --target x86_64-unknown-linux-musl --example=relay --package=libp2p-relay
 
 # 2: Copy the exe and extra files ("static") to an empty Docker image
