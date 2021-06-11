@@ -5,7 +5,9 @@ use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
 
-// TODO: docs
+/// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
+///
+/// For more details see libp2p RFC0002: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
 #[derive(Debug, Clone, PartialEq)]
 pub struct SignedEnvelope {
     key: PublicKey,
@@ -15,7 +17,7 @@ pub struct SignedEnvelope {
 }
 
 impl SignedEnvelope {
-    // TODO: docs
+    /// Constructs a new [`SignedEnvelope`].
     pub fn new(
         key: Keypair,
         domain_separation: String,
@@ -34,6 +36,7 @@ impl SignedEnvelope {
         })
     }
 
+    /// Verify this [`SignedEnvelope`] against the provided domain-separation string.
     #[must_use]
     pub fn verify(&self, domain_separation: String) -> bool {
         let buffer = signature_payload(domain_separation, &self.payload_type, &self.payload);
@@ -41,7 +44,10 @@ impl SignedEnvelope {
         self.key.verify(&buffer, &self.signature)
     }
 
-    // TODO: docs
+    /// Extract the payload of this [`SignedEnvelope`].
+    ///
+    /// You must provide the correct domain-separation string and expected payload type in order to get the payload.
+    /// This guards against accidental mis-use of the payload where the signature was created for a different purpose or payload type.
     pub fn payload(
         &self,
         domain_separation: String,
@@ -61,11 +67,7 @@ impl SignedEnvelope {
         Ok(&self.payload)
     }
 
-    // TODO: Do we need this?
-    // pub fn payload_unchecked(&self) -> Vec<u8> {
-    //
-    // }
-
+    /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
         use prost::Message;
 
@@ -80,9 +82,11 @@ impl SignedEnvelope {
         envelope
             .encode(&mut buf)
             .expect("Vec<u8> provides capacity as needed");
+
         buf
     }
 
+    /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
         use prost::Message;
 
@@ -128,6 +132,7 @@ fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[
     buffer
 }
 
+/// Errors that occur whilst decoding a [`SignedEnvelope`] from its byte representation.
 #[derive(Debug)]
 pub enum DecodingError {
     /// Decoding the provided bytes as a signed envelope failed.
@@ -166,6 +171,7 @@ impl std::error::Error for DecodingError {
     }
 }
 
+/// Errors that occur whilst extracting the payload of a [`SignedEnvelope`].
 #[derive(Debug)]
 pub enum ReadPayloadError {
     /// The signature on the signed envelope does not verify with the provided domain separation string.
