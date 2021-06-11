@@ -106,7 +106,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     match await_events_or_timeout(test.rendezvous_swarm.next(), test.registration_swarm.next()).await {
         (
             Event::PeerNotRegistered { .. },
-            Event::FailedToRegister {  err_code, .. },
+            Event::RegisterFailed { error: err_code, .. },
         ) => {
             assert_eq!(err_code, ErrorCode::InvalidTtl);
         }
@@ -184,7 +184,7 @@ impl RendezvousTest {
         match await_events_or_timeout(self.rendezvous_swarm.next(), self.discovery_swarm.next())
             .await
         {
-            (Event::AnsweredDiscoverRequest { .. }, Event::Discovered { registrations, .. }) => {
+            (Event::DiscoverServed { .. }, Event::Discovered { registrations, .. }) => {
                 if let Some(reg) =
                     registrations.get(&(expected_namespace.clone(), expected_peer_id))
                 {

@@ -105,24 +105,21 @@ pub enum Event {
         cookie: Cookie,
     },
     /// We failed to discover other nodes on the contained rendezvous node.
-    FailedToDiscover {
+    DiscoverFailed {
         rendezvous_node: PeerId,
-        err_code: ErrorCode,
+        error: ErrorCode,
     },
     /// We successfully registered with the contained rendezvous node.
-    Registered {
-        rendezvous_node: PeerId,
-        ttl: i64,
-        // TODO: get the namespace in as well, needs association between the registration request and the response
-    },
+    // TODO: get the namespace in as well, needs association between the registration request and the response
+    Registered { rendezvous_node: PeerId, ttl: i64 },
     /// We failed to register with the contained rendezvous node.
-    FailedToRegister {
+    // TODO: get the namespace in as well, needs association between the registration request and the response
+    RegisterFailed {
         rendezvous_node: PeerId,
-        err_code: ErrorCode,
-        // TODO: get the namespace in as well, needs association between the registration request and the response
+        error: ErrorCode,
     },
     /// We successfully served a discover request from a peer.
-    AnsweredDiscoverRequest {
+    DiscoverServed {
         enquirer: PeerId,
         registrations: Vec<Registration>,
     },
@@ -209,9 +206,9 @@ impl NetworkBehaviour for Rendezvous {
                     }))
             }
             Message::FailedToRegister { error } => self.events.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::FailedToRegister {
+                NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed {
                     rendezvous_node: peer_id,
-                    err_code: error,
+                    error,
                 }),
             ),
             Message::Unregister { namespace } => {
@@ -236,7 +233,7 @@ impl NetworkBehaviour for Rendezvous {
                         },
                     });
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::AnsweredDiscoverRequest {
+                    Event::DiscoverServed {
                         enquirer: peer_id,
                         registrations: discovered,
                     },
@@ -256,9 +253,9 @@ impl NetworkBehaviour for Rendezvous {
                     cookie,
                 })),
             Message::FailedToDiscover { error } => self.events.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::FailedToDiscover {
+                NetworkBehaviourAction::GenerateEvent(Event::DiscoverFailed {
                     rendezvous_node: peer_id,
-                    err_code: error,
+                    error: error,
                 }),
             ),
         }
