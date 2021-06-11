@@ -53,7 +53,7 @@ impl PeerRecord {
 
     /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key.
     ///
-    /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`libp2p_core::transport::Transport`].
+    /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
     pub fn new(key: Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
         use prost::Message;
 
