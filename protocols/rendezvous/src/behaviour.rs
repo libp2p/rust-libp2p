@@ -126,14 +126,12 @@ pub enum Event {
         enquirer: PeerId,
         registrations: Vec<Registration>,
     },
-    /// We declined a registration from a peer.
-    DeclinedRegisterRequest {
-        peer: PeerId,
-        // TODO: get the namespace in as well, needs association between the registration request and the response
-    },
     /// A peer successfully registered with us.
     // TODO: Include registration here
     PeerRegistered { peer: PeerId, namespace: String },
+    /// We declined a registration from a peer.
+    // TODO: get the namespace in as well, needs association between the registration request and the response
+    PeerNotRegistered { peer: PeerId },
     /// A peer successfully unregistered with us.
     PeerUnregistered { peer: PeerId, namespace: String },
 }
@@ -194,7 +192,7 @@ impl NetworkBehaviour for Rendezvous {
                                     error: ErrorCode::InvalidTtl,
                                 },
                             },
-                            NetworkBehaviourAction::GenerateEvent(Event::DeclinedRegisterRequest {
+                            NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
                                 peer: peer_id,
                             }),
                         ]

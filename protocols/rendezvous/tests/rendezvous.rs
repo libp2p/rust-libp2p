@@ -105,7 +105,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     match await_events_or_timeout(test.rendezvous_swarm.next(), test.registration_swarm.next()).await {
         (
-            Event::DeclinedRegisterRequest { .. },
+            Event::PeerNotRegistered { .. },
             Event::FailedToRegister {  err_code, .. },
         ) => {
             assert_eq!(err_code, ErrorCode::InvalidTtl);
