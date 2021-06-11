@@ -122,13 +122,13 @@ enum Inbound {
     /// We are in the process of reading a message from the substream.
     Reading(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We read a message, dispatched it to the behaviour and are waiting for the response.
-    WaitForBehaviour(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingBehaviour(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We are in the process of sending a response.
     PendingSend(Framed<NegotiatedSubstream, RendezvousCodec>, Message),
     /// We started sending and are currently flushing the data out.
     PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We've sent the message and are now closing down the substream.
-    Closing(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
 }
 
 /// The state of an outbound substream (i.e. we opened it).
@@ -136,15 +136,15 @@ enum Outbound {
     /// We got a message to send from the behaviour.
     Start(Message),
     /// We've requested a substream and are waiting for it to be set up.
-    WaitingUpgrade,
+    PendingSubstream,
     /// We got the substream, now we need to send the message.
     PendingSend(Framed<NegotiatedSubstream, RendezvousCodec>, Message),
     /// We sent the message, now we need to flush the data out.
     PendingFlush(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We are waiting for the response from the remote.
-    WaitForRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We got a message from the remote and dispatched it to the behaviour, now we are closing down the substream.
-    Closing(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
 }
 
 impl Advance for Inbound {
@@ -164,7 +164,7 @@ impl Advance for Inbound {
                     {
                         Next::Return {
                             poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
-                            next_state: Inbound::WaitForBehaviour(substream),
+                            next_state: Inbound::PendingBehaviour(substream),
                         }
                     } else {
                         panic!("Invalid inbound message");
@@ -182,9 +182,9 @@ impl Advance for Inbound {
                     next_state: Inbound::Reading(substream),
                 },
             },
-            Inbound::WaitForBehaviour(substream) => Next::Return {
+            Inbound::PendingBehaviour(substream) => Next::Return {
                 poll: Poll::Pending,
-                next_state: Inbound::WaitForBehaviour(substream),
+                next_state: Inbound::PendingBehaviour(substream),
             },
             Inbound::PendingSend(mut substream, message) => match substream.poll_ready_unpin(cx) {
                 Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
@@ -205,7 +205,7 @@ impl Advance for Inbound {
             },
             Inbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
                 Poll::Ready(Ok(())) => Next::Continue {
-                    next_state: Inbound::Closing(substream),
+                    next_state: Inbound::PendingClose(substream),
                 },
                 Poll::Ready(Err(e)) => panic!("pending send from inbound error: {:?}", e),
                 Poll::Pending => Next::Return {
@@ -213,11 +213,11 @@ impl Advance for Inbound {
                     next_state: Inbound::PendingFlush(substream),
                 },
             },
-            Inbound::Closing(mut substream) => match substream.poll_close_unpin(cx) {
+            Inbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
                 Poll::Ready(..) => Next::Done,
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
-                    next_state: Inbound::Closing(substream),
+                    next_state: Inbound::PendingClose(substream),
                 },
             },
         }
@@ -237,11 +237,11 @@ impl Advance for Outbound {
                 poll: Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: SubstreamProtocol::new(protocol::new(), msg),
                 }),
-                next_state: Outbound::WaitingUpgrade,
+                next_state: Outbound::PendingSubstream,
             },
-            Outbound::WaitingUpgrade => Next::Return {
+            Outbound::PendingSubstream => Next::Return {
                 poll: Poll::Pending,
-                next_state: Outbound::WaitingUpgrade,
+                next_state: Outbound::PendingSubstream,
             },
             Outbound::PendingSend(mut substream, message) => match substream.poll_ready_unpin(cx) {
                 Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
@@ -262,7 +262,7 @@ impl Advance for Outbound {
             },
             Outbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
                 Poll::Ready(Ok(())) => Next::Continue {
-                    next_state: Outbound::WaitForRemote(substream),
+                    next_state: Outbound::PendingRemote(substream),
                 },
                 Poll::Ready(Err(e)) => {
                     panic!("Error when flushing outbound: {:?}", e);
@@ -272,7 +272,7 @@ impl Advance for Outbound {
                     next_state: Outbound::PendingFlush(substream),
                 },
             },
-            Outbound::WaitForRemote(mut substream) => match substream.poll_next_unpin(cx) {
+            Outbound::PendingRemote(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
                     if let Message::DiscoverResponse { .. }
                     | Message::RegisterResponse { .. }
@@ -281,7 +281,7 @@ impl Advance for Outbound {
                     {
                         Next::Return {
                             poll: Poll::Ready(ProtocolsHandlerEvent::Custom(msg)),
-                            next_state: Outbound::Closing(substream),
+                            next_state: Outbound::PendingClose(substream),
                         }
                     } else {
                         panic!("Invalid inbound message");
@@ -295,14 +295,14 @@ impl Advance for Outbound {
                 }
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
-                    next_state: Outbound::WaitForRemote(substream),
+                    next_state: Outbound::PendingRemote(substream),
                 },
             },
-            Outbound::Closing(mut substream) => match substream.poll_close_unpin(cx) {
+            Outbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
                 Poll::Ready(..) => Next::Done,
                 Poll::Pending => Next::Return {
                     poll: Poll::Pending,
-                    next_state: Outbound::Closing(substream),
+                    next_state: Outbound::PendingClose(substream),
                 },
             },
         }
@@ -339,7 +339,7 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         msg: Self::OutboundOpenInfo,
     ) {
-        if let SubstreamState::Active(Outbound::WaitingUpgrade) = self.outbound {
+        if let SubstreamState::Active(Outbound::PendingSubstream) = self.outbound {
             self.outbound = SubstreamState::Active(Outbound::PendingSend(substream, msg));
         } else {
             unreachable!("Invalid outbound state")
@@ -370,7 +370,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ),
             (
                 InEvent::RegisterResponse { ttl },
-                SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
+                SubstreamState::Active(Inbound::PendingBehaviour(substream)),
                 outbound,
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
@@ -381,7 +381,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ),
             (
                 InEvent::DeclineRegisterRequest { error },
-                SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
+                SubstreamState::Active(Inbound::PendingBehaviour(substream)),
                 outbound,
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
@@ -392,7 +392,7 @@ impl ProtocolsHandler for RendezvousHandler {
             ),
             (
                 InEvent::DiscoverResponse { discovered, cookie },
-                SubstreamState::Active(Inbound::WaitForBehaviour(substream)),
+                SubstreamState::Active(Inbound::PendingBehaviour(substream)),
                 outbound,
             ) => (
                 SubstreamState::Active(Inbound::PendingSend(
