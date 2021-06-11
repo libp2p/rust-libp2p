@@ -295,7 +295,10 @@ impl Advance for Outbound {
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
-                    panic!("Error when receiving message from outbound: {:?}", e)
+                    log::debug!("Failed to read message from substream: {}", e);
+                    Next::Continue {
+                        next_state: Outbound::PendingClose(substream),
+                    }
                 }
                 Poll::Ready(None) => {
                     panic!("Honestly no idea what to do if this happens");
