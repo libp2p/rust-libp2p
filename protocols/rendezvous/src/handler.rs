@@ -150,11 +150,7 @@ enum Outbound {
 impl Advance for Inbound {
     type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>;
 
-    fn advance(
-        self,
-        cx: &mut Context<'_>,
-    ) -> Next<Self, ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>>
-    {
+    fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event> {
         match self {
             Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(msg))) => {
@@ -231,11 +227,7 @@ impl Advance for Inbound {
 impl Advance for Outbound {
     type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>;
 
-    fn advance(
-        self,
-        cx: &mut Context<'_>,
-    ) -> Next<Self, ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, codec::Error>>
-    {
+    fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event> {
         match self {
             Outbound::Start(msg) => Next::Return {
                 poll: Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
