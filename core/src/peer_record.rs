@@ -35,14 +35,18 @@ impl PeerRecord {
         let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
         let record = peer_record_proto::PeerRecord::decode(payload)?;
 
+        let peer_id = PeerId::from_bytes(&record.peer_id)?;
+        let seq = record.seq;
+        let addresses = record
+            .addresses
+            .into_iter()
+            .map(|a| a.multiaddr.try_into())
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(Self {
-            peer_id: PeerId::from_bytes(&record.peer_id)?,
-            seq: record.seq,
-            addresses: record
-                .addresses
-                .into_iter()
-                .map(|a| a.multiaddr.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+            peer_id,
+            seq,
+            addresses,
             envelope,
         })
     }
@@ -53,26 +57,24 @@ impl PeerRecord {
     pub fn new(key: Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
         use prost::Message;
 
-        let secs_since_epoch = SystemTime::now()
+        let seq = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("now() is never before UNIX_EPOCH")
             .as_secs();
-
         let peer_id = key.public().into_peer_id();
-        let seq = secs_since_epoch;
-
-        let record = peer_record_proto::PeerRecord {
-            peer_id: peer_id.to_bytes(),
-            seq,
-            addresses: addresses
-                .iter()
-                .map(|m| peer_record_proto::peer_record::AddressInfo {
-                    multiaddr: m.to_vec(),
-                })
-                .collect(),
-        };
 
         let payload = {
+            let record = peer_record_proto::PeerRecord {
+                peer_id: peer_id.to_bytes(),
+                seq,
+                addresses: addresses
+                    .iter()
+                    .map(|m| peer_record_proto::peer_record::AddressInfo {
+                        multiaddr: m.to_vec(),
+                    })
+                    .collect(),
+            };
+
             let mut buf = Vec::with_capacity(record.encoded_len());
             record
                 .encode(&mut buf)
