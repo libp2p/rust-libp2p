@@ -256,6 +256,9 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
 }
 
 /// Contains the state of the network, plus the way it should behave.
+///
+/// Note: Needs to be polled via [`<ExpandedSwarm as Stream>`] in order to make
+/// progress.
 pub struct ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
@@ -822,10 +825,13 @@ where
         })
 }
 
-/// Stream of events that are happening in the `Swarm`. 
-/// Includes events from the `NetworkBehaviour` but also events about the connections status and listeners.
+/// Stream of events returned by [`ExpandedSwarm`].
 ///
-/// This stream is infinite and it is guarenteed that `Stream::poll_next will never return `Poll::Ready(None)`.
+/// Includes events from the [`NetworkBehaviour`] as well as events about
+/// connection and listener status. See [`SwarmEvent`] for details.
+///
+/// Note: This stream is infinite and it is guaranteed that
+/// [`Stream::poll_next`] will never return `Poll::Ready(None)`.
 impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
