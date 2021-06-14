@@ -257,7 +257,7 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
 
 /// Contains the state of the network, plus the way it should behave.
 ///
-/// Note: Needs to be polled via [`<ExpandedSwarm as Stream>`] in order to make
+/// Note: Needs to be polled via `<ExpandedSwarm as Stream>` in order to make
 /// progress.
 pub struct ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
