@@ -49,7 +49,6 @@
           rust-analyzer
           clippy
           rustfmt
-          grin
         ];
       };
     });
