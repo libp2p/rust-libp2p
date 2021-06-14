@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::prelude::*;
+use libp2p::swarm::SwarmEvent;
 use libp2p_swarm_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -299,9 +301,12 @@ fn event_process_false() {
 
         // check that the event is bubbled up all the way to swarm
         let _ = async {
-            match _swarm.next().await {
-                BehaviourOutEvent::Ping(_) => {},
-                BehaviourOutEvent::Identify(_) => {},
+            loop {
+                match _swarm.select_next_some().await  {
+                    SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
+                    SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
+                    _ => {}
+                }
             }
         };
     }
