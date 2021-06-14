@@ -14,7 +14,7 @@
     utils.lib.eachDefaultSystem (system:
     let
       lib = nixpkgs.lib;
-      overlays = [ ./nix/rust-overlay.nix ];
+      overlays = [ (import ./nix/rust-overlay.nix) ];
       pkgs = import nixpkgs { inherit system overlays;};
       rust = import ./nix/rust.nix { nixpkgs = pkgs; };
       naersk-lib = naersk.lib."${system}".override {
@@ -26,7 +26,8 @@
 
       project = naersk-lib.buildPackage {
         name = crateName;
-        buildInputs = with pkgs; [ openssl pkg-config ];
+        buildInputs = with pkgs; [ openssl pkg-config protobuf ];
+        PROTOC = "${pkgs.protobuf}/bin/protoc";
         PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
         targets = [ ];
         root = ./.;
