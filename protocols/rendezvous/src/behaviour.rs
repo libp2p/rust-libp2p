@@ -275,7 +275,7 @@ impl NetworkBehaviour for Rendezvous {
 
     fn poll(
         &mut self,
-        _cx: &mut Context<'_>,
+        _: &mut Context<'_>,
         poll_params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
@@ -433,6 +433,10 @@ impl Registrations {
 
         Ok((registrations, new_cookie))
     }
+
+    pub fn poll(&mut self, _: &mut Context<'_>) -> Poll<()> {
+        todo!()
+    }
 }
 
 // TODO: Be more specific in what the bad combination was?
@@ -444,6 +448,7 @@ pub struct CookieNamespaceMismatch;
 mod tests {
     use super::*;
     use libp2p_core::identity;
+    use tokio::time::Instant;
 
     #[test]
     fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
@@ -489,9 +494,11 @@ mod tests {
         let alice = identity::Keypair::generate_ed25519();
         let mut registrations = Registrations::new(7200);
         registrations
-            .add(new_registration("foo", alice.clone()))
+            .add(new_registration("foo", alice.clone(), None))
             .unwrap();
-        registrations.add(new_registration("foo", alice)).unwrap();
+        registrations
+            .add(new_registration("foo", alice, None))
+            .unwrap();
 
         let (discover, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
 
@@ -529,17 +536,46 @@ mod tests {
         assert!(matches!(result, Err(CookieNamespaceMismatch)))
     }
 
+    #[tokio::test]
+    async fn registrations_expire() {
+        let mut registrations = Registrations::new(7200);
+        registrations
+            .add(new_dummy_registration_with_ttl("foo", 5))
+            .unwrap();
+
+        let start_time = Instant::now();
+        let event = futures::future::poll_fn(|cx| registrations.poll(cx)).await;
+        let duration = start_time.elapsed();
+
+        let (mut discovered, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+
+        assert_eq!(event, ()); // TODO: proper "RegistrationExpired" event
+        assert!(duration.as_secs() > 5);
+        assert!(duration.as_secs() < 6);
+        assert_eq!(discovered.next(), None)
+    }
+
     fn new_dummy_registration(namespace: &str) -> NewRegistration {
         let identity = identity::Keypair::generate_ed25519();
 
-        new_registration(namespace, identity)
+        new_registration(namespace, identity, None)
     }
 
-    fn new_registration(namespace: &str, identity: identity::Keypair) -> NewRegistration {
+    fn new_dummy_registration_with_ttl(namespace: &str, ttl: i64) -> NewRegistration {
+        let identity = identity::Keypair::generate_ed25519();
+
+        new_registration(namespace, identity, Some(ttl))
+    }
+
+    fn new_registration(
+        namespace: &str,
+        identity: identity::Keypair,
+        ttl: Option<i64>,
+    ) -> NewRegistration {
         NewRegistration::new(
             namespace.to_owned(),
             PeerRecord::new(identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
-            None,
+            ttl,
         )
     }
 }

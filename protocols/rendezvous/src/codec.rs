@@ -115,7 +115,7 @@ impl NewRegistration {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Registration {
     pub namespace: String,
     pub record: PeerRecord,
