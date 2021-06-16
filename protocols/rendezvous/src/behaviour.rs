@@ -14,7 +14,7 @@ use log::debug;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 pub struct Rendezvous {
@@ -332,6 +332,9 @@ impl RegistrationId {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct RegistrationsExpired(Vec<Registration>);
+
 pub struct Registrations {
     registrations_for_peer: HashMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
@@ -475,8 +478,37 @@ impl Registrations {
         difficulty_from_num_registrations(num_registrations)
     }
 
-    pub fn poll(&mut self, _: &mut Context<'_>) -> Poll<()> {
-        todo!()
+    pub fn poll(&mut self, _: &mut Context<'_>) -> Poll<RegistrationsExpired> {
+        let expired = self
+            .registrations
+            .iter()
+            .filter(|(id, r)| {
+                let absolute_expiry = r.timestamp + Duration::from_secs(r.ttl as u64);
+                debug!("absolute expiry: {:?}", absolute_expiry);
+                let now = SystemTime::now();
+                debug!("system time: {:?}", now);
+                if now > absolute_expiry {
+                    true
+                } else {
+                    false
+                }
+            })
+            .map(|(id, _r)| *id)
+            .collect::<Vec<RegistrationId>>();
+
+        let expired = expired
+            .iter()
+            .map(|id| self.registrations.remove(id))
+            .filter(|r| r.is_some())
+            //todo!:remove unrwap
+            .map(|r| r.unwrap())
+            .collect::<Vec<Registration>>();
+
+        if expired.is_empty() {
+            Poll::Pending
+        } else {
+            Poll::Ready(RegistrationsExpired(expired))
+        }
     }
 }
 
@@ -590,21 +622,28 @@ mod tests {
 
     #[tokio::test]
     async fn registrations_expire() {
+        env_logger::init();
         let mut registrations = Registrations::new(7200);
         registrations
-            .add(new_dummy_registration_with_ttl("foo", 5))
+            .add(new_dummy_registration_with_ttl("foo", 2))
             .unwrap();
 
-        let start_time = Instant::now();
-        let event = futures::future::poll_fn(|cx| registrations.poll(cx)).await;
-        let duration = start_time.elapsed();
+        let start_time = SystemTime::now();
+        let event = futures::future::poll_fn(|cx| loop {
+            if let Poll::Ready(reg) = registrations.poll(cx) {
+                return Poll::Ready(reg);
+            }
+        })
+        .await;
+        let elapsed = start_time.elapsed().unwrap();
 
-        let (mut discovered, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+        //let (mut discovered, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
 
-        assert_eq!(event, ()); // TODO: proper "RegistrationExpired" event
-        assert!(duration.as_secs() > 5);
-        assert!(duration.as_secs() < 6);
-        assert_eq!(discovered.next(), None)
+        debug!("elapsed: {}", elapsed.as_secs());
+        assert_eq!(event.0.iter().next().unwrap().namespace, "foo"); // TODO: proper "RegistrationExpired" event
+        assert!(elapsed.as_secs() >= 2);
+        assert!(elapsed.as_secs() < 3);
+        //assert_eq!(discovered.next(), None)
     }
 
     #[test]
