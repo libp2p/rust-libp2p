@@ -14,8 +14,9 @@ pub enum SubstreamState<S> {
 /// Advances a state machine.
 pub trait Advance: Sized {
     type Event;
+    type Params;
 
-    fn advance(self, cx: &mut Context<'_>) -> Next<Self, Self::Event>;
+    fn advance(self, cx: &mut Context<'_>, params: &mut Self::Params) -> Next<Self, Self::Event>;
 }
 
 /// Defines the results of advancing a state machine.
@@ -32,14 +33,14 @@ impl<S, E> SubstreamState<S>
 where
     S: Advance<Event = E>,
 {
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<E> {
+    pub fn poll(&mut self, cx: &mut Context<'_>, params: &mut S::Params) -> Poll<E> {
         loop {
             let next = match mem::replace(self, SubstreamState::Poisoned) {
                 SubstreamState::None => {
                     *self = SubstreamState::None;
                     return Poll::Pending;
                 }
-                SubstreamState::Active(state) => state.advance(cx),
+                SubstreamState::Active(state) => state.advance(cx, params),
                 SubstreamState::Poisoned => {
                     unreachable!("reached poisoned state")
                 }
