@@ -179,7 +179,7 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    pub fn into_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         use prost::Message;
 
         let public_key = match self {
