@@ -52,7 +52,7 @@ impl fmt::Display for PeerId {
 
 impl PeerId {
     /// Builds a `PeerId` from a public key.
-    pub fn from_public_key(key: PublicKey) -> PeerId {
+    pub fn from_public_key(key: &PublicKey) -> PeerId {
         let key_enc = key.into_protobuf_encoding();
 
         let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
@@ -119,9 +119,15 @@ impl PeerId {
     }
 }
 
+impl<'a> From<&'a PublicKey> for PeerId {
+    fn from(key: &'a PublicKey) -> PeerId {
+        PeerId::from_public_key(key)
+    }
+}
+
 impl From<PublicKey> for PeerId {
     fn from(key: PublicKey) -> PeerId {
-        PeerId::from_public_key(key)
+        PeerId::from_public_key(&key)
     }
 }
 

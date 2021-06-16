@@ -101,6 +101,24 @@ impl From<SecretKey> for Keypair {
     }
 }
 
+impl From<ed25519::Keypair> for Keypair {
+    fn from(kp: ed25519::Keypair) -> Self {
+        Self(kp)
+    }
+}
+
+impl From<Keypair> for super::Keypair {
+    fn from(kp: Keypair) -> Self {
+        Self::Ed25519(kp)
+    }
+}
+
+impl From<ed25519::Keypair> for super::Keypair {
+    fn from(kp: ed25519::Keypair) -> Self {
+        Self::Ed25519(kp.into())
+    }
+}
+
 /// An Ed25519 public key.
 #[derive(PartialEq, Eq, Clone)]
 pub struct PublicKey(ed25519::PublicKey);
@@ -132,6 +150,24 @@ impl PublicKey {
         ed25519::PublicKey::from_bytes(k)
             .map_err(|e| DecodingError::new("Ed25519 public key").source(e))
             .map(PublicKey)
+    }
+}
+
+impl From<ed25519::PublicKey> for PublicKey {
+    fn from(pk: ed25519::PublicKey) -> Self {
+        Self(pk)
+    }
+}
+
+impl From<PublicKey> for super::PublicKey {
+    fn from(pk: PublicKey) -> Self {
+        Self::Ed25519(pk)
+    }
+}
+
+impl From<ed25519::PublicKey> for super::PublicKey {
+    fn from(pk: ed25519::PublicKey) -> Self {
+        Self::Ed25519(pk.into())
     }
 }
 
