@@ -9,6 +9,7 @@ message Message {
     UNREGISTER = 2;
     DISCOVER = 3;
     DISCOVER_RESPONSE = 4;
+    PROOF_OF_WORK = 5;
   }
 
   enum ResponseStatus {
@@ -17,6 +18,8 @@ message Message {
     E_INVALID_SIGNED_PEER_RECORD = 101;
     E_INVALID_TTL = 102;
     E_INVALID_COOKIE = 103;
+    E_POW_REQUIRED = 104;
+    E_DIFFICULTY_TOO_LOW = 105;
     E_NOT_AUTHORIZED = 200;
     E_INTERNAL_ERROR = 300;
     E_UNAVAILABLE = 400;
@@ -32,6 +35,8 @@ message Message {
     optional ResponseStatus status = 1;
     optional string statusText = 2;
     optional int64 ttl = 3; // in seconds
+    optional bytes challenge = 4;
+    optional uint32 target_difficulty = 5;
   }
 
   message Unregister {
@@ -52,10 +57,16 @@ message Message {
     optional string statusText = 4;
   }
 
+  message ProofOfWork {
+    optional bytes hash = 1;
+    optional int64 nonce = 2;
+  }
+
   optional MessageType type = 1;
   optional Register register = 2;
   optional RegisterResponse registerResponse = 3;
   optional Unregister unregister = 4;
   optional Discover discover = 5;
   optional DiscoverResponse discoverResponse = 6;
+  optional ProofOfWork proofOfWork = 7;
 }

@@ -2,9 +2,9 @@ pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::PeerId;
-use libp2p_rendezvous::behaviour::{Event, Rendezvous};
+use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
 use libp2p_rendezvous::codec::{ErrorCode, DEFAULT_TTL};
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
@@ -127,16 +127,19 @@ const DEFAULT_TTL_UPPER_BOUND: i64 = 56_000;
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut registration_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        let mut registration_swarm = new_swarm(|_, identity| {
+            Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND, Difficulty::from_u32(2).expect("2 < 32"))
+        });
         registration_swarm.listen_on_random_memory_address().await;
 
-        let mut discovery_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        let mut discovery_swarm = new_swarm(|_, identity| {
+            Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND, Difficulty::from_u32(2).expect("2 < 32"))
+        });
         discovery_swarm.listen_on_random_memory_address().await;
 
-        let mut rendezvous_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        let mut rendezvous_swarm = new_swarm(|_, identity| {
+            Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND, Difficulty::from_u32(2).expect("2 < 32"))
+        });
         rendezvous_swarm.listen_on_random_memory_address().await;
 
         registration_swarm
@@ -158,10 +161,10 @@ impl RendezvousTest {
         expected_namespace: String,
         expected_ttl: i64,
     ) {
-        match await_events_or_timeout(self.rendezvous_swarm.next(), self.registration_swarm.next()).await {
+        match await_events_or_timeout(self.rendezvous_swarm.next_event(), self.registration_swarm.next_event()).await {
             (
-                Event::PeerRegistered { peer, namespace: rendezvous_node_namespace },
-                Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace },
+                SwarmEvent::Behaviour(Event::PeerRegistered { peer, namespace: rendezvous_node_namespace }),
+                SwarmEvent::Behaviour(Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
             ) => {
                 assert_eq!(&peer, self.registration_swarm.local_peer_id());
                 assert_eq!(&rendezvous_node, self.rendezvous_swarm.local_peer_id());

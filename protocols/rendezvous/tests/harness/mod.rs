@@ -73,7 +73,7 @@ where
     B: Debug,
 {
     tokio::time::timeout(
-        Duration::from_secs(10),
+        Duration::from_secs(30),
         future::join(
             async {
                 let e1 = swarm_1_event.await;

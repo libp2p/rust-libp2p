@@ -15,7 +15,7 @@ pub enum SubstreamState<S> {
 /// Advances a substream state machine.
 ///
 ///
-pub trait Advance: Sized {
+pub trait Advance<'handler>: Sized {
     type Event;
     type Params;
     type Error;
@@ -45,15 +45,20 @@ pub enum Next<TState, TEvent, TProtocol> {
     Done,
 }
 
-impl<TState, TEvent, TUpgrade, TInfo, TError> SubstreamState<TState>
-where
-    TState: Advance<Event = TEvent, Protocol = SubstreamProtocol<TUpgrade, TInfo>, Error = TError>,
-{
-    pub fn poll(
+impl<TState> SubstreamState<TState> {
+    pub fn poll<'handler, TEvent, TUpgrade, TInfo, TError>(
         &mut self,
         cx: &mut Context<'_>,
         params: &mut TState::Params,
-    ) -> Poll<ProtocolsHandlerEvent<TUpgrade, TInfo, TEvent, TError>> {
+    ) -> Poll<ProtocolsHandlerEvent<TUpgrade, TInfo, TEvent, TError>>
+    where
+        TState: Advance<
+            'handler,
+            Event = TEvent,
+            Protocol = SubstreamProtocol<TUpgrade, TInfo>,
+            Error = TError,
+        >,
+    {
         loop {
             let state = match mem::replace(self, SubstreamState::Poisoned) {
                 SubstreamState::None => {

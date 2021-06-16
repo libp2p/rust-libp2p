@@ -20,6 +20,8 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 thiserror = "1" # TODO: REMOVE FOR PRODUCTION USE
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 uuid = { version = "0.8", features = ["v4"] }
+sha2 = "0.9"
+rand = "0.8"
 
 [dev-dependencies]
 libp2p-tcp = { path = "../../transports/tcp" }

@@ -1,5 +1,7 @@
+use crate::pow::Difficulty;
 use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
+use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
 use std::time::SystemTime;
 use unsigned_varint::codec::UviBytes;
@@ -10,7 +12,7 @@ pub type Ttl = i64;
 #[derive(Debug, Clone)]
 pub enum Message {
     Register(NewRegistration),
-    RegisterResponse(Result<Ttl, ErrorCode>),
+    RegisterResponse(Result<Ttl, RegisterErrorResponse>),
     Unregister {
         namespace: String,
         // TODO: what is the `id` field here in the PB message
@@ -21,6 +23,39 @@ pub enum Message {
         cookie: Option<Cookie>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
+    ProofOfWork {
+        hash: [u8; 32],
+        nonce: i64,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum RegisterErrorResponse {
+    Failed(ErrorCode), // TODO: `Failed` is a bad name, find a better one.
+    /// We are declining the registration because PoW is required.
+    PowRequired {
+        challenge: Challenge,
+        target: Difficulty,
+    },
+}
+
+/// A challenge that needs to be incorporated into the PoW hash by the client.
+///
+/// Sending a challenge to the client ensures the PoW is unique to the registration and the client cannot pre-compute or reuse an existing hash.
+#[derive(Debug, Clone)]
+pub struct Challenge(Vec<u8>);
+
+impl Challenge {
+    pub fn new(rng: &mut impl RngCore) -> Self {
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+
+        Self(bytes.to_vec())
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_slice()
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
@@ -91,9 +126,9 @@ pub struct InvalidCookie;
 
 #[derive(Debug, Clone)]
 pub struct NewRegistration {
-    pub namespace: String,
+    pub namespace: String, // TODO: Create new-type for namespace to enforce max-length requirement.
     pub record: PeerRecord,
-    pub ttl: Option<i64>,
+    pub ttl: Option<i64>, // TODO: Create new-type for ttl to be more descriptive.
 }
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
@@ -222,6 +257,7 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 discover: None,
                 discover_response: None,
+                proof_of_work: None,
             },
             Message::RegisterResponse(Ok(ttl)) => wire::Message {
                 r#type: Some(MessageType::RegisterResponse.into()),
@@ -229,23 +265,47 @@ impl From<Message> for wire::Message {
                     status: Some(ResponseStatus::Ok.into()),
                     status_text: None,
                     ttl: Some(ttl),
+                    challenge: None,
+                    target_difficulty: None,
                 }),
                 register: None,
                 discover: None,
                 unregister: None,
                 discover_response: None,
+                proof_of_work: None,
             },
-            Message::RegisterResponse(Err(error)) => wire::Message {
+            Message::RegisterResponse(Err(RegisterErrorResponse::Failed(error))) => wire::Message {
                 r#type: Some(MessageType::RegisterResponse.into()),
                 register_response: Some(RegisterResponse {
                     status: Some(ResponseStatus::from(error).into()),
                     status_text: None,
                     ttl: None,
+                    challenge: None,
+                    target_difficulty: None,
                 }),
                 register: None,
                 discover: None,
                 unregister: None,
                 discover_response: None,
+                proof_of_work: None,
+            },
+            Message::RegisterResponse(Err(RegisterErrorResponse::PowRequired {
+                challenge,
+                target,
+            })) => wire::Message {
+                r#type: Some(MessageType::RegisterResponse.into()),
+                register_response: Some(RegisterResponse {
+                    status: Some(ResponseStatus::EPowRequired.into()),
+                    status_text: None,
+                    ttl: None,
+                    challenge: Some(challenge.0),
+                    target_difficulty: Some(target.to_u32()),
+                }),
+                register: None,
+                discover: None,
+                unregister: None,
+                discover_response: None,
+                proof_of_work: None,
             },
             Message::Unregister { namespace } => wire::Message {
                 r#type: Some(MessageType::Unregister.into()),
@@ -257,6 +317,7 @@ impl From<Message> for wire::Message {
                 register_response: None,
                 discover: None,
                 discover_response: None,
+                proof_of_work: None,
             },
             Message::Discover { namespace, cookie } => wire::Message {
                 r#type: Some(MessageType::Discover.into()),
@@ -269,6 +330,7 @@ impl From<Message> for wire::Message {
                 register_response: None,
                 unregister: None,
                 discover_response: None,
+                proof_of_work: None,
             },
             Message::DiscoverResponse(Ok((registrations, cookie))) => wire::Message {
                 r#type: Some(MessageType::DiscoverResponse.into()),
@@ -291,6 +353,7 @@ impl From<Message> for wire::Message {
                 discover: None,
                 unregister: None,
                 register_response: None,
+                proof_of_work: None,
             },
             Message::DiscoverResponse(Err(error)) => wire::Message {
                 r#type: Some(MessageType::DiscoverResponse.into()),
@@ -302,6 +365,19 @@ impl From<Message> for wire::Message {
                 }),
                 register: None,
                 discover: None,
+                unregister: None,
+                register_response: None,
+                proof_of_work: None,
+            },
+            Message::ProofOfWork { hash, nonce } => wire::Message {
+                r#type: Some(MessageType::ProofOfWork.into()),
+                proof_of_work: Some(ProofOfWork {
+                    hash: Some(hash.to_vec()),
+                    nonce: Some(nonce),
+                }),
+                register: None,
+                discover: None,
+                discover_response: None,
                 unregister: None,
                 register_response: None,
             },
@@ -387,14 +463,30 @@ impl TryFrom<wire::Message> for Message {
                 register_response:
                     Some(RegisterResponse {
                         status: Some(error_code),
+                        challenge: challenge_bytes,
+                        target_difficulty,
                         ..
                     }),
                 ..
             } => {
                 let error = wire::message::ResponseStatus::from_i32(error_code)
-                    .ok_or(ConversionError::BadStatusCode)?
-                    .try_into()?;
-                Message::RegisterResponse(Err(error))
+                    .ok_or(ConversionError::BadStatusCode)?;
+
+                let error_response = match (error, challenge_bytes, target_difficulty) {
+                    (
+                        wire::message::ResponseStatus::EPowRequired,
+                        Some(bytes),
+                        Some(target_difficulty),
+                    ) => RegisterErrorResponse::PowRequired {
+                        challenge: Challenge(bytes),
+                        target: Difficulty::from_u32(target_difficulty)
+                            .ok_or(ConversionError::PoWDifficultyOutOfRange)?,
+                    },
+                    (code, None, None) => RegisterErrorResponse::Failed(code.try_into()?),
+                    _ => return Err(ConversionError::InconsistentWireMessage),
+                };
+
+                Message::RegisterResponse(Err(error_response))
             }
             wire::Message {
                 r#type: Some(2),
@@ -417,6 +509,18 @@ impl TryFrom<wire::Message> for Message {
                     .try_into()?;
                 Message::DiscoverResponse(Err(error))
             }
+            wire::Message {
+                r#type: Some(5),
+                proof_of_work:
+                    Some(ProofOfWork {
+                        hash: Some(hash),
+                        nonce: Some(nonce),
+                    }),
+                ..
+            } => Message::ProofOfWork {
+                hash: hash.try_into().map_err(|_| ConversionError::BadPoWHash)?,
+                nonce,
+            },
             _ => return Err(ConversionError::InconsistentWireMessage),
         };
 
@@ -442,6 +546,10 @@ pub enum ConversionError {
     BadSignedPeerRecord(#[from] peer_record::FromEnvelopeError),
     #[error(transparent)]
     BadCookie(#[from] InvalidCookie),
+    #[error("The requested PoW difficulty is out of range")]
+    PoWDifficultyOutOfRange,
+    #[error("The provided PoW hash is not 32 bytes long")]
+    BadPoWHash,
 }
 
 impl ConversionError {
@@ -455,18 +563,20 @@ impl ConversionError {
             ConversionError::MissingTtl => ErrorCode::InvalidTtl,
             ConversionError::InconsistentWireMessage => ErrorCode::InternalError,
             ConversionError::BadStatusCode => ErrorCode::InternalError,
+            ConversionError::PoWDifficultyOutOfRange => ErrorCode::InternalError,
+            ConversionError::BadPoWHash => ErrorCode::InternalError,
         }
     }
 }
 
 impl TryFrom<wire::message::ResponseStatus> for ErrorCode {
-    type Error = NotAnError;
+    type Error = UnmappableStatusCode;
 
     fn try_from(value: wire::message::ResponseStatus) -> Result<Self, Self::Error> {
         use wire::message::ResponseStatus::*;
 
         let code = match value {
-            Ok => return Err(NotAnError),
+            Ok | EPowRequired | EDifficultyTooLow => return Err(UnmappableStatusCode(value)),
             EInvalidNamespace => ErrorCode::InvalidNamespace,
             EInvalidSignedPeerRecord => ErrorCode::InvalidSignedPeerRecord,
             EInvalidTtl => ErrorCode::InvalidTtl,
@@ -496,15 +606,15 @@ impl From<ErrorCode> for wire::message::ResponseStatus {
     }
 }
 
-impl From<NotAnError> for ConversionError {
-    fn from(_: NotAnError) -> Self {
+impl From<UnmappableStatusCode> for ConversionError {
+    fn from(_: UnmappableStatusCode) -> Self {
         ConversionError::InconsistentWireMessage
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("The provided response code is not an error code")]
-pub struct NotAnError;
+#[error("The response code ({0:?}) cannot be mapped to our ErrorCode enum")]
+pub struct UnmappableStatusCode(wire::message::ResponseStatus);
 
 mod wire {
     include!(concat!(env!("OUT_DIR"), "/rendezvous.pb.rs"));

@@ -1,6 +1,8 @@
+pub use crate::pow::Difficulty;
+
 use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
-use crate::handler::{InEvent, OutEvent, RendezvousHandler};
+use crate::handler::{DeclineReason, InEvent, OutEvent, RendezvousHandler};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
@@ -20,15 +22,23 @@ pub struct Rendezvous {
     registrations: Registrations,
     key_pair: Keypair,
     external_addresses: Vec<Multiaddr>,
+
+    /// The maximum PoW difficulty we are willing to accept from a rendezvous point.
+    max_accepted_difficulty: Difficulty,
 }
 
 impl Rendezvous {
-    pub fn new(key_pair: Keypair, ttl_upper_board: i64) -> Self {
+    pub fn new(
+        key_pair: Keypair,
+        ttl_upper_board: i64,
+        max_accepted_difficulty: Difficulty,
+    ) -> Self {
         Self {
             events: Default::default(),
             registrations: Registrations::new(ttl_upper_board),
             key_pair,
             external_addresses: vec![],
+            max_accepted_difficulty,
         }
     }
 
@@ -145,8 +155,7 @@ impl NetworkBehaviour for Rendezvous {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        debug!("spawning protocol handler");
-        RendezvousHandler::new()
+        RendezvousHandler::new(self.max_accepted_difficulty)
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -170,10 +179,27 @@ impl NetworkBehaviour for Rendezvous {
         event: handler::OutEvent,
     ) {
         match event {
-            OutEvent::RegistrationRequested(new_registration) => {
-                let namespace = new_registration.namespace.clone();
+            OutEvent::RegistrationRequested {
+                registration,
+                pow_difficulty: provided_difficulty,
+            } => {
+                let expected_difficulty = self.registrations.expected_pow(&registration);
 
-                let events = match self.registrations.add(new_registration) {
+                if expected_difficulty > provided_difficulty {
+                    self.events
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::One(connection),
+                            event: InEvent::DeclineRegisterRequest(DeclineReason::PowRequired {
+                                target: expected_difficulty,
+                            }),
+                        });
+                    return;
+                }
+
+                let namespace = registration.namespace.clone();
+
+                let events = match self.registrations.add(registration) {
                     Ok(effective_ttl) => {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
@@ -194,7 +220,9 @@ impl NetworkBehaviour for Rendezvous {
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::One(connection),
-                                event: InEvent::DeclineRegisterRequest { error },
+                                event: InEvent::DeclineRegisterRequest(
+                                    DeclineReason::BadRegistration(error),
+                                ),
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
                                 peer: peer_id,
@@ -363,6 +391,7 @@ impl Registrations {
                 timestamp: SystemTime::now(),
             },
         );
+
         Ok(ttl)
     }
 
@@ -434,9 +463,32 @@ impl Registrations {
         Ok((registrations, new_cookie))
     }
 
+    pub fn expected_pow(&self, registration: &NewRegistration) -> Difficulty {
+        let peer = registration.record.peer_id();
+
+        let num_registrations = self
+            .registrations_for_peer
+            .keys()
+            .filter(|(candidate, _)| candidate == &peer)
+            .count();
+
+        difficulty_from_num_registrations(num_registrations)
+    }
+
     pub fn poll(&mut self, _: &mut Context<'_>) -> Poll<()> {
         todo!()
     }
+}
+
+fn difficulty_from_num_registrations(existing_registrations: usize) -> Difficulty {
+    if existing_registrations == 0 {
+        return Difficulty::ZERO;
+    }
+
+    let new_registrations = existing_registrations + 1;
+
+    Difficulty::from_u32(((new_registrations) as f32 / 2f32).round() as u32)
+        .unwrap_or(Difficulty::MAX)
 }
 
 // TODO: Be more specific in what the bad combination was?
@@ -553,6 +605,30 @@ mod tests {
         assert!(duration.as_secs() > 5);
         assert!(duration.as_secs() < 6);
         assert_eq!(discovered.next(), None)
+    }
+
+    #[test]
+    fn first_registration_is_free() {
+        let required = difficulty_from_num_registrations(0);
+        let expected = Difficulty::ZERO;
+
+        assert_eq!(required, expected)
+    }
+
+    #[test]
+    fn second_registration_is_not_free() {
+        let required = difficulty_from_num_registrations(1);
+        let expected = Difficulty::from_u32(1).unwrap();
+
+        assert_eq!(required, expected)
+    }
+
+    #[test]
+    fn fourth_registration_requires_two() {
+        let required = difficulty_from_num_registrations(3);
+        let expected = Difficulty::from_u32(2).unwrap();
+
+        assert_eq!(required, expected)
     }
 
     fn new_dummy_registration(namespace: &str) -> NewRegistration {
