@@ -101,18 +101,21 @@ impl From<SecretKey> for Keypair {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<ed25519::Keypair> for Keypair {
     fn from(kp: ed25519::Keypair) -> Self {
         Self(kp)
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<Keypair> for super::Keypair {
     fn from(kp: Keypair) -> Self {
         Self::Ed25519(kp)
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<ed25519::Keypair> for super::Keypair {
     fn from(kp: ed25519::Keypair) -> Self {
         Self::Ed25519(kp.into())
@@ -153,18 +156,21 @@ impl PublicKey {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<ed25519::PublicKey> for PublicKey {
     fn from(pk: ed25519::PublicKey) -> Self {
         Self(pk)
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<PublicKey> for super::PublicKey {
     fn from(pk: PublicKey) -> Self {
         Self::Ed25519(pk)
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<ed25519::PublicKey> for super::PublicKey {
     fn from(pk: ed25519::PublicKey) -> Self {
         Self::Ed25519(pk.into())

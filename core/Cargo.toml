@@ -54,6 +54,7 @@ prost-build = "0.7"
 
 [features]
 default = ["secp256k1"]
+unstable = []
 secp256k1 = ["libsecp256k1"]
 
 [[bench]]
