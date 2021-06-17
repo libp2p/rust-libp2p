@@ -537,7 +537,6 @@ pub struct CookieNamespaceMismatch;
 mod tests {
     use super::*;
     use libp2p_core::identity;
-    use tokio::time::Instant;
 
     #[test]
     fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
@@ -626,29 +625,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn registrations_expire() {
+    async fn given_two_registration_ttls_one_expires_one_lives() {
         env_logger::init();
         let mut registrations = Registrations::new(7200);
+
         registrations
             .add(new_dummy_registration_with_ttl("foo", 2))
             .unwrap();
 
+        registrations
+            .add(new_dummy_registration_with_ttl("bar", 4))
+            .unwrap();
+
         let start_time = SystemTime::now();
+
         let event = futures::future::poll_fn(|cx| loop {
             if let Poll::Ready(reg) = registrations.poll(cx) {
                 return Poll::Ready(reg);
             }
         })
         .await;
+
         let elapsed = start_time.elapsed().unwrap();
 
-        let (mut discovered, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
-
-        debug!("elapsed: {}", elapsed.as_secs());
         assert_eq!(event.0.iter().next().unwrap().namespace, "foo");
         assert!(elapsed.as_secs() >= 2);
         assert!(elapsed.as_secs() < 3);
-        assert_eq!(discovered.next(), None)
+        {
+            let (mut discovered_foo, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+            assert!(discovered_foo.next().is_none());
+        }
+        let (mut discovered_bar, _) = registrations.get(Some("bar".to_owned()), None).unwrap();
+        assert!(discovered_bar.next().is_some());
     }
 
     #[test]
