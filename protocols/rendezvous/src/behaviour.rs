@@ -166,7 +166,7 @@ impl NetworkBehaviour for Rendezvous {
     fn inject_event(
         &mut self,
         peer_id: PeerId,
-        _connection: ConnectionId,
+        connection: ConnectionId,
         event: handler::OutEvent,
     ) {
         match event {
@@ -178,7 +178,7 @@ impl NetworkBehaviour for Rendezvous {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
-                                handler: NotifyHandler::Any,
+                                handler: NotifyHandler::One(connection),
                                 event: InEvent::RegisterResponse { ttl: effective_ttl },
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered {
@@ -193,7 +193,7 @@ impl NetworkBehaviour for Rendezvous {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
-                                handler: NotifyHandler::Any,
+                                handler: NotifyHandler::One(connection),
                                 event: InEvent::DeclineRegisterRequest { error },
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
@@ -237,7 +237,7 @@ impl NetworkBehaviour for Rendezvous {
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id,
-                        handler: NotifyHandler::Any,
+                        handler: NotifyHandler::One(connection),
                         event: InEvent::DiscoverResponse {
                             discovered: discovered.clone(),
                             cookie,
