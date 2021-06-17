@@ -130,147 +130,147 @@ pub enum Error {
 }
 
 impl Advance for Inbound {
-    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, Error>;
+    type Event = OutEvent;
     type Params = ();
+    type Error = Error;
+    type Protocol = SubstreamProtocol<protocol::Rendezvous, Message>;
 
-    fn advance(self, cx: &mut Context<'_>, _: &mut Self::Params) -> Next<Self, Self::Event> {
-        match self {
-            Inbound::Reading(mut substream) => match substream.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(msg))) => {
-                    let event = match msg {
-                        Message::Register(new_registration) => {
-                            OutEvent::RegistrationRequested(new_registration)
-                        }
-                        Message::Discover { cookie, namespace } => {
-                            OutEvent::DiscoverRequested { cookie, namespace }
-                        }
-                        Message::Unregister { namespace } => {
-                            OutEvent::UnregisterRequested { namespace }
-                        }
-                        other => {
-                            return Next::Done {
-                                event: Some(ProtocolsHandlerEvent::Close(Error::BadMessage(other))),
+    fn advance(
+        self,
+        cx: &mut Context<'_>,
+        _: &mut Self::Params,
+    ) -> Result<Next<Self, Self::Event, Self::Protocol>, Self::Error> {
+        Ok(match self {
+            Inbound::Reading(mut substream) => {
+                match substream.poll_next_unpin(cx).map_err(Error::ReadMessage)? {
+                    Poll::Ready(Some(msg)) => {
+                        let event = match msg {
+                            Message::Register(registration) => {
+                                OutEvent::RegistrationRequested(registration)
                             }
-                        }
-                    };
+                            Message::Discover { cookie, namespace } => {
+                                OutEvent::DiscoverRequested { cookie, namespace }
+                            }
+                            Message::Unregister { namespace } => {
+                                OutEvent::UnregisterRequested { namespace }
+                            }
+                            other => return Err(Error::BadMessage(other)),
+                        };
 
-                    Next::Return {
-                        poll: Poll::Ready(ProtocolsHandlerEvent::Custom(event)),
-                        next_state: Inbound::PendingBehaviour(substream),
+                        Next::EmitEvent {
+                            event,
+                            next_state: Inbound::PendingBehaviour(substream),
+                        }
                     }
+                    Poll::Ready(None) => return Err(Error::UnexpectedEndOfStream),
+                    Poll::Pending => Next::Pending {
+                        next_state: Inbound::Reading(substream),
+                    },
                 }
-                Poll::Ready(Some(Err(e))) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::ReadMessage(e))),
-                },
-                Poll::Ready(None) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::UnexpectedEndOfStream)),
-                },
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
-                    next_state: Inbound::Reading(substream),
-                },
-            },
-            Inbound::PendingBehaviour(substream) => Next::Return {
-                poll: Poll::Pending,
+            }
+            Inbound::PendingBehaviour(substream) => Next::Pending {
                 next_state: Inbound::PendingBehaviour(substream),
             },
-            Inbound::PendingSend(mut substream, message) => match substream.poll_ready_unpin(cx) {
-                Poll::Ready(Ok(())) => match substream.start_send_unpin(message) {
-                    Ok(()) => Next::Continue {
+            Inbound::PendingSend(mut substream, message) => match substream
+                .poll_ready_unpin(cx)
+                .map_err(Error::WriteMessage)?
+            {
+                Poll::Ready(()) => {
+                    substream
+                        .start_send_unpin(message)
+                        .map_err(Error::WriteMessage)?;
+
+                    Next::Continue {
                         next_state: Inbound::PendingFlush(substream),
-                    },
-                    Err(e) => Next::Done {
-                        event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
-                    },
-                },
-                Poll::Ready(Err(e)) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
-                },
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
+                    }
+                }
+                Poll::Pending => Next::Pending {
                     next_state: Inbound::PendingSend(substream, message),
                 },
             },
-            Inbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
-                Poll::Ready(Ok(())) => Next::Continue {
-                    next_state: Inbound::PendingClose(substream),
-                },
-                Poll::Ready(Err(e)) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
-                },
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
-                    next_state: Inbound::PendingFlush(substream),
-                },
-            },
+            Inbound::PendingFlush(mut substream) => {
+                match substream
+                    .poll_flush_unpin(cx)
+                    .map_err(Error::WriteMessage)?
+                {
+                    Poll::Ready(()) => Next::Continue {
+                        next_state: Inbound::PendingClose(substream),
+                    },
+                    Poll::Pending => Next::Pending {
+                        next_state: Inbound::PendingFlush(substream),
+                    },
+                }
+            }
             Inbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
-                Poll::Ready(Ok(())) => Next::Done { event: None },
-                Poll::Ready(Err(_)) => Next::Done { event: None }, // there is nothing we can do about an error during close
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
+                Poll::Ready(Ok(())) => Next::Done,
+                Poll::Ready(Err(_)) => Next::Done, // there is nothing we can do about an error during close
+                Poll::Pending => Next::Pending {
                     next_state: Inbound::PendingClose(substream),
                 },
             },
-        }
+        })
     }
 }
 
 impl Advance for Outbound {
-    type Event = ProtocolsHandlerEvent<protocol::Rendezvous, Message, OutEvent, Error>;
+    type Event = OutEvent;
     type Params = Vec<Message>;
+    type Error = Error;
+    type Protocol = SubstreamProtocol<protocol::Rendezvous, Message>;
 
-    fn advance(self, cx: &mut Context<'_>, history: &mut Vec<Message>) -> Next<Self, Self::Event> {
-        match self {
-            Outbound::Start(msg) => Next::Return {
-                poll: Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(protocol::new(), msg),
-                }),
+    fn advance(
+        self,
+        cx: &mut Context<'_>,
+        history: &mut Vec<Message>,
+    ) -> Result<Next<Self, Self::Event, Self::Protocol>, Self::Error> {
+        Ok(match self {
+            Outbound::Start(msg) => Next::OpenSubstream {
+                protocol: SubstreamProtocol::new(protocol::new(), msg),
                 next_state: Outbound::PendingSubstream,
             },
-            Outbound::PendingSubstream => Next::Return {
-                poll: Poll::Pending,
+            Outbound::PendingSubstream => Next::Pending {
                 next_state: Outbound::PendingSubstream,
             },
             Outbound::PendingSend {
                 mut substream,
                 to_send: message,
-            } => match substream.poll_ready_unpin(cx) {
-                Poll::Ready(Ok(())) => match substream.start_send_unpin(message.clone()) {
-                    Ok(()) => {
-                        history.push(message);
-                        Next::Continue {
-                            next_state: Outbound::PendingFlush(substream),
-                        }
+            } => match substream
+                .poll_ready_unpin(cx)
+                .map_err(Error::WriteMessage)?
+            {
+                Poll::Ready(()) => {
+                    substream
+                        .start_send_unpin(message.clone())
+                        .map_err(Error::WriteMessage)?;
+                    history.push(message);
+
+                    Next::Continue {
+                        next_state: Outbound::PendingFlush(substream),
                     }
-                    Err(e) => Next::Done {
-                        event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
-                    },
-                },
-                Poll::Ready(Err(e)) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
-                },
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
+                }
+                Poll::Pending => Next::Pending {
                     next_state: Outbound::PendingSend {
                         substream,
                         to_send: message,
                     },
                 },
             },
-            Outbound::PendingFlush(mut substream) => match substream.poll_flush_unpin(cx) {
-                Poll::Ready(Ok(())) => Next::Continue {
+            Outbound::PendingFlush(mut substream) => match substream
+                .poll_flush_unpin(cx)
+                .map_err(Error::WriteMessage)?
+            {
+                Poll::Ready(()) => Next::Continue {
                     next_state: Outbound::PendingRemote(substream),
                 },
-                Poll::Ready(Err(e)) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::WriteMessage(e))),
-                },
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
+                Poll::Pending => Next::Pending {
                     next_state: Outbound::PendingFlush(substream),
                 },
             },
-            Outbound::PendingRemote(mut substream) => match substream.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(received_message))) => {
+            Outbound::PendingRemote(mut substream) => match substream
+                .poll_next_unpin(cx)
+                .map_err(Error::ReadMessage)?
+            {
+                Poll::Ready(Some(received_message)) => {
                     use Message::*;
                     use OutEvent::*;
 
@@ -297,38 +297,27 @@ impl Advance for Outbound {
                                 error,
                             }
                         }
-                        (_, other) => {
-                            return Next::Done {
-                                event: Some(ProtocolsHandlerEvent::Close(Error::BadMessage(other))),
-                            }
-                        }
+                        (_, other) => return Err(Error::BadMessage(other)),
                     };
 
-                    Next::Return {
-                        poll: Poll::Ready(ProtocolsHandlerEvent::Custom(event)),
+                    Next::EmitEvent {
+                        event,
                         next_state: Outbound::PendingClose(substream),
                     }
                 }
-                Poll::Ready(Some(Err(e))) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::ReadMessage(e))),
-                },
-                Poll::Ready(None) => Next::Done {
-                    event: Some(ProtocolsHandlerEvent::Close(Error::UnexpectedEndOfStream)),
-                },
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
+                Poll::Ready(None) => return Err(Error::UnexpectedEndOfStream),
+                Poll::Pending => Next::Pending {
                     next_state: Outbound::PendingRemote(substream),
                 },
             },
             Outbound::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
-                Poll::Ready(Ok(())) => Next::Done { event: None },
-                Poll::Ready(Err(_)) => Next::Done { event: None }, // there is nothing we can do about an error during close
-                Poll::Pending => Next::Return {
-                    poll: Poll::Pending,
+                Poll::Ready(Ok(())) => Next::Done,
+                Poll::Ready(Err(_)) => Next::Done, // there is nothing we can do about an error during close
+                Poll::Pending => Next::Pending {
                     next_state: Outbound::PendingClose(substream),
                 },
             },
-        }
+        })
     }
 }
 

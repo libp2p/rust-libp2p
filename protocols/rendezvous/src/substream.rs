@@ -1,3 +1,4 @@
+use libp2p_swarm::{ProtocolsHandlerEvent, SubstreamProtocol};
 use std::mem;
 use std::task::{Context, Poll};
 
@@ -11,58 +12,87 @@ pub enum SubstreamState<S> {
     Poisoned,
 }
 
-/// Advances a state machine.
+/// Advances a substream state machine.
+///
+///
 pub trait Advance: Sized {
     type Event;
     type Params;
+    type Error;
+    type Protocol;
 
-    fn advance(self, cx: &mut Context<'_>, params: &mut Self::Params) -> Next<Self, Self::Event>;
+    fn advance(
+        self,
+        cx: &mut Context<'_>,
+        params: &mut Self::Params,
+    ) -> Result<Next<Self, Self::Event, Self::Protocol>, Self::Error>;
 }
 
 /// Defines the results of advancing a state machine.
-pub enum Next<S, E> {
-    /// Return from the `poll` function, either because are `Ready` or there is no more work to do (`Pending`).
-    Return { poll: Poll<E>, next_state: S },
-    /// Continue with polling the state.
-    Continue { next_state: S },
-    /// The state machine finished gracefully.
-    Done { event: Option<E> },
+pub enum Next<TState, TEvent, TProtocol> {
+    /// Return from the `poll` function to emit `event`. Set the state machine to `next_state`.
+    EmitEvent { event: TEvent, next_state: TState },
+    /// Return from the `poll` function because we cannot do any more work. Set the state machine to `next_state`.
+    Pending { next_state: TState },
+    /// Return from the `poll` function to open a new substream. Set the state machine to `next_state`.
+    OpenSubstream {
+        protocol: TProtocol,
+        next_state: TState,
+    },
+    /// Continue with advancing the state machine.
+    Continue { next_state: TState },
+    /// The state machine finished.
+    Done,
 }
 
-impl<S, E> SubstreamState<S>
+impl<TState, TEvent, TUpgrade, TInfo, TError> SubstreamState<TState>
 where
-    S: Advance<Event = E>,
+    TState: Advance<Event = TEvent, Protocol = SubstreamProtocol<TUpgrade, TInfo>, Error = TError>,
 {
-    pub fn poll(&mut self, cx: &mut Context<'_>, params: &mut S::Params) -> Poll<E> {
+    pub fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut TState::Params,
+    ) -> Poll<ProtocolsHandlerEvent<TUpgrade, TInfo, TEvent, TError>> {
         loop {
-            let next = match mem::replace(self, SubstreamState::Poisoned) {
+            let state = match mem::replace(self, SubstreamState::Poisoned) {
                 SubstreamState::None => {
                     *self = SubstreamState::None;
                     return Poll::Pending;
                 }
-                SubstreamState::Active(state) => state.advance(cx, params),
+                SubstreamState::Active(state) => state,
                 SubstreamState::Poisoned => {
                     unreachable!("reached poisoned state")
                 }
             };
 
-            match next {
-                Next::Continue { next_state } => {
+            match state.advance(cx, params) {
+                Ok(Next::Continue { next_state }) => {
                     *self = SubstreamState::Active(next_state);
                     continue;
                 }
-                Next::Return { poll, next_state } => {
+                Ok(Next::EmitEvent { event, next_state }) => {
                     *self = SubstreamState::Active(next_state);
-                    return poll;
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
                 }
-                Next::Done { event: final_event } => {
-                    *self = SubstreamState::None;
-                    if let Some(final_event) = final_event {
-                        return Poll::Ready(final_event);
-                    }
-
+                Ok(Next::Pending { next_state }) => {
+                    *self = SubstreamState::Active(next_state);
                     return Poll::Pending;
                 }
+                Ok(Next::OpenSubstream {
+                    protocol,
+                    next_state,
+                }) => {
+                    *self = SubstreamState::Active(next_state);
+                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                        protocol,
+                    });
+                }
+                Ok(Next::Done) => {
+                    *self = SubstreamState::None;
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(ProtocolsHandlerEvent::Close(e)),
             }
         }
     }
