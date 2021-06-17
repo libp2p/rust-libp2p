@@ -3,6 +3,7 @@ pub use crate::pow::Difficulty;
 use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
 use crate::handler::{DeclineReason, InEvent, OutEvent, RendezvousHandler};
+use bimap::BiMap;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
@@ -11,7 +12,6 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::debug;
-use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
@@ -336,7 +336,7 @@ impl RegistrationId {
 pub struct RegistrationsExpired(Vec<Registration>);
 
 pub struct Registrations {
-    registrations_for_peer: HashMap<(PeerId, String), RegistrationId>,
+    registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, Vec<RegistrationId>>,
     ttl_upper_bound: i64,
@@ -373,15 +373,16 @@ impl Registrations {
 
         match self
             .registrations_for_peer
-            .entry((new_registration.record.peer_id(), namespace.clone()))
+            .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
         {
-            Entry::Occupied(mut occupied) => {
-                let old_registration = occupied.insert(registration_id);
-
-                self.registrations.remove(&old_registration);
+            Some(old_registration) => {
+                self.registrations.remove(old_registration);
             }
-            Entry::Vacant(vacant) => {
-                vacant.insert(registration_id);
+            None => {
+                self.registrations_for_peer.insert(
+                    (new_registration.record.peer_id(), namespace.clone()),
+                    registration_id,
+                );
             }
         }
 
@@ -399,9 +400,11 @@ impl Registrations {
     }
 
     pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
-        let reggo_to_remove = self.registrations_for_peer.remove(&(peer_id, namespace));
+        let reggo_to_remove = self
+            .registrations_for_peer
+            .remove_by_left(&(peer_id, namespace));
 
-        if let Some(reggo_to_remove) = reggo_to_remove {
+        if let Some((_, reggo_to_remove)) = reggo_to_remove {
             self.registrations.remove(&reggo_to_remove);
         }
     }
@@ -471,7 +474,7 @@ impl Registrations {
 
         let num_registrations = self
             .registrations_for_peer
-            .keys()
+            .left_values()
             .filter(|(candidate, _)| candidate == &peer)
             .count();
 
@@ -479,10 +482,11 @@ impl Registrations {
     }
 
     pub fn poll(&mut self, _: &mut Context<'_>) -> Poll<RegistrationsExpired> {
+        // find ids of expired registrations
         let expired = self
             .registrations
             .iter()
-            .filter(|(id, r)| {
+            .filter(|(_id, r)| {
                 let absolute_expiry = r.timestamp + Duration::from_secs(r.ttl as u64);
                 debug!("absolute expiry: {:?}", absolute_expiry);
                 let now = SystemTime::now();
@@ -496,18 +500,19 @@ impl Registrations {
             .map(|(id, _r)| *id)
             .collect::<Vec<RegistrationId>>();
 
-        let expired = expired
+        //remove expired registrations
+        let expired_registrations = expired
             .iter()
-            .map(|id| self.registrations.remove(id))
-            .filter(|r| r.is_some())
-            //todo!:remove unrwap
-            .map(|r| r.unwrap())
+            .filter_map(|id| {
+                self.registrations_for_peer.remove_by_right(id);
+                self.registrations.remove(id)
+            })
             .collect::<Vec<Registration>>();
 
-        if expired.is_empty() {
+        if expired_registrations.is_empty() {
             Poll::Pending
         } else {
-            Poll::Ready(RegistrationsExpired(expired))
+            Poll::Ready(RegistrationsExpired(expired_registrations))
         }
     }
 }
@@ -637,13 +642,13 @@ mod tests {
         .await;
         let elapsed = start_time.elapsed().unwrap();
 
-        //let (mut discovered, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+        let (mut discovered, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
 
         debug!("elapsed: {}", elapsed.as_secs());
-        assert_eq!(event.0.iter().next().unwrap().namespace, "foo"); // TODO: proper "RegistrationExpired" event
+        assert_eq!(event.0.iter().next().unwrap().namespace, "foo");
         assert!(elapsed.as_secs() >= 2);
         assert!(elapsed.as_secs() < 3);
-        //assert_eq!(discovered.next(), None)
+        assert_eq!(discovered.next(), None)
     }
 
     #[test]
