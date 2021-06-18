@@ -665,6 +665,37 @@ mod tests {
         assert_no_events_emitted_for_seconds(&mut registrations, 3).await;
     }
 
+    /// FuturesUnordered stop polling for ready futures when poll_next() is called until a None
+    /// value is returned. To prevent the next_expiry future from going to "sleep", next_expiry
+    /// is initialised with a future that always returns pending. This test ensures that
+    /// FuturesUnordered does not stop polling for ready futures.
+    #[tokio::test]
+    async fn given_all_registrations_expired_then_succesfully_handle_new_registration_and_expiry() {
+        let mut registrations = Registrations::new(7200);
+
+        let dummy_registration = new_dummy_registration_with_ttl("foo", 1);
+
+        registrations.add(dummy_registration.clone()).unwrap();
+
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            futures::future::poll_fn(|cx| registrations.poll(cx)),
+        )
+        .await
+        .unwrap();
+
+        assert_no_events_emitted_for_seconds(&mut registrations, 1).await;
+
+        registrations.add(dummy_registration).unwrap();
+
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            futures::future::poll_fn(|cx| registrations.poll(cx)),
+        )
+        .await
+        .unwrap();
+    }
+
     #[test]
     fn first_registration_is_free() {
         let required = difficulty_from_num_registrations(0);
