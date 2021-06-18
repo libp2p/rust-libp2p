@@ -2,52 +2,62 @@ version: '3.4'
 services:
   relay: 
     image: libp2p-relay
-    environment:
-      - relay_command_arg_env=relay
-      - deterministic_peer_env=1
-      - address_env=/ip6/::/tcp/4444
+    command:
+      - "./relay"
+      - "--mode=relay"
+      - "--secret-key-seed=1"
+      - "--address=/ip6/::/tcp/4444"
     build:
       context: ../../../.
       dockerfile: ./protocols/relay/examples/Dockerfile
     networks:
-      - default
+      - network-a
+      - network-b
 
   client-listen: 
     image: libp2p-relay
-    environment:
-      - relay_command_arg_env=client-listen
-      - deterministic_peer_env=2
-      - address_env=/dns6/relay/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit
+    command:
+      - "./relay"
+      - "--mode=client-listen"
+      - "--secret-key-seed=2"
+      - "--address=/dns6/relay/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit"
     build:
       context: ../../../.
       dockerfile: ./protocols/relay/examples/Dockerfile
     depends_on:
         - "relay"
     networks:
-      - default
+      - network-a
 
   client-dial: 
     image: libp2p-relay
-    environment:
-      - relay_command_arg_env=client-dial
-      - deterministic_peer_env=3
-      - address_env=/dns6/relay/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3
+    command:
+      - "./relay"
+      - "--mode=client-dial"
+      - "--secret-key-seed=3"
+      - "--address=/dns6/relay/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3"
     build:
       context: ../../../.
       dockerfile: ./protocols/relay/examples/Dockerfile
     depends_on:
       - "client-listen"
     networks:
-      - default
+      - network-b
       
 networks:
-  default:
+  network-a:
     driver: bridge
     enable_ipv6: true
     ipam:
       driver: default
       config:
-        - subnet: 172.16.238.0/24
-          gateway: 172.16.238.1
         - subnet: 2001:3984:3989::/64
           gateway: 2001:3984:3989::1
+  network-b:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 2001:3984:3988::/64
+          gateway: 2001:3984:3988::1

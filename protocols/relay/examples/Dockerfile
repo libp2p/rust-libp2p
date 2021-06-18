@@ -17,5 +17,3 @@ FROM debian:buster-slim
 
 COPY --from=builder /usr/src/libp2p/target/x86_64-unknown-linux-musl/debug/examples/relay .
 USER 1000
-
-ENTRYPOINT ./relay -d $deterministic_peer_env --mode $relay_command_arg_env --address $address_env
