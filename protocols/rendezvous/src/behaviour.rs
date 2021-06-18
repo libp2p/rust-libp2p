@@ -380,26 +380,17 @@ impl Registrations {
         let namespace = new_registration.namespace;
         let registration_id = RegistrationId::new();
 
-        match self
+        if let Some(old_registration) = self
             .registrations_for_peer
             .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
         {
-            Some(old_registration) => {
-                self.registrations.remove(old_registration);
-            }
-            None => {
-                self.registrations_for_peer.insert(
-                    (new_registration.record.peer_id(), namespace.clone()),
-                    registration_id,
-                );
-            }
+            self.registrations.remove(old_registration);
         }
 
-        let next_expiry = sleep(Duration::from_secs(ttl as u64))
-            .map(move |()| registration_id)
-            .boxed();
-
-        self.next_expiry.push(next_expiry);
+        self.registrations_for_peer.insert(
+            (new_registration.record.peer_id(), namespace.clone()),
+            registration_id,
+        );
 
         self.registrations.insert(
             registration_id,
@@ -410,6 +401,12 @@ impl Registrations {
                 timestamp: SystemTime::now(),
             },
         );
+
+        let next_expiry = sleep(Duration::from_secs(ttl as u64))
+            .map(move |()| registration_id)
+            .boxed();
+
+        self.next_expiry.push(next_expiry);
 
         Ok(ttl)
     }
