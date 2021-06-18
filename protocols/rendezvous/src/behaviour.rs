@@ -504,7 +504,7 @@ impl Registrations {
         self.registrations_for_peer
             .remove_by_right(&registration_id);
         match self.registrations.remove(&registration_id) {
-            None => unimplemented!(),
+            None => self.poll(cx),
             Some(registration) => Poll::Ready(RegistrationExpired(registration)),
         }
     }
@@ -619,7 +619,6 @@ mod tests {
 
     #[tokio::test]
     async fn given_two_registration_ttls_one_expires_one_lives() {
-        env_logger::init();
         let mut registrations = Registrations::new(7200);
 
         registrations
@@ -649,26 +648,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_1_second_ttl() {
-        env_logger::init();
+    async fn given_peer_unregisters_before_expiry_do_not_emit_registration_expired() {
         let mut registrations = Registrations::new(7200);
 
-        registrations
-            .add(new_dummy_registration_with_ttl("foo", 2))
-            .unwrap();
+        let dummy_registration = new_dummy_registration_with_ttl("foo", 2);
 
-        let start_time = SystemTime::now();
+        let namespace = dummy_registration.namespace.clone();
+        let peer_id = dummy_registration.record.peer_id();
 
-        let event = futures::future::poll_fn(|cx| registrations.poll(cx)).await;
+        registrations.add(dummy_registration).unwrap();
 
-        let elapsed = start_time.elapsed().unwrap();
-        assert!(elapsed.as_secs() >= 2);
-        assert!(elapsed.as_secs() < 3);
+        assert_no_events_emitted_for_seconds(&mut registrations, 1).await;
 
-        assert_eq!(event.0.namespace, "foo");
+        registrations.remove(namespace, peer_id);
 
-        let (mut discovered_foo, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
-        assert!(discovered_foo.next().is_none());
+        assert_no_events_emitted_for_seconds(&mut registrations, 3).await;
     }
 
     #[test]
@@ -717,5 +711,14 @@ mod tests {
             PeerRecord::new(identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
             ttl,
         )
+    }
+
+    async fn assert_no_events_emitted_for_seconds(registrations: &mut Registrations, secs: u64) {
+        tokio::time::timeout(
+            Duration::from_secs(secs),
+            futures::future::poll_fn(|cx| registrations.poll(cx)),
+        )
+        .await
+        .unwrap_err();
     }
 }
