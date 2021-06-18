@@ -531,8 +531,8 @@ mod tests {
     use super::*;
     use libp2p_core::identity;
 
-    #[test]
-    fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
+    #[tokio::test]
+    async fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
         let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -544,8 +544,8 @@ mod tests {
         assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
     }
 
-    #[test]
-    fn given_registrations_when_discover_all_then_all_are_returned() {
+    #[tokio::test]
+    async fn given_registrations_when_discover_all_then_all_are_returned() {
         let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -555,9 +555,9 @@ mod tests {
         assert_eq!(discover.collect::<Vec<_>>().len(), 2);
     }
 
-    #[test]
-    fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
-    {
+    #[tokio::test]
+    async fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned(
+    ) {
         let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
@@ -570,8 +570,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn given_reregistration_old_registration_is_discarded() {
+    #[tokio::test]
+    async fn given_reregistration_old_registration_is_discarded() {
         let alice = identity::Keypair::generate_ed25519();
         let mut registrations = Registrations::new(7200);
         registrations
@@ -589,8 +589,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
+    #[tokio::test]
+    async fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
         let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -605,8 +605,8 @@ mod tests {
         assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
     }
 
-    #[test]
-    fn cookie_from_different_discover_request_is_not_valid() {
+    #[tokio::test]
+    async fn cookie_from_different_discover_request_is_not_valid() {
         let mut registrations = Registrations::new(7200);
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
