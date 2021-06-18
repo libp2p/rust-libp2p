@@ -4,6 +4,10 @@ use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
 use crate::handler::{DeclineReason, InEvent, OutEvent, RendezvousHandler};
 use bimap::BiMap;
+use futures::future::BoxFuture;
+use futures::ready;
+use futures::stream::FuturesUnordered;
+use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
@@ -13,8 +17,10 @@ use libp2p_swarm::{
 };
 use log::debug;
 use std::collections::{HashMap, VecDeque};
+use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
+use tokio::time::sleep;
 use uuid::Uuid;
 
 pub struct Rendezvous {
@@ -333,13 +339,15 @@ impl RegistrationId {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct RegistrationsExpired(Vec<Registration>);
+pub struct RegistrationExpired(Registration);
 
 pub struct Registrations {
     registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
+    // todo: move cookie to registrations as a value
     cookies: HashMap<Cookie, Vec<RegistrationId>>,
     ttl_upper_bound: i64,
+    next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -356,6 +364,7 @@ impl Registrations {
             registrations: Default::default(),
             ttl_upper_bound,
             cookies: Default::default(),
+            next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
         }
     }
 
@@ -385,6 +394,12 @@ impl Registrations {
                 );
             }
         }
+
+        let next_expiry = sleep(Duration::from_secs(ttl as u64))
+            .map(move |()| registration_id)
+            .boxed();
+
+        self.next_expiry.push(next_expiry);
 
         self.registrations.insert(
             registration_id,
@@ -481,38 +496,16 @@ impl Registrations {
         difficulty_from_num_registrations(num_registrations)
     }
 
-    pub fn poll(&mut self, _: &mut Context<'_>) -> Poll<RegistrationsExpired> {
-        // find ids of expired registrations
-        let expired = self
-            .registrations
-            .iter()
-            .filter(|(_id, r)| {
-                let absolute_expiry = r.timestamp + Duration::from_secs(r.ttl as u64);
-                debug!("absolute expiry: {:?}", absolute_expiry);
-                let now = SystemTime::now();
-                debug!("system time: {:?}", now);
-                if now > absolute_expiry {
-                    true
-                } else {
-                    false
-                }
-            })
-            .map(|(id, _r)| *id)
-            .collect::<Vec<RegistrationId>>();
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<RegistrationExpired> {
+        let registration_id = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
+            "This stream should never finish because it is initialised with a pending future",
+        );
 
-        //remove expired registrations
-        let expired_registrations = expired
-            .iter()
-            .filter_map(|id| {
-                self.registrations_for_peer.remove_by_right(id);
-                self.registrations.remove(id)
-            })
-            .collect::<Vec<Registration>>();
-
-        if expired_registrations.is_empty() {
-            Poll::Pending
-        } else {
-            Poll::Ready(RegistrationsExpired(expired_registrations))
+        self.registrations_for_peer
+            .remove_by_right(&registration_id);
+        match self.registrations.remove(&registration_id) {
+            None => unimplemented!(),
+            Some(registration) => Poll::Ready(RegistrationExpired(registration)),
         }
     }
 }
@@ -630,7 +623,7 @@ mod tests {
         let mut registrations = Registrations::new(7200);
 
         registrations
-            .add(new_dummy_registration_with_ttl("foo", 2))
+            .add(new_dummy_registration_with_ttl("foo", 1))
             .unwrap();
 
         registrations
@@ -639,24 +632,43 @@ mod tests {
 
         let start_time = SystemTime::now();
 
-        let event = futures::future::poll_fn(|cx| loop {
-            if let Poll::Ready(reg) = registrations.poll(cx) {
-                return Poll::Ready(reg);
-            }
-        })
-        .await;
+        let event = futures::future::poll_fn(|cx| registrations.poll(cx)).await;
 
         let elapsed = start_time.elapsed().unwrap();
+        assert!(elapsed.as_secs() >= 1);
+        assert!(elapsed.as_secs() < 2);
 
-        assert_eq!(event.0.iter().next().unwrap().namespace, "foo");
-        assert!(elapsed.as_secs() >= 2);
-        assert!(elapsed.as_secs() < 3);
+        assert_eq!(event.0.namespace, "foo");
+
         {
             let (mut discovered_foo, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
             assert!(discovered_foo.next().is_none());
         }
         let (mut discovered_bar, _) = registrations.get(Some("bar".to_owned()), None).unwrap();
         assert!(discovered_bar.next().is_some());
+    }
+
+    #[tokio::test]
+    async fn given_1_second_ttl() {
+        env_logger::init();
+        let mut registrations = Registrations::new(7200);
+
+        registrations
+            .add(new_dummy_registration_with_ttl("foo", 2))
+            .unwrap();
+
+        let start_time = SystemTime::now();
+
+        let event = futures::future::poll_fn(|cx| registrations.poll(cx)).await;
+
+        let elapsed = start_time.elapsed().unwrap();
+        assert!(elapsed.as_secs() >= 2);
+        assert!(elapsed.as_secs() < 3);
+
+        assert_eq!(event.0.namespace, "foo");
+
+        let (mut discovered_foo, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+        assert!(discovered_foo.next().is_none());
     }
 
     #[test]
