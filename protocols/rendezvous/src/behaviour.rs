@@ -16,7 +16,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::debug;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque, HashSet};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
@@ -345,7 +345,7 @@ pub struct Registrations {
     registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     // todo: move cookie to registrations as a value
-    cookies: HashMap<Cookie, Vec<RegistrationId>>,
+    cookies: HashMap<Cookie, HashSet<RegistrationId>>,
     ttl_upper_bound: i64,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
@@ -465,7 +465,7 @@ impl Registrations {
             .cloned()
             .collect::<Vec<_>>();
 
-        reggos_of_last_discover.extend_from_slice(&ids);
+        reggos_of_last_discover.extend(&ids);
 
         let new_cookie = discover_namespace
             .map(Cookie::for_namespace)
