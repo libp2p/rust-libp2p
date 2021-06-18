@@ -4,7 +4,7 @@ use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
 use crate::handler::{DeclineReason, InEvent, OutEvent, RendezvousHandler};
 use bimap::BiMap;
-use futures::future::BoxFuture;
+use futures::future::{poll_fn, BoxFuture};
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
@@ -618,17 +618,16 @@ mod tests {
     async fn given_two_registration_ttls_one_expires_one_lives() {
         let mut registrations = Registrations::new(7200);
 
+        let start_time = SystemTime::now();
+
         registrations
             .add(new_dummy_registration_with_ttl("foo", 1))
             .unwrap();
-
         registrations
             .add(new_dummy_registration_with_ttl("bar", 4))
             .unwrap();
 
-        let start_time = SystemTime::now();
-
-        let event = futures::future::poll_fn(|cx| registrations.poll(cx)).await;
+        let event = registrations.next_event().await;
 
         let elapsed = start_time.elapsed().unwrap();
         assert!(elapsed.as_secs() >= 1);
@@ -647,19 +646,15 @@ mod tests {
     #[tokio::test]
     async fn given_peer_unregisters_before_expiry_do_not_emit_registration_expired() {
         let mut registrations = Registrations::new(7200);
-
         let dummy_registration = new_dummy_registration_with_ttl("foo", 2);
-
         let namespace = dummy_registration.namespace.clone();
         let peer_id = dummy_registration.record.peer_id();
 
         registrations.add(dummy_registration).unwrap();
-
-        assert_no_events_emitted_for_seconds(&mut registrations, 1).await;
-
+        registrations.no_event_for(1).await;
         registrations.remove(namespace, peer_id);
 
-        assert_no_events_emitted_for_seconds(&mut registrations, 3).await;
+        registrations.no_event_for(3).await
     }
 
     /// FuturesUnordered stop polling for ready futures when poll_next() is called until a None
@@ -669,28 +664,15 @@ mod tests {
     #[tokio::test]
     async fn given_all_registrations_expired_then_succesfully_handle_new_registration_and_expiry() {
         let mut registrations = Registrations::new(7200);
-
         let dummy_registration = new_dummy_registration_with_ttl("foo", 1);
 
         registrations.add(dummy_registration.clone()).unwrap();
+        let _ = registrations.next_event_in_at_most(2).await;
 
-        tokio::time::timeout(
-            Duration::from_secs(2),
-            futures::future::poll_fn(|cx| registrations.poll(cx)),
-        )
-        .await
-        .unwrap();
-
-        assert_no_events_emitted_for_seconds(&mut registrations, 1).await;
+        registrations.no_event_for(1).await;
 
         registrations.add(dummy_registration).unwrap();
-
-        tokio::time::timeout(
-            Duration::from_secs(2),
-            futures::future::poll_fn(|cx| registrations.poll(cx)),
-        )
-        .await
-        .unwrap();
+        let _ = registrations.next_event_in_at_most(2).await;
     }
 
     #[test]
@@ -741,12 +723,24 @@ mod tests {
         )
     }
 
-    async fn assert_no_events_emitted_for_seconds(registrations: &mut Registrations, secs: u64) {
-        tokio::time::timeout(
-            Duration::from_secs(secs),
-            futures::future::poll_fn(|cx| registrations.poll(cx)),
-        )
-        .await
-        .unwrap_err();
+    /// Defines utility functions that make the tests more readable.
+    impl Registrations {
+        async fn next_event(&mut self) -> RegistrationExpired {
+            poll_fn(|cx| self.poll(cx)).await
+        }
+
+        /// Polls [`Registrations`] for `seconds` and panics if it returns a event during this time.
+        async fn no_event_for(&mut self, seconds: u64) {
+            tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
+                .await
+                .unwrap_err();
+        }
+
+        /// Polls [`Registrations`] for at most `seconds` and panics if doesn't return an event within that time.
+        async fn next_event_in_at_most(&mut self, seconds: u64) -> RegistrationExpired {
+            tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
+                .await
+                .unwrap()
+        }
     }
 }
