@@ -30,6 +30,7 @@
 //!    The address specifies a static address. Usually it will be some loop back address such as `/ip4/0.0.0.0/tcp/4444`.
 //!    Example:
 //!    `cargo run --example=relay --package=libp2p-relay -- --mode relay --secret-key-seed 1 --address /ip4/0.0.0.0/tcp/4444`
+//!    `cargo run --example=relay --package=libp2p-relay -- --mode relay --secret-key-seed 1 --address /ip6/::/tcp/4444`
 //!
 //! 2. To start the listening relay client run `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2 --address
 //! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit` in a second terminal where:
@@ -39,6 +40,7 @@
 //!
 //!    Example:
 //!    `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2 --address /ip4/127.0.0.1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit`
+//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2 --address /ip6/::1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit`
 //!
 //! 3. To start the dialing relay client run `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address
 //! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/p2p/<peer-id-listening-relay-client>` in
@@ -49,6 +51,7 @@
 //!   - `<peer-id-listening-relay-client>` is replaced by the peer id of the listening relay client.
 //!    Example:
 //!    `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address /ip4/127.0.0.1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3`
+//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address /ip6/::1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3`
 //!
 //! In the third terminal you will see the dialing relay client to receive pings
 //! from both the relay server AND from the listening relay client relayed via
@@ -136,12 +139,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => {
-                    if let SwarmEvent::NewListenAddr(addr) = event {
-                        println!("Listening on {:?}", addr);
-                        print_listener_peer(&addr, &opt.mode, local_peer_id);
+                Poll::Ready(Some(event)) => match event {
+                    SwarmEvent::NewListenAddr(addr) => {
+                        print_listener_peer(&addr, &opt.mode, local_peer_id)
                     }
-                }
+                    _ => println!("{:?}", event),
+                },
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => break,
             }
@@ -164,7 +167,9 @@ fn print_listener_peer(addr: &libp2p::Multiaddr, mode: &Mode, local_peer_id: Pee
                 addr, local_peer_id
             );
         }
-        Mode::ClientDial => {}
+        Mode::ClientDial => {
+            println!("Peer that act as Client Dial Listening on {:?}", addr);
+        }
     }
 }
 
