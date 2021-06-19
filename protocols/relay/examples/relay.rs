@@ -60,6 +60,7 @@ use libp2p::dns::DnsConfig;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
+use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{core::upgrade, identity::ed25519};
@@ -132,22 +133,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut listening = false;
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
-                            print_listener_peer(addr, &opt.mode, local_peer_id);
-                        }
+                Poll::Ready(Some(event)) => {
+                    if let SwarmEvent::NewListenAddr(addr) = event {
+                        println!("Listening on {:?}", addr);
+                        print_listener_peer(&addr, &opt.mode, local_peer_id);
                     }
-                    break;
                 }
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending

@@ -262,7 +262,7 @@
 //! use futures::executor::block_on;
 //! use futures::prelude::*;
 //! use libp2p::ping::{Ping, PingConfig};
-//! use libp2p::swarm::Swarm;
+//! use libp2p::swarm::{Swarm, SwarmEvent};
 //! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //! use std::task::Poll;
@@ -295,20 +295,15 @@
 //!         println!("Dialed {}", addr)
 //!     }
 //!
-//!     let mut listening = false;
 //!     block_on(future::poll_fn(move |cx| loop {
 //!         match swarm.poll_next_unpin(cx) {
-//!             Poll::Ready(Some(event)) => println!("{:?}", event),
-//!             Poll::Ready(None) => return Poll::Ready(()),
-//!             Poll::Pending => {
-//!                 if !listening {
-//!                     for addr in Swarm::listeners(&swarm) {
-//!                         println!("Listening on {}", addr);
-//!                         listening = true;
-//!                     }
+//!             Poll::Ready(Some(event)) => {
+//!                 if let SwarmEvent::NewListenAddr(addr) = event {
+//!                     println!("Listening on {:?}", addr);
 //!                 }
-//!                 return Poll::Pending;
-//!             }
+//!             },
+//!             Poll::Ready(None) => return Poll::Ready(()),
+//!             Poll::Pending => return Poll::Pending
 //!         }
 //!     }));
 //!
