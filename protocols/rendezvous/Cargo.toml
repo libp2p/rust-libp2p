@@ -17,7 +17,7 @@ prost = "0.7"
 void = "1"
 log = "0.4"
 futures = { version = "0.3", default-features = false, features = ["std"] }
-thiserror = "1" # TODO: REMOVE FOR PRODUCTION USE
+thiserror = "1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 uuid = { version = "0.8", features = ["v4"] }
 bimap = "0.6.1"

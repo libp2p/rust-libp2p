@@ -15,11 +15,9 @@ pub enum Message {
     RegisterResponse(Result<Ttl, RegisterErrorResponse>),
     Unregister {
         namespace: String,
-        // TODO: what is the `id` field here in the PB message
     },
     Discover {
         namespace: Option<String>,
-        // TODO limit: Option<i64>
         cookie: Option<Cookie>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
@@ -31,7 +29,7 @@ pub enum Message {
 
 #[derive(Debug, Clone)]
 pub enum RegisterErrorResponse {
-    Failed(ErrorCode), // TODO: `Failed` is a bad name, find a better one.
+    Failed(ErrorCode),
     /// We are declining the registration because PoW is required.
     PowRequired {
         challenge: Challenge,
@@ -126,9 +124,9 @@ pub struct InvalidCookie;
 
 #[derive(Debug, Clone)]
 pub struct NewRegistration {
-    pub namespace: String, // TODO: Create new-type for namespace to enforce max-length requirement.
+    pub namespace: String,
     pub record: PeerRecord,
-    pub ttl: Option<i64>, // TODO: Create new-type for ttl to be more descriptive.
+    pub ttl: Option<i64>,
 }
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
@@ -177,7 +175,7 @@ pub struct RendezvousCodec {
 impl Default for RendezvousCodec {
     fn default() -> Self {
         let mut length_codec = UviBytes::default();
-        length_codec.set_max_len(1024 * 1024); // 1MB TODO clarify with spec what the default should be
+        length_codec.set_max_len(1024 * 1024); // 1MB
 
         Self { length_codec }
     }
@@ -229,7 +227,7 @@ pub enum Error {
     Encode(#[from] prost::EncodeError),
     #[error("Failed to decode message from bytes")]
     Decode(#[from] prost::DecodeError),
-    #[error("Failed to read/write")] // TODO: Better message
+    #[error("Failed to read/write")]
     Io(#[from] std::io::Error),
     #[error("Failed to convert wire message to internal data model")]
     ConversionError(#[from] ConversionError),

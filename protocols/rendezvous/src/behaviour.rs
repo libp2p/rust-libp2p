@@ -16,7 +16,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::debug;
-use std::collections::{HashMap, VecDeque, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
@@ -48,7 +48,6 @@ impl Rendezvous {
         }
     }
 
-    // TODO: Make it possible to filter for specific external-addresses (like onion addresses-only f.e.)
     pub fn register(
         &mut self,
         namespace: String,
@@ -144,7 +143,6 @@ pub enum Event {
         registrations: Vec<Registration>,
     },
     /// A peer successfully registered with us.
-    // TODO: Include registration here
     PeerRegistered { peer: PeerId, namespace: String },
     /// We declined a registration from a peer.
     PeerNotRegistered {
@@ -258,7 +256,6 @@ impl NetworkBehaviour for Rendezvous {
             ),
             OutEvent::UnregisterRequested { namespace } => {
                 self.registrations.remove(namespace, peer_id);
-                // TODO: Should send unregister response?
             }
             OutEvent::DiscoverRequested { namespace, cookie } => {
                 let (registrations, cookie) = self
@@ -344,7 +341,6 @@ pub struct RegistrationExpired(Registration);
 pub struct Registrations {
     registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
-    // todo: move cookie to registrations as a value
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
     ttl_upper_bound: i64,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
@@ -494,13 +490,21 @@ impl Registrations {
     }
 
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<RegistrationExpired> {
-        let registration_id = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
+        let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
             "This stream should never finish because it is initialised with a pending future",
         );
 
+        // clean up our cookies
+        self.cookies.retain(|_, registrations| {
+            registrations.remove(&expired_registration);
+
+            // retain all cookies where there are still registrations left
+            !registrations.is_empty()
+        });
+
         self.registrations_for_peer
-            .remove_by_right(&registration_id);
-        match self.registrations.remove(&registration_id) {
+            .remove_by_right(&expired_registration);
+        match self.registrations.remove(&expired_registration) {
             None => self.poll(cx),
             Some(registration) => Poll::Ready(RegistrationExpired(registration)),
         }
@@ -518,7 +522,6 @@ fn difficulty_from_num_registrations(existing_registrations: usize) -> Difficult
         .unwrap_or(Difficulty::MAX)
 }
 
-// TODO: Be more specific in what the bad combination was?
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
 #[error("The provided cookie is not valid for a DISCOVER request for the given namespace")]
 pub struct CookieNamespaceMismatch;
@@ -673,6 +676,23 @@ mod tests {
 
         registrations.add(dummy_registration).unwrap();
         let _ = registrations.next_event_in_at_most(2).await;
+    }
+
+    #[tokio::test]
+    async fn cookies_are_cleaned_up_if_registrations_expire() {
+        let mut registrations = Registrations::new(7200);
+
+        registrations
+            .add(new_dummy_registration_with_ttl("foo", 2))
+            .unwrap();
+        let (registrations, cookie) = registrations.get(None, None).unwrap();
+
+        assert_eq!(registrations.cookies.len(), 1);
+
+        registrations.no_event_for(1).await;
+        registrations.remove(namespace, peer_id);
+
+        registrations.no_event_for(3).await
     }
 
     #[test]

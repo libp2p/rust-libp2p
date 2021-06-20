@@ -511,7 +511,7 @@ impl ProtocolsHandler for RendezvousHandler {
             self.inbound = SubstreamState::Active(Inbound::PendingRead(substream));
             self.inbound_history.clear();
         } else {
-            unreachable!("Invalid inbound state") // TODO: this unreachable is not correct I believe
+            unreachable!("Invalid inbound state")
         }
     }
 
@@ -527,7 +527,7 @@ impl ProtocolsHandler for RendezvousHandler {
             });
             self.outbound_history.clear();
         } else {
-            unreachable!("Invalid outbound state") // TODO: this unreachable is not correct I believe
+            unreachable!("Invalid outbound state")
         }
     }
 
@@ -599,7 +599,7 @@ impl ProtocolsHandler for RendezvousHandler {
                 )),
                 outbound,
             ),
-            _ => unreachable!("Handler in invalid state"), // TODO: this unreachable is not correct I believe
+            _ => unreachable!("Handler in invalid state"),
         };
 
         self.inbound = inbound;
@@ -614,7 +614,6 @@ impl ProtocolsHandler for RendezvousHandler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        //todo: fix this
         KeepAlive::Yes
     }
 
