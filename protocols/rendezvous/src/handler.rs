@@ -12,10 +12,9 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use std::fmt::Debug;
-use std::mem;
 use std::sync::mpsc::TryRecvError;
 use std::task::{Context, Poll};
+use std::{fmt, mem};
 use void::Void;
 
 pub struct RendezvousHandler {
@@ -126,6 +125,18 @@ enum Inbound {
     PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
 }
 
+impl fmt::Debug for Inbound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Inbound::PendingRead(_) => write!(f, "Inbound::PendingRead"),
+            Inbound::PendingBehaviour(_) => write!(f, "Inbound::PendingBehaviour"),
+            Inbound::PendingSend(_, _) => write!(f, "Inbound::PendingSend"),
+            Inbound::PendingFlushThenRead(_) => write!(f, "Inbound::PendingFlushThenRead"),
+            Inbound::PendingClose(_) => write!(f, "Inbound::PendingClose"),
+        }
+    }
+}
+
 /// The state of an outbound substream (i.e. we opened it).
 enum Outbound {
     /// We got a message to send from the behaviour.
@@ -148,6 +159,20 @@ enum Outbound {
     PendingRemote(Framed<NegotiatedSubstream, RendezvousCodec>),
     /// We are closing down the substream.
     PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
+}
+
+impl fmt::Debug for Outbound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Outbound::PendingOpen(_) => write!(f, "Outbound::PendingOpen"),
+            Outbound::PendingNegotiate => write!(f, "Outbound::PendingNegotiate"),
+            Outbound::PendingSend { .. } => write!(f, "Outbound::PendingSend"),
+            Outbound::PendingFlush(_) => write!(f, "Outbound::PendingFlush"),
+            Outbound::PendingPoW { .. } => write!(f, "Outbound::PendingPoW"),
+            Outbound::PendingRemote(_) => write!(f, "Outbound::PendingRemote"),
+            Outbound::PendingClose(_) => write!(f, "Outbound::PendingClose"),
+        }
+    }
 }
 
 /// Errors that can occur while interacting with a substream.
@@ -523,8 +548,6 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         msg: Self::OutboundOpenInfo,
     ) {
-
-
         match self.outbound {
             SubstreamState::Active(Outbound::PendingNegotiate) => {
                 self.outbound = SubstreamState::Active(Outbound::PendingSend {
@@ -556,7 +579,10 @@ impl ProtocolsHandler for RendezvousHandler {
             ),
             (InEvent::DiscoverRequest { namespace, cookie }, inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::PendingOpen(Message::Discover { namespace, cookie })),
+                SubstreamState::Active(Outbound::PendingOpen(Message::Discover {
+                    namespace,
+                    cookie,
+                })),
             ),
             (
                 InEvent::RegisterResponse { ttl },
@@ -607,7 +633,16 @@ impl ProtocolsHandler for RendezvousHandler {
                 )),
                 outbound,
             ),
-            _ => unreachable!("Handler in invalid state"),
+            (event, inbound, outbound) => {
+                log::warn!(
+                    "Neither {:?} nor {:?} can handle {:?}",
+                    inbound,
+                    outbound,
+                    event
+                );
+
+                (inbound, outbound)
+            }
         };
 
         self.inbound = inbound;
