@@ -31,7 +31,7 @@ use std::{
 };
 
 use futures::StreamExt;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 use wasm_timer::{Instant, Interval};
@@ -509,7 +509,7 @@ where
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
         self.join(&topic_hash);
-        info!("Subscribed to topic: {}", topic);
+        debug!("Subscribed to topic: {}", topic);
         Ok(true)
     }
 
@@ -549,7 +549,7 @@ where
         // this will remove the topic from the mesh
         self.leave(&topic_hash);
 
-        info!("Unsubscribed from topic: {:?}", topic_hash);
+        debug!("Unsubscribed from topic: {:?}", topic_hash);
         Ok(true)
     }
 
@@ -700,7 +700,7 @@ where
             self.send_message(*peer_id, event.clone())?;
         }
 
-        info!("Published message: {:?}", &msg_id);
+        debug!("Published message: {:?}", &msg_id);
         Ok(msg_id)
     }
 
@@ -860,7 +860,7 @@ where
 
         // if we are already in the mesh, return
         if self.mesh.contains_key(topic_hash) {
-            info!("JOIN: The topic is already in the mesh, ignoring JOIN");
+            debug!("JOIN: The topic is already in the mesh, ignoring JOIN");
             return;
         }
 
@@ -931,7 +931,7 @@ where
 
         for peer_id in added_peers {
             // Send a GRAFT control message
-            info!("JOIN: Sending Graft message to peer: {:?}", peer_id);
+            debug!("JOIN: Sending Graft message to peer: {:?}", peer_id);
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.graft(&peer_id, topic_hash.clone());
             }
@@ -1020,7 +1020,7 @@ where
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
             for peer in peers {
                 // Send a PRUNE control message
-                info!("LEAVE: Sending PRUNE to peer: {:?}", peer);
+                debug!("LEAVE: Sending PRUNE to peer: {:?}", peer);
                 let control = self.make_prune(topic_hash, &peer, self.config.do_px());
                 Self::control_pool_add(&mut self.control_pool, peer, control);
 
@@ -1316,7 +1316,7 @@ where
                     }
 
                     // add peer to the mesh
-                    info!(
+                    debug!(
                         "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
                         peer_id, &topic_hash
                     );
@@ -1354,7 +1354,7 @@ where
                 .map(|t| self.make_prune(t, peer_id, do_px))
                 .collect();
             // Send the prune messages to the peer
-            info!(
+            debug!(
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer: {}",
                 peer_id
             );
@@ -1388,7 +1388,7 @@ where
         if let Some(peers) = self.mesh.get_mut(&topic_hash) {
             // remove the peer if it exists in the mesh
             if peers.remove(peer_id) {
-                info!(
+                debug!(
                     "PRUNE: Removing peer: {} from the mesh for topic: {}",
                     peer_id.to_string(),
                     topic_hash
@@ -1827,7 +1827,7 @@ where
                 }
                 GossipsubSubscriptionAction::Unsubscribe => {
                     if peer_list.remove(propagation_source) {
-                        info!(
+                        debug!(
                             "SUBSCRIPTION: Removing gossip peer: {} from topic: {:?}",
                             propagation_source.to_string(),
                             subscription.topic_hash
@@ -2815,7 +2815,7 @@ where
             return;
         }
 
-        info!("New peer connected: {}", peer_id);
+        debug!("New peer connected: {}", peer_id);
         // We need to send our subscriptions to the newly-connected node.
         let mut subscriptions = vec![];
         for topic_hash in self.mesh.keys() {

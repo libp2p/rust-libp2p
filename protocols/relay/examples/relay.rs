@@ -57,6 +57,7 @@ use libp2p::core::upgrade;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
+use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId, Swarm};
@@ -128,21 +129,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         s => panic!("Unexpected argument {:?}", s),
     }
 
-    let mut listening = false;
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
-                        }
+                Poll::Ready(Some(event)) => {
+                    if let SwarmEvent::NewListenAddr(addr) = event {
+                        println!("Listening on {:?}", addr);
                     }
-                    break;
                 }
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending

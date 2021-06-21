@@ -61,7 +61,7 @@ use libp2p::{
     development_transport,
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent}
 };
 use std::{error::Error, task::{Context, Poll}};
 
@@ -150,8 +150,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a swarm to manage peers and events.
     let mut swarm = {
         // Create a Kademlia behaviour.
-        let store = MemoryStore::new(local_peer_id.clone());
-        let kademlia = Kademlia::new(local_peer_id.clone(), store);
+        let store = MemoryStore::new(local_peer_id);
+        let kademlia = Kademlia::new(local_peer_id, store);
         let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
@@ -164,7 +164,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off.
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
@@ -175,17 +174,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        if let Some(a) = Swarm::listeners(&swarm).next() {
-                            println!("Listening on {:?}", a);
-                            listening = true;
-                        }
+                Poll::Ready(Some(event)) => {
+                    if let SwarmEvent::NewListenAddr(addr) = event {
+                        println!("Listening on {:?}", addr);
                     }
-                    break
                 }
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending
@@ -193,7 +188,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
-    let mut args = line.split(" ");
+    let mut args = line.split(' ');
 
     match args.next() {
         Some("GET") => {
