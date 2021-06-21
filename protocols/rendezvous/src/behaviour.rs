@@ -4,7 +4,7 @@ use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
 use crate::handler::{DeclineReason, InEvent, OutEvent, RendezvousHandler};
 use bimap::BiMap;
-use futures::future::{poll_fn, BoxFuture};
+use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
