@@ -5,7 +5,6 @@ use libp2p_core::PeerId;
 use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
 use libp2p_rendezvous::codec::{ErrorCode, DEFAULT_TTL};
 use libp2p_swarm::{Swarm, SwarmEvent};
-use futures::StreamExt;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
@@ -104,7 +103,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
         Some(100_000),
     );
 
-    match await_events_or_timeout(test.rendezvous_swarm.select_next_some(), test.registration_swarm.select_next_some()).await {
+    match await_events_or_timeout(&mut test.rendezvous_swarm, &mut test.registration_swarm).await {
         (
             SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
             SwarmEvent::Behaviour(Event::RegisterFailed { error: err_code, .. }),
@@ -174,7 +173,7 @@ impl RendezvousTest {
         expected_namespace: String,
         expected_ttl: i64,
     ) {
-        match await_events_or_timeout(self.rendezvous_swarm.select_next_some(), self.registration_swarm.select_next_some()).await {
+        match await_events_or_timeout(&mut self.rendezvous_swarm, &mut self.registration_swarm).await {
             (
                 SwarmEvent::Behaviour(Event::PeerRegistered { peer, registration }),
                 SwarmEvent::Behaviour(Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
@@ -198,7 +197,7 @@ impl RendezvousTest {
         expected_ttl: i64,
         expected_peer_id: PeerId,
     ) {
-        match await_events_or_timeout(self.rendezvous_swarm.select_next_some(), self.discovery_swarm.select_next_some())
+        match await_events_or_timeout(&mut self.rendezvous_swarm, &mut self.discovery_swarm)
             .await
         {
             (SwarmEvent::Behaviour(Event::DiscoverServed { .. }), SwarmEvent::Behaviour(Event::Discovered { registrations, .. })) => {

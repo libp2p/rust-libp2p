@@ -1,7 +1,8 @@
 use async_trait::async_trait;
-use futures::future;
+use futures::stream::FusedStream;
 use futures::Future;
 use futures::StreamExt;
+use futures::{future, Stream};
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::MemoryTransport;
@@ -65,31 +66,23 @@ fn get_rand_memory_address() -> Multiaddr {
     addr
 }
 
-pub async fn await_events_or_timeout<A, B>(
-    swarm_1_event: impl Future<Output = A>,
-    swarm_2_event: impl Future<Output = B>,
-) -> (A, B)
+pub async fn await_events_or_timeout<A, B, E1, E2>(
+    swarm_1: &mut (impl Stream<Item = SwarmEvent<A, E1>> + FusedStream + Unpin),
+    swarm_2: &mut (impl Stream<Item = SwarmEvent<B, E2>> + FusedStream + Unpin),
+) -> (SwarmEvent<A, E1>, SwarmEvent<B, E2>)
 where
-    A: Debug,
-    B: Debug,
+    SwarmEvent<A, E1>: Debug,
+    SwarmEvent<B, E2>: Debug,
 {
     tokio::time::timeout(
         Duration::from_secs(30),
         future::join(
-            async {
-                let e1 = swarm_1_event.await;
-
-                log::debug!("Got event1: {:?}", e1);
-
-                e1
-            },
-            async {
-                let e2 = swarm_2_event.await;
-
-                log::debug!("Got event2: {:?}", e2);
-
-                e2
-            },
+            swarm_1
+                .inspect(|event| log::debug!("Swarm1 emitted {:?}", event))
+                .select_next_some(),
+            swarm_2
+                .inspect(|event| log::debug!("Swarm2 emitted {:?}", event))
+                .select_next_some(),
         ),
     )
     .await
