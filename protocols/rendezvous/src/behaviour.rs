@@ -552,10 +552,10 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
 
         let (initial_discover, cookie) = registrations.get(None, None).unwrap();
-        assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
+        assert_eq!(initial_discover.count(), 2);
 
         let (subsequent_discover, _) = registrations.get(None, Some(cookie)).unwrap();
-        assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
+        assert_eq!(subsequent_discover.count(), 0);
     }
 
     #[tokio::test]
@@ -566,7 +566,7 @@ mod tests {
 
         let (discover, _) = registrations.get(None, None).unwrap();
 
-        assert_eq!(discover.collect::<Vec<_>>().len(), 2);
+        assert_eq!(discover.count(), 2);
     }
 
     #[tokio::test]
@@ -610,13 +610,13 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
 
         let (initial_discover, cookie1) = registrations.get(None, None).unwrap();
-        assert_eq!(initial_discover.collect::<Vec<_>>().len(), 2);
+        assert_eq!(initial_discover.count(), 2);
 
         let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1)).unwrap();
-        assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
+        assert_eq!(subsequent_discover.count(), 0);
 
         let (subsequent_discover, _) = registrations.get(None, Some(cookie2)).unwrap();
-        assert_eq!(subsequent_discover.collect::<Vec<_>>().len(), 0);
+        assert_eq!(subsequent_discover.count(), 0);
     }
 
     #[tokio::test]
@@ -699,7 +699,7 @@ mod tests {
         registrations
             .add(new_dummy_registration_with_ttl("foo", 2))
             .unwrap();
-        let (_, cookie) = registrations.get(None, None).unwrap();
+        let (_, _) = registrations.get(None, None).unwrap();
 
         assert_eq!(registrations.cookies.len(), 1);
 

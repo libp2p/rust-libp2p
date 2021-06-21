@@ -15,7 +15,7 @@ async fn given_successful_registration_then_successful_discovery() {
 
     let _ = test.registration_swarm.behaviour_mut().register(
         namespace.clone(),
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
         None,
     );
 
@@ -25,13 +25,13 @@ async fn given_successful_registration_then_successful_discovery() {
     test.discovery_swarm.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
     );
 
     test.assert_successful_discovery(
         namespace.clone(),
         DEFAULT_TTL,
-        test.registration_swarm.local_peer_id().clone(),
+        *test.registration_swarm.local_peer_id(),
     )
     .await;
 }
@@ -47,7 +47,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 
     let _ = test.registration_swarm.behaviour_mut().register(
         namespace.clone(),
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
         None,
     );
 
@@ -57,19 +57,19 @@ async fn given_successful_registration_then_refresh_ttl() {
     test.discovery_swarm.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
     );
 
     test.assert_successful_discovery(
         namespace.clone(),
         DEFAULT_TTL,
-        test.registration_swarm.local_peer_id().clone(),
+        *test.registration_swarm.local_peer_id(),
     )
     .await;
 
     let _ = test.registration_swarm.behaviour_mut().register(
         namespace.clone(),
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
         Some(refesh_ttl),
     );
 
@@ -79,13 +79,13 @@ async fn given_successful_registration_then_refresh_ttl() {
     test.discovery_swarm.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
     );
 
     test.assert_successful_discovery(
         namespace.clone(),
         refesh_ttl,
-        test.registration_swarm.local_peer_id().clone(),
+        *test.registration_swarm.local_peer_id(),
     )
     .await;
 }
@@ -99,7 +99,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     let _ = test.registration_swarm.behaviour_mut().register(
         namespace.clone(),
-        test.rendezvous_swarm.local_peer_id().clone(),
+        *test.rendezvous_swarm.local_peer_id(),
         Some(100_000),
     );
 
