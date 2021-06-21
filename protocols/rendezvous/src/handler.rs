@@ -129,9 +129,9 @@ enum Inbound {
 /// The state of an outbound substream (i.e. we opened it).
 enum Outbound {
     /// We got a message to send from the behaviour.
-    Start(Message),
-    /// We've requested a substream and are waiting for it to be set up.
-    PendingSubstream,
+    PendingOpen(Message),
+    /// We've requested a substream and are waiting for it to be negotiated.
+    PendingNegotiate,
     /// We got the substream, now we need to send the message.
     PendingSend {
         substream: Framed<NegotiatedSubstream, RendezvousCodec>,
@@ -326,12 +326,12 @@ impl<'handler> Advance<'handler> for Outbound {
         }: &mut OutboundPollParams,
     ) -> Result<Next<Self, Self::Event, Self::Protocol>, Self::Error> {
         Ok(match self {
-            Outbound::Start(msg) => Next::OpenSubstream {
+            Outbound::PendingOpen(msg) => Next::OpenSubstream {
                 protocol: SubstreamProtocol::new(protocol::new(), msg),
-                next_state: Outbound::PendingSubstream,
+                next_state: Outbound::PendingNegotiate,
             },
-            Outbound::PendingSubstream => Next::Pending {
-                next_state: Outbound::PendingSubstream,
+            Outbound::PendingNegotiate => Next::Pending {
+                next_state: Outbound::PendingNegotiate,
             },
             Outbound::PendingSend {
                 mut substream,
@@ -526,7 +526,7 @@ impl ProtocolsHandler for RendezvousHandler {
 
 
         match self.outbound {
-            SubstreamState::Active(Outbound::PendingSubstream) => {
+            SubstreamState::Active(Outbound::PendingNegotiate) => {
                 self.outbound = SubstreamState::Active(Outbound::PendingSend {
                     substream,
                     to_send: msg,
@@ -548,15 +548,15 @@ impl ProtocolsHandler for RendezvousHandler {
         ) {
             (InEvent::RegisterRequest { request: reggo }, inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::Start(Message::Register(reggo))),
+                SubstreamState::Active(Outbound::PendingOpen(Message::Register(reggo))),
             ),
             (InEvent::UnregisterRequest { namespace }, inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::Start(Message::Unregister { namespace })),
+                SubstreamState::Active(Outbound::PendingOpen(Message::Unregister { namespace })),
             ),
             (InEvent::DiscoverRequest { namespace, cookie }, inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::Start(Message::Discover { namespace, cookie })),
+                SubstreamState::Active(Outbound::PendingOpen(Message::Discover { namespace, cookie })),
             ),
             (
                 InEvent::RegisterResponse { ttl },
