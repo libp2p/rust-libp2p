@@ -2,7 +2,7 @@ use libp2p_core::SignedEnvelope;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
-const DOMAIN_TAG: &'static str = "libp2p-rendezvous-pow";
+const DOMAIN_TAG: &str = "libp2p-rendezvous-pow";
 
 /// Run the Proof of Work algorithm for a registration at a rendezvous node.
 ///
@@ -80,7 +80,7 @@ impl Difficulty {
         Some(Difficulty(value))
     }
 
-    pub fn to_u32(&self) -> u32 {
+    pub fn to_u32(self) -> u32 {
         self.0
     }
 }
@@ -123,7 +123,7 @@ pub fn difficulty_of(hash: &[u8; 32]) -> Difficulty {
         }
     }
 
-    return Difficulty(32);
+    Difficulty(32)
 }
 
 fn make_hash(challenge: &[u8], namespace: &str, envelope: &[u8], nonce: i64) -> [u8; 32] {

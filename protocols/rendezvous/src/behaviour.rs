@@ -405,7 +405,7 @@ impl Registrations {
         self.registrations.insert(
             registration_id,
             Registration {
-                namespace: namespace.clone(),
+                namespace,
                 record: new_registration.record,
                 ttl,
                 timestamp,
@@ -479,7 +479,7 @@ impl Registrations {
 
         let new_cookie = discover_namespace
             .map(Cookie::for_namespace)
-            .unwrap_or_else(|| Cookie::for_all_namespaces());
+            .unwrap_or_else(Cookie::for_all_namespaces);
         self.cookies
             .insert(new_cookie.clone(), reggos_of_last_discover);
 

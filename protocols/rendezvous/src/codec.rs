@@ -98,7 +98,7 @@ impl Cookie {
         }
 
         let namespace = bytes.split_off(16);
-        let namespace = if namespace.len() == 0 {
+        let namespace = if namespace.is_empty() {
             None
         } else {
             Some(String::from_utf8(namespace).map_err(|_| InvalidCookie)?)
