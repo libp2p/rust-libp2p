@@ -507,11 +507,14 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _msg: Self::InboundOpenInfo,
     ) {
-        if let SubstreamState::None = self.inbound {
-            self.inbound = SubstreamState::Active(Inbound::PendingRead(substream));
-            self.inbound_history.clear();
-        } else {
-            unreachable!("Invalid inbound state")
+        match self.inbound {
+            SubstreamState::None => {
+                self.inbound = SubstreamState::Active(Inbound::PendingRead(substream));
+                self.inbound_history.clear();
+            }
+            _ => {
+                log::warn!("Ignoring new inbound substream because existing one is still active")
+            }
         }
     }
 
@@ -520,14 +523,19 @@ impl ProtocolsHandler for RendezvousHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         msg: Self::OutboundOpenInfo,
     ) {
-        if let SubstreamState::Active(Outbound::PendingSubstream) = self.outbound {
-            self.outbound = SubstreamState::Active(Outbound::PendingSend {
-                substream,
-                to_send: msg,
-            });
-            self.outbound_history.clear();
-        } else {
-            unreachable!("Invalid outbound state")
+
+
+        match self.outbound {
+            SubstreamState::Active(Outbound::PendingSubstream) => {
+                self.outbound = SubstreamState::Active(Outbound::PendingSend {
+                    substream,
+                    to_send: msg,
+                });
+                self.outbound_history.clear();
+            }
+            _ => {
+                log::warn!("Ignoring new outbound substream because existing one is still active")
+            }
         }
     }
 
