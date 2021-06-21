@@ -23,7 +23,7 @@ uuid = { version = "0.8", features = ["v4"] }
 bimap = "0.6.1"
 sha2 = "0.9"
 rand = "0.8"
-tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] } # TODO: REMOVE FOR PRODUCTION USE
+tokio = { version = "1", features = [ "time" ] }
 
 [dev-dependencies]
 libp2p-tcp = { path = "../../transports/tcp" }
@@ -34,6 +34,7 @@ rand = "0.8"
 async-std = "1.6.2"
 env_logger = "0.8"
 async-trait = "0.1"
+tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] } # TODO: REMOVE FOR PRODUCTION USE
 
 [build-dependencies]
 prost-build = "0.7"
