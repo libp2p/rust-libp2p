@@ -145,7 +145,6 @@ pub enum Event {
     /// A peer successfully registered with us.
     PeerRegistered {
         peer: PeerId,
-        namespace: String,
         registration: Registration,
     },
     /// We declined a registration from a peer.
@@ -218,7 +217,6 @@ impl NetworkBehaviour for Rendezvous {
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered {
                                 peer: peer_id,
-                                namespace: namespace.clone(),
                                 registration: Registration {
                                     namespace,
                                     record,

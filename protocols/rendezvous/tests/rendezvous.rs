@@ -128,17 +128,29 @@ const DEFAULT_TTL_UPPER_BOUND: i64 = 56_000;
 impl RendezvousTest {
     pub async fn setup() -> Self {
         let mut registration_swarm = new_swarm(|_, identity| {
-            Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND, Difficulty::from_u32(2).expect("2 < 32"))
+            Rendezvous::new(
+                identity,
+                DEFAULT_TTL_UPPER_BOUND,
+                Difficulty::from_u32(2).expect("2 < 32"),
+            )
         });
         registration_swarm.listen_on_random_memory_address().await;
 
         let mut discovery_swarm = new_swarm(|_, identity| {
-            Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND, Difficulty::from_u32(2).expect("2 < 32"))
+            Rendezvous::new(
+                identity,
+                DEFAULT_TTL_UPPER_BOUND,
+                Difficulty::from_u32(2).expect("2 < 32"),
+            )
         });
         discovery_swarm.listen_on_random_memory_address().await;
 
         let mut rendezvous_swarm = new_swarm(|_, identity| {
-            Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND, Difficulty::from_u32(2).expect("2 < 32"))
+            Rendezvous::new(
+                identity,
+                DEFAULT_TTL_UPPER_BOUND,
+                Difficulty::from_u32(2).expect("2 < 32"),
+            )
         });
         rendezvous_swarm.listen_on_random_memory_address().await;
 
@@ -163,12 +175,12 @@ impl RendezvousTest {
     ) {
         match await_events_or_timeout(self.rendezvous_swarm.next_event(), self.registration_swarm.next_event()).await {
             (
-                SwarmEvent::Behaviour(Event::PeerRegistered { peer, namespace: rendezvous_node_namespace }),
+                SwarmEvent::Behaviour(Event::PeerRegistered { peer, registration }),
                 SwarmEvent::Behaviour(Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
             ) => {
                 assert_eq!(&peer, self.registration_swarm.local_peer_id());
                 assert_eq!(&rendezvous_node, self.rendezvous_swarm.local_peer_id());
-                assert_eq!(rendezvous_node_namespace, expected_namespace);
+                assert_eq!(registration.namespace, expected_namespace);
                 assert_eq!(register_node_namespace, expected_namespace);
                 assert_eq!(ttl, expected_ttl);
             }

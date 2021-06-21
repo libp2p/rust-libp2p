@@ -23,6 +23,7 @@ uuid = { version = "0.8", features = ["v4"] }
 bimap = "0.6.1"
 sha2 = "0.9"
 rand = "0.8"
+tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] } # TODO: REMOVE FOR PRODUCTION USE
 
 [dev-dependencies]
 libp2p-tcp = { path = "../../transports/tcp" }
@@ -32,7 +33,6 @@ libp2p-mplex = { path = "../../muxers/mplex" }
 rand = "0.8"
 async-std = "1.6.2"
 env_logger = "0.8"
-tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 async-trait = "0.1"
 
 [build-dependencies]
