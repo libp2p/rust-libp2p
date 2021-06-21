@@ -5,6 +5,7 @@ use libp2p_core::PeerId;
 use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
 use libp2p_rendezvous::codec::{ErrorCode, DEFAULT_TTL};
 use libp2p_swarm::{Swarm, SwarmEvent};
+use futures::StreamExt;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
@@ -103,10 +104,10 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
         Some(100_000),
     );
 
-    match await_events_or_timeout(test.rendezvous_swarm.next(), test.registration_swarm.next()).await {
+    match await_events_or_timeout(test.rendezvous_swarm.select_next_some(), test.registration_swarm.select_next_some()).await {
         (
-            Event::PeerNotRegistered { .. },
-            Event::RegisterFailed { error: err_code, .. },
+            SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
+            SwarmEvent::Behaviour(Event::RegisterFailed { error: err_code, .. }),
         ) => {
             assert_eq!(err_code, ErrorCode::InvalidTtl);
         }
@@ -173,7 +174,7 @@ impl RendezvousTest {
         expected_namespace: String,
         expected_ttl: i64,
     ) {
-        match await_events_or_timeout(self.rendezvous_swarm.next_event(), self.registration_swarm.next_event()).await {
+        match await_events_or_timeout(self.rendezvous_swarm.select_next_some(), self.registration_swarm.select_next_some()).await {
             (
                 SwarmEvent::Behaviour(Event::PeerRegistered { peer, registration }),
                 SwarmEvent::Behaviour(Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
@@ -197,10 +198,10 @@ impl RendezvousTest {
         expected_ttl: i64,
         expected_peer_id: PeerId,
     ) {
-        match await_events_or_timeout(self.rendezvous_swarm.next(), self.discovery_swarm.next())
+        match await_events_or_timeout(self.rendezvous_swarm.select_next_some(), self.discovery_swarm.select_next_some())
             .await
         {
-            (Event::DiscoverServed { .. }, Event::Discovered { registrations, .. }) => {
+            (SwarmEvent::Behaviour(Event::DiscoverServed { .. }), SwarmEvent::Behaviour(Event::Discovered { registrations, .. })) => {
                 if let Some(reg) =
                     registrations.get(&(expected_namespace.clone(), expected_peer_id))
                 {

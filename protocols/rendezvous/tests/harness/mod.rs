@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use futures::future;
 use futures::Future;
+use futures::StreamExt;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::MemoryTransport;
@@ -127,7 +128,7 @@ where
         let mut listener_done = false;
 
         loop {
-            let dialer_event_fut = self.next_event();
+            let dialer_event_fut = self.select_next_some();
 
             tokio::select! {
                 dialer_event = dialer_event_fut => {
@@ -143,7 +144,7 @@ where
                         }
                     }
                 },
-                listener_event = other.next_event() => {
+                listener_event = other.select_next_some() => {
                     match listener_event {
                         SwarmEvent::ConnectionEstablished { .. } => {
                             listener_done = true;
@@ -171,7 +172,7 @@ where
 
         // block until we are actually listening
         loop {
-            match self.next_event().await {
+            match self.select_next_some().await {
                 SwarmEvent::NewListenAddr(addr) if addr == multiaddr => {
                     break;
                 }
