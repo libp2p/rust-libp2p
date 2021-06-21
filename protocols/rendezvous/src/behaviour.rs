@@ -699,14 +699,13 @@ mod tests {
         registrations
             .add(new_dummy_registration_with_ttl("foo", 2))
             .unwrap();
-        let (registrations, cookie) = registrations.get(None, None).unwrap();
+        let (_, cookie) = registrations.get(None, None).unwrap();
 
         assert_eq!(registrations.cookies.len(), 1);
 
-        registrations.no_event_for(1).await;
-        registrations.remove(namespace, peer_id);
+        let _ = registrations.next_event_in_at_most(3).await;
 
-        registrations.no_event_for(3).await
+        assert_eq!(registrations.cookies.len(), 0);
     }
 
     #[test]
@@ -760,7 +759,7 @@ mod tests {
     /// Defines utility functions that make the tests more readable.
     impl Registrations {
         async fn next_event(&mut self) -> RegistrationExpired {
-            poll_fn(|cx| self.poll(cx)).await
+            futures::future::poll_fn(|cx| self.poll(cx)).await
         }
 
         /// Polls [`Registrations`] for `seconds` and panics if it returns a event during this time.
