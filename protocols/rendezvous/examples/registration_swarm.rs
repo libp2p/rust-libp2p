@@ -1,26 +1,18 @@
 use async_std::task;
-use futures::executor::block_on;
-use futures::{future, FutureExt, StreamExt};
-use libp2p_core::multihash::Multihash;
+use futures::StreamExt;
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::{SelectUpgrade, Version};
 use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
 use libp2p_mplex::MplexConfig;
-use libp2p_noise::NoiseConfig;
 use libp2p_noise::{Keypair, X25519Spec};
 use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
-use libp2p_rendezvous::{behaviour, codec};
+use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmEvent;
-use libp2p_swarm::{Swarm, SwarmBuilder};
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
-use std::error::Error;
 use std::str::FromStr;
-use std::task::Poll;
 use std::time::Duration;
-use Event::Discovered;
 
 fn main() {
     let identity = identity::Keypair::generate_ed25519();
@@ -48,7 +40,9 @@ fn main() {
 
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
-    swarm.dial_addr("/ip4/127.0.0.1/tcp/62649".parse().unwrap());
+    swarm
+        .dial_addr("/ip4/127.0.0.1/tcp/62649".parse().unwrap())
+        .unwrap();
 
     let server_peer_id =
         PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
@@ -57,15 +51,14 @@ fn main() {
         loop {
             let event = swarm.next().await;
             println!("swarm event: {:?}", event);
-            if let Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) = event {
-                swarm.behaviour_mut().discover(
-                    Some("rendezvous".to_string()),
-                    None,
-                    server_peer_id,
-                );
+            if let Some(SwarmEvent::ConnectionEstablished { .. }) = event {
+                swarm
+                    .behaviour_mut()
+                    .register("rendezvous".to_string(), server_peer_id, None)
+                    .unwrap();
             };
-            if let Some(SwarmEvent::Behaviour(Discovered { registrations, .. })) = event {
-                println!("discovered: {:?}", registrations.values());
+            if let Some(SwarmEvent::Behaviour(Event::Registered { namespace, .. })) = event {
+                println!("registered namespace: {:?}", namespace);
             };
         }
     })

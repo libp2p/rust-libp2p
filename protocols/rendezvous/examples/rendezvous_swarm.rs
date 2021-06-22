@@ -1,5 +1,5 @@
-use futures::executor::block_on;
-use futures::{future, StreamExt};
+use async_std::task;
+use futures::StreamExt;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::upgrade::{SelectUpgrade, Version};
 use libp2p_core::PeerId;
@@ -10,11 +10,13 @@ use libp2p_rendezvous::behaviour::{Difficulty, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
-use std::task::Poll;
 use std::time::Duration;
 
 fn main() {
-    let identity = identity::Keypair::generate_ed25519();
+    let bytes = [0u8; 32];
+    let key = identity::ed25519::SecretKey::from_bytes(bytes).expect("we always pass 32 bytes");
+    let identity = identity::Keypair::Ed25519(key.into());
+
     let peer_id = PeerId::from(identity.public());
 
     let dh_keys = Keypair::<X25519Spec>::new()
@@ -34,7 +36,7 @@ fn main() {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let difficulty = Difficulty::from_u32(1).unwrap();
+    let difficulty = Difficulty::from_u32(2).unwrap();
     let behaviour = Rendezvous::new(identity, 1000, difficulty);
 
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
@@ -45,20 +47,10 @@ fn main() {
         .listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap())
         .unwrap();
 
-    let mut listening = false;
-    block_on(future::poll_fn(move |cx| loop {
-        match swarm.poll_next_unpin(cx) {
-            Poll::Ready(Some(event)) => println!("{:?}", event),
-            Poll::Ready(None) => return Poll::Ready(()),
-            Poll::Pending => {
-                if !listening {
-                    for addr in Swarm::listeners(&swarm) {
-                        println!("Listening on {}", addr);
-                        listening = true;
-                    }
-                }
-                return Poll::Pending;
-            }
+    task::block_on(async move {
+        loop {
+            let event = swarm.next().await;
+            println!("swarm event: {:?}", event);
         }
-    }));
+    });
 }
