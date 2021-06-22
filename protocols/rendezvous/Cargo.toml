@@ -30,6 +30,9 @@ libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-identify = { path = "../../protocols/identify" }
+libp2p-swarm-derive =  {path  = "../../swarm-derive"}
+libp2p = {path = "../.."}
 rand = "0.8"
 async-std = "1.6.2"
 env_logger = "0.8"

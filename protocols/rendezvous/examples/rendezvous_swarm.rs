@@ -1,18 +1,46 @@
-use async_std::task;
 use futures::StreamExt;
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::NetworkBehaviour;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::upgrade::{SelectUpgrade, Version};
 use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::behaviour::{Difficulty, Rendezvous};
+use libp2p_rendezvous::behaviour::{Difficulty, Event as RendezvousEvent, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
 use std::time::Duration;
 
-fn main() {
+#[derive(Debug)]
+enum MyEvent {
+    Rendezvous(RendezvousEvent),
+    Identify(IdentifyEvent),
+}
+
+impl From<RendezvousEvent> for MyEvent {
+    fn from(event: RendezvousEvent) -> Self {
+        MyEvent::Rendezvous(event)
+    }
+}
+
+impl From<IdentifyEvent> for MyEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        MyEvent::Identify(event)
+    }
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(event_process = false)]
+#[behaviour(out_event = "MyEvent")]
+struct MyBehaviour {
+    identify: Identify,
+    rendezvous: Rendezvous,
+}
+
+#[tokio::main]
+async fn main() {
     let bytes = [0u8; 32];
     let key = identity::ed25519::SecretKey::from_bytes(bytes).expect("we always pass 32 bytes");
     let identity = identity::Keypair::Ed25519(key.into());
@@ -36,10 +64,20 @@ fn main() {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let difficulty = Difficulty::from_u32(2).unwrap();
-    let behaviour = Rendezvous::new(identity, 1000, difficulty);
+    let identify = Identify::new(IdentifyConfig::new(
+        "rendezvous-example/1.0.0".to_string(),
+        identity.public(),
+    ));
+    let rendezvous = Rendezvous::new(identity, 10000, Difficulty::from_u32(2).unwrap());
 
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::new(
+        transport,
+        MyBehaviour {
+            identify,
+            rendezvous,
+        },
+        peer_id,
+    );
 
     println!("peer id: {}", swarm.local_peer_id());
 
@@ -47,10 +85,8 @@ fn main() {
         .listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap())
         .unwrap();
 
-    task::block_on(async move {
-        loop {
-            let event = swarm.next().await;
-            println!("swarm event: {:?}", event);
-        }
-    });
+    loop {
+        let event = swarm.next().await;
+        println!("swarm event: {:?}", event);
+    }
 }

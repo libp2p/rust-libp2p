@@ -27,8 +27,7 @@ pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
-    external_addresses: Vec<Multiaddr>,
-
+    pending_register_requests: Vec<(String, PeerId, Option<i64>)>,
     /// The maximum PoW difficulty we are willing to accept from a rendezvous point.
     max_accepted_difficulty: Difficulty,
 }
@@ -43,7 +42,7 @@ impl Rendezvous {
             events: Default::default(),
             registrations: Registrations::new(ttl_upper_board),
             key_pair,
-            external_addresses: vec![],
+            pending_register_requests: vec![],
             max_accepted_difficulty,
         }
     }
@@ -54,25 +53,8 @@ impl Rendezvous {
         rendezvous_node: PeerId,
         ttl: Option<i64>,
     ) -> Result<(), RegisterError> {
-        if self.external_addresses.is_empty() {
-            return Err(RegisterError::NoExternalAddresses);
-        }
-
-        let peer_record = PeerRecord::new(self.key_pair.clone(), self.external_addresses.clone())?;
-
-        self.events
-            .push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: rendezvous_node,
-                event: InEvent::RegisterRequest {
-                    request: NewRegistration {
-                        namespace,
-                        record: peer_record,
-                        ttl,
-                    },
-                },
-                handler: NotifyHandler::Any,
-            });
-
+        self.pending_register_requests
+            .push((namespace, rendezvous_node, ttl));
         Ok(())
     }
 
@@ -109,6 +91,12 @@ pub enum RegisterError {
     NoExternalAddresses,
     #[error("Failed to make a new PeerRecord")]
     FailedToMakeRecord(#[from] SigningError),
+    #[error("Failed to register with Rendezvous node")]
+    Remote {
+        rendezvous_node: PeerId,
+        namespace: String,
+        error: ErrorCode,
+    },
 }
 
 #[derive(Debug)]
@@ -132,11 +120,7 @@ pub enum Event {
         namespace: String,
     },
     /// We failed to register with the contained rendezvous node.
-    RegisterFailed {
-        rendezvous_node: PeerId,
-        namespace: String,
-        error: ErrorCode,
-    },
+    RegisterFailed(RegisterError),
     /// We successfully served a discover request from a peer.
     DiscoverServed {
         enquirer: PeerId,
@@ -256,13 +240,15 @@ impl NetworkBehaviour for Rendezvous {
                         namespace,
                     }))
             }
-            OutEvent::RegisterFailed { namespace, error } => self.events.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed {
-                    rendezvous_node: peer_id,
-                    namespace,
-                    error,
-                }),
-            ),
+            OutEvent::RegisterFailed { namespace, error } => {
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::RegisterFailed(RegisterError::Remote {
+                        rendezvous_node: peer_id,
+                        namespace,
+                        error,
+                    }),
+                ))
+            }
             OutEvent::UnregisterRequested { namespace } => {
                 self.registrations.remove(namespace, peer_id);
             }
@@ -315,7 +301,7 @@ impl NetworkBehaviour for Rendezvous {
 
     fn poll(
         &mut self,
-        _: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         poll_params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
@@ -323,12 +309,46 @@ impl NetworkBehaviour for Rendezvous {
             Self::OutEvent,
         >,
     > {
-        // Update our external addresses based on the Swarm's current knowledge.
-        // It doesn't make sense to register addresses on which we are not reachable, hence this should not be configurable from the outside.
-        self.external_addresses = poll_params.external_addresses().map(|r| r.addr).collect();
-
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        if let Some((namespace, rendezvous_node, ttl)) = self.pending_register_requests.pop() {
+            // Update our external addresses based on the Swarm's current knowledge.
+            // It doesn't make sense to register addresses on which we are not reachable, hence this should not be configurable from the outside.
+            let external_addresses = poll_params
+                .external_addresses()
+                .map(|r| r.addr)
+                .collect::<Vec<Multiaddr>>();
+
+            if external_addresses.is_empty() {
+                self.pending_register_requests
+                    .push((namespace, rendezvous_node, ttl));
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                    Event::RegisterFailed(RegisterError::NoExternalAddresses),
+                ));
+            }
+
+            match PeerRecord::new(self.key_pair.clone(), external_addresses) {
+                Ok(peer_record) => {
+                    return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: rendezvous_node,
+                        event: InEvent::RegisterRequest {
+                            request: NewRegistration {
+                                namespace,
+                                record: peer_record,
+                                ttl,
+                            },
+                        },
+                        handler: NotifyHandler::Any,
+                    })
+                }
+                Err(signing_error) => {
+                    return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                        Event::RegisterFailed(RegisterError::FailedToMakeRecord(signing_error)),
+                    ))
+                }
+            }
         }
 
         Poll::Pending

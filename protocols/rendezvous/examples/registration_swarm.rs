@@ -1,18 +1,46 @@
 use async_std::task;
 use futures::StreamExt;
+use libp2p::NetworkBehaviour;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::upgrade::{SelectUpgrade, Version};
 use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
+use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
+use libp2p_rendezvous::behaviour::{Difficulty, Event as RendezvousEvent, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmEvent;
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
 use std::str::FromStr;
 use std::time::Duration;
+
+#[derive(Debug)]
+enum MyEvent {
+    Rendezvous(RendezvousEvent),
+    Identify(IdentifyEvent),
+}
+
+impl From<RendezvousEvent> for MyEvent {
+    fn from(event: RendezvousEvent) -> Self {
+        MyEvent::Rendezvous(event)
+    }
+}
+
+impl From<IdentifyEvent> for MyEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        MyEvent::Identify(event)
+    }
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(event_process = false)]
+#[behaviour(out_event = "MyEvent")]
+struct MyBehaviour {
+    identify: Identify,
+    rendezvous: Rendezvous,
+}
 
 fn main() {
     let identity = identity::Keypair::generate_ed25519();
@@ -35,10 +63,22 @@ fn main() {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let difficulty = Difficulty::from_u32(2).unwrap();
-    let behaviour = Rendezvous::new(identity, 1000, difficulty);
+    let identify = Identify::new(IdentifyConfig::new(
+        "rendezvous-example/1.0.0".to_string(),
+        identity.public(),
+    ));
+    let rendezvous = Rendezvous::new(identity, 10000, Difficulty::from_u32(2).unwrap());
 
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::new(
+        transport,
+        MyBehaviour {
+            identify,
+            rendezvous,
+        },
+        peer_id,
+    );
+
+    let _ = swarm.listen_on("/ip4/127.0.0.1/tcp/62343".parse().unwrap());
 
     swarm
         .dial_addr("/ip4/127.0.0.1/tcp/62649".parse().unwrap())
@@ -50,15 +90,20 @@ fn main() {
     task::block_on(async move {
         loop {
             let event = swarm.next().await;
-            println!("swarm event: {:?}", event);
-            if let Some(SwarmEvent::ConnectionEstablished { .. }) = event {
-                swarm
-                    .behaviour_mut()
-                    .register("rendezvous".to_string(), server_peer_id, None)
-                    .unwrap();
-            };
-            if let Some(SwarmEvent::Behaviour(Event::Registered { namespace, .. })) = event {
-                println!("registered namespace: {:?}", namespace);
+            match event {
+                Some(SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received {
+                    ..
+                }))) => {
+                    swarm
+                        .behaviour_mut()
+                        .rendezvous
+                        .register("rendezvous".to_string(), server_peer_id, None)
+                        .unwrap();
+                }
+                Some(SwarmEvent::Behaviour(MyEvent::Rendezvous(event))) => {
+                    println!("registered event: {:?}", event);
+                }
+                _ => {}
             };
         }
     })
