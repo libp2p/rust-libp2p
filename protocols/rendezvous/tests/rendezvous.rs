@@ -4,7 +4,7 @@ use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::identity;
 use libp2p_core::PeerId;
 use libp2p_rendezvous::{ErrorCode, DEFAULT_TTL};
-use libp2p_rendezvous::{Event, RegisterError, Rendezvous};
+use libp2p_rendezvous::{Event, RegisterError, Registration, Rendezvous};
 use libp2p_swarm::{Swarm, SwarmEvent};
 
 #[tokio::test]
@@ -216,20 +216,18 @@ impl RendezvousTest {
             (
                 SwarmEvent::Behaviour(Event::DiscoverServed { .. }),
                 SwarmEvent::Behaviour(Event::Discovered { registrations, .. }),
-            ) => {
-                if let Some(reg) =
-                    registrations.get(&(expected_namespace.clone(), expected_peer_id))
-                {
-                    assert_eq!(reg.ttl, expected_ttl)
-                } else {
-                    {
-                        panic!(
-                            "Registration with namespace {} and peer id {} not found",
-                            expected_namespace, expected_peer_id
-                        )
-                    }
+            ) => match registrations.as_slice() {
+                [Registration {
+                    namespace,
+                    record,
+                    ttl,
+                }] => {
+                    assert_eq!(*ttl, expected_ttl);
+                    assert_eq!(record.peer_id(), expected_peer_id);
+                    assert_eq!(*namespace, expected_namespace);
                 }
-            }
+                _ => panic!("Expected exactly one registration to be returned from discover"),
+            },
             (e1, e2) => panic!("Unexpected events {:?} {:?}", e1, e2),
         }
     }

@@ -64,8 +64,9 @@ async fn main() {
                 registrations,
                 ..
             })) => {
-                for ((_, peer), registration) in registrations {
+                for registration in registrations {
                     for address in registration.record.addresses() {
+                        let peer = registration.record.peer_id();
                         log::info!("Discovered peer {} at {}", peer, address);
 
                         let p2p_suffix = Protocol::P2p(peer.as_ref().clone());

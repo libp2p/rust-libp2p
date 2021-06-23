@@ -97,7 +97,7 @@ pub enum Event {
     /// We successfully discovered other nodes with using the contained rendezvous node.
     Discovered {
         rendezvous_node: PeerId,
-        registrations: HashMap<(String, PeerId), Registration>,
+        registrations: Vec<Registration>,
         cookie: Cookie,
     },
     /// We failed to discover other nodes on the contained rendezvous node.
@@ -237,7 +237,10 @@ impl NetworkBehaviour for Rendezvous {
                 self.registrations.remove(namespace.clone(), peer_id);
 
                 vec![NetworkBehaviourAction::GenerateEvent(
-                    Event::PeerUnregistered { peer, namespace },
+                    Event::PeerUnregistered {
+                        peer: peer_id,
+                        namespace,
+                    },
                 )]
             }
             OutEvent::DiscoverRequested {
@@ -285,10 +288,7 @@ impl NetworkBehaviour for Rendezvous {
             } => {
                 vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
                     rendezvous_node: peer_id,
-                    registrations: registrations
-                        .iter()
-                        .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
-                        .collect(),
+                    registrations,
                     cookie,
                 })]
             }
