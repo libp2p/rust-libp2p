@@ -133,6 +133,8 @@ pub enum Event {
     },
     /// A peer successfully unregistered with us.
     PeerUnregistered { peer: PeerId, namespace: String },
+    /// A registration from a peer expired.
+    RegistrationExpired(Registration),
 }
 
 impl NetworkBehaviour for Rendezvous {
@@ -280,7 +282,7 @@ impl NetworkBehaviour for Rendezvous {
 
     fn poll(
         &mut self,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
         poll_params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
@@ -288,6 +290,12 @@ impl NetworkBehaviour for Rendezvous {
             Self::OutEvent,
         >,
     > {
+        if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                Event::RegistrationExpired(registration),
+            ));
+        }
+
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -342,7 +350,7 @@ impl RegistrationId {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct RegistrationExpired(Registration);
+struct ExpiredRegistration(Registration);
 
 pub struct Registrations {
     registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
@@ -498,7 +506,7 @@ impl Registrations {
         Ok((registrations, new_cookie))
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<RegistrationExpired> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
         let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
             "This stream should never finish because it is initialised with a pending future",
         );
@@ -515,7 +523,7 @@ impl Registrations {
             .remove_by_right(&expired_registration);
         match self.registrations.remove(&expired_registration) {
             None => self.poll(cx),
-            Some(registration) => Poll::Ready(RegistrationExpired(registration)),
+            Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
         }
     }
 }
@@ -753,7 +761,7 @@ mod tests {
 
     /// Defines utility functions that make the tests more readable.
     impl Registrations {
-        async fn next_event(&mut self) -> RegistrationExpired {
+        async fn next_event(&mut self) -> ExpiredRegistration {
             futures::future::poll_fn(|cx| self.poll(cx)).await
         }
 
@@ -765,7 +773,7 @@ mod tests {
         }
 
         /// Polls [`Registrations`] for at most `seconds` and panics if doesn't return an event within that time.
-        async fn next_event_in_at_most(&mut self, seconds: u64) -> RegistrationExpired {
+        async fn next_event_in_at_most(&mut self, seconds: u64) -> ExpiredRegistration {
             tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
                 .await
                 .unwrap()
