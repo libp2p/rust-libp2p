@@ -160,14 +160,14 @@ impl NetworkBehaviour for Rendezvous {
         connection: ConnectionId,
         event: handler::OutEvent,
     ) {
-        match event {
+        let new_events = match event {
             // bad registration
             OutEvent::RegistrationRequested(registration)
                 if registration.record.peer_id() != peer_id =>
             {
                 let error = ErrorCode::NotAuthorized;
 
-                self.events.extend(vec![
+                vec![
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(connection),
@@ -178,12 +178,12 @@ impl NetworkBehaviour for Rendezvous {
                         namespace: registration.namespace,
                         error,
                     }),
-                ])
+                ]
             }
             OutEvent::RegistrationRequested(registration) => {
                 let namespace = registration.namespace.clone();
 
-                let events = match self.registrations.add(registration) {
+                match self.registrations.add(registration) {
                     Ok(registration) => {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
@@ -215,94 +215,95 @@ impl NetworkBehaviour for Rendezvous {
                             }),
                         ]
                     }
-                };
-
-                self.events.extend(events);
+                }
             }
             OutEvent::Registered { namespace, ttl } => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Registered {
-                        rendezvous_node: peer_id,
-                        ttl,
-                        namespace,
-                    }))
+                vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
+                    rendezvous_node: peer_id,
+                    ttl,
+                    namespace,
+                })]
             }
             OutEvent::RegisterFailed { namespace, error } => {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                vec![NetworkBehaviourAction::GenerateEvent(
                     Event::RegisterFailed(RegisterError::Remote {
                         rendezvous_node: peer_id,
                         namespace,
                         error,
                     }),
-                ))
+                )]
             }
             OutEvent::UnregisterRequested { namespace } => {
-                self.registrations.remove(namespace, peer_id);
+                self.registrations.remove(namespace.clone(), peer_id);
+
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerUnregistered { peer, namespace },
+                )]
             }
             OutEvent::DiscoverRequested {
                 namespace,
                 cookie,
                 limit,
-            } => {
-                let events = match self.registrations.get(namespace, cookie, limit) {
-                    Ok((registrations, cookie)) => {
-                        let discovered = registrations.cloned().collect::<Vec<_>>();
+            } => match self.registrations.get(namespace, cookie, limit) {
+                Ok((registrations, cookie)) => {
+                    let discovered = registrations.cloned().collect::<Vec<_>>();
 
-                        vec![
-                            NetworkBehaviourAction::NotifyHandler {
-                                peer_id,
-                                handler: NotifyHandler::One(connection),
-                                event: InEvent::DiscoverResponse {
-                                    discovered: discovered.clone(),
-                                    cookie,
-                                },
+                    vec![
+                        NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::One(connection),
+                            event: InEvent::DiscoverResponse {
+                                discovered: discovered.clone(),
+                                cookie,
                             },
-                            NetworkBehaviourAction::GenerateEvent(Event::DiscoverServed {
-                                enquirer: peer_id,
-                                registrations: discovered,
-                            }),
-                        ]
-                    }
-                    Err(_) => {
-                        let error = ErrorCode::InvalidCookie;
+                        },
+                        NetworkBehaviourAction::GenerateEvent(Event::DiscoverServed {
+                            enquirer: peer_id,
+                            registrations: discovered,
+                        }),
+                    ]
+                }
+                Err(_) => {
+                    let error = ErrorCode::InvalidCookie;
 
-                        vec![
-                            NetworkBehaviourAction::NotifyHandler {
-                                peer_id,
-                                handler: NotifyHandler::One(connection),
-                                event: InEvent::DeclineDiscoverRequest(error),
-                            },
-                            NetworkBehaviourAction::GenerateEvent(Event::DiscoverNotServed {
-                                enquirer: peer_id,
-                                error,
-                            }),
-                        ]
-                    }
-                };
-
-                self.events.extend(events);
-            }
+                    vec![
+                        NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::One(connection),
+                            event: InEvent::DeclineDiscoverRequest(error),
+                        },
+                        NetworkBehaviourAction::GenerateEvent(Event::DiscoverNotServed {
+                            enquirer: peer_id,
+                            error,
+                        }),
+                    ]
+                }
+            },
             OutEvent::Discovered {
                 registrations,
                 cookie,
-            } => self
-                .events
-                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Discovered {
+            } => {
+                vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
                     rendezvous_node: peer_id,
                     registrations: registrations
                         .iter()
                         .map(|r| ((r.namespace.clone(), r.record.peer_id()), r.clone()))
                         .collect(),
                     cookie,
-                })),
-            OutEvent::DiscoverFailed { namespace, error } => self.events.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::DiscoverFailed {
-                    rendezvous_node: peer_id,
-                    namespace,
-                    error,
-                }),
-            ),
-        }
+                })]
+            }
+            OutEvent::DiscoverFailed { namespace, error } => {
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::DiscoverFailed {
+                        rendezvous_node: peer_id,
+                        namespace,
+                        error,
+                    },
+                )]
+            }
+        };
+
+        self.events.extend(new_events);
     }
 
     fn poll(
