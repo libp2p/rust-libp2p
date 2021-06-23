@@ -1,15 +1,12 @@
+pub use self::behaviour::{Config, Event, RegisterError, Rendezvous};
+pub use self::codec::ErrorCode;
+pub use codec::Registration;
+
 mod behaviour;
 mod codec;
 mod handler;
 mod protocol;
 mod substream;
-
-pub use behaviour::Config;
-pub use behaviour::Event;
-pub use behaviour::RegisterError;
-pub use behaviour::Rendezvous;
-pub use codec::ErrorCode;
-pub use codec::Registration;
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
 ///

@@ -3,8 +3,9 @@ pub mod harness;
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::identity;
 use libp2p_core::PeerId;
-use libp2p_rendezvous::{Config, ErrorCode, DEFAULT_TTL};
-use libp2p_rendezvous::{Event, RegisterError, Registration, Rendezvous};
+use libp2p_rendezvous::{
+    Config, ErrorCode, Event, RegisterError, Registration, Rendezvous, DEFAULT_TTL,
+};
 use libp2p_swarm::{Swarm, SwarmEvent};
 
 #[tokio::test]
@@ -96,9 +97,9 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     match await_events_or_timeout(&mut test.robert, &mut test.alice).await {
         (
             SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
-            SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote { error: err_code , ..})),
+            SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote {error , ..})),
         ) => {
-            assert_eq!(err_code, ErrorCode::InvalidTtl);
+            assert_eq!(error, ErrorCode::InvalidTtl);
         }
         (rendezvous_swarm_event, registration_swarm_event) => panic!(
             "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
