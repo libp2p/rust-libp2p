@@ -1,29 +1,30 @@
 use async_std::task;
 use futures::StreamExt;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::upgrade::{SelectUpgrade, Version};
+use libp2p::core::PeerId;
+use libp2p::core::{identity, Transport};
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::mplex::MplexConfig;
+use libp2p::noise::{Keypair, X25519Spec};
+use libp2p::rendezvous;
+use libp2p::rendezvous::Rendezvous;
+use libp2p::swarm::Swarm;
+use libp2p::swarm::SwarmEvent;
+use libp2p::tcp::TcpConfig;
+use libp2p::yamux::YamuxConfig;
 use libp2p::NetworkBehaviour;
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::upgrade::{SelectUpgrade, Version};
-use libp2p_core::PeerId;
-use libp2p_core::{identity, Transport};
-use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent};
-use libp2p_mplex::MplexConfig;
-use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::{Event as RendezvousEvent, Rendezvous};
-use libp2p_swarm::Swarm;
-use libp2p_swarm::SwarmEvent;
-use libp2p_tcp::TcpConfig;
-use libp2p_yamux::YamuxConfig;
 use std::str::FromStr;
 use std::time::Duration;
 
 #[derive(Debug)]
 enum MyEvent {
-    Rendezvous(RendezvousEvent),
+    Rendezvous(rendezvous::Event),
     Identify(IdentifyEvent),
 }
 
-impl From<RendezvousEvent> for MyEvent {
-    fn from(event: RendezvousEvent) -> Self {
+impl From<rendezvous::Event> for MyEvent {
+    fn from(event: rendezvous::Event) -> Self {
         MyEvent::Rendezvous(event)
     }
 }
@@ -49,7 +50,7 @@ fn main() {
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&identity)
         .expect("failed to create dh_keys");
-    let noise_config = libp2p_noise::NoiseConfig::xx(dh_keys).into_authenticated();
+    let noise_config = libp2p::noise::NoiseConfig::xx(dh_keys).into_authenticated();
 
     let tcp_config = TcpConfig::new();
     let transport = tcp_config
