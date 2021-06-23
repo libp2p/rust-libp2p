@@ -23,7 +23,7 @@ async fn main() {
                 "rendezvous-example/1.0.0".to_string(),
                 identity.public(),
             )),
-            rendezvous: Rendezvous::new(identity.clone(), 10000),
+            rendezvous: Rendezvous::new(identity.clone(), rendezvous::Config::default()),
             ping: Ping::default(),
         },
         PeerId::from(identity.public()),

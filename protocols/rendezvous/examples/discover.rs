@@ -24,7 +24,7 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            rendezvous: Rendezvous::new(identity.clone(), 10000),
+            rendezvous: Rendezvous::new(identity.clone(), rendezvous::Config::default()),
             ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),

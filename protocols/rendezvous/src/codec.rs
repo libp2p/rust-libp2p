@@ -1,3 +1,4 @@
+use crate::DEFAULT_TTL;
 use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use std::convert::{TryFrom, TryInto};
@@ -93,11 +94,6 @@ pub struct NewRegistration {
     pub record: PeerRecord,
     pub ttl: Option<i64>,
 }
-
-/// If unspecified, rendezvous nodes should assume a TTL of 2h.
-///
-/// See https://github.com/libp2p/specs/blob/d21418638d5f09f2a4e5a1ceca17058df134a300/rendezvous/README.md#L116-L117.
-pub const DEFAULT_TTL: i64 = 60 * 60 * 2;
 
 impl NewRegistration {
     pub fn new(namespace: String, record: PeerRecord, ttl: Option<i64>) -> Self {

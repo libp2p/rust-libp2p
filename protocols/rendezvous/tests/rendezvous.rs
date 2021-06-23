@@ -3,7 +3,7 @@ pub mod harness;
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::identity;
 use libp2p_core::PeerId;
-use libp2p_rendezvous::{ErrorCode, DEFAULT_TTL};
+use libp2p_rendezvous::{Config, ErrorCode, DEFAULT_TTL};
 use libp2p_rendezvous::{Event, RegisterError, Registration, Rendezvous};
 use libp2p_swarm::{Swarm, SwarmEvent};
 
@@ -90,7 +90,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     let _ = test.alice.behaviour_mut().register(
         namespace.clone(),
         *test.robert.local_peer_id(),
-        Some(100_000),
+        Some(100_000_000),
     );
 
     match await_events_or_timeout(&mut test.robert, &mut test.alice).await {
@@ -145,18 +145,15 @@ struct RendezvousTest {
     pub robert: Swarm<Rendezvous>,
 }
 
-const DEFAULT_TTL_UPPER_BOUND: i64 = 56_000;
-
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut alice = new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        let mut alice = new_swarm(|_, identity| Rendezvous::new(identity, Config::default()));
         alice.listen_on_random_memory_address().await;
 
-        let mut bob = new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        let mut bob = new_swarm(|_, identity| Rendezvous::new(identity, Config::default()));
         bob.listen_on_random_memory_address().await;
 
-        let mut robert =
-            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        let mut robert = new_swarm(|_, identity| Rendezvous::new(identity, Config::default()));
         robert.listen_on_random_memory_address().await;
 
         let mut eve = {
@@ -164,8 +161,7 @@ impl RendezvousTest {
             // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
             // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
             let someone_else = identity::Keypair::generate_ed25519();
-            let mut eve =
-                new_swarm(move |_, _| Rendezvous::new(someone_else, DEFAULT_TTL_UPPER_BOUND));
+            let mut eve = new_swarm(move |_, _| Rendezvous::new(someone_else, Config::default()));
             eve.listen_on_random_memory_address().await;
 
             eve

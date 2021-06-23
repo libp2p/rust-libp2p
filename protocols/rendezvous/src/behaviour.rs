@@ -1,6 +1,6 @@
 use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
-use crate::handler;
 use crate::handler::{InEvent, OutEvent, RendezvousHandler};
+use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::ready;
@@ -28,11 +28,25 @@ pub struct Rendezvous {
     pending_register_requests: Vec<(String, PeerId, Option<i64>)>,
 }
 
+pub struct Config {
+    min_ttl: i64,
+    max_ttl: i64,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            min_ttl: MIN_TTL,
+            max_ttl: MAX_TTL,
+        }
+    }
+}
+
 impl Rendezvous {
-    pub fn new(key_pair: Keypair, ttl_upper_board: i64) -> Self {
+    pub fn new(key_pair: Keypair, config: Config) -> Self {
         Self {
             events: Default::default(),
-            registrations: Registrations::new(ttl_upper_board),
+            registrations: Registrations::with_config(config),
             key_pair,
             pending_register_requests: vec![],
         }
@@ -199,7 +213,7 @@ impl NetworkBehaviour for Rendezvous {
                             }),
                         ]
                     }
-                    Err(TtlTooLong { .. }) => {
+                    Err(TtlOutOfRange::TooLong { .. } | TtlOutOfRange::TooShort { .. }) => {
                         let error = ErrorCode::InvalidTtl;
 
                         vec![
@@ -378,33 +392,51 @@ pub struct Registrations {
     registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
-    ttl_upper_bound: i64,
+    min_ttl: i64,
+    max_ttl: i64,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("Requested TTL {requested}s is longer than what we allow ({upper_bound}s)")]
-pub struct TtlTooLong {
-    upper_bound: i64,
-    requested: i64,
+pub enum TtlOutOfRange {
+    #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
+    TooLong { bound: i64, requested: i64 },
+    #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
+    TooShort { bound: i64, requested: i64 },
+}
+
+impl Default for Registrations {
+    fn default() -> Self {
+        Registrations::with_config(Config::default())
+    }
 }
 
 impl Registrations {
-    pub fn new(ttl_upper_bound: i64) -> Self {
+    pub fn with_config(config: Config) -> Self {
         Self {
             registrations_for_peer: Default::default(),
             registrations: Default::default(),
-            ttl_upper_bound,
+            min_ttl: config.min_ttl,
+            max_ttl: config.max_ttl,
             cookies: Default::default(),
             next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
         }
     }
 
-    pub fn add(&mut self, new_registration: NewRegistration) -> Result<Registration, TtlTooLong> {
+    pub fn add(
+        &mut self,
+        new_registration: NewRegistration,
+    ) -> Result<Registration, TtlOutOfRange> {
         let ttl = new_registration.effective_ttl();
-        if ttl > self.ttl_upper_bound {
-            return Err(TtlTooLong {
-                upper_bound: self.ttl_upper_bound,
+        if ttl > self.max_ttl {
+            return Err(TtlOutOfRange::TooLong {
+                bound: self.max_ttl,
+                requested: ttl,
+            });
+        }
+        if ttl < self.min_ttl {
+            return Err(TtlOutOfRange::TooShort {
+                bound: self.min_ttl,
                 requested: ttl,
             });
         }
@@ -556,7 +588,7 @@ mod tests {
 
     #[tokio::test]
     async fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
@@ -569,7 +601,7 @@ mod tests {
 
     #[tokio::test]
     async fn given_registrations_when_discover_all_then_all_are_returned() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
@@ -581,7 +613,7 @@ mod tests {
     #[tokio::test]
     async fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned(
     ) {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
 
@@ -598,7 +630,7 @@ mod tests {
     #[tokio::test]
     async fn given_reregistration_old_registration_is_discarded() {
         let alice = identity::Keypair::generate_ed25519();
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations
             .add(new_registration("foo", alice.clone(), None))
             .unwrap();
@@ -618,7 +650,7 @@ mod tests {
 
     #[tokio::test]
     async fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
@@ -634,7 +666,7 @@ mod tests {
 
     #[tokio::test]
     async fn cookie_from_different_discover_request_is_not_valid() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
 
@@ -648,7 +680,10 @@ mod tests {
 
     #[tokio::test]
     async fn given_two_registration_ttls_one_expires_one_lives() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::with_config(Config {
+            min_ttl: 0,
+            max_ttl: 4,
+        });
 
         let start_time = SystemTime::now();
 
@@ -681,7 +716,10 @@ mod tests {
 
     #[tokio::test]
     async fn given_peer_unregisters_before_expiry_do_not_emit_registration_expired() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::with_config(Config {
+            min_ttl: 1,
+            max_ttl: 10,
+        });
         let dummy_registration = new_dummy_registration_with_ttl("foo", 2);
         let namespace = dummy_registration.namespace.clone();
         let peer_id = dummy_registration.record.peer_id();
@@ -699,7 +737,10 @@ mod tests {
     /// FuturesUnordered does not stop polling for ready futures.
     #[tokio::test]
     async fn given_all_registrations_expired_then_succesfully_handle_new_registration_and_expiry() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::with_config(Config {
+            min_ttl: 0,
+            max_ttl: 10,
+        });
         let dummy_registration = new_dummy_registration_with_ttl("foo", 1);
 
         registrations.add(dummy_registration.clone()).unwrap();
@@ -713,7 +754,10 @@ mod tests {
 
     #[tokio::test]
     async fn cookies_are_cleaned_up_if_registrations_expire() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::with_config(Config {
+            min_ttl: 1,
+            max_ttl: 10,
+        });
 
         registrations
             .add(new_dummy_registration_with_ttl("foo", 2))
@@ -729,7 +773,7 @@ mod tests {
 
     #[tokio::test]
     async fn given_limit_discover_only_returns_n_results() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
@@ -740,7 +784,7 @@ mod tests {
 
     #[tokio::test]
     async fn given_limit_cookie_can_be_used_for_pagination() {
-        let mut registrations = Registrations::new(7200);
+        let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
