@@ -86,20 +86,27 @@ async fn main() {
     let server_peer_id =
         PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
 
-    loop {
-        let event = swarm.next().await;
+    while let Some(event) = swarm.next().await {
         match event {
-            Some(SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. }))) => {
+            // once `/identify` did its job, we know our external address and can register
+            SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. })) => {
                 swarm
                     .behaviour_mut()
                     .rendezvous
                     .register("rendezvous".to_string(), server_peer_id, None)
                     .unwrap();
             }
-            Some(SwarmEvent::Behaviour(MyEvent::Rendezvous(event))) => {
-                println!("registered event: {:?}", event);
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Registered {
+                namespace,
+                ttl,
+                rendezvous_node,
+            })) => {
+                println!(
+                    "Registered for namespace '{}' at rendezvous point {} for the next {} seconds",
+                    namespace, rendezvous_node, ttl
+                );
             }
             _ => {}
-        };
+        }
     }
 }
