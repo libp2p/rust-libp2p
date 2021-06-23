@@ -213,7 +213,7 @@ impl NetworkBehaviour for Rendezvous {
                             }),
                         ]
                     }
-                    Err(TtlOutOfRange::TooLong { .. } | TtlOutOfRange::TooShort { .. }) => {
+                    Err(TtlOutOfRange::TooLong { .. }) | Err(TtlOutOfRange::TooShort { .. }) => {
                         let error = ErrorCode::InvalidTtl;
 
                         vec![
