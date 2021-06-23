@@ -13,28 +13,23 @@ async fn given_successful_registration_then_successful_discovery() {
 
     let namespace = "some-namespace".to_string();
 
-    let _ = test.registration_swarm.behaviour_mut().register(
-        namespace.clone(),
-        *test.rendezvous_swarm.local_peer_id(),
-        None,
-    );
+    let _ =
+        test.alice
+            .behaviour_mut()
+            .register(namespace.clone(), *test.robert.local_peer_id(), None);
 
     test.assert_successful_registration(namespace.clone(), DEFAULT_TTL)
         .await;
 
-    test.discovery_swarm.behaviour_mut().discover(
+    test.bob.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
         None,
-        *test.rendezvous_swarm.local_peer_id(),
+        *test.robert.local_peer_id(),
     );
 
-    test.assert_successful_discovery(
-        namespace.clone(),
-        DEFAULT_TTL,
-        *test.registration_swarm.local_peer_id(),
-    )
-    .await;
+    test.assert_successful_discovery(namespace.clone(), DEFAULT_TTL, *test.alice.local_peer_id())
+        .await;
 }
 
 #[tokio::test]
@@ -46,51 +41,42 @@ async fn given_successful_registration_then_refresh_ttl() {
 
     let refesh_ttl = 10_000;
 
-    let _ = test.registration_swarm.behaviour_mut().register(
-        namespace.clone(),
-        *test.rendezvous_swarm.local_peer_id(),
-        None,
-    );
+    let _ =
+        test.alice
+            .behaviour_mut()
+            .register(namespace.clone(), *test.robert.local_peer_id(), None);
 
     test.assert_successful_registration(namespace.clone(), DEFAULT_TTL)
         .await;
 
-    test.discovery_swarm.behaviour_mut().discover(
+    test.bob.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
         None,
-        *test.rendezvous_swarm.local_peer_id(),
+        *test.robert.local_peer_id(),
     );
 
-    test.assert_successful_discovery(
-        namespace.clone(),
-        DEFAULT_TTL,
-        *test.registration_swarm.local_peer_id(),
-    )
-    .await;
+    test.assert_successful_discovery(namespace.clone(), DEFAULT_TTL, *test.alice.local_peer_id())
+        .await;
 
-    let _ = test.registration_swarm.behaviour_mut().register(
+    let _ = test.alice.behaviour_mut().register(
         namespace.clone(),
-        *test.rendezvous_swarm.local_peer_id(),
+        *test.robert.local_peer_id(),
         Some(refesh_ttl),
     );
 
     test.assert_successful_registration(namespace.clone(), refesh_ttl)
         .await;
 
-    test.discovery_swarm.behaviour_mut().discover(
+    test.bob.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
         None,
-        *test.rendezvous_swarm.local_peer_id(),
+        *test.robert.local_peer_id(),
     );
 
-    test.assert_successful_discovery(
-        namespace.clone(),
-        refesh_ttl,
-        *test.registration_swarm.local_peer_id(),
-    )
-    .await;
+    test.assert_successful_discovery(namespace.clone(), refesh_ttl, *test.alice.local_peer_id())
+        .await;
 }
 
 #[tokio::test]
@@ -100,13 +86,13 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     let namespace = "some-namespace".to_string();
 
-    let _ = test.registration_swarm.behaviour_mut().register(
+    let _ = test.alice.behaviour_mut().register(
         namespace.clone(),
-        *test.rendezvous_swarm.local_peer_id(),
+        *test.robert.local_peer_id(),
         Some(100_000),
     );
 
-    match await_events_or_timeout(&mut test.rendezvous_swarm, &mut test.registration_swarm).await {
+    match await_events_or_timeout(&mut test.robert, &mut test.alice).await {
         (
             SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
             SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote { error: err_code , ..})),
@@ -120,40 +106,33 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     }
 }
 
+/// Holds a network of nodes that is used to test certain rendezvous functionality.
+///
+/// In all cases, Alice would like to connect to Bob with Robert acting as a rendezvous point.
 struct RendezvousTest {
-    pub registration_swarm: Swarm<Rendezvous>,
-    pub discovery_swarm: Swarm<Rendezvous>,
-    pub rendezvous_swarm: Swarm<Rendezvous>,
+    pub alice: Swarm<Rendezvous>,
+    pub bob: Swarm<Rendezvous>,
+    pub robert: Swarm<Rendezvous>,
 }
 
 const DEFAULT_TTL_UPPER_BOUND: i64 = 56_000;
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut registration_swarm =
+        let mut alice = new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        alice.listen_on_random_memory_address().await;
+
+        let mut bob = new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
+        bob.listen_on_random_memory_address().await;
+
+        let mut robert =
             new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
-        registration_swarm.listen_on_random_memory_address().await;
+        robert.listen_on_random_memory_address().await;
 
-        let mut discovery_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
-        discovery_swarm.listen_on_random_memory_address().await;
+        alice.block_on_connection(&mut robert).await;
+        bob.block_on_connection(&mut robert).await;
 
-        let mut rendezvous_swarm =
-            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
-        rendezvous_swarm.listen_on_random_memory_address().await;
-
-        registration_swarm
-            .block_on_connection(&mut rendezvous_swarm)
-            .await;
-        discovery_swarm
-            .block_on_connection(&mut rendezvous_swarm)
-            .await;
-
-        Self {
-            registration_swarm,
-            discovery_swarm,
-            rendezvous_swarm,
-        }
+        Self { alice, bob, robert }
     }
 
     pub async fn assert_successful_registration(
@@ -161,13 +140,13 @@ impl RendezvousTest {
         expected_namespace: String,
         expected_ttl: i64,
     ) {
-        match await_events_or_timeout(&mut self.rendezvous_swarm, &mut self.registration_swarm).await {
+        match await_events_or_timeout(&mut self.robert, &mut self.alice).await {
             (
                 SwarmEvent::Behaviour(Event::PeerRegistered { peer, registration }),
                 SwarmEvent::Behaviour(Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
             ) => {
-                assert_eq!(&peer, self.registration_swarm.local_peer_id());
-                assert_eq!(&rendezvous_node, self.rendezvous_swarm.local_peer_id());
+                assert_eq!(&peer, self.alice.local_peer_id());
+                assert_eq!(&rendezvous_node, self.robert.local_peer_id());
                 assert_eq!(registration.namespace, expected_namespace);
                 assert_eq!(register_node_namespace, expected_namespace);
                 assert_eq!(ttl, expected_ttl);
@@ -185,7 +164,7 @@ impl RendezvousTest {
         expected_ttl: i64,
         expected_peer_id: PeerId,
     ) {
-        match await_events_or_timeout(&mut self.rendezvous_swarm, &mut self.discovery_swarm).await {
+        match await_events_or_timeout(&mut self.robert, &mut self.bob).await {
             (
                 SwarmEvent::Behaviour(Event::DiscoverServed { .. }),
                 SwarmEvent::Behaviour(Event::Discovered { registrations, .. }),
