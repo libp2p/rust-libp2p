@@ -89,6 +89,7 @@ pub enum InEvent {
         discovered: Vec<Registration>,
         cookie: Cookie,
     },
+    DeclineDiscoverRequest(ErrorCode),
 }
 
 /// The state of an inbound substream (i.e. the remote node opened it).
@@ -459,6 +460,17 @@ impl ProtocolsHandler for RendezvousHandler {
                 SubstreamState::Active(Inbound::PendingSend(
                     substream,
                     Message::DiscoverResponse(Ok((discovered, cookie))),
+                )),
+                outbound,
+            ),
+            (
+                InEvent::DeclineDiscoverRequest(error),
+                SubstreamState::Active(Inbound::PendingBehaviour(substream)),
+                outbound,
+            ) => (
+                SubstreamState::Active(Inbound::PendingSend(
+                    substream,
+                    Message::DiscoverResponse(Err(error)),
                 )),
                 outbound,
             ),

@@ -119,6 +119,8 @@ pub enum Event {
         enquirer: PeerId,
         registrations: Vec<Registration>,
     },
+    /// We failed to serve a discover request for a peer.
+    DiscoverNotServed { enquirer: PeerId, error: ErrorCode },
     /// A peer successfully registered with us.
     PeerRegistered {
         peer: PeerId,
@@ -242,28 +244,43 @@ impl NetworkBehaviour for Rendezvous {
                 cookie,
                 limit,
             } => {
-                let (registrations, cookie) = self
-                    .registrations
-                    .get(namespace, cookie, limit)
-                    .expect("TODO: error handling: send back bad cookie");
+                let events = match self.registrations.get(namespace, cookie, limit) {
+                    Ok((registrations, cookie)) => {
+                        let discovered = registrations.cloned().collect::<Vec<_>>();
 
-                let discovered = registrations.cloned().collect::<Vec<_>>();
+                        vec![
+                            NetworkBehaviourAction::NotifyHandler {
+                                peer_id,
+                                handler: NotifyHandler::One(connection),
+                                event: InEvent::DiscoverResponse {
+                                    discovered: discovered.clone(),
+                                    cookie,
+                                },
+                            },
+                            NetworkBehaviourAction::GenerateEvent(Event::DiscoverServed {
+                                enquirer: peer_id,
+                                registrations: discovered,
+                            }),
+                        ]
+                    }
+                    Err(_) => {
+                        let error = ErrorCode::InvalidCookie;
 
-                self.events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(connection),
-                        event: InEvent::DiscoverResponse {
-                            discovered: discovered.clone(),
-                            cookie,
-                        },
-                    });
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::DiscoverServed {
-                        enquirer: peer_id,
-                        registrations: discovered,
-                    },
-                ));
+                        vec![
+                            NetworkBehaviourAction::NotifyHandler {
+                                peer_id,
+                                handler: NotifyHandler::One(connection),
+                                event: InEvent::DeclineDiscoverRequest(error),
+                            },
+                            NetworkBehaviourAction::GenerateEvent(Event::DiscoverNotServed {
+                                enquirer: peer_id,
+                                error,
+                            }),
+                        ]
+                    }
+                };
+
+                self.events.extend(events);
             }
             OutEvent::Discovered {
                 registrations,
