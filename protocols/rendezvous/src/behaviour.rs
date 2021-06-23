@@ -13,7 +13,6 @@ use libp2p_core::{Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
-use log::debug;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
 use std::option::Option::None;
@@ -149,15 +148,9 @@ impl NetworkBehaviour for Rendezvous {
         Vec::new()
     }
 
-    fn inject_connected(&mut self, peer_id: &PeerId) {
-        debug!("New peer connected: {}", peer_id);
-        // Dont need to do anything here?
-    }
+    fn inject_connected(&mut self, _: &PeerId) {}
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        debug!("Peer disconnected: {}", peer_id);
-        // Don't need to do anything?
-    }
+    fn inject_disconnected(&mut self, _: &PeerId) {}
 
     fn inject_event(
         &mut self,
