@@ -333,13 +333,11 @@ impl NetworkBehaviour for Rendezvous {
                 Ok(peer_record) => {
                     return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                         peer_id: rendezvous_node,
-                        event: InEvent::RegisterRequest {
-                            request: NewRegistration {
-                                namespace,
-                                record: peer_record,
-                                ttl,
-                            },
-                        },
+                        event: InEvent::RegisterRequest(NewRegistration {
+                            namespace,
+                            record: peer_record,
+                            ttl,
+                        }),
                         handler: NotifyHandler::Any,
                     })
                 }

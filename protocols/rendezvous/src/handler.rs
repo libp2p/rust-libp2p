@@ -85,9 +85,7 @@ pub enum OutEvent {
 
 #[derive(Debug)]
 pub enum InEvent {
-    RegisterRequest {
-        request: NewRegistration,
-    },
+    RegisterRequest(NewRegistration),
     DeclineRegisterRequest(DeclineReason),
     UnregisterRequest {
         namespace: String,
@@ -569,7 +567,7 @@ impl ProtocolsHandler for RendezvousHandler {
             mem::replace(&mut self.inbound, SubstreamState::Poisoned),
             mem::replace(&mut self.outbound, SubstreamState::Poisoned),
         ) {
-            (InEvent::RegisterRequest { request: reggo }, inbound, SubstreamState::None) => (
+            (InEvent::RegisterRequest(reggo), inbound, SubstreamState::None) => (
                 inbound,
                 SubstreamState::Active(Outbound::PendingOpen(Message::Register(reggo))),
             ),

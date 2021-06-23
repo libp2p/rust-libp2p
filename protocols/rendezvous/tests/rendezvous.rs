@@ -197,10 +197,11 @@ impl RendezvousTest {
         expected_ttl: i64,
         expected_peer_id: PeerId,
     ) {
-        match await_events_or_timeout(&mut self.rendezvous_swarm, &mut self.discovery_swarm)
-            .await
-        {
-            (SwarmEvent::Behaviour(Event::DiscoverServed { .. }), SwarmEvent::Behaviour(Event::Discovered { registrations, .. })) => {
+        match await_events_or_timeout(&mut self.rendezvous_swarm, &mut self.discovery_swarm).await {
+            (
+                SwarmEvent::Behaviour(Event::DiscoverServed { .. }),
+                SwarmEvent::Behaviour(Event::Discovered { registrations, .. }),
+            ) => {
                 if let Some(reg) =
                     registrations.get(&(expected_namespace.clone(), expected_peer_id))
                 {
