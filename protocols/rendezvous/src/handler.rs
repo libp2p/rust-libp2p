@@ -18,7 +18,6 @@ pub struct RendezvousHandler {
     outbound: SubstreamState<Outbound>,
     outbound_history: MessageHistory,
     inbound: SubstreamState<Inbound>,
-    inbound_history: MessageHistory,
 }
 
 impl Default for RendezvousHandler {
@@ -27,7 +26,6 @@ impl Default for RendezvousHandler {
             outbound: SubstreamState::None,
             outbound_history: Default::default(),
             inbound: SubstreamState::None,
-            inbound_history: Default::default(),
         }
     }
 }
@@ -35,13 +33,11 @@ impl Default for RendezvousHandler {
 #[derive(Default)]
 struct MessageHistory {
     sent: Vec<Message>,
-    received: Vec<Message>,
 }
 
 impl MessageHistory {
     fn clear(&mut self) {
         self.sent.clear();
-        self.received.clear();
     }
 }
 
@@ -161,43 +157,33 @@ pub enum Error {
     UnexpectedEndOfStream,
 }
 
-struct InboundPollParams<'handler> {
-    history: &'handler mut MessageHistory,
-}
-
 impl<'handler> Advance<'handler> for Inbound {
     type Event = OutEvent;
-    type Params = InboundPollParams<'handler>;
+    type Params = ();
     type Error = Error;
     type Protocol = SubstreamProtocol<protocol::Rendezvous, Message>;
 
     fn advance(
         self,
         cx: &mut Context<'_>,
-        InboundPollParams { history }: &mut Self::Params,
+        _: &mut Self::Params,
     ) -> Result<Next<Self, Self::Event, Self::Protocol>, Self::Error> {
         Ok(match self {
             Inbound::PendingRead(mut substream) => {
                 match substream.poll_next_unpin(cx).map_err(Error::ReadMessage)? {
                     Poll::Ready(Some(msg)) => {
-                        let event = match (
-                            history.received.as_slice(),
-                            history.sent.as_slice(),
-                            msg.clone(),
-                        ) {
-                            (.., Message::Register(registration)) => {
+                        let event = match msg.clone() {
+                            Message::Register(registration) => {
                                 OutEvent::RegistrationRequested(registration)
                             }
-                            (.., Message::Discover { cookie, namespace }) => {
+                            Message::Discover { cookie, namespace } => {
                                 OutEvent::DiscoverRequested { cookie, namespace }
                             }
-                            (.., Message::Unregister { namespace }) => {
+                            Message::Unregister { namespace } => {
                                 OutEvent::UnregisterRequested { namespace }
                             }
-                            (.., other) => return Err(Error::BadMessage(other)),
+                            other => return Err(Error::BadMessage(other)),
                         };
-
-                        history.received.push(msg);
 
                         Next::EmitEvent {
                             event,
@@ -221,8 +207,6 @@ impl<'handler> Advance<'handler> for Inbound {
                     substream
                         .start_send_unpin(message.clone())
                         .map_err(Error::WriteMessage)?;
-
-                    history.sent.push(message);
 
                     Next::Continue {
                         next_state: Inbound::PendingClose(substream),
@@ -380,7 +364,6 @@ impl ProtocolsHandler for RendezvousHandler {
         match self.inbound {
             SubstreamState::None => {
                 self.inbound = SubstreamState::Active(Inbound::PendingRead(substream));
-                self.inbound_history.clear();
             }
             _ => {
                 log::warn!("Ignoring new inbound substream because existing one is still active")
@@ -500,12 +483,7 @@ impl ProtocolsHandler for RendezvousHandler {
             Self::Error,
         >,
     > {
-        if let Poll::Ready(event) = self.inbound.poll(
-            cx,
-            &mut InboundPollParams {
-                history: &mut self.inbound_history,
-            },
-        ) {
+        if let Poll::Ready(event) = self.inbound.poll(cx, &mut ()) {
             return Poll::Ready(event);
         }
 
