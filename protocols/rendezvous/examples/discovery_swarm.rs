@@ -6,7 +6,7 @@ use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
+use libp2p_rendezvous::behaviour::{Event, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmEvent;
 use libp2p_tcp::TcpConfig;
@@ -36,8 +36,7 @@ fn main() {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let difficulty = Difficulty::from_u32(2).unwrap();
-    let behaviour = Rendezvous::new(identity, 10000, difficulty);
+    let behaviour = Rendezvous::new(identity, 10000);
 
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 

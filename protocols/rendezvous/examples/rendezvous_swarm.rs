@@ -7,7 +7,7 @@ use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::behaviour::{Difficulty, Event as RendezvousEvent, Rendezvous};
+use libp2p_rendezvous::behaviour::{Event as RendezvousEvent, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
@@ -68,7 +68,7 @@ async fn main() {
         "rendezvous-example/1.0.0".to_string(),
         identity.public(),
     ));
-    let rendezvous = Rendezvous::new(identity, 10000, Difficulty::from_u32(2).unwrap());
+    let rendezvous = Rendezvous::new(identity, 10000);
 
     let mut swarm = Swarm::new(
         transport,

@@ -1,8 +1,6 @@
-pub use crate::pow::Difficulty;
-
 use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
 use crate::handler;
-use crate::handler::{DeclineReason, InEvent, OutEvent, RendezvousHandler};
+use crate::handler::{InEvent, OutEvent, RendezvousHandler};
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::ready;
@@ -28,22 +26,15 @@ pub struct Rendezvous {
     registrations: Registrations,
     key_pair: Keypair,
     pending_register_requests: Vec<(String, PeerId, Option<i64>)>,
-    /// The maximum PoW difficulty we are willing to accept from a rendezvous point.
-    max_accepted_difficulty: Difficulty,
 }
 
 impl Rendezvous {
-    pub fn new(
-        key_pair: Keypair,
-        ttl_upper_board: i64,
-        max_accepted_difficulty: Difficulty,
-    ) -> Self {
+    pub fn new(key_pair: Keypair, ttl_upper_board: i64) -> Self {
         Self {
             events: Default::default(),
             registrations: Registrations::new(ttl_upper_board),
             key_pair,
             pending_register_requests: vec![],
-            max_accepted_difficulty,
         }
     }
 
@@ -146,7 +137,7 @@ impl NetworkBehaviour for Rendezvous {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        RendezvousHandler::new(self.max_accepted_difficulty)
+        RendezvousHandler::default()
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -170,24 +161,7 @@ impl NetworkBehaviour for Rendezvous {
         event: handler::OutEvent,
     ) {
         match event {
-            OutEvent::RegistrationRequested {
-                registration,
-                pow_difficulty: provided_difficulty,
-            } => {
-                let expected_difficulty = self.registrations.expected_pow(&registration);
-
-                if expected_difficulty > provided_difficulty {
-                    self.events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::One(connection),
-                            event: InEvent::DeclineRegisterRequest(DeclineReason::PowRequired {
-                                target: expected_difficulty,
-                            }),
-                        });
-                    return;
-                }
-
+            OutEvent::RegistrationRequested(registration) => {
                 let namespace = registration.namespace.clone();
                 let record = registration.record.clone();
 
@@ -217,9 +191,7 @@ impl NetworkBehaviour for Rendezvous {
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::One(connection),
-                                event: InEvent::DeclineRegisterRequest(
-                                    DeclineReason::BadRegistration(error),
-                                ),
+                                event: InEvent::DeclineRegisterRequest(error),
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
                                 peer: peer_id,
@@ -509,18 +481,6 @@ impl Registrations {
         Ok((registrations, new_cookie))
     }
 
-    pub fn expected_pow(&self, registration: &NewRegistration) -> Difficulty {
-        let peer = registration.record.peer_id();
-
-        let num_registrations = self
-            .registrations_for_peer
-            .left_values()
-            .filter(|(candidate, _)| candidate == &peer)
-            .count();
-
-        difficulty_from_num_registrations(num_registrations)
-    }
-
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<RegistrationExpired> {
         let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
             "This stream should never finish because it is initialised with a pending future",
@@ -541,17 +501,6 @@ impl Registrations {
             Some(registration) => Poll::Ready(RegistrationExpired(registration)),
         }
     }
-}
-
-fn difficulty_from_num_registrations(existing_registrations: usize) -> Difficulty {
-    if existing_registrations == 0 {
-        return Difficulty::ZERO;
-    }
-
-    let new_registrations = existing_registrations + 1;
-
-    Difficulty::from_u32(((new_registrations) as f32 / 2f32).round() as u32)
-        .unwrap_or(Difficulty::MAX)
 }
 
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
@@ -724,30 +673,6 @@ mod tests {
         let _ = registrations.next_event_in_at_most(3).await;
 
         assert_eq!(registrations.cookies.len(), 0);
-    }
-
-    #[test]
-    fn first_registration_is_free() {
-        let required = difficulty_from_num_registrations(0);
-        let expected = Difficulty::ZERO;
-
-        assert_eq!(required, expected)
-    }
-
-    #[test]
-    fn second_registration_is_not_free() {
-        let required = difficulty_from_num_registrations(1);
-        let expected = Difficulty::from_u32(1).unwrap();
-
-        assert_eq!(required, expected)
-    }
-
-    #[test]
-    fn fourth_registration_requires_two() {
-        let required = difficulty_from_num_registrations(3);
-        let expected = Difficulty::from_u32(2).unwrap();
-
-        assert_eq!(required, expected)
     }
 
     fn new_dummy_registration(namespace: &str) -> NewRegistration {

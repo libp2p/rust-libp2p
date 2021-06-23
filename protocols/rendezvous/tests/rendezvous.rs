@@ -2,7 +2,7 @@ pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::PeerId;
-use libp2p_rendezvous::behaviour::{Difficulty, Event, Rendezvous};
+use libp2p_rendezvous::behaviour::{Event, RegisterError, Rendezvous};
 use libp2p_rendezvous::codec::{ErrorCode, DEFAULT_TTL};
 use libp2p_swarm::{Swarm, SwarmEvent};
 
@@ -106,7 +106,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     match await_events_or_timeout(&mut test.rendezvous_swarm, &mut test.registration_swarm).await {
         (
             SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
-            SwarmEvent::Behaviour(Event::RegisterFailed { error: err_code, .. }),
+            SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote { error: err_code , ..})),
         ) => {
             assert_eq!(err_code, ErrorCode::InvalidTtl);
         }
@@ -127,31 +127,16 @@ const DEFAULT_TTL_UPPER_BOUND: i64 = 56_000;
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut registration_swarm = new_swarm(|_, identity| {
-            Rendezvous::new(
-                identity,
-                DEFAULT_TTL_UPPER_BOUND,
-                Difficulty::from_u32(2).expect("2 < 32"),
-            )
-        });
+        let mut registration_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         registration_swarm.listen_on_random_memory_address().await;
 
-        let mut discovery_swarm = new_swarm(|_, identity| {
-            Rendezvous::new(
-                identity,
-                DEFAULT_TTL_UPPER_BOUND,
-                Difficulty::from_u32(2).expect("2 < 32"),
-            )
-        });
+        let mut discovery_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         discovery_swarm.listen_on_random_memory_address().await;
 
-        let mut rendezvous_swarm = new_swarm(|_, identity| {
-            Rendezvous::new(
-                identity,
-                DEFAULT_TTL_UPPER_BOUND,
-                Difficulty::from_u32(2).expect("2 < 32"),
-            )
-        });
+        let mut rendezvous_swarm =
+            new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         rendezvous_swarm.listen_on_random_memory_address().await;
 
         registration_swarm
