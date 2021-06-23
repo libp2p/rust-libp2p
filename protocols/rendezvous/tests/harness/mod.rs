@@ -26,12 +26,12 @@ impl Executor for GlobalSpawnTokioExecutor {
     }
 }
 
-pub fn new_swarm<B: NetworkBehaviour, F: Fn(PeerId, identity::Keypair) -> B>(
-    behaviour_fn: F,
-) -> Swarm<B>
+pub fn new_swarm<B, F>(behaviour_fn: F) -> Swarm<B>
 where
     B: NetworkBehaviour,
     <B as NetworkBehaviour>::OutEvent: Debug,
+    B: NetworkBehaviour,
+    F: FnOnce(PeerId, identity::Keypair) -> B,
 {
     let identity = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(identity.public());

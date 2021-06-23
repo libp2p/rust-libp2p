@@ -159,6 +159,25 @@ impl NetworkBehaviour for Rendezvous {
         event: handler::OutEvent,
     ) {
         match event {
+            // bad registration
+            OutEvent::RegistrationRequested(registration)
+                if registration.record.peer_id() != peer_id =>
+            {
+                let error = ErrorCode::NotAuthorized;
+
+                self.events.extend(vec![
+                    NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        handler: NotifyHandler::One(connection),
+                        event: InEvent::DeclineRegisterRequest(error),
+                    },
+                    NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
+                        peer: peer_id,
+                        namespace: registration.namespace,
+                        error,
+                    }),
+                ])
+            }
             OutEvent::RegistrationRequested(registration) => {
                 let namespace = registration.namespace.clone();
 
@@ -298,31 +317,27 @@ impl NetworkBehaviour for Rendezvous {
                 .collect::<Vec<Multiaddr>>();
 
             if external_addresses.is_empty() {
-                self.pending_register_requests
-                    .push((namespace, rendezvous_node, ttl));
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     Event::RegisterFailed(RegisterError::NoExternalAddresses),
                 ));
             }
 
-            match PeerRecord::new(self.key_pair.clone(), external_addresses) {
-                Ok(peer_record) => {
-                    return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: rendezvous_node,
-                        event: InEvent::RegisterRequest(NewRegistration {
-                            namespace,
-                            record: peer_record,
-                            ttl,
-                        }),
-                        handler: NotifyHandler::Any,
-                    })
-                }
-                Err(signing_error) => {
-                    return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                        Event::RegisterFailed(RegisterError::FailedToMakeRecord(signing_error)),
-                    ))
-                }
-            }
+            let action = match PeerRecord::new(self.key_pair.clone(), external_addresses) {
+                Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
+                    peer_id: rendezvous_node,
+                    event: InEvent::RegisterRequest(NewRegistration {
+                        namespace,
+                        record: peer_record,
+                        ttl,
+                    }),
+                    handler: NotifyHandler::Any,
+                },
+                Err(signing_error) => NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed(
+                    RegisterError::FailedToMakeRecord(signing_error),
+                )),
+            };
+
+            return Poll::Ready(action);
         }
 
         Poll::Pending

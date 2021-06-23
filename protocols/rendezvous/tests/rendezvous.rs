@@ -1,6 +1,7 @@
 pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
+use libp2p_core::identity;
 use libp2p_core::PeerId;
 use libp2p_rendezvous::{ErrorCode, DEFAULT_TTL};
 use libp2p_rendezvous::{Event, RegisterError, Rendezvous};
@@ -106,12 +107,41 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     }
 }
 
+#[tokio::test]
+async fn eve_cannot_register() {
+    let _ = env_logger::try_init();
+    let mut test = RendezvousTest::setup().await;
+
+    let namespace = "some-namespace".to_string();
+
+    let _ = test.eve.behaviour_mut().register(
+        namespace.clone(),
+        *test.robert.local_peer_id(),
+        Some(100_000),
+    );
+
+    match await_events_or_timeout(&mut test.robert, &mut test.eve).await {
+        (
+            SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
+            SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote { error: err_code , ..})),
+        ) => {
+            assert_eq!(err_code, ErrorCode::NotAuthorized);
+        }
+        (rendezvous_swarm_event, registration_swarm_event) => panic!(
+            "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
+            rendezvous_swarm_event, registration_swarm_event
+        ),
+    }
+}
+
 /// Holds a network of nodes that is used to test certain rendezvous functionality.
 ///
 /// In all cases, Alice would like to connect to Bob with Robert acting as a rendezvous point.
+/// Eve is an evil actor that tries to act maliciously.
 struct RendezvousTest {
     pub alice: Swarm<Rendezvous>,
     pub bob: Swarm<Rendezvous>,
+    pub eve: Swarm<Rendezvous>,
     pub robert: Swarm<Rendezvous>,
 }
 
@@ -129,10 +159,28 @@ impl RendezvousTest {
             new_swarm(|_, identity| Rendezvous::new(identity, DEFAULT_TTL_UPPER_BOUND));
         robert.listen_on_random_memory_address().await;
 
+        let mut eve = {
+            // In reality, if Eve were to try and fake someones identity, she would obviously only know the public key.
+            // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
+            // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
+            let someone_else = identity::Keypair::generate_ed25519();
+            let mut eve =
+                new_swarm(move |_, _| Rendezvous::new(someone_else, DEFAULT_TTL_UPPER_BOUND));
+            eve.listen_on_random_memory_address().await;
+
+            eve
+        };
+
         alice.block_on_connection(&mut robert).await;
         bob.block_on_connection(&mut robert).await;
+        eve.block_on_connection(&mut robert).await;
 
-        Self { alice, bob, robert }
+        Self {
+            alice,
+            bob,
+            eve,
+            robert,
+        }
     }
 
     pub async fn assert_successful_registration(
