@@ -1,4 +1,3 @@
-use async_std::task;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::upgrade::{SelectUpgrade, Version};
@@ -43,7 +42,8 @@ struct MyBehaviour {
     rendezvous: Rendezvous,
 }
 
-fn main() {
+#[async_std::main]
+async fn main() {
     let identity = identity::Keypair::generate_ed25519();
 
     let transport = TcpConfig::new()
@@ -86,24 +86,20 @@ fn main() {
     let server_peer_id =
         PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
 
-    task::block_on(async move {
-        loop {
-            let event = swarm.next().await;
-            match event {
-                Some(SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received {
-                    ..
-                }))) => {
-                    swarm
-                        .behaviour_mut()
-                        .rendezvous
-                        .register("rendezvous".to_string(), server_peer_id, None)
-                        .unwrap();
-                }
-                Some(SwarmEvent::Behaviour(MyEvent::Rendezvous(event))) => {
-                    println!("registered event: {:?}", event);
-                }
-                _ => {}
-            };
-        }
-    })
+    loop {
+        let event = swarm.next().await;
+        match event {
+            Some(SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. }))) => {
+                swarm
+                    .behaviour_mut()
+                    .rendezvous
+                    .register("rendezvous".to_string(), server_peer_id, None)
+                    .unwrap();
+            }
+            Some(SwarmEvent::Behaviour(MyEvent::Rendezvous(event))) => {
+                println!("registered event: {:?}", event);
+            }
+            _ => {}
+        };
+    }
 }

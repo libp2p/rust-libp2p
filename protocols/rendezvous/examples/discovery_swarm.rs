@@ -1,4 +1,3 @@
-use async_std::task;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::upgrade::{SelectUpgrade, Version};
@@ -15,7 +14,8 @@ use libp2p::yamux::YamuxConfig;
 use std::str::FromStr;
 use std::time::Duration;
 
-fn main() {
+#[async_std::main]
+async fn main() {
     let identity = identity::Keypair::generate_ed25519();
 
     let transport = TcpConfig::new()
@@ -44,24 +44,21 @@ fn main() {
     let server_peer_id =
         PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
 
-    task::block_on(async move {
-        loop {
-            let event = swarm.next().await;
-            if let Some(SwarmEvent::ConnectionEstablished { .. }) = event {
-                swarm.behaviour_mut().discover(
-                    Some("rendezvous".to_string()),
-                    None,
-                    None,
-                    server_peer_id,
-                );
-            };
-            if let Some(SwarmEvent::Behaviour(rendezvous::Event::Discovered {
-                registrations,
-                ..
-            })) = event
-            {
-                println!("discovered: {:?}", registrations.values());
-            };
-        }
-    })
+    loop {
+        let event = swarm.next().await;
+        if let Some(SwarmEvent::ConnectionEstablished { .. }) = event {
+            swarm.behaviour_mut().discover(
+                Some("rendezvous".to_string()),
+                None,
+                None,
+                server_peer_id,
+            );
+        };
+        if let Some(SwarmEvent::Behaviour(rendezvous::Event::Discovered {
+            registrations, ..
+        })) = event
+        {
+            println!("discovered: {:?}", registrations.values());
+        };
+    }
 }
