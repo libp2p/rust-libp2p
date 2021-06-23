@@ -168,23 +168,20 @@ impl NetworkBehaviour for Rendezvous {
         match event {
             OutEvent::RegistrationRequested(registration) => {
                 let namespace = registration.namespace.clone();
-                let record = registration.record.clone();
 
                 let events = match self.registrations.add(registration) {
-                    Ok(effective_ttl) => {
+                    Ok(registration) => {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::One(connection),
-                                event: InEvent::RegisterResponse { ttl: effective_ttl },
+                                event: InEvent::RegisterResponse {
+                                    ttl: registration.ttl,
+                                },
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered {
                                 peer: peer_id,
-                                registration: Registration {
-                                    namespace,
-                                    record,
-                                    ttl: effective_ttl,
-                                },
+                                registration,
                             }),
                         ]
                     }
@@ -377,7 +374,7 @@ impl Registrations {
         }
     }
 
-    pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, TtlTooLong> {
+    pub fn add(&mut self, new_registration: NewRegistration) -> Result<Registration, TtlTooLong> {
         let ttl = new_registration.effective_ttl();
         if ttl > self.ttl_upper_bound {
             return Err(TtlTooLong {
@@ -401,14 +398,13 @@ impl Registrations {
             registration_id,
         );
 
-        self.registrations.insert(
-            registration_id,
-            Registration {
-                namespace,
-                record: new_registration.record,
-                ttl,
-            },
-        );
+        let registration = Registration {
+            namespace,
+            record: new_registration.record,
+            ttl,
+        };
+        self.registrations
+            .insert(registration_id, registration.clone());
 
         let next_expiry = sleep(Duration::from_secs(ttl as u64))
             .map(move |()| registration_id)
@@ -416,7 +412,7 @@ impl Registrations {
 
         self.next_expiry.push(next_expiry);
 
-        Ok(ttl)
+        Ok(registration)
     }
 
     pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
