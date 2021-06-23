@@ -2,12 +2,13 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
-use libp2p::ping::{Ping, PingEvent, PingSuccess};
+use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
+use std::time::Duration;
 
 #[async_std::main]
 async fn main() {
@@ -28,10 +29,12 @@ async fn main() {
                 identity.public(),
             )),
             rendezvous: Rendezvous::new(identity.clone(), 10000),
-            ping: Ping::default(),
+            ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
     );
+
+    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 

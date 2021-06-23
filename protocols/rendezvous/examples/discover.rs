@@ -2,11 +2,12 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
-use libp2p::ping::{Ping, PingEvent, PingSuccess};
+use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous, Multiaddr};
+use std::time::Duration;
 
 const NAMESPACE: &'static str = "rendezvous";
 
@@ -24,10 +25,12 @@ async fn main() {
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
             rendezvous: Rendezvous::new(identity.clone(), 10000),
-            ping: Ping::default(),
+            ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
     );
+
+    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.dial_addr(rendezvous_point_address.clone());
 
