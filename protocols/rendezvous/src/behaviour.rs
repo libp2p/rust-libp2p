@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
 use std::option::Option::None;
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -171,7 +171,7 @@ impl NetworkBehaviour for Rendezvous {
                 let record = registration.record.clone();
 
                 let events = match self.registrations.add(registration) {
-                    Ok((effective_ttl, timestamp)) => {
+                    Ok(effective_ttl) => {
                         vec![
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
@@ -184,7 +184,6 @@ impl NetworkBehaviour for Rendezvous {
                                     namespace,
                                     record,
                                     ttl: effective_ttl,
-                                    timestamp,
                                 },
                             }),
                         ]
@@ -378,10 +377,7 @@ impl Registrations {
         }
     }
 
-    pub fn add(
-        &mut self,
-        new_registration: NewRegistration,
-    ) -> Result<(i64, SystemTime), TtlTooLong> {
+    pub fn add(&mut self, new_registration: NewRegistration) -> Result<i64, TtlTooLong> {
         let ttl = new_registration.effective_ttl();
         if ttl > self.ttl_upper_bound {
             return Err(TtlTooLong {
@@ -405,15 +401,12 @@ impl Registrations {
             registration_id,
         );
 
-        let timestamp = SystemTime::now();
-
         self.registrations.insert(
             registration_id,
             Registration {
                 namespace,
                 record: new_registration.record,
                 ttl,
-                timestamp,
             },
         );
 
@@ -423,7 +416,7 @@ impl Registrations {
 
         self.next_expiry.push(next_expiry);
 
-        Ok((ttl, timestamp))
+        Ok(ttl)
     }
 
     pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
@@ -537,6 +530,7 @@ mod tests {
     use super::*;
     use libp2p_core::identity;
     use std::option::Option::None;
+    use std::time::SystemTime;
 
     #[tokio::test]
     async fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
