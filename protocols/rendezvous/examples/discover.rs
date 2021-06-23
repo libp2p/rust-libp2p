@@ -1,20 +1,13 @@
 use futures::StreamExt;
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::upgrade::{SelectUpgrade, Version};
+use libp2p::core::identity;
 use libp2p::core::PeerId;
-use libp2p::core::{identity, Transport};
-use libp2p::mplex::MplexConfig;
 use libp2p::multiaddr::Protocol;
-use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
 use libp2p::ping::{Ping, PingEvent, PingSuccess};
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
-use libp2p::tcp::TcpConfig;
-use libp2p::yamux::YamuxConfig;
-use libp2p::{rendezvous, Multiaddr};
+use libp2p::{development_transport, rendezvous, Multiaddr};
 use std::str::FromStr;
-use std::time::Duration;
 
 const NAMESPACE: &'static str = "rendezvous";
 
@@ -23,32 +16,13 @@ async fn main() {
     let identity = identity::Keypair::generate_ed25519();
     let rendezvous_point = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
 
-    let transport = TcpConfig::new()
-        .upgrade(Version::V1)
-        .authenticate(
-            NoiseConfig::xx(
-                Keypair::<X25519Spec>::new()
-                    .into_authentic(&identity)
-                    .expect("failed to create dh_keys"),
-            )
-            .into_authenticated(),
-        )
-        .multiplex(SelectUpgrade::new(
-            YamuxConfig::default(),
-            MplexConfig::new(),
-        ))
-        .timeout(Duration::from_secs(20))
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
-        .boxed();
-
-    let local_peer_id = PeerId::from(identity.public());
     let mut swarm = Swarm::new(
-        transport,
+        development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            rendezvous: Rendezvous::new(identity, 10000),
+            rendezvous: Rendezvous::new(identity.clone(), 10000),
             ping: Ping::default(),
         },
-        local_peer_id,
+        PeerId::from(identity.public()),
     );
 
     let _ = swarm.dial_addr(rendezvous_point.clone());
