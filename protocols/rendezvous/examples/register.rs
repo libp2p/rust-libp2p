@@ -53,7 +53,7 @@ async fn main() {
         local_peer_id,
     );
 
-    let _ = swarm.listen_on("/ip4/127.0.0.1/tcp/62343".parse().unwrap());
+    let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
     swarm
         .dial_addr("/ip4/127.0.0.1/tcp/62649".parse().unwrap())
@@ -64,6 +64,9 @@ async fn main() {
 
     while let Some(event) = swarm.next().await {
         match event {
+            SwarmEvent::NewListenAddr(addr) => {
+                println!("Listening on {}", addr);
+            }
             // once `/identify` did its job, we know our external address and can register
             SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. })) => {
                 swarm
