@@ -8,6 +8,7 @@ use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
+use libp2p_rendezvous::Namespace;
 use std::time::Duration;
 
 #[async_std::main]
@@ -57,7 +58,7 @@ async fn main() {
                 swarm
                     .behaviour_mut()
                     .rendezvous
-                    .register("rendezvous".to_string(), rendezvous_point, None)
+                    .register(Namespace::from_static("rendezvous"), rendezvous_point, None)
                     .unwrap();
             }
             SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Registered {

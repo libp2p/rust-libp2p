@@ -3,7 +3,7 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::rendezvous::Rendezvous;
+use libp2p::rendezvous::{Namespace, Rendezvous};
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous, Multiaddr};
@@ -43,7 +43,7 @@ async fn main() {
                 );
 
                 swarm.behaviour_mut().rendezvous.discover(
-                    Some(NAMESPACE.to_string()),
+                    Some(Namespace::new(NAMESPACE.to_string()).unwrap()),
                     None,
                     None,
                     rendezvous_point,

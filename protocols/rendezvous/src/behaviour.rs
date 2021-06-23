@@ -1,4 +1,4 @@
-use crate::codec::{Cookie, ErrorCode, NewRegistration, Registration};
+use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration};
 use crate::handler::{InEvent, OutEvent, RendezvousHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
@@ -25,7 +25,7 @@ pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
-    pending_register_requests: Vec<(String, PeerId, Option<i64>)>,
+    pending_register_requests: Vec<(Namespace, PeerId, Option<i64>)>,
 }
 
 pub struct Config {
@@ -54,7 +54,7 @@ impl Rendezvous {
 
     pub fn register(
         &mut self,
-        namespace: String,
+        namespace: Namespace,
         rendezvous_node: PeerId,
         ttl: Option<i64>,
     ) -> Result<(), RegisterError> {
@@ -63,18 +63,18 @@ impl Rendezvous {
         Ok(())
     }
 
-    pub fn unregister(&mut self, namespace: String, rendezvous_node: PeerId) {
+    pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: InEvent::UnregisterRequest { namespace },
+                event: InEvent::UnregisterRequest(namespace),
                 handler: NotifyHandler::Any,
             });
     }
 
     pub fn discover(
         &mut self,
-        ns: Option<String>,
+        ns: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<i64>,
         rendezvous_node: PeerId,
@@ -101,7 +101,7 @@ pub enum RegisterError {
     #[error("Failed to register with Rendezvous node")]
     Remote {
         rendezvous_node: PeerId,
-        namespace: String,
+        namespace: Namespace,
         error: ErrorCode,
     },
 }
@@ -117,14 +117,14 @@ pub enum Event {
     /// We failed to discover other nodes on the contained rendezvous node.
     DiscoverFailed {
         rendezvous_node: PeerId,
-        namespace: Option<String>,
+        namespace: Option<Namespace>,
         error: ErrorCode,
     },
     /// We successfully registered with the contained rendezvous node.
     Registered {
         rendezvous_node: PeerId,
         ttl: i64,
-        namespace: String,
+        namespace: Namespace,
     },
     /// We failed to register with the contained rendezvous node.
     RegisterFailed(RegisterError),
@@ -143,11 +143,11 @@ pub enum Event {
     /// We declined a registration from a peer.
     PeerNotRegistered {
         peer: PeerId,
-        namespace: String,
+        namespace: Namespace,
         error: ErrorCode,
     },
     /// A peer successfully unregistered with us.
-    PeerUnregistered { peer: PeerId, namespace: String },
+    PeerUnregistered { peer: PeerId, namespace: Namespace },
     /// A registration from a peer expired.
     RegistrationExpired(Registration),
 }
@@ -238,7 +238,7 @@ impl NetworkBehaviour for Rendezvous {
                     namespace,
                 })]
             }
-            OutEvent::RegisterFailed { namespace, error } => {
+            OutEvent::RegisterFailed(namespace, error) => {
                 vec![NetworkBehaviourAction::GenerateEvent(
                     Event::RegisterFailed(RegisterError::Remote {
                         rendezvous_node: peer_id,
@@ -247,7 +247,7 @@ impl NetworkBehaviour for Rendezvous {
                     }),
                 )]
             }
-            OutEvent::UnregisterRequested { namespace } => {
+            OutEvent::UnregisterRequested(namespace) => {
                 self.registrations.remove(namespace.clone(), peer_id);
 
                 vec![NetworkBehaviourAction::GenerateEvent(
@@ -389,7 +389,7 @@ impl RegistrationId {
 struct ExpiredRegistration(Registration);
 
 pub struct Registrations {
-    registrations_for_peer: BiMap<(PeerId, String), RegistrationId>,
+    registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
     min_ttl: i64,
@@ -473,7 +473,7 @@ impl Registrations {
         Ok(registration)
     }
 
-    pub fn remove(&mut self, namespace: String, peer_id: PeerId) {
+    pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
         let reggo_to_remove = self
             .registrations_for_peer
             .remove_by_left(&(peer_id, namespace));
@@ -485,7 +485,7 @@ impl Registrations {
 
     pub fn get(
         &mut self,
-        discover_namespace: Option<String>,
+        discover_namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         mut limit: Option<i64>,
     ) -> Result<(impl Iterator<Item = &Registration> + '_, Cookie), CookieNamespaceMismatch> {
@@ -618,11 +618,11 @@ mod tests {
         registrations.add(new_dummy_registration("bar")).unwrap();
 
         let (discover, _) = registrations
-            .get(Some("foo".to_owned()), None, None)
+            .get(Some(Namespace::from_static("foo")), None, None)
             .unwrap();
 
         assert_eq!(
-            discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
+            discover.map(|r| &r.namespace).collect::<Vec<_>>(),
             vec!["foo"]
         );
     }
@@ -639,11 +639,11 @@ mod tests {
             .unwrap();
 
         let (discover, _) = registrations
-            .get(Some("foo".to_owned()), None, None)
+            .get(Some(Namespace::from_static("foo")), None, None)
             .unwrap();
 
         assert_eq!(
-            discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
+            discover.map(|r| &r.namespace).collect::<Vec<_>>(),
             vec!["foo"]
         );
     }
@@ -671,9 +671,13 @@ mod tests {
         registrations.add(new_dummy_registration("bar")).unwrap();
 
         let (_, foo_discover_cookie) = registrations
-            .get(Some("foo".to_owned()), None, None)
+            .get(Some(Namespace::from_static("foo")), None, None)
             .unwrap();
-        let result = registrations.get(Some("bar".to_owned()), Some(foo_discover_cookie), None);
+        let result = registrations.get(
+            Some(Namespace::from_static("bar")),
+            Some(foo_discover_cookie),
+            None,
+        );
 
         assert!(matches!(result, Err(CookieNamespaceMismatch)))
     }
@@ -700,16 +704,16 @@ mod tests {
         assert!(elapsed.as_secs() >= 1);
         assert!(elapsed.as_secs() < 2);
 
-        assert_eq!(event.0.namespace, "foo");
+        assert_eq!(event.0.namespace, Namespace::from_static("foo"));
 
         {
             let (mut discovered_foo, _) = registrations
-                .get(Some("foo".to_owned()), None, None)
+                .get(Some(Namespace::from_static("foo")), None, None)
                 .unwrap();
             assert!(discovered_foo.next().is_none());
         }
         let (mut discovered_bar, _) = registrations
-            .get(Some("bar".to_owned()), None, None)
+            .get(Some(Namespace::from_static("bar")), None, None)
             .unwrap();
         assert!(discovered_bar.next().is_some());
     }
@@ -795,25 +799,25 @@ mod tests {
         assert_eq!(discover2.count(), 1);
     }
 
-    fn new_dummy_registration(namespace: &str) -> NewRegistration {
+    fn new_dummy_registration(namespace: &'static str) -> NewRegistration {
         let identity = identity::Keypair::generate_ed25519();
 
         new_registration(namespace, identity, None)
     }
 
-    fn new_dummy_registration_with_ttl(namespace: &str, ttl: i64) -> NewRegistration {
+    fn new_dummy_registration_with_ttl(namespace: &'static str, ttl: i64) -> NewRegistration {
         let identity = identity::Keypair::generate_ed25519();
 
         new_registration(namespace, identity, Some(ttl))
     }
 
     fn new_registration(
-        namespace: &str,
+        namespace: &'static str,
         identity: identity::Keypair,
         ttl: Option<i64>,
     ) -> NewRegistration {
         NewRegistration::new(
-            namespace.to_owned(),
+            Namespace::from_static(namespace),
             PeerRecord::new(identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
             ttl,
         )

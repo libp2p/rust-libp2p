@@ -2,6 +2,7 @@ use crate::DEFAULT_TTL;
 use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
 use unsigned_varint::codec::UviBytes;
 use uuid::Uuid;
 
@@ -11,28 +12,78 @@ pub type Ttl = i64;
 pub enum Message {
     Register(NewRegistration),
     RegisterResponse(Result<Ttl, ErrorCode>),
-    Unregister {
-        namespace: String,
-    },
+    Unregister(Namespace),
     Discover {
-        namespace: Option<String>,
+        namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<i64>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Namespace(String);
+
+impl Namespace {
+    /// Creates a new [`Namespace`] from a static string.
+    ///
+    /// This will panic if the namespace is too long. We accepting panicking in this case because we are enforcing a `static lifetime which means this value can only be a constant in the program and hence we hope the developer checked that it is of an acceptable length.
+    pub fn from_static(value: &'static str) -> Self {
+        if value.len() > 255 {
+            panic!("Namespace '{}' is too long!", value)
+        }
+
+        Namespace(value.to_owned())
+    }
+
+    pub fn new(value: String) -> Result<Self, NamespaceTooLong> {
+        if value.len() > 255 {
+            return Err(NamespaceTooLong);
+        }
+
+        Ok(Namespace(value))
+    }
+}
+
+impl From<Namespace> for String {
+    fn from(namespace: Namespace) -> Self {
+        namespace.0
+    }
+}
+
+impl fmt::Display for Namespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl PartialEq<str> for Namespace {
+    fn eq(&self, other: &str) -> bool {
+        self.0.eq(other)
+    }
+}
+
+impl PartialEq<Namespace> for str {
+    fn eq(&self, other: &Namespace) -> bool {
+        other.0.eq(self)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Namespace is too long")]
+pub struct NamespaceTooLong;
+
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct Cookie {
     id: Uuid,
-    namespace: Option<String>,
+    namespace: Option<Namespace>,
 }
 
 impl Cookie {
     /// Construct a new [`Cookie`] for a given namespace.
     ///
     /// This cookie will only be valid for subsequent DISCOVER requests targeting the same namespace.
-    pub fn for_namespace(namespace: String) -> Self {
+    pub fn for_namespace(namespace: Namespace) -> Self {
         Self {
             id: Uuid::new_v4(),
             namespace: Some(namespace),
@@ -48,7 +99,7 @@ impl Cookie {
     }
 
     pub fn into_wire_encoding(self) -> Vec<u8> {
-        let namespace = self.namespace.unwrap_or_default();
+        let namespace = self.namespace.map(|ns| ns.0).unwrap_or_default();
 
         let mut buffer = Vec::with_capacity(16 + namespace.len());
         buffer.extend_from_slice(self.id.as_bytes());
@@ -67,7 +118,10 @@ impl Cookie {
         let namespace = if namespace.is_empty() {
             None
         } else {
-            Some(String::from_utf8(namespace).map_err(|_| InvalidCookie)?)
+            Some(
+                Namespace::new(String::from_utf8(namespace).map_err(|_| InvalidCookie)?)
+                    .map_err(|_| InvalidCookie)?,
+            )
         };
 
         let bytes = <[u8; 16]>::try_from(bytes).map_err(|_| InvalidCookie)?;
@@ -79,8 +133,8 @@ impl Cookie {
         })
     }
 
-    pub fn namespace(&self) -> Option<&str> {
-        self.namespace.as_deref()
+    pub fn namespace(&self) -> Option<&Namespace> {
+        self.namespace.as_ref()
     }
 }
 
@@ -90,13 +144,13 @@ pub struct InvalidCookie;
 
 #[derive(Debug, Clone)]
 pub struct NewRegistration {
-    pub namespace: String,
+    pub namespace: Namespace,
     pub record: PeerRecord,
     pub ttl: Option<i64>,
 }
 
 impl NewRegistration {
-    pub fn new(namespace: String, record: PeerRecord, ttl: Option<i64>) -> Self {
+    pub fn new(namespace: Namespace, record: PeerRecord, ttl: Option<i64>) -> Self {
         Self {
             namespace,
             record,
@@ -111,7 +165,7 @@ impl NewRegistration {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Registration {
-    pub namespace: String,
+    pub namespace: Namespace,
     pub record: PeerRecord,
     pub ttl: i64,
 }
@@ -205,7 +259,7 @@ impl From<Message> for wire::Message {
             }) => wire::Message {
                 r#type: Some(MessageType::Register.into()),
                 register: Some(Register {
-                    ns: Some(namespace),
+                    ns: Some(namespace.into()),
                     ttl,
                     signed_peer_record: Some(
                         record.into_signed_envelope().into_protobuf_encoding(),
@@ -240,10 +294,10 @@ impl From<Message> for wire::Message {
                 unregister: None,
                 discover_response: None,
             },
-            Message::Unregister { namespace } => wire::Message {
+            Message::Unregister(namespace) => wire::Message {
                 r#type: Some(MessageType::Unregister.into()),
                 unregister: Some(Unregister {
-                    ns: Some(namespace),
+                    ns: Some(namespace.into()),
                     id: None,
                 }),
                 register: None,
@@ -258,7 +312,7 @@ impl From<Message> for wire::Message {
             } => wire::Message {
                 r#type: Some(MessageType::Discover.into()),
                 discover: Some(Discover {
-                    ns: namespace,
+                    ns: namespace.map(|ns| ns.into()),
                     cookie: cookie.map(|cookie| cookie.into_wire_encoding()),
                     limit,
                 }),
@@ -273,7 +327,7 @@ impl From<Message> for wire::Message {
                     registrations: registrations
                         .into_iter()
                         .map(|reggo| Register {
-                            ns: Some(reggo.namespace),
+                            ns: Some(reggo.namespace.into()),
                             ttl: Some(reggo.ttl),
                             signed_peer_record: Some(
                                 reggo.record.into_signed_envelope().into_protobuf_encoding(),
@@ -323,7 +377,10 @@ impl TryFrom<wire::Message> for Message {
                     }),
                 ..
             } => Message::Register(NewRegistration {
-                namespace: ns.ok_or(ConversionError::MissingNamespace)?,
+                namespace: ns
+                    .map(Namespace::new)
+                    .transpose()?
+                    .ok_or(ConversionError::MissingNamespace)?,
                 ttl,
                 record: PeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(
                     &signed_peer_record,
@@ -344,7 +401,7 @@ impl TryFrom<wire::Message> for Message {
                 discover: Some(Discover { ns, limit, cookie }),
                 ..
             } => Message::Discover {
-                namespace: ns,
+                namespace: ns.map(Namespace::new).transpose()?,
                 cookie: cookie.map(Cookie::from_wire_encoding).transpose()?,
                 limit,
             },
@@ -363,7 +420,11 @@ impl TryFrom<wire::Message> for Message {
                     .into_iter()
                     .map(|reggo| {
                         Ok(Registration {
-                            namespace: reggo.ns.ok_or(ConversionError::MissingNamespace)?,
+                            namespace: reggo
+                                .ns
+                                .map(Namespace::new)
+                                .transpose()?
+                                .ok_or(ConversionError::MissingNamespace)?,
                             record: PeerRecord::from_signed_envelope(
                                 SignedEnvelope::from_protobuf_encoding(
                                     &reggo
@@ -397,9 +458,11 @@ impl TryFrom<wire::Message> for Message {
                 r#type: Some(2),
                 unregister: Some(Unregister { ns, .. }),
                 ..
-            } => Message::Unregister {
-                namespace: ns.ok_or(ConversionError::MissingNamespace)?,
-            },
+            } => Message::Unregister(
+                ns.map(Namespace::new)
+                    .transpose()?
+                    .ok_or(ConversionError::MissingNamespace)?,
+            ),
             wire::Message {
                 r#type: Some(4),
                 discover_response:
@@ -427,6 +490,8 @@ pub enum ConversionError {
     InconsistentWireMessage,
     #[error("Missing namespace field")]
     MissingNamespace,
+    #[error("Invalid namespace")]
+    InvalidNamespace(#[from] NamespaceTooLong),
     #[error("Missing signed peer record field")]
     MissingSignedPeerRecord,
     #[error("Missing TTL field")]
@@ -458,6 +523,7 @@ impl ConversionError {
             ConversionError::BadStatusCode => ErrorCode::InternalError,
             ConversionError::PoWDifficultyOutOfRange => ErrorCode::InternalError,
             ConversionError::BadPoWHash => ErrorCode::InternalError,
+            ConversionError::InvalidNamespace(_) => ErrorCode::InvalidNamespace,
         }
     }
 }
@@ -519,7 +585,7 @@ mod tests {
 
     #[test]
     fn cookie_wire_encoding_roundtrip() {
-        let cookie = Cookie::for_namespace("foo".to_owned());
+        let cookie = Cookie::for_namespace(Namespace::from_static("foo"));
 
         let bytes = cookie.clone().into_wire_encoding();
         let parsed = Cookie::from_wire_encoding(bytes).unwrap();
@@ -529,7 +595,7 @@ mod tests {
 
     #[test]
     fn cookie_wire_encoding_length() {
-        let cookie = Cookie::for_namespace("foo".to_owned());
+        let cookie = Cookie::for_namespace(Namespace::from_static("foo"));
 
         let bytes = cookie.into_wire_encoding();
 

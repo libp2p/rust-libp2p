@@ -1,5 +1,5 @@
 pub use self::behaviour::{Config, Event, RegisterError, Rendezvous};
-pub use self::codec::ErrorCode;
+pub use self::codec::{ErrorCode, Namespace, NamespaceTooLong};
 pub use codec::Registration;
 
 mod behaviour;

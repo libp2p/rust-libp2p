@@ -1,5 +1,5 @@
 use crate::codec::{
-    self, Cookie, ErrorCode, Message, NewRegistration, Registration, RendezvousCodec,
+    self, Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec,
 };
 use crate::protocol;
 use crate::substream::{Advance, Next, SubstreamState};
@@ -45,18 +45,13 @@ impl MessageHistory {
 pub enum OutEvent {
     RegistrationRequested(NewRegistration),
     Registered {
-        namespace: String,
+        namespace: Namespace,
         ttl: i64,
     },
-    RegisterFailed {
-        namespace: String,
-        error: ErrorCode,
-    },
-    UnregisterRequested {
-        namespace: String,
-    },
+    RegisterFailed(Namespace, ErrorCode),
+    UnregisterRequested(Namespace),
     DiscoverRequested {
-        namespace: Option<String>,
+        namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<i64>,
     },
@@ -65,7 +60,7 @@ pub enum OutEvent {
         cookie: Cookie,
     },
     DiscoverFailed {
-        namespace: Option<String>,
+        namespace: Option<Namespace>,
         error: ErrorCode,
     },
 }
@@ -74,11 +69,9 @@ pub enum OutEvent {
 pub enum InEvent {
     RegisterRequest(NewRegistration),
     DeclineRegisterRequest(ErrorCode),
-    UnregisterRequest {
-        namespace: String,
-    },
+    UnregisterRequest(Namespace),
     DiscoverRequest {
-        namespace: Option<String>,
+        namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<i64>,
     },
@@ -188,8 +181,8 @@ impl<'handler> Advance<'handler> for Inbound {
                                 namespace,
                                 limit,
                             },
-                            Message::Unregister { namespace } => {
-                                OutEvent::UnregisterRequested { namespace }
+                            Message::Unregister(namespace) => {
+                                OutEvent::UnregisterRequested(namespace)
                             }
                             other => return Err(Error::BadMessage(other)),
                         };
@@ -311,10 +304,7 @@ impl<'handler> Advance<'handler> for Outbound {
                             ttl,
                         },
                         ([Register(registration), ..], RegisterResponse(Err(error))) => {
-                            RegisterFailed {
-                                namespace: registration.namespace.to_owned(),
-                                error,
-                            }
+                            RegisterFailed(registration.namespace.to_owned(), error)
                         }
                         ([Discover { .. }, ..], DiscoverResponse(Ok((registrations, cookie)))) => {
                             Discovered {
@@ -410,9 +400,9 @@ impl ProtocolsHandler for RendezvousHandler {
                 inbound,
                 SubstreamState::Active(Outbound::PendingOpen(Message::Register(reggo))),
             ),
-            (InEvent::UnregisterRequest { namespace }, inbound, SubstreamState::None) => (
+            (InEvent::UnregisterRequest(namespace), inbound, SubstreamState::None) => (
                 inbound,
-                SubstreamState::Active(Outbound::PendingOpen(Message::Unregister { namespace })),
+                SubstreamState::Active(Outbound::PendingOpen(Message::Unregister(namespace))),
             ),
             (
                 InEvent::DiscoverRequest {

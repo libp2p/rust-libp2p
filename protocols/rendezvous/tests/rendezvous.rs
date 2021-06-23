@@ -1,6 +1,7 @@
 pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
+use libp2p::rendezvous::Namespace;
 use libp2p_core::identity;
 use libp2p_core::PeerId;
 use libp2p_rendezvous::{
@@ -13,7 +14,7 @@ async fn given_successful_registration_then_successful_discovery() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = "some-namespace".to_string();
+    let namespace = Namespace::from_static("some-namespace");
 
     let _ =
         test.alice
@@ -39,7 +40,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = "some-namespace".to_string();
+    let namespace = Namespace::from_static("some-namespace");
 
     let refesh_ttl = 10_000;
 
@@ -86,7 +87,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = "some-namespace".to_string();
+    let namespace = Namespace::from_static("some-namespace");
 
     let _ = test.alice.behaviour_mut().register(
         namespace.clone(),
@@ -113,7 +114,7 @@ async fn eve_cannot_register() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = "some-namespace".to_string();
+    let namespace = Namespace::from_static("some-namespace");
 
     let _ = test.eve.behaviour_mut().register(
         namespace.clone(),
@@ -182,7 +183,7 @@ impl RendezvousTest {
 
     pub async fn assert_successful_registration(
         &mut self,
-        expected_namespace: String,
+        expected_namespace: Namespace,
         expected_ttl: i64,
     ) {
         match await_events_or_timeout(&mut self.robert, &mut self.alice).await {
@@ -205,7 +206,7 @@ impl RendezvousTest {
 
     pub async fn assert_successful_discovery(
         &mut self,
-        expected_namespace: String,
+        expected_namespace: Namespace,
         expected_ttl: i64,
         expected_peer_id: PeerId,
     ) {
