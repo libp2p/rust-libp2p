@@ -5,7 +5,7 @@ use libp2p::core::upgrade::{SelectUpgrade, Version};
 use libp2p::core::PeerId;
 use libp2p::core::{identity, Transport};
 use libp2p::mplex::MplexConfig;
-use libp2p::noise::{Keypair, X25519Spec};
+use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
 use libp2p::rendezvous;
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
@@ -17,17 +17,17 @@ use std::time::Duration;
 
 fn main() {
     let identity = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(identity.public());
 
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&identity)
-        .expect("failed to create dh_keys");
-    let noise_config = libp2p::noise::NoiseConfig::xx(dh_keys).into_authenticated();
-
-    let tcp_config = TcpConfig::new();
-    let transport = tcp_config
+    let transport = TcpConfig::new()
         .upgrade(Version::V1)
-        .authenticate(noise_config)
+        .authenticate(
+            NoiseConfig::xx(
+                Keypair::<X25519Spec>::new()
+                    .into_authentic(&identity)
+                    .expect("failed to create dh_keys"),
+            )
+            .into_authenticated(),
+        )
         .multiplex(SelectUpgrade::new(
             YamuxConfig::default(),
             MplexConfig::new(),
@@ -36,7 +36,8 @@ fn main() {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let mut swarm = Swarm::new(transport, Rendezvous::new(identity, 10000), peer_id);
+    let local_peer_id = PeerId::from(identity.public());
+    let mut swarm = Swarm::new(transport, Rendezvous::new(identity, 10000), local_peer_id);
 
     let _ = swarm.dial_addr("/ip4/127.0.0.1/tcp/62649".parse().unwrap());
 

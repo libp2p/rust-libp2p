@@ -6,7 +6,7 @@ use libp2p::core::PeerId;
 use libp2p::core::{identity, Transport};
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::mplex::MplexConfig;
-use libp2p::noise::{Keypair, X25519Spec};
+use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
 use libp2p::rendezvous;
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
@@ -45,17 +45,17 @@ struct MyBehaviour {
 
 fn main() {
     let identity = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(identity.public());
 
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&identity)
-        .expect("failed to create dh_keys");
-    let noise_config = libp2p::noise::NoiseConfig::xx(dh_keys).into_authenticated();
-
-    let tcp_config = TcpConfig::new();
-    let transport = tcp_config
+    let transport = TcpConfig::new()
         .upgrade(Version::V1)
-        .authenticate(noise_config)
+        .authenticate(
+            NoiseConfig::xx(
+                Keypair::<X25519Spec>::new()
+                    .into_authentic(&identity)
+                    .expect("failed to create dh_keys"),
+            )
+            .into_authenticated(),
+        )
         .multiplex(SelectUpgrade::new(
             YamuxConfig::default(),
             MplexConfig::new(),
@@ -64,19 +64,17 @@ fn main() {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
-    let identify = Identify::new(IdentifyConfig::new(
-        "rendezvous-example/1.0.0".to_string(),
-        identity.public(),
-    ));
-    let rendezvous = Rendezvous::new(identity, 10000);
-
+    let local_peer_id = PeerId::from(identity.public());
     let mut swarm = Swarm::new(
         transport,
         MyBehaviour {
-            identify,
-            rendezvous,
+            identify: Identify::new(IdentifyConfig::new(
+                "rendezvous-example/1.0.0".to_string(),
+                identity.public(),
+            )),
+            rendezvous: Rendezvous::new(identity, 10000),
         },
-        peer_id,
+        local_peer_id,
     );
 
     let _ = swarm.listen_on("/ip4/127.0.0.1/tcp/62343".parse().unwrap());
