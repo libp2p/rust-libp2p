@@ -4,7 +4,7 @@ use libp2p::core::PeerId;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::ping::{Ping, PingEvent};
 use libp2p::rendezvous::Rendezvous;
-use libp2p::swarm::Swarm;
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{development_transport, rendezvous};
 
@@ -36,7 +36,37 @@ async fn main() {
         .unwrap();
 
     while let Some(event) = swarm.next().await {
-        log::info!("{:?}", event);
+        match event {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                log::info!("Connected to {}", peer_id);
+            }
+            SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                log::info!("Disconnected from {}", peer_id);
+            }
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::PeerRegistered {
+                peer,
+                registration,
+            })) => {
+                log::info!(
+                    "Peer {} registered for namespace '{}'",
+                    peer,
+                    registration.namespace
+                );
+            }
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::DiscoverServed {
+                enquirer,
+                registrations,
+            })) => {
+                log::info!(
+                    "Served peer {} with {} registrations",
+                    enquirer,
+                    registrations.len()
+                );
+            }
+            other => {
+                log::debug!("Unhandled {:?}", other);
+            }
+        }
     }
 }
 

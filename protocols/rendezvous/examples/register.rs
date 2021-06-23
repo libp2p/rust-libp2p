@@ -82,7 +82,7 @@ async fn main() {
                 log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
             }
             other => {
-                log::warn!("Unhandled event {:?}", other)
+                log::debug!("Unhandled {:?}", other);
             }
         }
     }

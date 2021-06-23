@@ -34,8 +34,8 @@ async fn main() {
     while let Some(event) = swarm.next().await {
         match event {
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
-                println!(
-                    "Connected to rendezvous point, discovering nodes in `{}` namespace ...",
+                log::info!(
+                    "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
                     NAMESPACE
                 );
 
@@ -50,9 +50,10 @@ async fn main() {
             | SwarmEvent::UnknownPeerUnreachableAddr { error, address, .. }
                 if address == rendezvous_point_address =>
             {
-                println!(
+                log::error!(
                     "Failed to connect to rendezvous point at {}: {}",
-                    address, error
+                    address,
+                    error
                 );
                 return;
             }
@@ -62,7 +63,7 @@ async fn main() {
             })) => {
                 for ((_, peer), registration) in registrations {
                     for address in registration.record.addresses() {
-                        println!("Discovered peer {} at {}", peer, address);
+                        log::info!("Discovered peer {} at {}", peer, address);
 
                         let p2p_suffix = Protocol::P2p(peer.as_ref().clone());
                         let address_with_p2p =
@@ -80,9 +81,11 @@ async fn main() {
                 peer,
                 result: Ok(PingSuccess::Ping { rtt }),
             })) if peer != rendezvous_point => {
-                println!("Ping to {} is {}ms", peer, rtt.as_millis())
+                log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
             }
-            _ => {}
+            other => {
+                log::debug!("Unhandled {:?}", other);
+            }
         }
     }
 }
