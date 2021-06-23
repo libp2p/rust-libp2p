@@ -16,6 +16,7 @@ use libp2p_swarm::{
 use log::debug;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
+use std::option::Option::None;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
@@ -62,6 +63,7 @@ impl Rendezvous {
         &mut self,
         ns: Option<String>,
         cookie: Option<Cookie>,
+        limit: Option<i64>,
         rendezvous_node: PeerId,
     ) {
         self.events
@@ -70,6 +72,7 @@ impl Rendezvous {
                 event: InEvent::DiscoverRequest {
                     namespace: ns,
                     cookie,
+                    limit,
                 },
                 handler: NotifyHandler::Any,
             });
@@ -224,10 +227,14 @@ impl NetworkBehaviour for Rendezvous {
             OutEvent::UnregisterRequested { namespace } => {
                 self.registrations.remove(namespace, peer_id);
             }
-            OutEvent::DiscoverRequested { namespace, cookie } => {
+            OutEvent::DiscoverRequested {
+                namespace,
+                cookie,
+                limit,
+            } => {
                 let (registrations, cookie) = self
                     .registrations
-                    .get(namespace, cookie)
+                    .get(namespace, cookie, limit)
                     .expect("TODO: error handling: send back bad cookie");
 
                 let discovered = registrations.cloned().collect::<Vec<_>>();
@@ -425,6 +432,7 @@ impl Registrations {
         &mut self,
         discover_namespace: Option<String>,
         cookie: Option<Cookie>,
+        mut limit: Option<i64>,
     ) -> Result<(impl Iterator<Item = &Registration> + '_, Cookie), CookieNamespaceMismatch> {
         let cookie_namespace = cookie.as_ref().and_then(|cookie| cookie.namespace());
 
@@ -461,6 +469,15 @@ impl Registrations {
                         None => Some(registration_id),
                     }
                 }
+            })
+            .take_while(|_| {
+                let limit = match limit.as_mut() {
+                    None => return true,
+                    Some(limit) => limit,
+                };
+                *limit -= 1;
+
+                *limit >= 0
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -511,6 +528,7 @@ pub struct CookieNamespaceMismatch;
 mod tests {
     use super::*;
     use libp2p_core::identity;
+    use std::option::Option::None;
 
     #[tokio::test]
     async fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
@@ -518,10 +536,10 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
-        let (initial_discover, cookie) = registrations.get(None, None).unwrap();
+        let (initial_discover, cookie) = registrations.get(None, None, None).unwrap();
         assert_eq!(initial_discover.count(), 2);
 
-        let (subsequent_discover, _) = registrations.get(None, Some(cookie)).unwrap();
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie), None).unwrap();
         assert_eq!(subsequent_discover.count(), 0);
     }
 
@@ -531,7 +549,7 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
-        let (discover, _) = registrations.get(None, None).unwrap();
+        let (discover, _) = registrations.get(None, None, None).unwrap();
 
         assert_eq!(discover.count(), 2);
     }
@@ -543,7 +561,9 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
 
-        let (discover, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+        let (discover, _) = registrations
+            .get(Some("foo".to_owned()), None, None)
+            .unwrap();
 
         assert_eq!(
             discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
@@ -562,7 +582,9 @@ mod tests {
             .add(new_registration("foo", alice, None))
             .unwrap();
 
-        let (discover, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+        let (discover, _) = registrations
+            .get(Some("foo".to_owned()), None, None)
+            .unwrap();
 
         assert_eq!(
             discover.map(|r| r.namespace.as_str()).collect::<Vec<_>>(),
@@ -576,13 +598,13 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
 
-        let (initial_discover, cookie1) = registrations.get(None, None).unwrap();
+        let (initial_discover, cookie1) = registrations.get(None, None, None).unwrap();
         assert_eq!(initial_discover.count(), 2);
 
-        let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1)).unwrap();
+        let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1), None).unwrap();
         assert_eq!(subsequent_discover.count(), 0);
 
-        let (subsequent_discover, _) = registrations.get(None, Some(cookie2)).unwrap();
+        let (subsequent_discover, _) = registrations.get(None, Some(cookie2), None).unwrap();
         assert_eq!(subsequent_discover.count(), 0);
     }
 
@@ -592,8 +614,10 @@ mod tests {
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
 
-        let (_, foo_discover_cookie) = registrations.get(Some("foo".to_owned()), None).unwrap();
-        let result = registrations.get(Some("bar".to_owned()), Some(foo_discover_cookie));
+        let (_, foo_discover_cookie) = registrations
+            .get(Some("foo".to_owned()), None, None)
+            .unwrap();
+        let result = registrations.get(Some("bar".to_owned()), Some(foo_discover_cookie), None);
 
         assert!(matches!(result, Err(CookieNamespaceMismatch)))
     }
@@ -620,10 +644,14 @@ mod tests {
         assert_eq!(event.0.namespace, "foo");
 
         {
-            let (mut discovered_foo, _) = registrations.get(Some("foo".to_owned()), None).unwrap();
+            let (mut discovered_foo, _) = registrations
+                .get(Some("foo".to_owned()), None, None)
+                .unwrap();
             assert!(discovered_foo.next().is_none());
         }
-        let (mut discovered_bar, _) = registrations.get(Some("bar".to_owned()), None).unwrap();
+        let (mut discovered_bar, _) = registrations
+            .get(Some("bar".to_owned()), None, None)
+            .unwrap();
         assert!(discovered_bar.next().is_some());
     }
 
@@ -666,13 +694,37 @@ mod tests {
         registrations
             .add(new_dummy_registration_with_ttl("foo", 2))
             .unwrap();
-        let (_, _) = registrations.get(None, None).unwrap();
+        let (_, _) = registrations.get(None, None, None).unwrap();
 
         assert_eq!(registrations.cookies.len(), 1);
 
         let _ = registrations.next_event_in_at_most(3).await;
 
         assert_eq!(registrations.cookies.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn given_limit_discover_only_returns_n_results() {
+        let mut registrations = Registrations::new(7200);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
+
+        let (registrations, _) = registrations.get(None, None, Some(1)).unwrap();
+
+        assert_eq!(registrations.count(), 1);
+    }
+
+    #[tokio::test]
+    async fn given_limit_cookie_can_be_used_for_pagination() {
+        let mut registrations = Registrations::new(7200);
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
+
+        let (discover1, cookie) = registrations.get(None, None, Some(1)).unwrap();
+        assert_eq!(discover1.count(), 1);
+
+        let (discover2, _) = registrations.get(None, Some(cookie), None).unwrap();
+        assert_eq!(discover2.count(), 1);
     }
 
     fn new_dummy_registration(namespace: &str) -> NewRegistration {

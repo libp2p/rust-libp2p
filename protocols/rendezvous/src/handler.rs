@@ -58,6 +58,7 @@ pub enum OutEvent {
     DiscoverRequested {
         namespace: Option<String>,
         cookie: Option<Cookie>,
+        limit: Option<i64>,
     },
     Discovered {
         registrations: Vec<Registration>,
@@ -79,6 +80,7 @@ pub enum InEvent {
     DiscoverRequest {
         namespace: Option<String>,
         cookie: Option<Cookie>,
+        limit: Option<i64>,
     },
     RegisterResponse {
         ttl: i64,
@@ -176,9 +178,15 @@ impl<'handler> Advance<'handler> for Inbound {
                             Message::Register(registration) => {
                                 OutEvent::RegistrationRequested(registration)
                             }
-                            Message::Discover { cookie, namespace } => {
-                                OutEvent::DiscoverRequested { cookie, namespace }
-                            }
+                            Message::Discover {
+                                cookie,
+                                namespace,
+                                limit,
+                            } => OutEvent::DiscoverRequested {
+                                cookie,
+                                namespace,
+                                limit,
+                            },
                             Message::Unregister { namespace } => {
                                 OutEvent::UnregisterRequested { namespace }
                             }
@@ -405,11 +413,20 @@ impl ProtocolsHandler for RendezvousHandler {
                 inbound,
                 SubstreamState::Active(Outbound::PendingOpen(Message::Unregister { namespace })),
             ),
-            (InEvent::DiscoverRequest { namespace, cookie }, inbound, SubstreamState::None) => (
+            (
+                InEvent::DiscoverRequest {
+                    namespace,
+                    cookie,
+                    limit,
+                },
+                inbound,
+                SubstreamState::None,
+            ) => (
                 inbound,
                 SubstreamState::Active(Outbound::PendingOpen(Message::Discover {
                     namespace,
                     cookie,
+                    limit,
                 })),
             ),
             (

@@ -17,6 +17,7 @@ pub enum Message {
     Discover {
         namespace: Option<String>,
         cookie: Option<Cookie>,
+        limit: Option<i64>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
 }
@@ -256,12 +257,16 @@ impl From<Message> for wire::Message {
                 discover: None,
                 discover_response: None,
             },
-            Message::Discover { namespace, cookie } => wire::Message {
+            Message::Discover {
+                namespace,
+                cookie,
+                limit,
+            } => wire::Message {
                 r#type: Some(MessageType::Discover.into()),
                 discover: Some(Discover {
                     ns: namespace,
                     cookie: cookie.map(|cookie| cookie.into_wire_encoding()),
-                    limit: None,
+                    limit,
                 }),
                 register: None,
                 register_response: None,
@@ -342,11 +347,12 @@ impl TryFrom<wire::Message> for Message {
             } => Message::RegisterResponse(Ok(ttl.ok_or(ConversionError::MissingTtl)?)),
             wire::Message {
                 r#type: Some(3),
-                discover: Some(Discover { ns, .. }),
+                discover: Some(Discover { ns, limit, cookie }),
                 ..
             } => Message::Discover {
                 namespace: ns,
-                cookie: None,
+                cookie: cookie.map(Cookie::from_wire_encoding).transpose()?,
+                limit,
             },
             wire::Message {
                 r#type: Some(4),

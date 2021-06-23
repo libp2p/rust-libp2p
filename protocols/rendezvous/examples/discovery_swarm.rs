@@ -52,6 +52,7 @@ fn main() {
                 swarm.behaviour_mut().discover(
                     Some("rendezvous".to_string()),
                     None,
+                    None,
                     server_peer_id,
                 );
             };

@@ -25,6 +25,7 @@ async fn given_successful_registration_then_successful_discovery() {
     test.discovery_swarm.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
+        None,
         *test.rendezvous_swarm.local_peer_id(),
     );
 
@@ -57,6 +58,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     test.discovery_swarm.behaviour_mut().discover(
         Some(namespace.clone()),
         None,
+        None,
         *test.rendezvous_swarm.local_peer_id(),
     );
 
@@ -78,6 +80,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 
     test.discovery_swarm.behaviour_mut().discover(
         Some(namespace.clone()),
+        None,
         None,
         *test.rendezvous_swarm.local_peer_id(),
     );
