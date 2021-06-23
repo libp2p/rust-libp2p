@@ -7,14 +7,18 @@ use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous, Multiaddr};
-use std::str::FromStr;
 
 const NAMESPACE: &'static str = "rendezvous";
 
 #[async_std::main]
 async fn main() {
+    env_logger::init();
+
     let identity = identity::Keypair::generate_ed25519();
-    let rendezvous_point = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
+    let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
+    let rendezvous_point = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
+        .parse()
+        .unwrap();
 
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
@@ -25,14 +29,11 @@ async fn main() {
         PeerId::from(identity.public()),
     );
 
-    let _ = swarm.dial_addr(rendezvous_point.clone());
-
-    let server_peer_id =
-        PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
+    let _ = swarm.dial_addr(rendezvous_point_address.clone());
 
     while let Some(event) = swarm.next().await {
         match event {
-            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == server_peer_id => {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
                 println!(
                     "Connected to rendezvous point, discovering nodes in `{}` namespace ...",
                     NAMESPACE
@@ -42,12 +43,12 @@ async fn main() {
                     Some(NAMESPACE.to_string()),
                     None,
                     None,
-                    server_peer_id,
+                    rendezvous_point,
                 );
             }
             SwarmEvent::UnreachableAddr { error, address, .. }
             | SwarmEvent::UnknownPeerUnreachableAddr { error, address, .. }
-                if address == rendezvous_point =>
+                if address == rendezvous_point_address =>
             {
                 println!(
                     "Failed to connect to rendezvous point at {}: {}",
@@ -78,7 +79,7 @@ async fn main() {
             SwarmEvent::Behaviour(MyEvent::Ping(PingEvent {
                 peer,
                 result: Ok(PingSuccess::Ping { rtt }),
-            })) => {
+            })) if peer != rendezvous_point => {
                 println!("Ping to {} is {}ms", peer, rtt.as_millis())
             }
             _ => {}
