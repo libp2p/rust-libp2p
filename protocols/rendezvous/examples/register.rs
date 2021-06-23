@@ -19,6 +19,9 @@ use std::time::Duration;
 
 #[async_std::main]
 async fn main() {
+    let rendezvous_point =
+        PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
+
     let identity = identity::Keypair::generate_ed25519();
 
     let transport = TcpConfig::new()
@@ -59,9 +62,6 @@ async fn main() {
         .dial_addr("/ip4/127.0.0.1/tcp/62649".parse().unwrap())
         .unwrap();
 
-    let server_peer_id =
-        PeerId::from_str("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN").unwrap();
-
     while let Some(event) = swarm.next().await {
         match event {
             SwarmEvent::NewListenAddr(addr) => {
@@ -72,7 +72,7 @@ async fn main() {
                 swarm
                     .behaviour_mut()
                     .rendezvous
-                    .register("rendezvous".to_string(), server_peer_id, None)
+                    .register("rendezvous".to_string(), rendezvous_point, None)
                     .unwrap();
             }
             SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Registered {
