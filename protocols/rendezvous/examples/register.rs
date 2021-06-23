@@ -6,6 +6,7 @@ use libp2p::core::{identity, Transport};
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::mplex::MplexConfig;
 use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p::ping::{Ping, PingEvent, PingSuccess};
 use libp2p::rendezvous;
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
@@ -15,32 +16,6 @@ use libp2p::yamux::YamuxConfig;
 use libp2p::NetworkBehaviour;
 use std::str::FromStr;
 use std::time::Duration;
-
-#[derive(Debug)]
-enum MyEvent {
-    Rendezvous(rendezvous::Event),
-    Identify(IdentifyEvent),
-}
-
-impl From<rendezvous::Event> for MyEvent {
-    fn from(event: rendezvous::Event) -> Self {
-        MyEvent::Rendezvous(event)
-    }
-}
-
-impl From<IdentifyEvent> for MyEvent {
-    fn from(event: IdentifyEvent) -> Self {
-        MyEvent::Identify(event)
-    }
-}
-
-#[derive(NetworkBehaviour)]
-#[behaviour(event_process = false)]
-#[behaviour(out_event = "MyEvent")]
-struct MyBehaviour {
-    identify: Identify,
-    rendezvous: Rendezvous,
-}
 
 #[async_std::main]
 async fn main() {
@@ -73,6 +48,7 @@ async fn main() {
                 identity.public(),
             )),
             rendezvous: Rendezvous::new(identity, 10000),
+            ping: Ping::default(),
         },
         local_peer_id,
     );
@@ -106,7 +82,47 @@ async fn main() {
                     namespace, rendezvous_node, ttl
                 );
             }
+            SwarmEvent::Behaviour(MyEvent::Ping(PingEvent {
+                peer,
+                result: Ok(PingSuccess::Ping { rtt }),
+            })) => {
+                println!("Ping to {} is {}ms", peer, rtt.as_millis())
+            }
             _ => {}
         }
     }
+}
+
+#[derive(Debug)]
+enum MyEvent {
+    Rendezvous(rendezvous::Event),
+    Identify(IdentifyEvent),
+    Ping(PingEvent),
+}
+
+impl From<rendezvous::Event> for MyEvent {
+    fn from(event: rendezvous::Event) -> Self {
+        MyEvent::Rendezvous(event)
+    }
+}
+
+impl From<IdentifyEvent> for MyEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        MyEvent::Identify(event)
+    }
+}
+
+impl From<PingEvent> for MyEvent {
+    fn from(event: PingEvent) -> Self {
+        MyEvent::Ping(event)
+    }
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(event_process = false)]
+#[behaviour(out_event = "MyEvent")]
+struct MyBehaviour {
+    identify: Identify,
+    rendezvous: Rendezvous,
+    ping: Ping,
 }

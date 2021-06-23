@@ -6,6 +6,7 @@ use libp2p::core::{identity, Transport};
 use libp2p::mplex::MplexConfig;
 use libp2p::multiaddr::Protocol;
 use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p::ping::{Ping, PingEvent, PingSuccess};
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
@@ -41,7 +42,14 @@ async fn main() {
         .boxed();
 
     let local_peer_id = PeerId::from(identity.public());
-    let mut swarm = Swarm::new(transport, Rendezvous::new(identity, 10000), local_peer_id);
+    let mut swarm = Swarm::new(
+        transport,
+        MyBehaviour {
+            rendezvous: Rendezvous::new(identity, 10000),
+            ping: Ping::default(),
+        },
+        local_peer_id,
+    );
 
     let _ = swarm.dial_addr(rendezvous_point.clone());
 
@@ -56,7 +64,7 @@ async fn main() {
                     NAMESPACE
                 );
 
-                swarm.behaviour_mut().discover(
+                swarm.behaviour_mut().rendezvous.discover(
                     Some(NAMESPACE.to_string()),
                     None,
                     None,
@@ -73,7 +81,10 @@ async fn main() {
                 );
                 return;
             }
-            SwarmEvent::Behaviour(rendezvous::Event::Discovered { registrations, .. }) => {
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Discovered {
+                registrations,
+                ..
+            })) => {
                 for ((_, peer), registration) in registrations {
                     for address in registration.record.addresses() {
                         println!("Discovered peer {} at {}", peer, address);
@@ -90,7 +101,39 @@ async fn main() {
                     }
                 }
             }
+            SwarmEvent::Behaviour(MyEvent::Ping(PingEvent {
+                peer,
+                result: Ok(PingSuccess::Ping { rtt }),
+            })) => {
+                println!("Ping to {} is {}ms", peer, rtt.as_millis())
+            }
             _ => {}
         }
     }
+}
+
+#[derive(Debug)]
+enum MyEvent {
+    Rendezvous(rendezvous::Event),
+    Ping(PingEvent),
+}
+
+impl From<rendezvous::Event> for MyEvent {
+    fn from(event: rendezvous::Event) -> Self {
+        MyEvent::Rendezvous(event)
+    }
+}
+
+impl From<PingEvent> for MyEvent {
+    fn from(event: PingEvent) -> Self {
+        MyEvent::Ping(event)
+    }
+}
+
+#[derive(libp2p::NetworkBehaviour)]
+#[behaviour(event_process = false)]
+#[behaviour(out_event = "MyEvent")]
+struct MyBehaviour {
+    rendezvous: Rendezvous,
+    ping: Ping,
 }
