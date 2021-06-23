@@ -6,14 +6,13 @@ use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::behaviour::{Event, Rendezvous};
+use libp2p_rendezvous::{Event as RendzevousEvent, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmEvent;
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
 use std::str::FromStr;
 use std::time::Duration;
-use Event::Discovered;
 
 fn main() {
     let identity = identity::Keypair::generate_ed25519();
@@ -56,7 +55,10 @@ fn main() {
                     server_peer_id,
                 );
             };
-            if let Some(SwarmEvent::Behaviour(Discovered { registrations, .. })) = event {
+            if let Some(SwarmEvent::Behaviour(RendzevousEvent::Discovered {
+                registrations, ..
+            })) = event
+            {
                 println!("discovered: {:?}", registrations.values());
             };
         }

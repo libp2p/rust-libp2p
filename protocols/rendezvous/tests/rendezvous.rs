@@ -2,8 +2,8 @@ pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use libp2p_core::PeerId;
-use libp2p_rendezvous::behaviour::{Event, RegisterError, Rendezvous};
-use libp2p_rendezvous::codec::{ErrorCode, DEFAULT_TTL};
+use libp2p_rendezvous::{ErrorCode, DEFAULT_TTL};
+use libp2p_rendezvous::{Event, RegisterError, Rendezvous};
 use libp2p_swarm::{Swarm, SwarmEvent};
 
 #[tokio::test]

@@ -7,7 +7,7 @@ use libp2p_core::PeerId;
 use libp2p_core::{identity, Transport};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise::{Keypair, X25519Spec};
-use libp2p_rendezvous::behaviour::{Event as RendezvousEvent, Rendezvous};
+use libp2p_rendezvous::{Event as RendezvousEvent, Rendezvous};
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux::YamuxConfig;
