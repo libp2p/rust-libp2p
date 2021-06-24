@@ -68,7 +68,8 @@ pub use behaviour::{
     NetworkBehaviourEventProcess,
     PollParameters,
     NotifyHandler,
-    DialPeerCondition
+    DialPeerCondition,
+    DisconnectPeerHandler
 };
 pub use protocols_handler::{
     IntoProtocolsHandler,
@@ -463,6 +464,18 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         self.banned_peers.remove(&peer_id);
     }
 
+    /// Disconnects a peer by its peer ID.
+    ///
+    /// Returns `Ok(())` if a peer with this ID was in the list.
+    pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
+        if let Some(peer) = self.network.peer(peer_id).into_connected() {
+            peer.disconnect();
+            return Ok(());
+        }
+
+        Err(())
+    }
+
     /// Checks whether the [`Network`] has an established connection to a peer.
     pub fn is_connected(&self, peer_id: &PeerId) -> bool {
         self.network.is_connected(peer_id)
@@ -737,6 +750,20 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.add_external_address(addr, score);
                     }
                 },
+                Poll::Ready(NetworkBehaviourAction::DisconnectPeer { peer_id, handler }) => {
+                    if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
+                        match handler {
+                            DisconnectPeerHandler::One(connection_id) => {
+                                if let Some(conn) = peer.connection(connection_id) {
+                                    conn.start_close();
+                                }
+                            }
+                            DisconnectPeerHandler::All => {
+                                peer.disconnect();
+                            }
+                        }
+                    }
+                },
             }
         }
     }
@@ -838,7 +865,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
       TInEvent: Send + 'static,
       TOutEvent: Send + 'static,
-      THandler::Handler: 
+      THandler::Handler:
         ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
       THandleErr: error::Error + Send + 'static,
 {
@@ -1135,6 +1162,13 @@ mod tests {
     use libp2p_noise as noise;
     use super::*;
 
+    // Test execution state.
+    // Connection => Disconnecting => Connecting.
+    enum State {
+        Connecting,
+        Disconnecting,
+    }
+
     fn new_test_swarm<T, O>(handler_proto: T) -> Swarm<CallTraceBehaviour<MockBehaviour<T, O>>>
     where
         T: ProtocolsHandler + Clone,
@@ -1153,6 +1187,52 @@ mod tests {
         SwarmBuilder::new(transport, behaviour, pubkey.into()).build()
     }
 
+    fn swarms_connected<TBehaviour>(
+        swarm1: &Swarm<CallTraceBehaviour<TBehaviour>>,
+        swarm2: &Swarm<CallTraceBehaviour<TBehaviour>>,
+        num_connections: usize,
+    ) -> bool
+    where
+        TBehaviour: NetworkBehaviour,
+        <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Clone,
+    {
+        for s in &[swarm1, swarm2] {
+            if s.behaviour.inject_connection_established.len() > 0 {
+                assert_eq!(s.behaviour.inject_connected.len(), 1);
+            } else {
+                assert_eq!(s.behaviour.inject_connected.len(), 0);
+            }
+            assert!(s.behaviour.inject_connection_closed.is_empty());
+            assert!(s.behaviour.inject_disconnected.is_empty());
+        }
+        [swarm1, swarm2]
+            .iter()
+            .all(|s| s.behaviour.inject_connection_established.len() == num_connections)
+    }
+
+    fn swarms_disconnected<TBehaviour: NetworkBehaviour>(
+        swarm1: &Swarm<CallTraceBehaviour<TBehaviour>>,
+        swarm2: &Swarm<CallTraceBehaviour<TBehaviour>>,
+        num_connections: usize,
+    ) -> bool
+    where
+        TBehaviour: NetworkBehaviour,
+        <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Clone
+    {
+        for s in &[swarm1, swarm2] {
+            if s.behaviour.inject_connection_closed.len() < num_connections {
+                assert_eq!(s.behaviour.inject_disconnected.len(), 0);
+            } else {
+                assert_eq!(s.behaviour.inject_disconnected.len(), 1);
+            }
+            assert_eq!(s.behaviour.inject_connection_established.len(), 0);
+            assert_eq!(s.behaviour.inject_connected.len(), 0);
+        }
+        [swarm1, swarm2]
+            .iter()
+            .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
+    }
+
     /// Establishes a number of connections between two peers,
     /// after which one peer bans the other.
     ///
@@ -1163,8 +1243,7 @@ mod tests {
     fn test_connect_disconnect_ban() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let mut handler_proto = DummyProtocolsHandler::default();
-        handler_proto.keep_alive = KeepAlive::Yes;
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
@@ -1175,12 +1254,6 @@ mod tests {
         swarm1.listen_on(addr1.clone().into()).unwrap();
         swarm2.listen_on(addr2.clone().into()).unwrap();
 
-        // Test execution state. Connection => Disconnecting => Connecting.
-        enum State {
-            Connecting,
-            Disconnecting,
-        }
-
         let swarm1_id = *swarm1.local_peer_id();
 
         let mut banned = false;
@@ -1188,7 +1261,7 @@ mod tests {
 
         let num_connections = 10;
 
-        for _ in 0 .. num_connections {
+        for _ in 0..num_connections {
             swarm1.dial_addr(addr2.clone()).unwrap();
         }
         let mut state = State::Connecting;
@@ -1199,18 +1272,7 @@ mod tests {
                 let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
                 match state {
                     State::Connecting => {
-                        for s in &[&swarm1, &swarm2] {
-                            if s.behaviour.inject_connection_established.len() > 0 {
-                                assert_eq!(s.behaviour.inject_connected.len(), 1);
-                            } else {
-                                assert_eq!(s.behaviour.inject_connected.len(), 0);
-                            }
-                            assert!(s.behaviour.inject_connection_closed.len() == 0);
-                            assert!(s.behaviour.inject_disconnected.len() == 0);
-                        }
-                        if [&swarm1, &swarm2].iter().all(|s| {
-                            s.behaviour.inject_connection_established.len() == num_connections
-                        }) {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
                             if banned {
                                 return Poll::Ready(())
                             }
@@ -1222,18 +1284,7 @@ mod tests {
                         }
                     }
                     State::Disconnecting => {
-                        for s in &[&swarm1, &swarm2] {
-                            if s.behaviour.inject_connection_closed.len() < num_connections {
-                                assert_eq!(s.behaviour.inject_disconnected.len(), 0);
-                            } else {
-                                assert_eq!(s.behaviour.inject_disconnected.len(), 1);
-                            }
-                            assert_eq!(s.behaviour.inject_connection_established.len(), 0);
-                            assert_eq!(s.behaviour.inject_connected.len(), 0);
-                        }
-                        if [&swarm1, &swarm2].iter().all(|s| {
-                            s.behaviour.inject_connection_closed.len() == num_connections
-                        }) {
+                        if swarms_disconnected(&swarm1, &swarm2, num_connections) {
                             if unbanned {
                                 return Poll::Ready(())
                             }
@@ -1242,10 +1293,237 @@ mod tests {
                             swarm1.behaviour.reset();
                             swarm2.behaviour.reset();
                             unbanned = true;
-                            for _ in 0 .. num_connections {
+                            for _ in 0..num_connections {
                                 swarm2.dial_addr(addr1.clone()).unwrap();
                             }
                             state = State::Connecting;
+                        }
+                    }
+                }
+
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending
+                }
+            }
+        }))
+    }
+
+    /// Establishes a number of connections between two peers,
+    /// after which one peer disconnects the other using [`ExpandedSwarm::disconnect_peer_id`].
+    ///
+    /// The test expects both behaviours to be notified via pairs of
+    /// inject_connected / inject_disconnected as well as
+    /// inject_connection_established / inject_connection_closed calls.
+    #[test]
+    fn test_swarm_disconnect() {
+        // Since the test does not try to open any substreams, we can
+        // use the dummy protocols handler.
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
+
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
+
+        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+
+        swarm1.listen_on(addr1.clone().into()).unwrap();
+        swarm2.listen_on(addr2.clone().into()).unwrap();
+
+        let swarm1_id = *swarm1.local_peer_id();
+
+        let mut reconnected = false;
+        let num_connections = 10;
+
+        for _ in 0..num_connections {
+            swarm1.dial_addr(addr2.clone()).unwrap();
+        }
+        let mut state = State::Connecting;
+
+        executor::block_on(future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            swarm2.disconnect_peer_id(swarm1_id.clone()).expect("Error disconnecting");
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            state = State::Disconnecting;
+                        }
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            reconnected = true;
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            for _ in 0..num_connections {
+                                swarm2.dial_addr(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                        }
+                    }
+                }
+
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending
+                }
+            }
+        }))
+    }
+
+    /// Establishes a number of connections between two peers,
+    /// after which one peer disconnects the other
+    /// using [`NetworkBehaviourAction::DisconnectPeer`] thrown from a behaviour.
+    ///
+    /// The test expects both behaviours to be notified via pairs of
+    /// inject_connected / inject_disconnected as well as
+    /// inject_connection_established / inject_connection_closed calls.
+    #[test]
+    fn test_behaviour_disconnect_all() {
+        // Since the test does not try to open any substreams, we can
+        // use the dummy protocols handler.
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
+
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
+
+        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+
+        swarm1.listen_on(addr1.clone().into()).unwrap();
+        swarm2.listen_on(addr2.clone().into()).unwrap();
+
+        let swarm1_id = *swarm1.local_peer_id();
+
+        let mut reconnected = false;
+        let num_connections = 10;
+
+        for _ in 0..num_connections {
+            swarm1.dial_addr(addr2.clone()).unwrap();
+        }
+        let mut state = State::Connecting;
+
+        executor::block_on(future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            swarm2
+                                .behaviour
+                                .inner()
+                                .next_action
+                                .replace(NetworkBehaviourAction::DisconnectPeer {
+                                    peer_id: swarm1_id.clone(),
+                                    handler: DisconnectPeerHandler::All,
+                                });
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            state = State::Disconnecting;
+                        }
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            reconnected = true;
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            for _ in 0..num_connections {
+                                swarm2.dial_addr(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                        }
+                    }
+                }
+
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending
+                }
+            }
+        }))
+    }
+
+    /// Establishes a number of connections between two peers,
+    /// after which one peer closes the only one connection
+    /// using [`NetworkBehaviourAction::DisconnectPeer`] thrown from a behaviour.
+    ///
+    /// The test expects both behaviours to be notified via pairs of
+    /// inject_connected / inject_disconnected as well as
+    /// inject_connection_established / inject_connection_closed calls.
+    #[test]
+    fn test_behaviour_disconnect_one() {
+        // Since the test does not try to open any substreams, we can
+        // use the dummy protocols handler.
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
+
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
+
+        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+
+        swarm1.listen_on(addr1.clone().into()).unwrap();
+        swarm2.listen_on(addr2.clone().into()).unwrap();
+
+        let swarm1_id = *swarm1.local_peer_id();
+
+        let num_connections = 10;
+
+        for _ in 0..num_connections {
+            swarm1.dial_addr(addr2.clone()).unwrap();
+        }
+        let mut state = State::Connecting;
+        let mut disconnected_conn_id = None;
+
+        executor::block_on(future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            disconnected_conn_id = {
+                                let conn_id = swarm2.behaviour.inject_connection_established[num_connections / 2].1;
+                                swarm2
+                                    .behaviour
+                                    .inner()
+                                    .next_action
+                                    .replace(NetworkBehaviourAction::DisconnectPeer {
+                                        peer_id: swarm1_id.clone(),
+                                        handler: DisconnectPeerHandler::One(conn_id),
+                                    });
+                                Some(conn_id)
+                            };
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            state = State::Disconnecting;
+                        }
+                    }
+                    State::Disconnecting => {
+                        for s in &[&swarm1, &swarm2] {
+                            assert_eq!(s.behaviour.inject_disconnected.len(), 0);
+                            assert_eq!(s.behaviour.inject_connection_established.len(), 0);
+                            assert_eq!(s.behaviour.inject_connected.len(), 0);
+                        }
+                        if [&swarm1, &swarm2].iter().all(|s| {
+                            s.behaviour.inject_connection_closed.len() == 1
+                        }) {
+                            let conn_id = swarm2.behaviour.inject_connection_closed[0].1;
+                            assert_eq!(Some(conn_id), disconnected_conn_id);
+                            return Poll::Ready(());
                         }
                     }
                 }

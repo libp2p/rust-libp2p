@@ -293,6 +293,15 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// relative to other observed addresses.
         score: AddressScore,
     },
+
+    /// Instructs the `Swarm` to initiate a graceful close of the connection
+    /// with a peer.
+    DisconnectPeer {
+        /// The peer to disconnect.
+        peer_id: PeerId,
+        /// The ID of the connection whose `ProtocolsHandler` to disconnect.
+        handler: DisconnectPeerHandler,
+    }
 }
 
 impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
@@ -312,7 +321,10 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                     event: f(event)
                 },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+                NetworkBehaviourAction::ReportObservedAddr { address, score },
+            NetworkBehaviourAction::DisconnectPeer { peer_id, handler } => {
+                NetworkBehaviourAction::DisconnectPeer { peer_id, handler }
+            }
         }
     }
 
@@ -328,7 +340,9 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
             NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
                 NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+                NetworkBehaviourAction::ReportObservedAddr { address, score },
+            NetworkBehaviourAction::DisconnectPeer { peer_id, handler } =>
+                NetworkBehaviourAction::DisconnectPeer { peer_id, handler }
         }
     }
 }
@@ -371,5 +385,20 @@ pub enum DialPeerCondition {
 impl Default for DialPeerCondition {
     fn default() -> Self {
         DialPeerCondition::Disconnected
+    }
+}
+
+/// The options which connection handlers to disconnect.
+#[derive(Debug, Clone)]
+pub enum DisconnectPeerHandler {
+    /// Disconnect a particular connection handler.
+    One(ConnectionId),
+    /// Disconnect all connection handlers.
+    All,
+}
+
+impl Default for DisconnectPeerHandler {
+    fn default() -> Self {
+        DisconnectPeerHandler::All
     }
 }
