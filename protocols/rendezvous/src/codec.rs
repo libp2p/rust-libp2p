@@ -6,7 +6,7 @@ use std::fmt;
 use unsigned_varint::codec::UviBytes;
 use uuid::Uuid;
 
-pub type Ttl = i64;
+pub type Ttl = u64;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -16,7 +16,7 @@ pub enum Message {
     Discover {
         namespace: Option<Namespace>,
         cookie: Option<Cookie>,
-        limit: Option<i64>,
+        limit: Option<Ttl>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
 }
@@ -146,11 +146,11 @@ pub struct InvalidCookie;
 pub struct NewRegistration {
     pub namespace: Namespace,
     pub record: PeerRecord,
-    pub ttl: Option<i64>,
+    pub ttl: Option<u64>,
 }
 
 impl NewRegistration {
-    pub fn new(namespace: Namespace, record: PeerRecord, ttl: Option<i64>) -> Self {
+    pub fn new(namespace: Namespace, record: PeerRecord, ttl: Option<Ttl>) -> Self {
         Self {
             namespace,
             record,
@@ -158,7 +158,7 @@ impl NewRegistration {
         }
     }
 
-    pub fn effective_ttl(&self) -> i64 {
+    pub fn effective_ttl(&self) -> Ttl {
         self.ttl.unwrap_or(DEFAULT_TTL)
     }
 }
@@ -167,7 +167,7 @@ impl NewRegistration {
 pub struct Registration {
     pub namespace: Namespace,
     pub record: PeerRecord,
-    pub ttl: i64,
+    pub ttl: Ttl,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

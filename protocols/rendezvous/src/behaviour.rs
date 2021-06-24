@@ -1,4 +1,4 @@
-use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration};
+use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler::{InEvent, OutEvent, RendezvousHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
@@ -25,12 +25,12 @@ pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
     registrations: Registrations,
     key_pair: Keypair,
-    pending_register_requests: Vec<(Namespace, PeerId, Option<i64>)>,
+    pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 }
 
 pub struct Config {
-    min_ttl: i64,
-    max_ttl: i64,
+    min_ttl: Ttl,
+    max_ttl: Ttl,
 }
 
 impl Default for Config {
@@ -56,7 +56,7 @@ impl Rendezvous {
         &mut self,
         namespace: Namespace,
         rendezvous_node: PeerId,
-        ttl: Option<i64>,
+        ttl: Option<Ttl>,
     ) -> Result<(), RegisterError> {
         self.pending_register_requests
             .push((namespace, rendezvous_node, ttl));
@@ -76,7 +76,7 @@ impl Rendezvous {
         &mut self,
         ns: Option<Namespace>,
         cookie: Option<Cookie>,
-        limit: Option<i64>,
+        limit: Option<u64>,
         rendezvous_node: PeerId,
     ) {
         self.events
@@ -123,7 +123,7 @@ pub enum Event {
     /// We successfully registered with the contained rendezvous node.
     Registered {
         rendezvous_node: PeerId,
-        ttl: i64,
+        ttl: Ttl,
         namespace: Namespace,
     },
     /// We failed to register with the contained rendezvous node.
@@ -392,17 +392,17 @@ pub struct Registrations {
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
-    min_ttl: i64,
-    max_ttl: i64,
+    min_ttl: Ttl,
+    max_ttl: Ttl,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum TtlOutOfRange {
     #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
-    TooLong { bound: i64, requested: i64 },
+    TooLong { bound: Ttl, requested: Ttl },
     #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
-    TooShort { bound: i64, requested: i64 },
+    TooShort { bound: Ttl, requested: Ttl },
 }
 
 impl Default for Registrations {
@@ -487,7 +487,7 @@ impl Registrations {
         &mut self,
         discover_namespace: Option<Namespace>,
         cookie: Option<Cookie>,
-        mut limit: Option<i64>,
+        limit: Option<u64>,
     ) -> Result<(impl Iterator<Item = &Registration> + '_, Cookie), CookieNamespaceMismatch> {
         let cookie_namespace = cookie.as_ref().and_then(|cookie| cookie.namespace());
 
@@ -525,15 +525,7 @@ impl Registrations {
                     }
                 }
             })
-            .take_while(|_| {
-                let limit = match limit.as_mut() {
-                    None => return true,
-                    Some(limit) => limit,
-                };
-                *limit -= 1;
-
-                *limit >= 0
-            })
+            .take(limit.unwrap_or(u64::MAX) as usize)
             .cloned()
             .collect::<Vec<_>>();
 
@@ -805,7 +797,7 @@ mod tests {
         new_registration(namespace, identity, None)
     }
 
-    fn new_dummy_registration_with_ttl(namespace: &'static str, ttl: i64) -> NewRegistration {
+    fn new_dummy_registration_with_ttl(namespace: &'static str, ttl: Ttl) -> NewRegistration {
         let identity = identity::Keypair::generate_ed25519();
 
         new_registration(namespace, identity, Some(ttl))
@@ -814,7 +806,7 @@ mod tests {
     fn new_registration(
         namespace: &'static str,
         identity: identity::Keypair,
-        ttl: Option<i64>,
+        ttl: Option<Ttl>,
     ) -> NewRegistration {
         NewRegistration::new(
             Namespace::from_static(namespace),

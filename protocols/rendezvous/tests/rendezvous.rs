@@ -1,7 +1,7 @@
 pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
-use libp2p::rendezvous::Namespace;
+use libp2p::rendezvous::{Namespace, Ttl};
 use libp2p_core::identity;
 use libp2p_core::PeerId;
 use libp2p_rendezvous::{
@@ -184,7 +184,7 @@ impl RendezvousTest {
     pub async fn assert_successful_registration(
         &mut self,
         expected_namespace: Namespace,
-        expected_ttl: i64,
+        expected_ttl: Ttl,
     ) {
         match await_events_or_timeout(&mut self.robert, &mut self.alice).await {
             (
@@ -207,7 +207,7 @@ impl RendezvousTest {
     pub async fn assert_successful_discovery(
         &mut self,
         expected_namespace: Namespace,
-        expected_ttl: i64,
+        expected_ttl: Ttl,
         expected_peer_id: PeerId,
     ) {
         match await_events_or_timeout(&mut self.robert, &mut self.bob).await {

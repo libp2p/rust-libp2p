@@ -1,5 +1,6 @@
 use crate::codec::{
     self, Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec,
+    Ttl,
 };
 use crate::protocol;
 use crate::substream::{Advance, Next, SubstreamState};
@@ -46,14 +47,14 @@ pub enum OutEvent {
     RegistrationRequested(NewRegistration),
     Registered {
         namespace: Namespace,
-        ttl: i64,
+        ttl: Ttl,
     },
     RegisterFailed(Namespace, ErrorCode),
     UnregisterRequested(Namespace),
     DiscoverRequested {
         namespace: Option<Namespace>,
         cookie: Option<Cookie>,
-        limit: Option<i64>,
+        limit: Option<u64>,
     },
     Discovered {
         registrations: Vec<Registration>,
@@ -73,10 +74,10 @@ pub enum InEvent {
     DiscoverRequest {
         namespace: Option<Namespace>,
         cookie: Option<Cookie>,
-        limit: Option<i64>,
+        limit: Option<Ttl>,
     },
     RegisterResponse {
-        ttl: i64,
+        ttl: Ttl,
     },
     DiscoverResponse {
         discovered: Vec<Registration>,
