@@ -472,7 +472,10 @@ where
                             is_new_peer: false,
                             addresses: entry.value().clone(),
                             old_peer: None,
-                            bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                            bucket_range: self.kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
                         }
                     ))
                 }
@@ -498,7 +501,10 @@ where
                                 is_new_peer: true,
                                 addresses,
                                 old_peer: None,
-                                bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                                bucket_range: self.kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
                             }
                         ));
                         RoutingUpdate::Success
@@ -976,7 +982,10 @@ where
                                 is_new_peer: false,
                                 addresses: entry.value().clone(),
                                 old_peer: None,
-                                bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                                bucket_range: self.kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
                             }
                         ))
                     }
@@ -1017,7 +1026,10 @@ where
                                     is_new_peer: true,
                                     addresses,
                                     old_peer: None,
-                                    bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                                    bucket_range: self.kbuckets
+                                        .bucket(&key)
+                                        .map(|b| b.range())
+                                        .expect("Not kbucket::Entry::SelfEntry."),
                                 };
                                 self.queued_events.push_back(
                                     NetworkBehaviourAction::GenerateEvent(event));
@@ -1993,7 +2005,10 @@ where
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
-                    bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                    bucket_range: self.kbuckets
+                        .bucket(&key)
+                        .map(|b| b.range())
+                        .expect("Self to never be applied from pending."),
                     peer: key.into_preimage(),
                     is_new_peer: true,
                     addresses: value,
@@ -2125,9 +2140,7 @@ pub enum KademliaEvent {
         addresses: Addresses,
         /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
         /// the bucket of the peer.
-        //
-        // TODO: Ideally this should not be an Option.
-        bucket_range: Option<(Distance, Distance)>,
+        bucket_range: (Distance, Distance),
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
         old_peer: Option<PeerId>,
