@@ -24,9 +24,10 @@
 //! peer ID will be generated randomly.
 
 use async_std::task;
+use futures::StreamExt;
 use libp2p::{
     Multiaddr,
-    Swarm,
+    swarm::{Swarm, SwarmEvent},
     PeerId,
     identity,
     development_transport
@@ -64,8 +65,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let mut cfg = KademliaConfig::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        let store = MemoryStore::new(local_peer_id.clone());
-        let mut behaviour = Kademlia::with_config(local_peer_id.clone(), store, cfg);
+        let store = MemoryStore::new(local_peer_id);
+        let mut behaviour = Kademlia::with_config(local_peer_id, store, cfg);
 
         // Add the bootnodes to the local routing table. `libp2p-dns` built
         // into the `transport` resolves the `dnsaddr` when Kademlia tries
@@ -91,11 +92,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off!
     task::block_on(async move {
         loop {
-            let event = swarm.next().await;
-            if let KademliaEvent::QueryResult {
+            let event = swarm.select_next_some().await;
+            if let SwarmEvent::Behaviour(KademliaEvent::QueryResult {
                 result: QueryResult::GetClosestPeers(result),
                 ..
-            } = event {
+            }) = event {
                 match result {
                     Ok(ok) =>
                         if !ok.peers.is_empty() {

@@ -59,7 +59,7 @@ use libp2p::{
     identity,
     floodsub::{self, Floodsub, FloodsubEvent},
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent}
 };
 use std::{error::Error, task::{Context, Poll}};
 
@@ -124,7 +124,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(local_peer_id.clone()),
+            floodsub: Floodsub::new(local_peer_id),
             mdns,
             ignored_member: false,
         };
@@ -147,7 +147,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
@@ -160,17 +159,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
-                        }
+                Poll::Ready(Some(event)) => {
+                    if let SwarmEvent::NewListenAddr(addr) = event {
+                        println!("Listening on {:?}", addr);
                     }
-                    break
                 }
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending

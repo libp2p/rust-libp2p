@@ -1803,7 +1803,6 @@ where
                 ));
             }
 
-            // TODO: Should this not be called GetRecordReq?
             KademliaHandlerEvent::GetRecord { key, request_id } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
@@ -2105,7 +2104,6 @@ pub enum KademliaEvent {
     },
 
     /// A query has produced a result.
-    // TODO: Consider renaming to OutboundQueryResult.
     OutboundQueryResult {
         /// The ID of the query that finished.
         id: QueryId,
