@@ -113,12 +113,14 @@ impl ProtocolsHandler for Handler {
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        remote_addrs: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
+        protocol::Connect { obs_addrs }: <Self::OutboundProtocol as upgrade::OutboundUpgrade<
+            NegotiatedSubstream,
+        >>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
         self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnectReq(
-                inbound_connect,
+            .push_back(ProtocolsHandlerEvent::Custom(Event::OutboundConnectNeg(
+                obs_addrs,
             )));
     }
 
@@ -182,7 +184,9 @@ impl ProtocolsHandler for Handler {
         }
 
         while let Poll::Ready(Some(remote_addrs)) = self.inbound_connects.poll_next_unpin(cx) {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::InboundConnectNeg(remote_addrs.unwrap())))
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::InboundConnectNeg(
+                remote_addrs.unwrap(),
+            )));
         }
 
         Poll::Pending

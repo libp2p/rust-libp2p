@@ -245,6 +245,7 @@ async fn wait_for_reservation(
 async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
     loop {
         match client.next_event().await {
+            SwarmEvent::IncomingConnection { .. } => {},
             SwarmEvent::ConnectionEstablished { endpoint, .. }
                 if endpoint.get_remote_address() == addr =>
             {

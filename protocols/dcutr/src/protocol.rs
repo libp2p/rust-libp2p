@@ -275,7 +275,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
 
 // TODO: Should we rename this to OutboundConnect?
 pub struct Connect {
-    obs_addrs: Vec<Multiaddr>,
+    pub obs_addrs: Vec<Multiaddr>,
 }
 
 pub struct InboundConnect {
