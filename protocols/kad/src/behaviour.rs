@@ -2118,7 +2118,7 @@ pub enum KademliaEvent {
         request: InboundRequest,
     },
 
-    /// A query has produced a result.
+    /// An outbound query has produced a result.
     OutboundQueryResult {
         /// The ID of the query that finished.
         id: QueryId,
