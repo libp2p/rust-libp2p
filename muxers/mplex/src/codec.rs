@@ -305,4 +305,33 @@ mod tests {
         let ok_msg = Frame::Data { stream_id: LocalStreamId { num: 123, role }, data };
         assert!(enc.encode(ok_msg, &mut out).is_ok());
     }
+
+    #[test]
+    fn test_60bit_stream_id() {
+        // create new codec object for encoding and decoding our frame
+        let mut codec = Codec::new();
+        // create a u64 stream ID
+        let id : u64 = u32::MAX as u64 + 1 ;
+        let stream_id = LocalStreamId { num: id, role: Endpoint::Dialer };
+
+        // open a new frame with that stream ID
+        let original_frame = Frame::Open { stream_id };
+
+        // encode that frame
+        let mut enc_frame = BytesMut::new();
+        match codec.encode(original_frame, &mut enc_frame) {
+            Err(e) => panic!("{}", e.to_string()),
+            _ => {}
+        };
+
+        // decode encoded frame and extract stream ID
+        let dec_string_id = match codec.decode(&mut enc_frame) {
+            Err(e) => panic!("{}", e.to_string()),
+            Ok(decoded_frame) => decoded_frame.unwrap().remote_id(),
+        };
+        
+        assert_eq!(dec_string_id.num, stream_id.num);
+        
+    }
+
 }
