@@ -24,7 +24,7 @@ use uuid::Uuid;
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
     registrations: Registrations,
-    key_pair: Keypair,
+    keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 }
 
@@ -43,11 +43,11 @@ impl Default for Config {
 }
 
 impl Rendezvous {
-    pub fn new(key_pair: Keypair, config: Config) -> Self {
+    pub fn new(keypair: Keypair, config: Config) -> Self {
         Self {
             events: Default::default(),
             registrations: Registrations::with_config(config),
-            key_pair,
+            keypair,
             pending_register_requests: vec![],
         }
     }
@@ -354,7 +354,7 @@ impl NetworkBehaviour for Rendezvous {
                 ));
             }
 
-            let action = match PeerRecord::new(self.key_pair.clone(), external_addresses) {
+            let action = match PeerRecord::new(self.keypair.clone(), external_addresses) {
                 Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
                     peer_id: rendezvous_node,
                     event: InEvent::RegisterRequest(NewRegistration {
