@@ -37,7 +37,7 @@ use libp2p_gossipsub::{
     ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {
@@ -49,10 +49,13 @@ impl Future for Graph {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
-            match node.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => return Poll::Ready((addr.clone(), event)),
-                Poll::Ready(None) => panic!("unexpected None when polling nodes"),
-                Poll::Pending => {}
+            loop {
+                match node.poll_next_unpin(cx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => return Poll::Ready((addr.clone(), event)),
+                    Poll::Ready(Some(_)) => {}
+                    Poll::Ready(None) => panic!("unexpected None when polling nodes"),
+                    Poll::Pending => break,
+                }   
             }
         }
 
