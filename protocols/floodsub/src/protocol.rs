@@ -166,7 +166,7 @@ where
     fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let bytes = self.into_bytes();
-            upgrade::write_one(&mut socket, bytes).await?;
+            upgrade::write_and_close(&mut socket, bytes).await?;
             Ok(())
         })
     }

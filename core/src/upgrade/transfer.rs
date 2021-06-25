@@ -29,7 +29,7 @@ use std::{error, fmt, io};
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what `read_one` expects.
-pub async fn write_one(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
+pub async fn write_and_close(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
     -> Result<(), io::Error>
 {
     write_varint(socket, data.as_ref().len()).await?;
@@ -180,7 +180,7 @@ mod tests {
 
         let mut out = vec![0; 10_000];
         futures::executor::block_on(
-            write_one(&mut futures::io::Cursor::new(&mut out[..]), data.clone())
+            write_and_close(&mut futures::io::Cursor::new(&mut out[..]), data.clone())
         ).unwrap();
 
         let (out_len, out_data) = unsigned_varint::decode::usize(&out).unwrap();

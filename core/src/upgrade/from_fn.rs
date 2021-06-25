@@ -35,7 +35,7 @@ use std::iter;
 ///     .and_then(move |out, cp| {
 ///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock, endpoint| async move {
 ///             if endpoint.is_dialer() {
-///                 upgrade::write_one(&mut sock, "some handshake data").await?;
+///                 upgrade::write_and_close(&mut sock, "some handshake data").await?;
 ///             } else {
 ///                 let handshake_data = upgrade::read_one(&mut sock, 1024).await?;
 ///                 if handshake_data != b"some handshake data" {

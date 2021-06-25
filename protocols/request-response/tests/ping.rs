@@ -27,7 +27,7 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade::{self, read_one, write_one}
+    upgrade::{self, read_one, write_and_close}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
@@ -449,7 +449,7 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).await
+        write_and_close(io, data).await
     }
 
     async fn write_response<T>(&mut self, _: &PingProtocol, io: &mut T, Pong(data): Pong)
@@ -457,6 +457,6 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).await
+        write_and_close(io, data).await
     }
 }
