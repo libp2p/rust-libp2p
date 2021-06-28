@@ -47,7 +47,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > the corresponding local ID has the role `Endpoint::Listener`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct LocalStreamId {
-    num: u32,
+    num: u64,
     role: Endpoint,
 }
 
@@ -63,7 +63,7 @@ impl fmt::Display for LocalStreamId {
 impl Hash for LocalStreamId {
     #![allow(clippy::derive_hash_xor_eq)]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u32(self.num);
+        state.write_u64(self.num);
     }
 }
 
@@ -76,17 +76,17 @@ impl nohash_hasher::IsEnabled for LocalStreamId {}
 /// [`RemoteStreamId::into_local()`].
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct RemoteStreamId {
-    num: u32,
+    num: u64,
     role: Endpoint,
 }
 
 impl LocalStreamId {
-    pub fn dialer(num: u32) -> Self {
+    pub fn dialer(num: u64) -> Self {
         Self { num, role: Endpoint::Dialer }
     }
 
     #[cfg(test)]
-    pub fn listener(num: u32) -> Self {
+    pub fn listener(num: u64) -> Self {
         Self { num, role: Endpoint::Listener }
     }
 
@@ -107,11 +107,11 @@ impl LocalStreamId {
 }
 
 impl RemoteStreamId {
-    fn dialer(num: u32) -> Self {
+    fn dialer(num: u64) -> Self {
         Self { num, role: Endpoint::Dialer }
     }
 
-    fn listener(num: u32) -> Self {
+    fn listener(num: u64) -> Self {
         Self { num, role: Endpoint::Listener }
     }
 
@@ -146,15 +146,15 @@ impl Frame<RemoteStreamId> {
 }
 
 pub struct Codec {
-    varint_decoder: codec::Uvi<u32>,
+    varint_decoder: codec::Uvi<u64>,
     decoder_state: CodecDecodeState,
 }
 
 #[derive(Debug, Clone)]
 enum CodecDecodeState {
     Begin,
-    HasHeader(u32),
-    HasHeaderAndLen(u32, usize),
+    HasHeader(u64),
+    HasHeaderAndLen(u64, usize),
     Poisoned,
 }
 
@@ -210,7 +210,7 @@ impl Decoder for Codec {
                     }
 
                     let buf = src.split_to(len);
-                    let num = (header >> 3) as u32;
+                    let num = (header >> 3) as u64;
                     let out = match header & 7 {
                         0 => Frame::Open { stream_id: RemoteStreamId::dialer(num) },
                         1 => Frame::Data { stream_id: RemoteStreamId::listener(num), data: buf.freeze() },
@@ -304,5 +304,30 @@ mod tests {
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE][..]);
         let ok_msg = Frame::Data { stream_id: LocalStreamId { num: 123, role }, data };
         assert!(enc.encode(ok_msg, &mut out).is_ok());
+    }
+
+    #[test]
+    fn test_60bit_stream_id() {
+        // Create new codec object for encoding and decoding our frame.
+        let mut codec = Codec::new();
+        // Create a u64 stream ID.
+        let id: u64 = u32::MAX as u64 + 1 ;
+        let stream_id = LocalStreamId { num: id, role: Endpoint::Dialer };
+
+        // Open a new frame with that stream ID.
+        let original_frame = Frame::Open { stream_id };
+
+        // Encode that frame.
+        let mut enc_frame = BytesMut::new();
+        codec.encode(original_frame, &mut enc_frame)
+            .expect("Encoding to succeed.");
+
+        // Decode encoded frame and extract stream ID.
+        let dec_string_id = codec.decode(&mut enc_frame)
+            .expect("Decoding to succeed.")
+            .map(|f| f.remote_id())
+            .unwrap();
+
+        assert_eq!(dec_string_id.num, stream_id.num);
     }
 }

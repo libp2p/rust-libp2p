@@ -1093,7 +1093,7 @@ mod tests {
 
             // Open the maximum number of inbound streams.
             for i in 0 .. cfg.max_substreams {
-                let stream_id = LocalStreamId::dialer(i as u32);
+                let stream_id = LocalStreamId::dialer(i as u64);
                 codec.encode(Frame::Open { stream_id  }, &mut r_buf).unwrap();
             }
 
@@ -1115,7 +1115,7 @@ mod tests {
                         Poll::Pending => panic!("Expected new inbound stream."),
                         Poll::Ready(Err(e)) => panic!("{:?}", e),
                         Poll::Ready(Ok(id)) => {
-                            assert_eq!(id, LocalStreamId::listener(i as u32));
+                            assert_eq!(id, LocalStreamId::listener(i as u64));
                         }
                     };
                 }
@@ -1162,7 +1162,7 @@ mod tests {
                     MaxBufferBehaviour::Block => {
                         assert!(m.poll_next_stream(cx).is_pending());
                         for i in 1 .. cfg.max_substreams {
-                            let id = LocalStreamId::listener(i as u32);
+                            let id = LocalStreamId::listener(i as u64);
                             assert!(m.poll_read_stream(cx, id).is_pending());
                         }
                     }
