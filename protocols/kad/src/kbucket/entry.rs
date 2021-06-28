@@ -189,10 +189,9 @@ where
             .value
     }
 
-    /// Sets the status of the entry to `NodeStatus::Disconnected`.
-    pub fn update(self, status: NodeStatus) -> Self {
+    /// Sets the status of the entry to the provided [`NodeStatus`].
+    pub fn update(&mut self, status: NodeStatus) {
         self.0.bucket.update(self.0.key, status);
-        Self::new(self.0.bucket, self.0.key)
     }
 
     /// Removes the entry from the bucket.
@@ -274,4 +273,3 @@ where
         }, status)
     }
 }
-
