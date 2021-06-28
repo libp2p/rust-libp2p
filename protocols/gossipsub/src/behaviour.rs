@@ -3202,8 +3202,8 @@ where
                 NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                     NetworkBehaviourAction::ReportObservedAddr { address, score }
                 }
-                NetworkBehaviourAction::DisconnectPeer { peer_id, handler } => {
-                    NetworkBehaviourAction::DisconnectPeer { peer_id, handler }
+                NetworkBehaviourAction::CloseConnection { peer_id, handler } => {
+                    NetworkBehaviourAction::CloseConnection { peer_id, handler }
                 }
             });
         }

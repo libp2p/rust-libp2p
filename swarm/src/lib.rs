@@ -69,7 +69,7 @@ pub use behaviour::{
     PollParameters,
     NotifyHandler,
     DialPeerCondition,
-    DisconnectPeerHandler
+    CloseConnection
 };
 pub use protocols_handler::{
     IntoProtocolsHandler,
@@ -464,7 +464,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         self.banned_peers.remove(&peer_id);
     }
 
-    /// Disconnects a peer by its peer ID.
+    /// Disconnects a peer by its peer ID, closing all connections to said peer.
     ///
     /// Returns `Ok(())` if a peer with this ID was in the list.
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
@@ -750,15 +750,15 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.add_external_address(addr, score);
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::DisconnectPeer { peer_id, handler }) => {
+                Poll::Ready(NetworkBehaviourAction::CloseConnection { peer_id, handler }) => {
                     if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
                         match handler {
-                            DisconnectPeerHandler::One(connection_id) => {
+                            CloseConnection::One(connection_id) => {
                                 if let Some(conn) = peer.connection(connection_id) {
                                     conn.start_close();
                                 }
                             }
-                            DisconnectPeerHandler::All => {
+                            CloseConnection::All => {
                                 peer.disconnect();
                             }
                         }
@@ -1380,7 +1380,7 @@ mod tests {
 
     /// Establishes a number of connections between two peers,
     /// after which one peer disconnects the other
-    /// using [`NetworkBehaviourAction::DisconnectPeer`] thrown from a behaviour.
+    /// using [`NetworkBehaviourAction::CloseConnection`] thrown from a behaviour.
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// inject_connected / inject_disconnected as well as
@@ -1424,9 +1424,9 @@ mod tests {
                                 .behaviour
                                 .inner()
                                 .next_action
-                                .replace(NetworkBehaviourAction::DisconnectPeer {
+                                .replace(NetworkBehaviourAction::CloseConnection {
                                     peer_id: swarm1_id.clone(),
-                                    handler: DisconnectPeerHandler::All,
+                                    handler: CloseConnection::All,
                                 });
                             swarm1.behaviour.reset();
                             swarm2.behaviour.reset();
@@ -1458,7 +1458,7 @@ mod tests {
 
     /// Establishes a number of connections between two peers,
     /// after which one peer closes the only one connection
-    /// using [`NetworkBehaviourAction::DisconnectPeer`] thrown from a behaviour.
+    /// using [`NetworkBehaviourAction::CloseConnection`] thrown from a behaviour.
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// inject_connected / inject_disconnected as well as
@@ -1501,9 +1501,9 @@ mod tests {
                                     .behaviour
                                     .inner()
                                     .next_action
-                                    .replace(NetworkBehaviourAction::DisconnectPeer {
+                                    .replace(NetworkBehaviourAction::CloseConnection {
                                         peer_id: swarm1_id.clone(),
-                                        handler: DisconnectPeerHandler::One(conn_id),
+                                        handler: CloseConnection::One(conn_id),
                                     });
                                 Some(conn_id)
                             };
