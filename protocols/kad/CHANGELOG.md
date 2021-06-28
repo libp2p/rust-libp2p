@@ -4,7 +4,7 @@
 
 - Expose inbound request information (see [PR 2087]). Note:
   `KademliaEvent::QueryResult` is renamed to
-  `KademliaEvent::OutboundQueryResult`.
+  `KademliaEvent::OutboundQueryCompleted`.
 
 - Expose whether `KademliaEvent::RoutingUpdated` is triggered with new peer (see
   [PR 2087]).
