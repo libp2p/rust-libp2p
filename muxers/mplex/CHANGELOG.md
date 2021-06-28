@@ -1,3 +1,7 @@
+# 0.39.0 [unreleased]
+
+- Increased the lenght of Stream ID to 60 bits.
+ 
 # 0.29.0 [unreleased]
 
 - Update dependencies.
