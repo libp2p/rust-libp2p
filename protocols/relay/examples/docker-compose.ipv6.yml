@@ -1,5 +1,5 @@
 # This docker compose use the same example as the docker-compose.yml but with ipv6 instead of ipv4
-version: '3.4'
+version: '2.1'
 services:
   relay: 
     image: libp2p-relay
