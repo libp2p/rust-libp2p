@@ -162,7 +162,7 @@ impl Metrics {
 impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         match event {
-            libp2p_kad::KademliaEvent::OutboundQueryResult { result, stats, .. } => {
+            libp2p_kad::KademliaEvent::OutboundQueryCompleted { result, stats, .. } => {
                 self.kad
                     .query_result_num_requests
                     .get_or_create(&result.into())
@@ -225,12 +225,10 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
             libp2p_kad::KademliaEvent::RoutingUpdated {
                 is_new_peer,
                 old_peer,
-                bucket_range,
+                bucket_range: (low, _high),
                 ..
             } => {
-                let bucket = bucket_range
-                    .and_then(|(low, _high)| low.ilog2())
-                    .unwrap_or(0);
+                let bucket = low.ilog2().unwrap_or(0);
                 if *is_new_peer {
                     self.kad
                         .routing_updated
@@ -260,7 +258,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                 }
             }
 
-            libp2p_kad::KademliaEvent::InboundRequest { request } => {
+            libp2p_kad::KademliaEvent::InboundRequestServed { request } => {
                 self.kad.inbound_requests.get_or_create(&request.into()).inc();
             }
             _ => {}

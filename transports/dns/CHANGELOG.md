@@ -1,3 +1,7 @@
+# 0.29.0 [unreleased]
+
+- Update dependencies.
+
 # 0.28.1 [2021-04-01]
 
 - Update dependencies.
@@ -48,4 +52,3 @@
 # 0.20.0 [2020-07-01]
 
 - Dependency and documentation updates.
-

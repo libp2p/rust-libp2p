@@ -472,7 +472,10 @@ where
                             is_new_peer: false,
                             addresses: entry.value().clone(),
                             old_peer: None,
-                            bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                            bucket_range: self.kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
                         }
                     ))
                 }
@@ -498,7 +501,10 @@ where
                                 is_new_peer: true,
                                 addresses,
                                 old_peer: None,
-                                bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                                bucket_range: self.kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
                             }
                         ));
                         RoutingUpdate::Success
@@ -597,7 +603,7 @@ where
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
-    /// [`KademliaEvent::OutboundQueryResult{QueryResult::GetClosestPeers}`].
+    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone
@@ -612,7 +618,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
-    /// [`KademliaEvent::OutboundQueryResult{QueryResult::GetRecord}`].
+    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) -> QueryId {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
@@ -651,7 +657,7 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`KademliaEvent::OutboundQueryResult{QueryResult::PutRecord}`].
+    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::PutRecord}`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
@@ -764,7 +770,7 @@ where
     ///
     /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
     /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
-    /// reported via [`KademliaEvent::OutboundQueryResult{QueryResult::Bootstrap}`] events,
+    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::Bootstrap}`] events,
     /// with one such event per bootstrapping query.
     ///
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
@@ -807,7 +813,7 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`KademliaEvent::OutboundQueryResult{QueryResult::StartProviding}`].
+    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::StartProviding}`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -842,7 +848,7 @@ where
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in a
-    /// reported via [`KademliaEvent::OutboundQueryResult{QueryResult::GetProviders}`].
+    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let info = QueryInfo::GetProviders {
             key: key.clone(),
@@ -976,7 +982,10 @@ where
                                 is_new_peer: false,
                                 addresses: entry.value().clone(),
                                 old_peer: None,
-                                bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                                bucket_range: self.kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
                             }
                         ))
                     }
@@ -1017,7 +1026,10 @@ where
                                     is_new_peer: true,
                                     addresses,
                                     old_peer: None,
-                                    bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                                    bucket_range: self.kbuckets
+                                        .bucket(&key)
+                                        .map(|b| b.range())
+                                        .expect("Not kbucket::Entry::SelfEntry."),
                                 };
                                 self.queued_events.push_back(
                                     NetworkBehaviourAction::GenerateEvent(event));
@@ -1105,7 +1117,7 @@ where
                     self.queries.continue_iter_closest(query_id, target.clone(), peers, inner);
                 }
 
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::Bootstrap(Ok(BootstrapOk { peer, num_remaining }))
@@ -1113,7 +1125,7 @@ where
             }
 
             QueryInfo::GetClosestPeers { key, .. } => {
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetClosestPeers(Ok(
@@ -1123,7 +1135,7 @@ where
             }
 
             QueryInfo::GetProviders { key, providers } => {
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetProviders(Ok(
@@ -1163,14 +1175,14 @@ where
             } => {
                 match context {
                     AddProviderContext::Publish => {
-                        Some(KademliaEvent::OutboundQueryResult {
+                        Some(KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
                             result: QueryResult::StartProviding(Ok(AddProviderOk { key }))
                         })
                     }
                     AddProviderContext::Republish => {
-                        Some(KademliaEvent::OutboundQueryResult {
+                        Some(KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
                             result: QueryResult::RepublishProvider(Ok(AddProviderOk { key }))
@@ -1208,7 +1220,7 @@ where
                 } else {
                     Err(GetRecordError::QuorumFailed { key, records, quorum })
                 };
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(results)
@@ -1250,13 +1262,13 @@ where
                 };
                 match context {
                     PutRecordContext::Publish | PutRecordContext::Custom =>
-                        Some(KademliaEvent::OutboundQueryResult {
+                        Some(KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
                             result: QueryResult::PutRecord(mk_result(record.key))
                         }),
                     PutRecordContext::Republish =>
-                        Some(KademliaEvent::OutboundQueryResult {
+                        Some(KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
                             result: QueryResult::RepublishRecord(mk_result(record.key))
@@ -1296,7 +1308,7 @@ where
                     }
                 }
 
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::Bootstrap(Err(
@@ -1308,7 +1320,7 @@ where
             QueryInfo::AddProvider { context, key, .. } =>
                 Some(match context {
                     AddProviderContext::Publish =>
-                        KademliaEvent::OutboundQueryResult {
+                        KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: result.stats,
                             result: QueryResult::StartProviding(Err(
@@ -1316,7 +1328,7 @@ where
                             ))
                         },
                     AddProviderContext::Republish =>
-                        KademliaEvent::OutboundQueryResult {
+                        KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: result.stats,
                             result: QueryResult::RepublishProvider(Err(
@@ -1326,7 +1338,7 @@ where
                 }),
 
             QueryInfo::GetClosestPeers { key } => {
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetClosestPeers(Err(
@@ -1349,13 +1361,13 @@ where
                 });
                 match context {
                     PutRecordContext::Publish | PutRecordContext::Custom =>
-                        Some(KademliaEvent::OutboundQueryResult {
+                        Some(KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: result.stats,
                             result: QueryResult::PutRecord(err)
                         }),
                     PutRecordContext::Republish =>
-                        Some(KademliaEvent::OutboundQueryResult {
+                        Some(KademliaEvent::OutboundQueryCompleted {
                             id: query_id,
                             stats: result.stats,
                             result: QueryResult::RepublishRecord(err)
@@ -1386,7 +1398,7 @@ where
             }
 
             QueryInfo::GetRecord { key, records, quorum, .. } =>
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(Err(
@@ -1395,7 +1407,7 @@ where
                 }),
 
             QueryInfo::GetProviders { key, providers } =>
-                Some(KademliaEvent::OutboundQueryResult {
+                Some(KademliaEvent::OutboundQueryCompleted {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetProviders(Err(
@@ -1718,7 +1730,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::InboundRequest{ request: InboundRequest::FindNode {
+                    KademliaEvent::InboundRequestServed{ request: InboundRequest::FindNode {
                         num_closer_peers: closer_peers.len(),
                     }}
                 ));
@@ -1745,7 +1757,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::InboundRequest{ request: InboundRequest::GetProvider {
+                    KademliaEvent::InboundRequestServed{ request: InboundRequest::GetProvider {
                         num_closer_peers: closer_peers.len(),
                         num_provider_peers: provider_peers.len(),
                     }}
@@ -1799,11 +1811,10 @@ where
                 self.provider_received(key, provider);
 
                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::InboundRequest{ request: InboundRequest::AddProvider {} }
+                    KademliaEvent::InboundRequestServed{ request: InboundRequest::AddProvider {} }
                 ));
             }
 
-            // TODO: Should this not be called GetRecordReq?
             KademliaHandlerEvent::GetRecord { key, request_id } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
@@ -1821,7 +1832,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::InboundRequest{ request: InboundRequest::GetRecord {
+                    KademliaEvent::InboundRequestServed{ request: InboundRequest::GetRecord {
                         num_closer_peers: closer_peers.len(),
                         present_locally: record.is_some(),
                     }}
@@ -1895,7 +1906,7 @@ where
                 self.record_received(source, connection, request_id, record);
 
                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::InboundRequest{ request: InboundRequest::PutRecord {} }
+                    KademliaEvent::InboundRequestServed{ request: InboundRequest::PutRecord {} }
                 ));
             }
 
@@ -1994,7 +2005,10 @@ where
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
-                    bucket_range: self.kbuckets.bucket(&key).map(|b| b.range()),
+                    bucket_range: self.kbuckets
+                        .bucket(&key)
+                        .map(|b| b.range())
+                        .expect("Self to never be applied from pending."),
                     peer: key.into_preimage(),
                     is_new_peer: true,
                     addresses: value,
@@ -2100,13 +2114,12 @@ pub enum KademliaEvent {
     // Note on the difference between 'request' and 'query': A request is a
     // single request-response style exchange with a single remote peer. A query
     // is made of multiple requests across multiple remote peers.
-    InboundRequest {
+    InboundRequestServed {
         request: InboundRequest,
     },
 
-    /// A query has produced a result.
-    // TODO: Consider renaming to OutboundQueryResult.
-    OutboundQueryResult {
+    /// An outbound query has produced a result.
+    OutboundQueryCompleted {
         /// The ID of the query that finished.
         id: QueryId,
         /// The result of the query.
@@ -2127,9 +2140,7 @@ pub enum KademliaEvent {
         addresses: Addresses,
         /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
         /// the bucket of the peer.
-        //
-        // TODO: Ideally this should not be an Option.
-        bucket_range: Option<(Distance, Distance)>,
+        bucket_range: (Distance, Distance),
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
         old_peer: Option<PeerId>,
