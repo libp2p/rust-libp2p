@@ -52,7 +52,7 @@ fn select_proto_basic() {
         let client = async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
+            let (proto, mut io, _) = dialer_select_proto(connec, protos.into_iter(), version)
                 .await.unwrap();
             assert_eq!(proto, b"/proto2");
 
@@ -103,7 +103,7 @@ fn negotiation_failed() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let mut io = match dialer_select_proto(connec, dial_protos.into_iter(), version).await {
                 Err(NegotiationError::Failed) => return,
-                Ok((_, io)) => io,
+                Ok((_, io, _)) => io,
                 Err(_) => panic!()
             };
             // The dialer may write a payload that is even sent before it
@@ -192,7 +192,7 @@ fn select_proto_parallel() {
         let client = async_std::task::spawn(async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, io) = dialer_select_proto_parallel(connec, protos.into_iter(), version)
+            let (proto, io, _) = dialer_select_proto_parallel(connec, protos.into_iter(), version)
                 .await.unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
@@ -223,7 +223,7 @@ fn select_proto_serial() {
         let client = async_std::task::spawn(async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, io) = dialer_select_proto_serial(connec, protos.into_iter(), version)
+            let (proto, io, _) = dialer_select_proto_serial(connec, protos.into_iter(), version)
                 .await.unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
@@ -247,7 +247,7 @@ fn simultaneous_open() {
         let server = async move {
             let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
-            let (proto, io) = dialer_select_proto_serial(connec, protos, version).await.unwrap();
+            let (proto, io, _) = dialer_select_proto_serial(connec, protos, version).await.unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         };
@@ -255,7 +255,7 @@ fn simultaneous_open() {
         let client = async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, io) = dialer_select_proto_serial(connec, protos.into_iter(), version)
+            let (proto, io, _) = dialer_select_proto_serial(connec, protos.into_iter(), version)
                 .await.unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();

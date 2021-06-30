@@ -169,7 +169,7 @@ where
     // TODO: Clone needed to embed ListenerSelectFuture. Still needed?
     I::Item: AsRef<[u8]> + Clone
 {
-    type Output = Result<(I::Item, Negotiated<R>), NegotiationError>;
+    type Output = Result<(I::Item, Negotiated<R>, SimOpenRole), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -301,7 +301,7 @@ where
 
                 SeqState::Responder { mut responder } => {
                     match Pin::new(&mut responder ).poll(cx) {
-                        Poll::Ready(res) => return Poll::Ready(res),
+                        Poll::Ready(res) => return Poll::Ready(res.map(|(p, io)| (p, io, SimOpenRole::Responder))),
                         Poll::Pending => {
                             *this.state = SeqState::Responder { responder };
                             return Poll::Pending
@@ -337,7 +337,7 @@ where
                                 log::debug!("Dialer: Expecting proposed protocol: {}", p);
                                 let hl = HeaderLine::from(Version::V1Lazy);
                                 let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
-                                return Poll::Ready(Ok((protocol, io)))
+                                return Poll::Ready(Ok((protocol, io, SimOpenRole::Initiator)))
                             }
                         }
                     }
@@ -382,7 +382,7 @@ where
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
                             log::debug!("Dialer: Received confirmation for protocol: {}", p);
                             let io = Negotiated::completed(io.into_inner());
-                            return Poll::Ready(Ok((protocol, io)));
+                            return Poll::Ready(Ok((protocol, io, SimOpenRole::Initiator)));
                         }
                         Message::NotAvailable => {
                             log::debug!("Dialer: Received rejection of protocol: {}",
@@ -414,7 +414,8 @@ enum SimOpenState<R> {
     Done,
 }
 
-enum SimOpenRole {
+// TODO: Rename this to `Role` in general?
+pub enum SimOpenRole {
     Initiator,
     Responder,
 }
@@ -589,7 +590,8 @@ where
     I: Iterator,
     I::Item: AsRef<[u8]>
 {
-    type Output = Result<(I::Item, Negotiated<R>), NegotiationError>;
+    // TODO: Is it a hack that DialerSelectPar returns the simopenrole?
+    type Output = Result<(I::Item, Negotiated<R>, SimOpenRole), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -687,7 +689,7 @@ where
                     log::debug!("Dialer: Expecting proposed protocol: {}", p);
                     let io = Negotiated::expecting(io.into_reader(), p, None);
 
-                    return Poll::Ready(Ok((protocol, io)))
+                    return Poll::Ready(Ok((protocol, io, SimOpenRole::Initiator)))
                 }
 
                 ParState::Done => panic!("ParState::poll called after completion")
