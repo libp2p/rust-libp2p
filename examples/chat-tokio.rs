@@ -36,11 +36,11 @@
 //!    --features="floodsub mplex noise tcp-tokio mdns"
 //! ```
 
+use futures::StreamExt;
 use libp2p::{
     Multiaddr,
     NetworkBehaviour,
     PeerId,
-    Swarm,
     Transport,
     core::upgrade,
     identity,
@@ -48,7 +48,7 @@ use libp2p::{
     mdns::{Mdns, MdnsEvent},
     mplex,
     noise,
-    swarm::{NetworkBehaviourEventProcess, SwarmBuilder},
+    swarm::{NetworkBehaviourEventProcess, SwarmBuilder, SwarmEvent},
     // `TokioTcpConfig` is available through the `tcp-tokio` feature.
     tcp::TokioTcpConfig,
 };
@@ -149,29 +149,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    let mut listening = false;
     loop {
-        let to_publish = {
-            tokio::select! {
-                line = stdin.next_line() => {
-                    let line = line?.expect("stdin closed");
-                    Some((floodsub_topic.clone(), line))
-                }
-                event = swarm.next() => {
-                    // All events are handled by the `NetworkBehaviourEventProcess`es.
-                    // I.e. the `swarm.next()` future drives the `Swarm` without ever
-                    // terminating.
-                    panic!("Unexpected event: {:?}", event);
-                }
+        tokio::select! {
+            line = stdin.next_line() => {
+                let line = line?.expect("stdin closed");
+                swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.as_bytes());
             }
-        };
-        if let Some((topic, line)) = to_publish {
-            swarm.behaviour_mut().floodsub.publish(topic, line.as_bytes());
-        }
-        if !listening {
-            for addr in Swarm::listeners(&swarm) {
-                println!("Listening on {:?}", addr);
-                listening = true;
+            event = swarm.select_next_some() => {
+                if let SwarmEvent::NewListenAddr(addr) = event {
+                    println!("Listening on {:?}", addr);
+                }
             }
         }
     }
