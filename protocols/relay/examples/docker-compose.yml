@@ -1,4 +1,5 @@
-# This docker compose use the same example as the docker-compose.yml but with ipv6 instead of ipv4
+# Run `docker-compose up` to start the setup.
+
 version: '2.1'
 services:
   relay: 
