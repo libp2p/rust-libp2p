@@ -83,15 +83,9 @@ impl Rendezvous {
         }
     }
 
-    pub fn register(
-        &mut self,
-        namespace: Namespace,
-        rendezvous_node: PeerId,
-        ttl: Option<Ttl>,
-    ) -> Result<(), RegisterError> {
+    pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
         self.pending_register_requests
             .push((namespace, rendezvous_node, ttl));
-        Ok(())
     }
 
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {

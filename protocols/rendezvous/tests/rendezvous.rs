@@ -82,7 +82,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     test.assert_successful_discovery(namespace.clone(), DEFAULT_TTL, *test.alice.local_peer_id())
         .await;
 
-    let _ = test.alice.behaviour_mut().register(
+    test.alice.behaviour_mut().register(
         namespace.clone(),
         *test.robert.local_peer_id(),
         Some(refesh_ttl),
@@ -109,7 +109,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     let namespace = Namespace::from_static("some-namespace");
 
-    let _ = test.alice.behaviour_mut().register(
+    test.alice.behaviour_mut().register(
         namespace.clone(),
         *test.robert.local_peer_id(),
         Some(100_000_000),
@@ -136,7 +136,7 @@ async fn eve_cannot_register() {
 
     let namespace = Namespace::from_static("some-namespace");
 
-    let _ = test.eve.behaviour_mut().register(
+    test.eve.behaviour_mut().register(
         namespace.clone(),
         *test.robert.local_peer_id(),
         Some(100_000),
