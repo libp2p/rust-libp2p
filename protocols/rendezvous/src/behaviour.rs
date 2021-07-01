@@ -33,6 +33,18 @@ pub struct Config {
     max_ttl: Ttl,
 }
 
+impl Config {
+    pub fn with_min_ttl(mut self, min_ttl: Ttl) -> Self {
+        self.min_ttl = min_ttl;
+        self
+    }
+
+    pub fn with_max_ttl(mut self, max_ttl: Ttl) -> Self {
+        self.max_ttl = max_ttl;
+        self
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
