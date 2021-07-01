@@ -28,7 +28,7 @@ use std::{error, fmt, io};
 /// Writes a message to the given socket with a length prefix appended to it. Also flushes the socket.
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
-/// >           compatible with what `read_one` expects.
+/// >           compatible with what [`read_length_prefixed`] expects.
 pub async fn write_length_prefixed(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
     -> Result<(), io::Error>
 {
