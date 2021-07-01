@@ -744,7 +744,7 @@ mod tests {
     /// is initialised with a future that always returns pending. This test ensures that
     /// FuturesUnordered does not stop polling for ready futures.
     #[tokio::test]
-    async fn given_all_registrations_expired_then_succesfully_handle_new_registration_and_expiry() {
+    async fn given_all_registrations_expired_then_successfully_handle_new_registration_and_expiry() {
         let mut registrations = Registrations::with_config(Config {
             min_ttl: 0,
             max_ttl: 10,
