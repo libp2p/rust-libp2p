@@ -78,8 +78,7 @@ async fn main() {
                 swarm
                     .behaviour_mut()
                     .rendezvous
-                    .register(Namespace::from_static("rendezvous"), rendezvous_point, None)
-                    .unwrap();
+                    .register(Namespace::from_static("rendezvous"), rendezvous_point, None);
             }
             SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Registered {
                 namespace,
