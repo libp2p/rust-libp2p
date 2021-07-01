@@ -33,7 +33,7 @@ use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
-use futures::{channel::mpsc, executor::LocalPool, prelude::*, task::SpawnExt};
+use futures::{channel::mpsc, executor::LocalPool, prelude::*, task::SpawnExt, AsyncWriteExt};
 use rand::{self, Rng};
 use std::{io, iter};
 use std::{collections::HashSet, num::NonZeroU16};
@@ -450,7 +450,7 @@ impl RequestResponseCodec for PingCodec {
         T: AsyncWrite + Unpin + Send
     {
         write_length_prefixed(io, data).await?;
-        socket.close().await?;
+        io.close().await?;
 
         Ok(())
     }
@@ -461,7 +461,7 @@ impl RequestResponseCodec for PingCodec {
         T: AsyncWrite + Unpin + Send
     {
         write_length_prefixed(io, data).await?;
-        socket.close().await?;
+        io.close().await?;
 
         Ok(())
     }
