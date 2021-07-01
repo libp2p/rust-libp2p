@@ -27,7 +27,7 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade::{self, read_one, write_and_close}
+    upgrade::{self, read_length_prefixed, write_length_prefixed}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
@@ -421,7 +421,7 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_one(io, 1024)
+        read_length_prefixed(io, 1024)
             .map(|res| match res {
                 Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
                 Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
@@ -435,7 +435,7 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_one(io, 1024)
+        read_length_prefixed(io, 1024)
             .map(|res| match res {
                 Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
                 Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
@@ -449,7 +449,10 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_and_close(io, data).await
+        write_length_prefixed(io, data).await?;
+        socket.close().await?;
+
+        Ok(())
     }
 
     async fn write_response<T>(&mut self, _: &PingProtocol, io: &mut T, Pong(data): Pong)
@@ -457,6 +460,9 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_and_close(io, data).await
+        write_length_prefixed(io, data).await?;
+        socket.close().await?;
+
+        Ok(())
     }
 }

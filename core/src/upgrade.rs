@@ -80,7 +80,7 @@ pub use self::{
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
     select::SelectUpgrade,
-    transfer::{write_and_close, write_with_len_prefix, write_varint, read_one, ReadOneError, read_varint},
+    transfer::{write_length_prefixed, write_varint, read_length_prefixed, ReadOneError, read_varint},
 };
 
 /// Types serving as protocol names.

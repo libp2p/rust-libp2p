@@ -25,29 +25,17 @@ use std::{error, fmt, io};
 
 // TODO: these methods could be on an Ext trait to AsyncWrite
 
-/// Send a message to the given socket, then shuts down the writing side.
+/// Writes a message to the given socket with a length prefix appended to it. Also flushes the socket.
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what `read_one` expects.
-pub async fn write_and_close(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
-    -> Result<(), io::Error>
-{
-    write_varint(socket, data.as_ref().len()).await?;
-    socket.write_all(data.as_ref()).await?;
-    socket.close().await?;
-    Ok(())
-}
-
-/// Send a message to the given socket with a length prefix appended to it. Also flushes the socket.
-///
-/// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
-/// >           compatible with what `read_one` expects.
-pub async fn write_with_len_prefix(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
+pub async fn write_length_prefixed(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
     -> Result<(), io::Error>
 {
     write_varint(socket, data.as_ref().len()).await?;
     socket.write_all(data.as_ref()).await?;
     socket.flush().await?;
+
     Ok(())
 }
 
@@ -60,6 +48,7 @@ pub async fn write_varint(socket: &mut (impl AsyncWrite + Unpin), len: usize)
     let mut len_data = unsigned_varint::encode::usize_buffer();
     let encoded_len = unsigned_varint::encode::usize(len, &mut len_data).len();
     socket.write_all(&len_data[..encoded_len]).await?;
+
     Ok(())
 }
 
@@ -113,8 +102,8 @@ pub async fn read_varint(socket: &mut (impl AsyncRead + Unpin)) -> Result<usize,
 /// gigabytes.
 ///
 /// > **Note**: Assumes that a variable-length prefix indicates the length of the message. This is
-/// >           compatible with what `write_one` does.
-pub async fn read_one(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
+/// >           compatible with what [`write_length_prefixed`] does.
+pub async fn read_length_prefixed(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
     -> Result<Vec<u8>, ReadOneError>
 {
     let len = read_varint(socket).await?;
@@ -127,6 +116,7 @@ pub async fn read_one(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
 
     let mut buf = vec![0; len];
     socket.read_exact(&mut buf).await?;
+
     Ok(buf)
 }
 
@@ -173,15 +163,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn write_one_works() {
+    fn write_length_prefixed_works() {
         let data = (0..rand::random::<usize>() % 10_000)
             .map(|_| rand::random::<u8>())
             .collect::<Vec<_>>();
-
         let mut out = vec![0; 10_000];
-        futures::executor::block_on(
-            write_and_close(&mut futures::io::Cursor::new(&mut out[..]), data.clone())
-        ).unwrap();
+
+        futures::executor::block_on(async {
+            let mut socket = futures::io::Cursor::new(&mut out[..]);
+
+            write_length_prefixed(&mut socket, &data).await.unwrap();
+            socket.close().await.unwrap();
+        });
 
         let (out_len, out_data) = unsigned_varint::decode::usize(&out).unwrap();
         assert_eq!(out_len, data.len());
