@@ -38,17 +38,14 @@ message Peer {
 }
 
 message Reservation {
-  // TODO: Should this be a timestamp instead?
-  optional int64 expire = 1;  // Unix expiration time (UTC)
+  optional uint64 expire = 1; // Unix expiration time (UTC)
   repeated bytes addrs = 2;   // relay addrs for reserving peer
   optional bytes voucher = 3; // reservation voucher
 }
 
 message Limit {
-  // TODO: Why use an int32 instead of a uint32?
-  optional int32 duration = 1; // seconds
-  // TODO: Why use an int64 instead of a uint64?
-  optional int64 data = 2;     // bytes
+  optional uint32 duration = 1; // seconds
+  optional uint64 data = 2;     // bytes
 }
 
 enum Status {

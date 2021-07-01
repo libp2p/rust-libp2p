@@ -60,10 +60,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 addrs: vec![],
             }),
             limit: Some(Limit {
-                // TODO: Handle the unwrap. Why use an i32 in protobuf in the first place?
+                // TODO: Handle unwrap?
                 duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
-                // TODO: Handle the unwrap. Why use an i64 instead of a u64?
-                data: Some(self.max_circuit_bytes.try_into().unwrap()),
+                data: Some(self.max_circuit_bytes),
             }),
             status: None,
         };
