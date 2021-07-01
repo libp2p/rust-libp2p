@@ -24,8 +24,7 @@ pub use self::codec::{ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl}
 mod behaviour;
 mod codec;
 mod handler;
-mod protocol;
-mod substream;
+mod substream_handler;
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
 ///

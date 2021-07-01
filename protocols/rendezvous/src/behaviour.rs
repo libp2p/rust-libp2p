@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
-use crate::handler::{InEvent, OutEvent, RendezvousHandler};
-use crate::{handler, MAX_TTL, MIN_TTL};
+use crate::handler::outbound::OpenInfo;
+use crate::handler::{inbound, outbound};
+use crate::substream_handler::SubstreamProtocolsHandler;
+use crate::{substream_handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::ready;
@@ -35,13 +37,15 @@ use libp2p_swarm::{
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
-use std::option::Option::None;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use uuid::Uuid;
+use void::Void;
 
 pub struct Rendezvous {
-    events: VecDeque<NetworkBehaviourAction<InEvent, Event>>,
+    events: VecDeque<
+        NetworkBehaviourAction<substream_handler::InEvent<OpenInfo, inbound::InEvent, Void>, Event>,
+    >,
     registrations: Registrations,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
@@ -92,7 +96,9 @@ impl Rendezvous {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: InEvent::UnregisterRequest(namespace),
+                event: substream_handler::InEvent::NewSubstream {
+                    open_info: OpenInfo::UnregisterRequest(namespace),
+                },
                 handler: NotifyHandler::Any,
             });
     }
@@ -107,10 +113,12 @@ impl Rendezvous {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: InEvent::DiscoverRequest {
-                    namespace: ns,
-                    cookie,
-                    limit,
+                event: substream_handler::InEvent::NewSubstream {
+                    open_info: OpenInfo::DiscoverRequest {
+                        namespace: ns,
+                        cookie,
+                        limit,
+                    },
                 },
                 handler: NotifyHandler::Any,
             });
@@ -178,11 +186,12 @@ pub enum Event {
 }
 
 impl NetworkBehaviour for Rendezvous {
-    type ProtocolsHandler = RendezvousHandler;
+    type ProtocolsHandler =
+        SubstreamProtocolsHandler<inbound::Stream, outbound::Stream, outbound::OpenInfo>;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        RendezvousHandler::default()
+        SubstreamProtocolsHandler::new(b"/rendezvous/1.0.0")
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -197,20 +206,29 @@ impl NetworkBehaviour for Rendezvous {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: handler::OutEvent,
+        event: substream_handler::OutEvent<
+            inbound::OutEvent,
+            outbound::OutEvent,
+            crate::handler::Error,
+            crate::handler::Error,
+        >,
     ) {
         let new_events = match event {
             // bad registration
-            OutEvent::RegistrationRequested(registration)
-                if registration.record.peer_id() != peer_id =>
-            {
+            substream_handler::OutEvent::InboundEvent {
+                id,
+                message: inbound::OutEvent::RegistrationRequested(registration),
+            } if registration.record.peer_id() != peer_id => {
                 let error = ErrorCode::NotAuthorized;
 
                 vec![
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(connection),
-                        event: InEvent::DeclineRegisterRequest(error),
+                        event: substream_handler::InEvent::NotifyInboundSubstream {
+                            id,
+                            message: inbound::InEvent::DeclineRegisterRequest(error),
+                        },
                     },
                     NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
                         peer: peer_id,
@@ -219,7 +237,10 @@ impl NetworkBehaviour for Rendezvous {
                     }),
                 ]
             }
-            OutEvent::RegistrationRequested(registration) => {
+            substream_handler::OutEvent::InboundEvent {
+                id,
+                message: inbound::OutEvent::RegistrationRequested(registration),
+            } => {
                 let namespace = registration.namespace.clone();
 
                 match self.registrations.add(registration) {
@@ -228,8 +249,11 @@ impl NetworkBehaviour for Rendezvous {
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::One(connection),
-                                event: InEvent::RegisterResponse {
-                                    ttl: registration.ttl,
+                                event: substream_handler::InEvent::NotifyInboundSubstream {
+                                    id,
+                                    message: inbound::InEvent::RegisterResponse {
+                                        ttl: registration.ttl,
+                                    },
                                 },
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered {
@@ -245,7 +269,10 @@ impl NetworkBehaviour for Rendezvous {
                             NetworkBehaviourAction::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::One(connection),
-                                event: InEvent::DeclineRegisterRequest(error),
+                                event: substream_handler::InEvent::NotifyInboundSubstream {
+                                    id,
+                                    message: inbound::InEvent::DeclineRegisterRequest(error),
+                                },
                             },
                             NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
                                 peer: peer_id,
@@ -256,36 +283,14 @@ impl NetworkBehaviour for Rendezvous {
                     }
                 }
             }
-            OutEvent::Registered { namespace, ttl } => {
-                vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
-                    rendezvous_node: peer_id,
-                    ttl,
-                    namespace,
-                })]
-            }
-            OutEvent::RegisterFailed(namespace, error) => {
-                vec![NetworkBehaviourAction::GenerateEvent(
-                    Event::RegisterFailed(RegisterError::Remote {
-                        rendezvous_node: peer_id,
+            substream_handler::OutEvent::InboundEvent {
+                id,
+                message:
+                    inbound::OutEvent::DiscoverRequested {
                         namespace,
-                        error,
-                    }),
-                )]
-            }
-            OutEvent::UnregisterRequested(namespace) => {
-                self.registrations.remove(namespace.clone(), peer_id);
-
-                vec![NetworkBehaviourAction::GenerateEvent(
-                    Event::PeerUnregistered {
-                        peer: peer_id,
-                        namespace,
+                        cookie,
+                        limit,
                     },
-                )]
-            }
-            OutEvent::DiscoverRequested {
-                namespace,
-                cookie,
-                limit,
             } => match self.registrations.get(namespace, cookie, limit) {
                 Ok((registrations, cookie)) => {
                     let discovered = registrations.cloned().collect::<Vec<_>>();
@@ -294,9 +299,12 @@ impl NetworkBehaviour for Rendezvous {
                         NetworkBehaviourAction::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::One(connection),
-                            event: InEvent::DiscoverResponse {
-                                discovered: discovered.clone(),
-                                cookie,
+                            event: substream_handler::InEvent::NotifyInboundSubstream {
+                                id,
+                                message: inbound::InEvent::DiscoverResponse {
+                                    discovered: discovered.clone(),
+                                    cookie,
+                                },
                             },
                         },
                         NetworkBehaviourAction::GenerateEvent(Event::DiscoverServed {
@@ -312,7 +320,10 @@ impl NetworkBehaviour for Rendezvous {
                         NetworkBehaviourAction::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::One(connection),
-                            event: InEvent::DeclineDiscoverRequest(error),
+                            event: substream_handler::InEvent::NotifyInboundSubstream {
+                                id,
+                                message: inbound::InEvent::DeclineDiscoverRequest(error),
+                            },
                         },
                         NetworkBehaviourAction::GenerateEvent(Event::DiscoverNotServed {
                             enquirer: peer_id,
@@ -321,9 +332,48 @@ impl NetworkBehaviour for Rendezvous {
                     ]
                 }
             },
-            OutEvent::Discovered {
-                registrations,
-                cookie,
+            substream_handler::OutEvent::InboundEvent {
+                message: inbound::OutEvent::UnregisterRequested(namespace),
+                ..
+            } => {
+                self.registrations.remove(namespace.clone(), peer_id);
+
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerUnregistered {
+                        peer: peer_id,
+                        namespace,
+                    },
+                )]
+            }
+            substream_handler::OutEvent::OutboundEvent {
+                message: outbound::OutEvent::Registered { namespace, ttl },
+                ..
+            } => {
+                vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
+                    rendezvous_node: peer_id,
+                    ttl,
+                    namespace,
+                })]
+            }
+            substream_handler::OutEvent::OutboundEvent {
+                message: outbound::OutEvent::RegisterFailed(namespace, error),
+                ..
+            } => {
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::RegisterFailed(RegisterError::Remote {
+                        rendezvous_node: peer_id,
+                        namespace,
+                        error,
+                    }),
+                )]
+            }
+            substream_handler::OutEvent::OutboundEvent {
+                message:
+                    outbound::OutEvent::Discovered {
+                        registrations,
+                        cookie,
+                    },
+                ..
             } => {
                 vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
                     rendezvous_node: peer_id,
@@ -331,7 +381,10 @@ impl NetworkBehaviour for Rendezvous {
                     cookie,
                 })]
             }
-            OutEvent::DiscoverFailed { namespace, error } => {
+            substream_handler::OutEvent::OutboundEvent {
+                message: outbound::OutEvent::DiscoverFailed { namespace, error },
+                ..
+            } => {
                 vec![NetworkBehaviourAction::GenerateEvent(
                     Event::DiscoverFailed {
                         rendezvous_node: peer_id,
@@ -339,6 +392,14 @@ impl NetworkBehaviour for Rendezvous {
                         error,
                     },
                 )]
+            }
+            substream_handler::OutEvent::InboundError { .. } => {
+                // TODO: log errors and close connection?
+                vec![]
+            }
+            substream_handler::OutEvent::OutboundError { .. } => {
+                // TODO: log errors and close connection?
+                vec![]
             }
         };
 
@@ -382,11 +443,13 @@ impl NetworkBehaviour for Rendezvous {
             let action = match PeerRecord::new(self.keypair.clone(), external_addresses) {
                 Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
                     peer_id: rendezvous_node,
-                    event: InEvent::RegisterRequest(NewRegistration {
-                        namespace,
-                        record: peer_record,
-                        ttl,
-                    }),
+                    event: substream_handler::InEvent::NewSubstream {
+                        open_info: OpenInfo::RegisterRequest(NewRegistration {
+                            namespace,
+                            record: peer_record,
+                            ttl,
+                        }),
+                    },
                     handler: NotifyHandler::Any,
                 },
                 Err(signing_error) => NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed(
@@ -604,10 +667,12 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use libp2p_core::identity;
     use std::option::Option::None;
     use std::time::SystemTime;
+
+    use libp2p_core::identity;
+
+    use super::*;
 
     #[test]
     fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
