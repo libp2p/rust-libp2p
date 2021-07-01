@@ -18,6 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::collections::{HashMap, VecDeque};
+use std::fmt;
+use std::future::{Future, Ready};
+use std::hash::Hash;
+use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
+
+use futures::future::{BoxFuture, Fuse, FusedFuture};
+use futures::FutureExt;
+use void::Void;
+
 use libp2p_core::upgrade::FromFnUpgrade;
 use libp2p_core::Endpoint;
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -25,13 +36,6 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
-use std::future::Ready;
-use std::hash::Hash;
-use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
-use void::Void;
 
 pub trait SubstreamHandler: Sized {
     type InEvent;
@@ -408,5 +412,35 @@ where
         }
 
         Poll::Pending
+    }
+}
+
+/// A helper struct for substream handlers that can be implemented as async functions.
+///
+/// This only works for substreams without an `InEvent` because - once constructed - the state of an inner future is opaque.
+pub struct FutureSubstream<TOutEvent, TError> {
+    future: Fuse<BoxFuture<'static, Result<TOutEvent, TError>>>,
+}
+
+impl<TOutEvent, TError> FutureSubstream<TOutEvent, TError> {
+    pub fn new(future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static) -> Self {
+        Self {
+            future: future.boxed().fuse(),
+        }
+    }
+
+    pub fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
+        if self.future.is_terminated() {
+            return Ok(Next::Done);
+        }
+
+        match self.future.poll_unpin(cx) {
+            Poll::Ready(Ok(event)) => Ok(Next::EmitEvent {
+                event,
+                next_state: self,
+            }),
+            Poll::Ready(Err(error)) => Err(error),
+            Poll::Pending => Ok(Next::Pending { next_state: self }),
+        }
     }
 }
