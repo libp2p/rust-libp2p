@@ -32,12 +32,11 @@ use std::iter;
 /// # use libp2p_core::upgrade;
 /// # use std::io;
 /// # use futures::AsyncWriteExt;
-/// use libp2p_core::upgrade::write_length_prefixed;
 /// let _transport = MemoryTransport::default()
 ///     .and_then(move |out, cp| {
 ///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock, endpoint| async move {
 ///             if endpoint.is_dialer() {
-///                 write_length_prefixed(&mut sock, "some handshake data").await?;
+///                 upgrade::write_length_prefixed(&mut sock, "some handshake data").await?;
 ///                 sock.close().await?;
 ///                 Ok(())
 ///             } else {
