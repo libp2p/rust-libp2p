@@ -49,6 +49,7 @@
 //! `libp2p_ping` metrics, they should be `>0`.
 
 use futures::executor::block_on;
+use futures::stream::StreamExt;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::ping::{Ping, PingConfig};
 use libp2p::swarm::SwarmEvent;
@@ -84,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     block_on(async {
         loop {
-            match swarm.next_event().await {
+            match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(ping_event) => {
                     tide::log::info!("{:?}", ping_event);
                     metrics.record(&ping_event);
