@@ -486,11 +486,10 @@ impl ProtocolsHandler for RendezvousHandler {
                 outbound,
             ),
             (event, inbound, outbound) => {
-                log::warn!(
+                debug_assert!(
+                    false,
                     "Neither {:?} nor {:?} can handle {:?}",
-                    inbound,
-                    outbound,
-                    event
+                    inbound, outbound, event
                 );
 
                 (inbound, outbound)
