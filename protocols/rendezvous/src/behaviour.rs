@@ -18,7 +18,6 @@ use std::iter::FromIterator;
 use std::option::Option::None;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tokio::time::sleep;
 use uuid::Uuid;
 
 pub struct Rendezvous {
@@ -476,8 +475,14 @@ impl Registrations {
         self.registrations
             .insert(registration_id, registration.clone());
 
-        let next_expiry = sleep(Duration::from_secs(ttl as u64))
-            .map(move |()| registration_id)
+        let next_expiry = wasm_timer::Delay::new(Duration::from_secs(ttl as u64))
+            .map(move |result| {
+                if result.is_err() {
+                    log::warn!("Timer for registration {} has unexpectedly errored, treating it as expired", registration_id.0);
+                }
+
+                registration_id
+            })
             .boxed();
 
         self.next_expiry.push(next_expiry);
@@ -590,8 +595,8 @@ mod tests {
     use std::option::Option::None;
     use std::time::SystemTime;
 
-    #[tokio::test]
-    async fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
+    #[test]
+    fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -603,8 +608,8 @@ mod tests {
         assert_eq!(subsequent_discover.count(), 0);
     }
 
-    #[tokio::test]
-    async fn given_registrations_when_discover_all_then_all_are_returned() {
+    #[test]
+    fn given_registrations_when_discover_all_then_all_are_returned() {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -614,9 +619,9 @@ mod tests {
         assert_eq!(discover.count(), 2);
     }
 
-    #[tokio::test]
-    async fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned(
-    ) {
+    #[test]
+    fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
+    {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
@@ -631,8 +636,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn given_reregistration_old_registration_is_discarded() {
+    #[test]
+    fn given_reregistration_old_registration_is_discarded() {
         let alice = identity::Keypair::generate_ed25519();
         let mut registrations = Registrations::default();
         registrations
@@ -652,8 +657,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
+    #[test]
+    fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -668,8 +673,8 @@ mod tests {
         assert_eq!(subsequent_discover.count(), 0);
     }
 
-    #[tokio::test]
-    async fn cookie_from_different_discover_request_is_not_valid() {
+    #[test]
+    fn cookie_from_different_discover_request_is_not_valid() {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("bar")).unwrap();
@@ -744,7 +749,8 @@ mod tests {
     /// is initialised with a future that always returns pending. This test ensures that
     /// FuturesUnordered does not stop polling for ready futures.
     #[tokio::test]
-    async fn given_all_registrations_expired_then_successfully_handle_new_registration_and_expiry() {
+    async fn given_all_registrations_expired_then_successfully_handle_new_registration_and_expiry()
+    {
         let mut registrations = Registrations::with_config(Config {
             min_ttl: 0,
             max_ttl: 10,
@@ -779,8 +785,8 @@ mod tests {
         assert_eq!(registrations.cookies.len(), 0);
     }
 
-    #[tokio::test]
-    async fn given_limit_discover_only_returns_n_results() {
+    #[test]
+    fn given_limit_discover_only_returns_n_results() {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
@@ -790,8 +796,8 @@ mod tests {
         assert_eq!(registrations.count(), 1);
     }
 
-    #[tokio::test]
-    async fn given_limit_cookie_can_be_used_for_pagination() {
+    #[test]
+    fn given_limit_cookie_can_be_used_for_pagination() {
         let mut registrations = Registrations::default();
         registrations.add(new_dummy_registration("foo")).unwrap();
         registrations.add(new_dummy_registration("foo")).unwrap();
