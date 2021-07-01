@@ -38,7 +38,6 @@ use std::iter;
 ///             if endpoint.is_dialer() {
 ///                 upgrade::write_length_prefixed(&mut sock, "some handshake data").await?;
 ///                 sock.close().await?;
-///                 Ok(())
 ///             } else {
 ///                 let handshake_data = upgrade::read_length_prefixed(&mut sock, 1024).await?;
 ///                 if handshake_data != b"some handshake data" {
