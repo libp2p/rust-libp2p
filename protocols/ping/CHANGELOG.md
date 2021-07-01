@@ -1,3 +1,7 @@
+# 0.30.0 [unreleased]
+
+- Update dependencies.
+
 # 0.29.0 [2021-04-13]
 
 - Update `libp2p-swarm`.
@@ -55,4 +59,3 @@ a single substream for outbound pings, addressing
 
 - Close substream in inbound upgrade
   [PR 1606](https://github.com/libp2p/rust-libp2p/pull/1606).
-

@@ -1,4 +1,12 @@
-# 0.31.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Update dependencies.
+
+- Reduce log levels across the crate to lessen noisiness of libp2p-gossipsub (see [PR 2101]).
+
+[PR 2101]: https://github.com/libp2p/rust-libp2p/pull/2101
+
+# 0.31.0 [2021-05-17]
 
 - Keep connections to peers in a mesh alive. Allow closing idle connections to peers not in a mesh
   [PR-2043].

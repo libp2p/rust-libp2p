@@ -26,9 +26,10 @@ use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::noise;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::relay::v2::relay::{self, Relay};
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{identity, NetworkBehaviour, PeerId, Swarm};
+use libp2p::{identity, NetworkBehaviour, PeerId};
 use std::error::Error;
 use std::task::{Context, Poll};
 
@@ -102,7 +103,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(Event::Relay(event))) => println!("{:?}", event),
+                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {
+                    println!("{:?}", event)
+                }
                 Poll::Ready(Some(_)) => {}
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => {
