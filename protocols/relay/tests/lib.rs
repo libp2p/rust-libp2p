@@ -569,7 +569,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         let query_id = dst_swarm.behaviour_mut().kad.bootstrap().unwrap();
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
+                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::OutboundQueryCompleted {
                     id,
                     result: QueryResult::Bootstrap(Ok(_)),
                     ..
@@ -647,7 +647,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     SwarmEvent::Dialing(peer_id)
                         if peer_id == relay_peer_id || peer_id == dst_peer_id => {}
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::OutboundQueryCompleted {
                         id,
                         result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
                         ..
