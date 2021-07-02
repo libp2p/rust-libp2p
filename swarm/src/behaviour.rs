@@ -299,11 +299,11 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     ///
     /// Note: Closing a connection via
     /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
-    /// corresponding [`ProtocolsHandler`](s).
+    /// corresponding [`ProtocolsHandler`].
     /// Closing a connection via a [`ProtocolsHandler`] can be done
     /// either in a collaborative manner across [`ProtocolsHandler`]s
     /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
-    /// [`ProtocolsHandlerEvent::Close`].
+    /// [`ProtocolsHandlerEvent::Close`](crate::ProtocolsHandlerEvent::Close).
     CloseConnection {
         /// The peer to disconnect.
         peer_id: PeerId,

@@ -469,7 +469,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Returns `Ok(())` if there was one or more established connections to the peer.
     ///
     /// Note: Closing a connection via [`ExpandedSwarm::disconnect_peer_id`] does
-    /// not inform the corresponding [`ProtocolsHandler`](s).
+    /// not inform the corresponding [`ProtocolsHandler`].
     /// Closing a connection via a [`ProtocolsHandler`] can be done either in a
     /// collaborative manner across [`ProtocolsHandler`]s
     /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
