@@ -75,10 +75,11 @@ async fn main() {
             }
             // once `/identify` did its job, we know our external address and can register
             SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. })) => {
-                swarm
-                    .behaviour_mut()
-                    .rendezvous
-                    .register(Namespace::from_static("rendezvous"), rendezvous_point, None);
+                swarm.behaviour_mut().rendezvous.register(
+                    Namespace::from_static("rendezvous"),
+                    rendezvous_point,
+                    None,
+                );
             }
             SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Registered {
                 namespace,

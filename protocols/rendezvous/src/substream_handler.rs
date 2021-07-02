@@ -18,17 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
-use std::future::{Future, Ready};
-use std::hash::Hash;
-use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+//! A generic [`ProtocolsHandler`] that delegates the handling of substreams to [`SubstreamHandler`]s.
+//!
+//! This module is an attempt to simplify the implementation of protocols by freeing implementations from dealing with aspects such as concurrent substreams.
+//! Particularly for outbound substreams, it greatly simplifies the definition of protocols through the [`FutureSubstream`] helper.
+//!
+//! At the moment, this module is an implementation detail of the rendezvous protocol but the intent is for it to be provided as a generic module that is accessible to other protocols as well.
 
 use futures::future::{BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
-use void::Void;
-
 use libp2p_core::upgrade::FromFnUpgrade;
 use libp2p_core::Endpoint;
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -36,7 +34,15 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use std::collections::{HashMap, VecDeque};
+use std::fmt;
+use std::future::{Future, Ready};
+use std::hash::Hash;
+use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
+use void::Void;
 
+/// Handles a substream throughout its lifetime.
 pub trait SubstreamHandler: Sized {
     type InEvent;
     type OutEvent;
@@ -48,15 +54,17 @@ pub trait SubstreamHandler: Sized {
     fn advance(self, cx: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error>;
 }
 
-/// Defines the results of advancing a state machine.
+/// The result of advancing a [`SubstreamHandler`].
 pub enum Next<TState, TEvent> {
-    /// Return from the `poll` function to emit `event`. Set the state machine to `next_state`.
+    /// Return the given event and set the handler into `next_state`.
     EmitEvent { event: TEvent, next_state: TState },
-    /// Return from the `poll` function because we cannot do any more work. Set the state machine to `next_state`.
+    /// The handler currently cannot do any more work, set its state back into `next_state`.
     Pending { next_state: TState },
-    /// Continue with advancing the state machine.
+    /// The handler performed some work and wants to continue in the given state.
+    ///
+    /// This variant is useful because it frees the handler from implementing a loop internally.
     Continue { next_state: TState },
-    /// The state machine finished.
+    /// The handler finished.
     Done,
 }
 
@@ -137,7 +145,7 @@ pub struct SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOut
 impl<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
     SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
 {
-    pub fn new(protocol: &'static [u8]) -> Self {
+    pub fn new(protocol: &'static [u8], initial_keep_alive: Duration) -> Self {
         Self {
             inbound_substreams: Default::default(),
             outbound_substreams: Default::default(),
@@ -145,7 +153,7 @@ impl<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
             next_inbound_substream_id: InboundSubstreamId(0),
             next_outbound_substream_id: OutboundSubstreamId(0),
             new_substreams: Default::default(),
-            initial_keep_alive_deadline: Instant::now() + Duration::from_secs(30),
+            initial_keep_alive_deadline: Instant::now() + initial_keep_alive,
         }
     }
 }
@@ -191,10 +199,12 @@ where
     Poll::Pending
 }
 
+/// Event sent from the [`NetworkBehaviour`] to the [`SubstreamProtocolsHandler`].
 pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
-    NewSubstream {
-        open_info: I,
-    },
+    /// Open a new substream using the provided `open_info`.
+    ///
+    /// For "client-server" protocols, this is typically the initial message to be sent to the other party.
+    NewSubstream { open_info: I },
     NotifyInboundSubstream {
         id: InboundSubstreamId,
         message: TInboundEvent,
@@ -205,19 +215,24 @@ pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     },
 }
 
+/// Event produced by the [`SubstreamProtocolsHandler`] for the corresponding [`NetworkBehaviour`].
 pub enum OutEvent<TInbound, TOutbound, TInboundError, TOutboundError> {
+    /// An inbound substream produced an event.
     InboundEvent {
         id: InboundSubstreamId,
         message: TInbound,
     },
+    /// An outbound substream produced an event.
     OutboundEvent {
         id: OutboundSubstreamId,
         message: TOutbound,
     },
+    /// An inbound substream errored irrecoverably.
     InboundError {
         id: InboundSubstreamId,
         error: TInboundError,
     },
+    /// An outbound substream errored irrecoverably.
     OutboundError {
         id: OutboundSubstreamId,
         error: TOutboundError,
@@ -342,6 +357,8 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
+        // Rudimentary keep-alive handling, to be extended as needed as this abstraction is used more by other protocols.
+
         if Instant::now() < self.initial_keep_alive_deadline {
             return KeepAlive::Yes;
         }

@@ -20,6 +20,7 @@
 
 use crate::codec;
 use crate::codec::Message;
+use void::Void;
 
 pub mod inbound;
 pub mod outbound;
@@ -36,3 +37,7 @@ pub enum Error {
     #[error("Substream ended unexpectedly mid-protocol")]
     UnexpectedEndOfStream,
 }
+
+pub type InEvent = crate::substream_handler::InEvent<outbound::OpenInfo, inbound::InEvent, Void>;
+pub type OutEvent =
+    crate::substream_handler::OutEvent<inbound::OutEvent, outbound::OutEvent, Error, Error>;
