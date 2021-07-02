@@ -28,13 +28,13 @@ use std::iter;
 /// # Example
 ///
 /// ```
-/// # use libp2p_core::transport::{Transport, MemoryTransport};
-/// # use libp2p_core::upgrade;
+/// # use libp2p_core::transport::{Transport, MemoryTransport, memory::Channel};
+/// # use libp2p_core::{upgrade, Negotiated};
 /// # use std::io;
 /// # use futures::AsyncWriteExt;
 /// let _transport = MemoryTransport::default()
 ///     .and_then(move |out, cp| {
-///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock, endpoint| async move {
+///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock: Negotiated<Channel<Vec<u8>>>, endpoint| async move {
 ///             if endpoint.is_dialer() {
 ///                 upgrade::write_length_prefixed(&mut sock, "some handshake data").await?;
 ///                 sock.close().await?;
