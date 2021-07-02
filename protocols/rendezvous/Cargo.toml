@@ -25,6 +25,9 @@ sha2 = "0.9"
 rand = "0.8"
 wasm-timer = "0.2"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "0.8", features = ["wasm-bindgen"] }
+
 [dev-dependencies]
 libp2p = { path = "../.." }
 rand = "0.8"
