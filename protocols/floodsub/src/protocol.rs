@@ -95,15 +95,15 @@ where
 #[derive(Debug)]
 pub enum FloodsubDecodeError {
     /// Error when reading the packet from the socket.
-    ReadError(upgrade::ReadOneError),
+    ReadError(io::Error),
     /// Error when decoding the raw buffer into a protobuf.
     ProtobufError(prost::DecodeError),
     /// Error when parsing the `PeerId` in the message.
     InvalidPeerId,
 }
 
-impl From<upgrade::ReadOneError> for FloodsubDecodeError {
-    fn from(err: upgrade::ReadOneError) -> Self {
+impl From<io::Error> for FloodsubDecodeError {
+    fn from(err: io::Error) -> Self {
         FloodsubDecodeError::ReadError(err)
     }
 }

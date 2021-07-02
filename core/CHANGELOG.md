@@ -6,10 +6,10 @@
 
 - Implement `Keypair::from_protobuf_encoding` for ed25519 keys (see [PR 2090]).
 
-- Remove `upgrade::write_one`.
-  Rename `upgrade::write_with_len_prefix` to `upgrade::write_length_prefixed`.
-  Rename `upgrade::read_one` to `upgrade::read_length_prefixed`.
-  With the removal of `upgrade::write_one`, you now have to close the socket yourself after writing the message.
+- Deprecate `upgrade::write_one`.
+  Deprecate `upgrade::write_with_len_prefix`.
+  Deprecate `upgrade::read_one`.
+  Introduce `upgrade::read_length_prefixed` and `upgrade::write_length_prefixed`.
   See [PR 2111](https://github.com/libp2p/rust-libp2p/pull/2111).
 
 [PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090

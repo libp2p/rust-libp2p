@@ -80,8 +80,10 @@ pub use self::{
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
     select::SelectUpgrade,
-    transfer::{write_length_prefixed, write_varint, read_length_prefixed, ReadOneError, read_varint},
+    transfer::{write_length_prefixed, write_varint, read_length_prefixed, read_varint},
 };
+#[allow(deprecated)]
+pub use self::transfer::ReadOneError;
 
 /// Types serving as protocol names.
 ///
