@@ -47,7 +47,7 @@ pub async fn write_length_prefixed(socket: &mut (impl AsyncWrite + Unpin), data:
 #[deprecated(since = "0.29.0", note = "Use `write_length_prefixed` instead. You will need to manually close the stream using `socket.close().await`.")]
 #[allow(dead_code)]
 pub async fn write_one(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
-                       -> Result<(), io::Error>
+    -> Result<(), io::Error>
 {
     write_varint(socket, data.as_ref().len()).await?;
     socket.write_all(data.as_ref()).await?;
@@ -62,7 +62,7 @@ pub async fn write_one(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<
 #[deprecated(since = "0.29.0", note = "Use `write_length_prefixed` instead.")]
 #[allow(dead_code)]
 pub async fn write_with_len_prefix(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
-                                   -> Result<(), io::Error>
+    -> Result<(), io::Error>
 {
     write_varint(socket, data.as_ref().len()).await?;
     socket.write_all(data.as_ref()).await?;
@@ -158,7 +158,7 @@ pub async fn read_length_prefixed(socket: &mut (impl AsyncRead + Unpin), max_siz
 #[deprecated(since = "0.29.0", note = "Use `read_length_prefixed` instead.")]
 #[allow(dead_code, deprecated)]
 pub async fn read_one(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
-                      -> Result<Vec<u8>, ReadOneError>
+    -> Result<Vec<u8>, ReadOneError>
 {
     let len = read_varint(socket).await?;
     if len > max_size {
