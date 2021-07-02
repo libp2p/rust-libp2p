@@ -21,6 +21,7 @@
 pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
+use futures::StreamExt;
 use libp2p::rendezvous::{Namespace, Ttl};
 use libp2p_core::identity;
 use libp2p_core::PeerId;
@@ -127,6 +128,67 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
             rendezvous_swarm_event, registration_swarm_event
         ),
     }
+}
+
+#[tokio::test]
+async fn discover_allows_for_dial_by_peer_id() {
+    let _ = env_logger::try_init();
+    let RendezvousTest {
+        mut alice,
+        mut bob,
+        mut robert,
+        ..
+    } = RendezvousTest::setup().await;
+    let roberts_peer_id = *robert.local_peer_id();
+
+    // poll rendezvous point continuously
+    tokio::spawn(async move {
+        loop {
+            robert.next().await;
+        }
+    });
+
+    let namespace = Namespace::from_static("some-namespace");
+
+    alice
+        .behaviour_mut()
+        .register(namespace.clone(), roberts_peer_id, None);
+    bob.behaviour_mut()
+        .discover(Some(namespace), None, None, roberts_peer_id);
+
+    match await_events_or_timeout(&mut alice, &mut bob).await {
+        (
+            SwarmEvent::Behaviour(Event::Registered { .. }),
+            SwarmEvent::Behaviour(Event::Discovered { .. }),
+        ) => {}
+        _ => panic!("bad event combination emitted"),
+    };
+
+    let alices_peer_id = *alice.local_peer_id();
+    let bobs_peer_id = *bob.local_peer_id();
+
+    bob.dial(&alices_peer_id).unwrap();
+
+    let alice_connected_to = tokio::spawn(async move {
+        loop {
+            if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
+                alice.select_next_some().await
+            {
+                break peer_id;
+            }
+        }
+    });
+    let bob_connected_to = tokio::spawn(async move {
+        loop {
+            if let SwarmEvent::ConnectionEstablished { peer_id, .. } = bob.select_next_some().await
+            {
+                break peer_id;
+            }
+        }
+    });
+
+    assert_eq!(alice_connected_to.await.unwrap(), bobs_peer_id);
+    assert_eq!(bob_connected_to.await.unwrap(), alices_peer_id);
 }
 
 #[tokio::test]

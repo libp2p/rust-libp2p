@@ -46,6 +46,11 @@ pub struct Rendezvous {
     registrations: Registrations,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
+
+    /// Hold addresses of all peers that we have discovered so far.
+    ///
+    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::addresses_of_peer`].
+    discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
 }
 
 pub struct Config {
@@ -81,6 +86,7 @@ impl Rendezvous {
             registrations: Registrations::with_config(config),
             keypair,
             pending_register_requests: vec![],
+            discovered_peers: Default::default(),
         }
     }
 
@@ -193,8 +199,13 @@ impl NetworkBehaviour for Rendezvous {
         SubstreamProtocolsHandler::new(b"/rendezvous/1.0.0", initial_keep_alive)
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
+    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+        self.discovered_peers
+            .iter()
+            .filter_map(|((candidate, _), addresses)| (candidate == peer).then(|| addresses))
+            .flatten()
+            .cloned()
+            .collect()
     }
 
     fn inject_connected(&mut self, _: &PeerId) {}
@@ -212,7 +223,7 @@ impl NetworkBehaviour for Rendezvous {
                 handle_inbound_event(message, peer_id, connection, id, &mut self.registrations)
             }
             handler::OutEvent::OutboundEvent { message, .. } => {
-                handle_outbound_event(message, peer_id)
+                handle_outbound_event(message, peer_id, &mut self.discovered_peers)
             }
             handler::OutEvent::InboundError { .. } => {
                 // TODO: log errors and close connection?
@@ -418,6 +429,7 @@ fn handle_inbound_event(
 fn handle_outbound_event(
     event: outbound::OutEvent,
     peer_id: PeerId,
+    discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
 ) -> Vec<NetworkBehaviourAction<handler::InEvent, Event>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
@@ -440,6 +452,15 @@ fn handle_outbound_event(
             registrations,
             cookie,
         } => {
+            discovered_peers.extend(registrations.iter().map(|registration| {
+                let peer_id = registration.record.peer_id();
+                let namespace = registration.namespace.clone();
+
+                let addresses = registration.record.addresses().to_vec();
+
+                ((peer_id, namespace), addresses)
+            }));
+
             vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
                 rendezvous_node: peer_id,
                 registrations,
