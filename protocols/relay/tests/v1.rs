@@ -1233,7 +1233,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
     );
 
     let transport = transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
@@ -1269,7 +1269,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
         new_transport_and_behaviour(RelayConfig::default(), transport);
 
     let transport = transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
@@ -1293,7 +1293,7 @@ fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
     let transport = MemoryTransport::default();
 
     let transport = transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();

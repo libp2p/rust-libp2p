@@ -52,8 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Signing libp2p-noise static DH keypair failed.");
 
     let transport = transport
-        .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .upgrade()
+        .authenticate_with_version(noise::NoiseConfig::xx(noise_keys).into_authenticated(), upgrade::Version::V1SimOpen)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 

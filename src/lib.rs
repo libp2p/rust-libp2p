@@ -179,7 +179,7 @@ pub async fn development_transport(keypair: identity::Keypair)
         .expect("Signing libp2p-noise static DH keypair failed.");
 
     Ok(transport
-        .upgrade(core::upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))
         .timeout(std::time::Duration::from_secs(20))
