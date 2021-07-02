@@ -15,7 +15,12 @@
 
   See [PR 2100] for details.
 
+- Add `ExpandedSwarm::disconnect_peer_id` and
+  `NetworkBehaviourAction::CloseConnection` to close connections to a specific
+  peer via an `ExpandedSwarm` or `NetworkBehaviour`. See [PR 2110] for details.
+
 [PR 2100]: https://github.com/libp2p/rust-libp2p/pull/2100
+[PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
 
 # 0.29.0 [2021-04-13]
 

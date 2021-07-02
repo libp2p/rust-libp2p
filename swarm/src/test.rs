@@ -167,6 +167,8 @@ where
         self.inject_listener_closed = Vec::new();
         self.poll = 0;
     }
+
+    pub fn inner(&mut self) -> &mut TInner { &mut self.inner }
 }
 
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
