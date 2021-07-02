@@ -289,7 +289,7 @@ where
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(
             libp2p_core::upgrade::from_fn(
-                self.protocol.clone(),
+                self.protocol,
                 Box::new(|socket, _| std::future::ready(Ok(socket))),
             ),
             (),
@@ -370,7 +370,7 @@ where
             return KeepAlive::No;
         }
 
-        return KeepAlive::Yes;
+        KeepAlive::Yes
     }
 
     fn poll(
@@ -388,7 +388,7 @@ where
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     libp2p_core::upgrade::from_fn(
-                        self.protocol.clone(),
+                        self.protocol,
                         Box::new(|socket, _| std::future::ready(Ok(socket))),
                     ),
                     open_info,

@@ -65,20 +65,19 @@ impl SubstreamHandler for Stream {
 
             let event = match (sent_message, received_message) {
                 (Register(registration), RegisterResponse(Ok(ttl))) => Registered {
-                    namespace: registration.namespace.to_owned(),
+                    namespace: registration.namespace,
                     ttl,
                 },
                 (Register(registration), RegisterResponse(Err(error))) => {
-                    RegisterFailed(registration.namespace.to_owned(), error)
+                    RegisterFailed(registration.namespace, error)
                 }
                 (Discover { .. }, DiscoverResponse(Ok((registrations, cookie)))) => Discovered {
                     registrations,
                     cookie,
                 },
-                (Discover { namespace, .. }, DiscoverResponse(Err(error))) => DiscoverFailed {
-                    namespace: namespace.to_owned(),
-                    error,
-                },
+                (Discover { namespace, .. }, DiscoverResponse(Err(error))) => {
+                    DiscoverFailed { namespace, error }
+                }
                 (.., other) => return Err(Error::BadMessage(other)),
             };
 

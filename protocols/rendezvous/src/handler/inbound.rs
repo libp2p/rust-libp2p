@@ -117,7 +117,7 @@ impl SubstreamHandler for Stream {
             Stream::PendingRead(mut substream) => {
                 match substream.poll_next_unpin(cx).map_err(Error::ReadMessage)? {
                     Poll::Ready(Some(msg)) => {
-                        let event = match msg.clone() {
+                        let event = match msg {
                             Message::Register(registration) => {
                                 OutEvent::RegistrationRequested(registration)
                             }
@@ -156,7 +156,7 @@ impl SubstreamHandler for Stream {
             {
                 Poll::Ready(()) => {
                     substream
-                        .start_send_unpin(message.clone())
+                        .start_send_unpin(message)
                         .map_err(Error::WriteMessage)?;
 
                     Next::Continue {
