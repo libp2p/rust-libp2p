@@ -199,7 +199,7 @@ where
     Poll::Pending
 }
 
-/// Event sent from the [`NetworkBehaviour`] to the [`SubstreamProtocolsHandler`].
+/// Event sent from the [`libp2p_swarm::NetworkBehaviour`] to the [`SubstreamProtocolsHandler`].
 pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     /// Open a new substream using the provided `open_info`.
     ///
@@ -215,7 +215,7 @@ pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     },
 }
 
-/// Event produced by the [`SubstreamProtocolsHandler`] for the corresponding [`NetworkBehaviour`].
+/// Event produced by the [`SubstreamProtocolsHandler`] for the corresponding [`libp2p_swarm::NetworkBehaviour`].
 pub enum OutEvent<TInbound, TOutbound, TInboundError, TOutboundError> {
     /// An inbound substream produced an event.
     InboundEvent {
