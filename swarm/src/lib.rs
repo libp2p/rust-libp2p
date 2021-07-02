@@ -466,7 +466,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
     ///
-    /// Returns `Ok(())` if a peer with this ID was in the list.
+    /// Returns `Ok(())` if there was one or more established connections to the peer.
+    ///
+    /// Note: Closing a connection via [`ExpandedSwarm::disconnect_peer_id`] does
+    /// not inform the corresponding [`ProtocolsHandler`](s).
+    /// Closing a connection via a [`ProtocolsHandler`] can be done either in a
+    /// collaborative manner across [`ProtocolsHandler`]s
+    /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
+    /// [`ProtocolsHandlerEvent::Close`].
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
         if let Some(peer) = self.network.peer(peer_id).into_connected() {
             peer.disconnect();
@@ -750,9 +757,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.add_external_address(addr, score);
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::CloseConnection { peer_id, handler }) => {
+                Poll::Ready(NetworkBehaviourAction::CloseConnection { peer_id, connection }) => {
                     if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
-                        match handler {
+                        match connection {
                             CloseConnection::One(connection_id) => {
                                 if let Some(conn) = peer.connection(connection_id) {
                                     conn.start_close();
@@ -1233,7 +1240,7 @@ mod tests {
             .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
     }
 
-    /// Establishes a number of connections between two peers,
+    /// Establishes multiple connections between two peers,
     /// after which one peer bans the other.
     ///
     /// The test expects both behaviours to be notified via pairs of
@@ -1308,7 +1315,7 @@ mod tests {
         }))
     }
 
-    /// Establishes a number of connections between two peers,
+    /// Establishes multiple connections between two peers,
     /// after which one peer disconnects the other using [`ExpandedSwarm::disconnect_peer_id`].
     ///
     /// The test expects both behaviours to be notified via pairs of
@@ -1378,9 +1385,9 @@ mod tests {
         }))
     }
 
-    /// Establishes a number of connections between two peers,
+    /// Establishes multiple connections between two peers,
     /// after which one peer disconnects the other
-    /// using [`NetworkBehaviourAction::CloseConnection`] thrown from a behaviour.
+    /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// inject_connected / inject_disconnected as well as
@@ -1426,7 +1433,7 @@ mod tests {
                                 .next_action
                                 .replace(NetworkBehaviourAction::CloseConnection {
                                     peer_id: swarm1_id.clone(),
-                                    handler: CloseConnection::All,
+                                    connection: CloseConnection::All,
                                 });
                             swarm1.behaviour.reset();
                             swarm2.behaviour.reset();
@@ -1456,9 +1463,9 @@ mod tests {
         }))
     }
 
-    /// Establishes a number of connections between two peers,
-    /// after which one peer closes the only one connection
-    /// using [`NetworkBehaviourAction::CloseConnection`] thrown from a behaviour.
+    /// Establishes multiple connections between two peers,
+    /// after which one peer closes a single connection
+    /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// inject_connected / inject_disconnected as well as
@@ -1503,7 +1510,7 @@ mod tests {
                                     .next_action
                                     .replace(NetworkBehaviourAction::CloseConnection {
                                         peer_id: swarm1_id.clone(),
-                                        handler: CloseConnection::One(conn_id),
+                                        connection: CloseConnection::One(conn_id),
                                     });
                                 Some(conn_id)
                             };

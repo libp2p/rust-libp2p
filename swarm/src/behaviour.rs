@@ -296,11 +296,19 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
 
     /// Instructs the `Swarm` to initiate a graceful close of one or all connections
     /// with the given peer.
+    ///
+    /// Note: Closing a connection via
+    /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
+    /// corresponding [`ProtocolsHandler`](s).
+    /// Closing a connection via a [`ProtocolsHandler`] can be done
+    /// either in a collaborative manner across [`ProtocolsHandler`]s
+    /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
+    /// [`ProtocolsHandlerEvent::Close`].
     CloseConnection {
         /// The peer to disconnect.
         peer_id: PeerId,
-        /// The ID of the connection whose `ProtocolsHandler` to disconnect.
-        handler: CloseConnection,
+        /// Whether to close a specific or all connections to the given peer.
+        connection: CloseConnection,
     }
 }
 
@@ -322,9 +330,8 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                 },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
                 NetworkBehaviourAction::ReportObservedAddr { address, score },
-            NetworkBehaviourAction::CloseConnection { peer_id, handler } => {
-                NetworkBehaviourAction::CloseConnection { peer_id, handler }
-            }
+            NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
+                NetworkBehaviourAction::CloseConnection { peer_id, connection }
         }
     }
 
@@ -341,8 +348,8 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                 NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
                 NetworkBehaviourAction::ReportObservedAddr { address, score },
-            NetworkBehaviourAction::CloseConnection { peer_id, handler } =>
-                NetworkBehaviourAction::CloseConnection { peer_id, handler }
+            NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
+                NetworkBehaviourAction::CloseConnection { peer_id, connection }
         }
     }
 }
@@ -388,7 +395,7 @@ impl Default for DialPeerCondition {
     }
 }
 
-/// The options which connection handlers to disconnect.
+/// The options which connections to close.
 #[derive(Debug, Clone)]
 pub enum CloseConnection {
     /// Disconnect a particular connection.
