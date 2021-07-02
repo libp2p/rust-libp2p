@@ -421,13 +421,13 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_length_prefixed(io, 1024)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Ping(vec))
-            })
-            .await
+        let vec = read_length_prefixed(io, 1024).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into())
+        }
+
+        Ok(Ping(vec))
     }
 
     async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T)
@@ -435,13 +435,13 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_length_prefixed(io, 1024)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Pong(vec))
-            })
-            .await
+        let vec = read_length_prefixed(io, 1024).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into())
+        }
+
+        Ok(Pong(vec))
     }
 
     async fn write_request<T>(&mut self, _: &PingProtocol, io: &mut T, Ping(data): Ping)
