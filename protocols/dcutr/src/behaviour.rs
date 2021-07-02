@@ -82,7 +82,6 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
-        todo!();
     }
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {
