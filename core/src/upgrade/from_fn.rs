@@ -41,7 +41,7 @@ use std::iter;
 ///             } else {
 ///                 let handshake_data = upgrade::read_length_prefixed(&mut sock, 1024).await?;
 ///                 if handshake_data != b"some handshake data" {
-///                     return Err(upgrade::ReadOneError::from(io::Error::from(io::ErrorKind::Other)));
+///                     return Err(io::Error::new(io::ErrorKind::Other, "bad handshake"));
 ///                 }
 ///             }
 ///             Ok(sock)
