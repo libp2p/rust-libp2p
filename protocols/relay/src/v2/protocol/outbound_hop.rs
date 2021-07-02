@@ -259,17 +259,13 @@ impl error::Error for UpgradeError {
     }
 }
 
-// TODO: This should use a u64.
-fn unix_timestamp_to_instant(secs: i64) -> Option<Instant> {
+fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
     Instant::now().checked_add(Duration::from_secs(
         secs.checked_sub(
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs()
-                .try_into()
-                // TODO: Can we do better? Why represent time as an i64 in protobuf in the first place?
-                .expect("Time to fit i64."),
+                .as_secs(),
         )?
         .try_into()
         .ok()?,

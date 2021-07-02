@@ -18,7 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p::{identity, mdns::{Mdns, MdnsConfig, MdnsEvent}, PeerId, Swarm};
+use futures::StreamExt;
+use libp2p::{
+    identity, 
+    mdns::{Mdns, MdnsConfig, MdnsEvent}, 
+    swarm::{Swarm, SwarmEvent},
+    PeerId
+};
 use std::error::Error;
 
 #[async_std::main]
@@ -43,17 +49,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     loop {
-        match swarm.next().await {
-            MdnsEvent::Discovered(peers) => {
+        match swarm.select_next_some().await {
+            SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
                 for (peer, addr) in peers {
                     println!("discovered {} {}", peer, addr);
                 }
             }
-            MdnsEvent::Expired(expired) => {
+            SwarmEvent::Behaviour(MdnsEvent::Expired(expired)) => {
                 for (peer, addr) in expired {
                     println!("expired {} {}", peer, addr);
                 }
             }
+            _ => {}
         }
     }
 }

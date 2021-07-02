@@ -222,7 +222,7 @@ async fn wait_for_reservation(
     is_renewal: bool,
 ) {
     loop {
-        match client.next_event().await {
+        match client.select_next_some().await {
             SwarmEvent::NewListenAddr(addr) if addr != client_addr => {}
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
@@ -236,7 +236,7 @@ async fn wait_for_reservation(
     }
 
     // Wait for `NewListenAddr` event.
-    match client.next_event().await {
+    match client.select_next_some().await {
         SwarmEvent::NewListenAddr(addr) if addr == client_addr => {}
         e => panic!("{:?}", e),
     }
@@ -244,7 +244,7 @@ async fn wait_for_reservation(
 
 async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
     loop {
-        match client.next_event().await {
+        match client.select_next_some().await {
             SwarmEvent::IncomingConnection { .. } => {},
             SwarmEvent::ConnectionEstablished { endpoint, .. }
                 if endpoint.get_remote_address() == addr =>
@@ -261,7 +261,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
 
 async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
     loop {
-        match client.next_event().await {
+        match client.select_next_some().await {
             SwarmEvent::NewListenAddr(addr) if addr == *new_addr => break,
             e => panic!("{:?}", e),
         }

@@ -48,6 +48,8 @@ pub use behaviour::{
     Quorum
 };
 pub use behaviour::{
+    InboundRequest,
+
     QueryRef,
     QueryMut,
 

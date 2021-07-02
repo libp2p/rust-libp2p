@@ -114,7 +114,7 @@ fn connect() {
 
     pool.run_until(async {
         loop {
-            match src.next_event().await {
+            match src.select_next_some().await {
                 SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
                 SwarmEvent::Behaviour(ClientEvent::Ping(PingEvent { peer, .. }))
@@ -306,7 +306,7 @@ async fn wait_for_reservation(
     is_renewal: bool,
 ) {
     loop {
-        match client.next_event().await {
+        match client.select_next_some().await {
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
                 renewal,
@@ -319,7 +319,7 @@ async fn wait_for_reservation(
     }
 
     // Wait for `NewListenAddr` event.
-    match client.next_event().await {
+    match client.select_next_some().await {
         SwarmEvent::NewListenAddr(addr) if addr == client_addr => {}
         e => panic!("{:?}", e),
     }
@@ -327,7 +327,7 @@ async fn wait_for_reservation(
 
 async fn wait_for_dial(client: &mut Swarm<Client>, relay_peer_id: PeerId) -> bool {
     loop {
-        match client.next_event().await {
+        match client.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {
                 return false

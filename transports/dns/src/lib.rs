@@ -36,6 +36,22 @@
 //! features. For more information about these features, please
 //! refer to the documentation of [trust-dns-resolver].
 //!
+//! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
+//! will try to parse the `/etc/resolv.conf` file. This approach comes with a
+//! few caveats to be aware of:
+//!   1) This fails (panics even!) if `/etc/resolv.conf` does not exist. This is
+//!      the case on all versions of Android.
+//!   2) DNS configuration is only evaluated during startup. Runtime changes are
+//!      thus ignored.
+//!   3) DNS resolution is obviously done in process and consequently not using
+//!      any system APIs (like libc's `gethostbyname`). Again this is
+//!      problematic on platforms like Android, where there's a lot of
+//!      complexity hidden behind the system APIs.
+//! If the implementation requires different characteristics, one should
+//! consider providing their own implementation of [`GenDnsConfig`] or use
+//! platform specific APIs to extract the host's DNS configuration (if possible)
+//! and provide a custom [`ResolverConfig`].
+//!
 //![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
 use futures::{prelude::*, future::BoxFuture};

@@ -174,19 +174,15 @@ impl ReservationReq {
                     (SystemTime::now() + self.reservation_duration)
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
-                        .as_secs()
-                        .try_into()
-                        // TODO: Can we do better? Why represent time as an i64 in protobuf in the first place?
-                        .expect("Time to fit i64."),
+                        .as_secs(),
                 ),
                 // TODO: Does this need to be set?
                 voucher: None,
             }),
             limit: Some(Limit {
-                // TODO: Handle the unwrap. Why use an i32 in protobuf in the first place?
+                // TODO: Handle unwrap
                 duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
-                // TODO: Handle the unwrap. Why use an i64 instead of a u64?
-                data: Some(self.max_circuit_bytes.try_into().unwrap()),
+                data: Some(self.max_circuit_bytes),
             }),
             status: Some(Status::Ok.into()),
         };
