@@ -2,6 +2,8 @@
 
 - Update dependencies.
 
+- Change `FloodsubDecodeError::ReadError` from a `upgrade::ReadOneError` to `std::io::Error`
+
 # 0.29.0 [2021-04-13]
 
 - Update `libp2p-swarm`.
