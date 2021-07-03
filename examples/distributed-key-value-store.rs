@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Called when `kademlia` produces an event.
         fn inject_event(&mut self, message: KademliaEvent) {
             match message {
-                KademliaEvent::QueryResult { result, .. } => match result {
+                KademliaEvent::OutboundQueryCompleted { result, .. } => match result {
                     QueryResult::GetProviders(Ok(ok)) => {
                         for peer in ok.providers {
                             println!(
