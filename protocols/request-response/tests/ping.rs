@@ -27,13 +27,13 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade::{self, read_one, write_one}
+    upgrade::{self, read_length_prefixed, write_length_prefixed}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
-use futures::{channel::mpsc, executor::LocalPool, prelude::*, task::SpawnExt};
+use futures::{channel::mpsc, executor::LocalPool, prelude::*, task::SpawnExt, AsyncWriteExt};
 use rand::{self, Rng};
 use std::{io, iter};
 use std::{collections::HashSet, num::NonZeroU16};
@@ -421,13 +421,13 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_one(io, 1024)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Ping(vec))
-            })
-            .await
+        let vec = read_length_prefixed(io, 1024).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into())
+        }
+
+        Ok(Ping(vec))
     }
 
     async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T)
@@ -435,13 +435,13 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_one(io, 1024)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Pong(vec))
-            })
-            .await
+        let vec = read_length_prefixed(io, 1024).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into())
+        }
+
+        Ok(Pong(vec))
     }
 
     async fn write_request<T>(&mut self, _: &PingProtocol, io: &mut T, Ping(data): Ping)
@@ -449,7 +449,10 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).await
+        write_length_prefixed(io, data).await?;
+        io.close().await?;
+
+        Ok(())
     }
 
     async fn write_response<T>(&mut self, _: &PingProtocol, io: &mut T, Pong(data): Pong)
@@ -457,6 +460,9 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).await
+        write_length_prefixed(io, data).await?;
+        io.close().await?;
+
+        Ok(())
     }
 }
