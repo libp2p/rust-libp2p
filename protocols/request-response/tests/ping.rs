@@ -27,7 +27,7 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade::{self, read_one, write_one}
+    upgrade::{read_one, write_one}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
@@ -207,8 +207,8 @@ fn emits_inbound_connection_closed_failure() {
 
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure { 
-                    error: InboundFailure::ConnectionClosed, 
+                SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure {
+                    error: InboundFailure::ConnectionClosed,
                     ..
                 }) => break,
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),

@@ -35,7 +35,7 @@ use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
     core::{
-        either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
+        either::EitherTransport, muxing::StreamMuxerBox, transport,
     },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify::{Identify, IdentifyConfig, IdentifyEvent},

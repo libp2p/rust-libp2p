@@ -30,7 +30,7 @@ use std::{
 
 use futures::StreamExt;
 use libp2p_core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
+    identity, multiaddr::Protocol, transport::MemoryTransport, Multiaddr, Transport,
 };
 use libp2p_gossipsub::{
     Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
@@ -55,7 +55,7 @@ impl Future for Graph {
                     Poll::Ready(Some(_)) => {}
                     Poll::Ready(None) => panic!("unexpected None when polling nodes"),
                     Poll::Pending => break,
-                }   
+                }
             }
         }
 

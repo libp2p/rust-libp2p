@@ -53,7 +53,6 @@
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p::core::upgrade;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};

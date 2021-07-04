@@ -25,9 +25,36 @@ use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
-pub use multistream_select::{Version, SimOpenRole, NegotiationError};
+pub use multistream_select::{SimOpenRole, NegotiationError};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Version {
+    V1,
+    V1Lazy,
+}
+
+impl From<Version> for multistream_select::Version {
+    fn from(v: Version) -> Self {
+        match v {
+            Version::V1 => multistream_select::Version::V1,
+            Version::V1Lazy => multistream_select::Version::V1Lazy,
+        }
+    }
+}
+
+impl Default for Version {
+    fn default() -> Self {
+        match multistream_select::Version::default() {
+            multistream_select::Version::V1 => Version::V1,
+            multistream_select::Version::V1Lazy => Version::V1Lazy,
+            multistream_select::Version::V1SimOpen => unreachable!("see `v1_sim_open_is_not_default`"),
+        }
+    }
+}
 
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
+//
+// TODO: Link to apply_authentication for authentication protocols.
 pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
@@ -61,7 +88,7 @@ where
     U: OutboundUpgrade<Negotiated<C>>
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::dialer_select_proto(conn, iter, v);
+    let future = multistream_select::dialer_select_proto(conn, iter, v.into());
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
     }
@@ -220,10 +247,37 @@ where
     }
 }
 
-/// Applies an authentication upgrade to the inbound or outbound direction of a connection or substream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthenticationVersion {
+    V1,
+    V1Lazy,
+    V1SimOpen
+}
+
+impl Default for AuthenticationVersion {
+    fn default() -> Self {
+        match multistream_select::Version::default() {
+            multistream_select::Version::V1 => AuthenticationVersion::V1,
+            multistream_select::Version::V1Lazy => AuthenticationVersion::V1Lazy,
+            multistream_select::Version::V1SimOpen => AuthenticationVersion::V1SimOpen,
+        }
+    }
+}
+
+impl From<AuthenticationVersion> for multistream_select::Version {
+    fn from(v: AuthenticationVersion) -> Self {
+        match v {
+            AuthenticationVersion::V1 => multistream_select::Version::V1,
+            AuthenticationVersion::V1Lazy => multistream_select::Version::V1Lazy,
+            AuthenticationVersion::V1SimOpen => multistream_select::Version::V1SimOpen,
+        }
+    }
+}
+
+/// Applies an authentication upgrade to the inbound or outbound direction of a connection.
 ///
-// TODO: Document that this is like `apply` but with simultaneous open.
-pub fn apply_authentication<C, D, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
+/// Note: This is like [`apply`] with additional support for
+pub fn apply_authentication<C, D, U>(conn: C, up: U, cp: ConnectedPoint, v: AuthenticationVersion)
     -> AuthenticationUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -242,7 +296,7 @@ where
         inner: AuthenticationUpgradeApplyState::Init{
             future: match cp {
                 ConnectedPoint::Dialer { .. } => Either::Left(
-                    multistream_select::dialer_select_proto(conn, iter, v),
+                    multistream_select::dialer_select_proto(conn, iter, v.into()),
                 ),
                 ConnectedPoint::Listener { .. } => Either::Right(
                     multistream_select::listener_select_proto(conn, iter)
@@ -356,5 +410,18 @@ pub struct NameWrap<N>(N);
 impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
     fn as_ref(&self) -> &[u8] {
         self.0.protocol_name()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v1_sim_open_is_not_default() {
+        assert_ne!(
+            multistream_select::Version::default(),
+            multistream_select::Version::V1SimOpen,
+        );
     }
 }

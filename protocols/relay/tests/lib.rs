@@ -29,7 +29,7 @@ use libp2p_core::either::EitherTransport;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-use libp2p_core::{identity, upgrade, PeerId};
+use libp2p_core::{identity, PeerId};
 use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};

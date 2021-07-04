@@ -838,7 +838,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
       TInEvent: Send + 'static,
       TOutEvent: Send + 'static,
-      THandler::Handler: 
+      THandler::Handler:
         ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
       THandleErr: error::Error + Send + 'static,
 {
@@ -1128,7 +1128,6 @@ mod tests {
     use futures::{future, executor};
     use libp2p_core::{
         identity,
-        upgrade,
         multiaddr,
         transport
     };

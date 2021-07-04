@@ -20,7 +20,6 @@
 
 //! Configuration of transport protocol upgrades.
 
-pub use crate::upgrade::{Version, SimOpenRole};
 
 use crate::{
     ConnectedPoint,
@@ -35,6 +34,9 @@ use crate::{
     muxing::{StreamMuxer, StreamMuxerBox},
     upgrade::{
         self,
+        SimOpenRole,
+        Version,
+        AuthenticationVersion,
         OutboundUpgrade,
         InboundUpgrade,
         UpgradeError,
@@ -111,12 +113,12 @@ where
         U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
         E: Error + 'static,
     {
-        self.authenticate_with_version(upgrade, upgrade::Version::default())
+        self.authenticate_with_version(upgrade, AuthenticationVersion::default())
     }
 
-    /// Same as [`Builder::authenticate`] with the option to choose the [`upgrade::Version`] used to
-    /// upgrade the connection.
-    pub fn authenticate_with_version<C, D, U, E>(self, upgrade: U, version: upgrade::Version) -> Authenticated<
+    /// Same as [`Builder::authenticate`] with the option to choose the
+    /// [`AuthenticationVersion`] used to upgrade the connection.
+    pub fn authenticate_with_version<C, D, U, E>(self, upgrade: U, version: AuthenticationVersion) -> Authenticated<
         AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>
     > where
         T: Transport<Output = C>,
@@ -151,11 +153,21 @@ where
     ///
     ///   * I/O upgrade: `C -> D`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, D)`.
-    //
-    // TODO: Do we need an `apply` with a version?
-    //
-    // TODO: Rename to `and_then`.
     pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, SimOpenRole)> + Clone>>
+    where
+        T: Transport<Output = ((PeerId, SimOpenRole), C)>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        D: AsyncRead + AsyncWrite + Unpin,
+        U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
+        E: Error + 'static,
+    {
+        self.apply_with_version(upgrade, Version::default())
+    }
+
+    /// Same as [`Authenticated::apply`] with the option to choose the
+    /// [`Version`] used to upgrade the connection.
+    pub fn apply_with_version<C, D, U, E>(self, upgrade: U, version: Version) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, SimOpenRole)> + Clone>>
     where
         T: Transport<Output = ((PeerId, SimOpenRole), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
@@ -167,8 +179,7 @@ where
         Authenticated(Builder::new(self.0.inner.and_then(move |((i, r), c), _endpoint| {
             let upgrade = match r {
                 SimOpenRole::Initiator => {
-                    // TODO: Offer version that allows choosing the Version.
-                    Either::Left(upgrade::apply_outbound(c, upgrade, upgrade::Version::default()))
+                    Either::Left(upgrade::apply_outbound(c, upgrade, version))
                 },
                 SimOpenRole::Responder => {
                     Either::Right(upgrade::apply_inbound(c, upgrade))
@@ -199,11 +210,25 @@ where
         U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
         E: Error + 'static,
     {
+        self.multiplex_with_version(upgrade, Version::default())
+    }
+
+    /// Same as [`Authenticated::multiplex`] with the option to choose the
+    /// [`Version`] used to upgrade the connection.
+    pub fn multiplex_with_version<C, M, U, E>(self, upgrade: U, version: Version) -> Multiplexed<
+        AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
+    > where
+        T: Transport<Output = ((PeerId, SimOpenRole), C)>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        M: StreamMuxer,
+        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        E: Error + 'static,
+    {
         Multiplexed(self.0.inner.and_then(move |((i, r), c), _endpoint| {
             let upgrade = match r {
                 SimOpenRole::Initiator => {
-                    // TODO: Offer version that allows choosing the Version.
-                    Either::Left(upgrade::apply_outbound(c, upgrade, upgrade::Version::default()))
+                    Either::Left(upgrade::apply_outbound(c, upgrade, version))
                 },
                 SimOpenRole::Responder => {
                     Either::Right(upgrade::apply_inbound(c, upgrade))
@@ -213,7 +238,6 @@ where
             UpgradeAuthenticated { user_data: Some(i), upgrade }
         }))
     }
-
 
     // TODO: Add changelog entry that multiplex_ext is removed.
 }
