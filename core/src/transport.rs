@@ -46,7 +46,6 @@ pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
-pub use self::upgrade::Upgrade;
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).

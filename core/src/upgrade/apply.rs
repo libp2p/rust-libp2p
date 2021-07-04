@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{ConnectedPoint, Negotiated};
+use crate::{ConnectedPoint, Negotiated, PeerId};
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
 use futures::{future::{Either, TryFutureExt, MapOk}, prelude::*};
 use log::debug;
@@ -38,136 +38,6 @@ where
         Either::Left(apply_inbound(conn, up))
     } else {
         Either::Right(apply_outbound(conn, up, v))
-    }
-}
-
-
-/// Applies an authentication upgrade to the inbound or outbound direction of a connection or substream.
-//
-// TODO: This is specific to authentication upgrades, given that it can handle simultaneous open.
-// Should this be moved to transport.rs?
-pub fn apply_authentication<C, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
-    -> AuthenticationUpgradeApply<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
-{
-    let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-
-    AuthenticationUpgradeApply {
-        inner: AuthenticationUpgradeApplyState::Init{
-            future: match cp {
-                ConnectedPoint::Dialer { .. } => Either::Left(
-                    multistream_select::dialer_select_proto(conn, iter, v),
-                ),
-                ConnectedPoint::Listener { .. } => Either::Right(
-                    multistream_select::listener_select_proto(conn, iter)
-                        .map_ok(add_responder as fn (_) -> _),
-                ),
-            },
-            upgrade: up,
-        },
-    }
-}
-
-// TODO: This is a hack to get a fn pointer. Can we do better?
-fn add_responder<P, C>(input: (P, C)) -> (P, C, SimOpenRole) {
-    (input.0, input.1, SimOpenRole::Responder)
-}
-
-pub struct AuthenticationUpgradeApply<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
-{
-    inner: AuthenticationUpgradeApplyState<C, U>
-}
-
-impl<C, U> Unpin for AuthenticationUpgradeApply<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
-{
-}
-
-enum AuthenticationUpgradeApplyState<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
-{
-    Init {
-        future: Either<
-                multistream_select::DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
-            MapOk<
-                    ListenerSelectFuture<C, NameWrap<U::Info>>,
-                fn((NameWrap<U::Info>, Negotiated<C>)) -> (NameWrap<U::Info>, Negotiated<C>, SimOpenRole)
-                    >,
-            >,
-        upgrade: U,
-    },
-    Upgrade {
-        role: SimOpenRole,
-        future: Either<
-                Pin<Box<<U as OutboundUpgrade<Negotiated<C>>>::Future>>,
-            Pin<Box<<U as InboundUpgrade<Negotiated<C>>>::Future>>,
-            >,
-    },
-    Undefined
-}
-
-impl<C, U> Future for AuthenticationUpgradeApply<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>,
-        Output = <U as InboundUpgrade<Negotiated<C>>>::Output,
-        Error = <U as InboundUpgrade<Negotiated<C>>>::Error
-    >
-{
-    type Output = Result<
-        (<U as InboundUpgrade<Negotiated<C>>>::Output, SimOpenRole),
-        UpgradeError<<U as InboundUpgrade<Negotiated<C>>>::Error>,
-    >;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            match mem::replace(&mut self.inner, AuthenticationUpgradeApplyState::Undefined) {
-                AuthenticationUpgradeApplyState::Init { mut future, upgrade } => {
-                    let (info, io, role) = match Future::poll(Pin::new(&mut future), cx)? {
-                        Poll::Ready(x) => x,
-                        Poll::Pending => {
-                            self.inner = AuthenticationUpgradeApplyState::Init { future, upgrade };
-                            return Poll::Pending
-                        }
-                    };
-                    let fut = match role {
-                        SimOpenRole::Initiator => Either::Left(Box::pin(upgrade.upgrade_outbound(io, info.0))),
-                        SimOpenRole::Responder => Either::Right(Box::pin(upgrade.upgrade_inbound(io, info.0))),
-                    };
-                    self.inner = AuthenticationUpgradeApplyState::Upgrade {
-                        future: fut,
-                        role,
-                    };
-                }
-                AuthenticationUpgradeApplyState::Upgrade { mut future, role } => {
-                    match Future::poll(Pin::new(&mut future), cx) {
-                        Poll::Pending => {
-                            self.inner = AuthenticationUpgradeApplyState::Upgrade { future, role };
-                            return Poll::Pending
-                        }
-                        Poll::Ready(Ok(x)) => {
-                            debug!("Successfully applied negotiated protocol");
-                            return Poll::Ready(Ok((x, role)))
-                        }
-                        Poll::Ready(Err(e)) => {
-                            debug!("Failed to apply negotiated protocol");
-                            return Poll::Ready(Err(UpgradeError::Apply(e)))
-                        }
-                    }
-                }
-                AuthenticationUpgradeApplyState::Undefined =>
-                    panic!("AuthenticationUpgradeApplyState::poll called after completion")
-            }
-        }
     }
 }
 
@@ -350,11 +220,138 @@ where
     }
 }
 
-type NameWrapIter<I> = iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
+/// Applies an authentication upgrade to the inbound or outbound direction of a connection or substream.
+///
+// TODO: Document that this is like `apply` but with simultaneous open.
+pub fn apply_authentication<C, D, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
+    -> AuthenticationUpgradeApply<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    D: AsyncRead + AsyncWrite + Unpin,
+    U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D)>,
+    U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = <U as InboundUpgrade<Negotiated<C>>>::Error> + Clone,
+
+{
+    fn add_responder<P, C>(input: (P, C)) -> (P, C, SimOpenRole) {
+        (input.0, input.1, SimOpenRole::Responder)
+    }
+
+    let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
+
+    AuthenticationUpgradeApply {
+        inner: AuthenticationUpgradeApplyState::Init{
+            future: match cp {
+                ConnectedPoint::Dialer { .. } => Either::Left(
+                    multistream_select::dialer_select_proto(conn, iter, v),
+                ),
+                ConnectedPoint::Listener { .. } => Either::Right(
+                    multistream_select::listener_select_proto(conn, iter)
+                        .map_ok(add_responder as fn (_) -> _),
+                ),
+            },
+            upgrade: up,
+        },
+    }
+}
+
+pub struct AuthenticationUpgradeApply<C, U>
+where
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
+{
+    inner: AuthenticationUpgradeApplyState<C, U>
+}
+
+impl<C, U> Unpin for AuthenticationUpgradeApply<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
+{
+}
+
+enum AuthenticationUpgradeApplyState<C, U>
+where
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
+{
+    Init {
+        future: Either<
+            multistream_select::DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
+            MapOk<
+                ListenerSelectFuture<C, NameWrap<U::Info>>,
+                fn((NameWrap<U::Info>, Negotiated<C>)) -> (NameWrap<U::Info>, Negotiated<C>, SimOpenRole)
+            >,
+        >,
+        upgrade: U,
+    },
+    Upgrade {
+        role: SimOpenRole,
+        future: Either<
+            Pin<Box<<U as OutboundUpgrade<Negotiated<C>>>::Future>>,
+            Pin<Box<<U as InboundUpgrade<Negotiated<C>>>::Future>>,
+        >,
+    },
+    Undefined
+}
+
+impl<C, D, U> Future for AuthenticationUpgradeApply<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    D: AsyncRead + AsyncWrite + Unpin,
+    U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D)>,
+    U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = <U as InboundUpgrade<Negotiated<C>>>::Error> + Clone,
+{
+    type Output = Result<
+        ((PeerId, SimOpenRole), D),
+        UpgradeError<<U as InboundUpgrade<Negotiated<C>>>::Error>,
+    >;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match mem::replace(&mut self.inner, AuthenticationUpgradeApplyState::Undefined) {
+                AuthenticationUpgradeApplyState::Init { mut future, upgrade } => {
+                    let (info, io, role) = match Future::poll(Pin::new(&mut future), cx)? {
+                        Poll::Ready(x) => x,
+                        Poll::Pending => {
+                            self.inner = AuthenticationUpgradeApplyState::Init { future, upgrade };
+                            return Poll::Pending
+                        }
+                    };
+                    let fut = match role {
+                        SimOpenRole::Initiator => Either::Left(Box::pin(upgrade.upgrade_outbound(io, info.0))),
+                        SimOpenRole::Responder => Either::Right(Box::pin(upgrade.upgrade_inbound(io, info.0))),
+                    };
+                    self.inner = AuthenticationUpgradeApplyState::Upgrade {
+                        future: fut,
+                        role,
+                    };
+                }
+                AuthenticationUpgradeApplyState::Upgrade { mut future, role } => {
+                    match Future::poll(Pin::new(&mut future), cx) {
+                        Poll::Pending => {
+                            self.inner = AuthenticationUpgradeApplyState::Upgrade { future, role };
+                            return Poll::Pending
+                        }
+                        Poll::Ready(Ok((peer_id, d))) => {
+                            debug!("Successfully applied negotiated protocol");
+                            return Poll::Ready(Ok(((peer_id, role), d)))
+                        }
+                        Poll::Ready(Err(e)) => {
+                            debug!("Failed to apply negotiated protocol");
+                            return Poll::Ready(Err(UpgradeError::Apply(e)))
+                        }
+                    }
+                }
+                AuthenticationUpgradeApplyState::Undefined =>
+                    panic!("AuthenticationUpgradeApplyState::poll called after completion")
+            }
+        }
+    }
+}
+
+pub type NameWrapIter<I> = iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
 
 /// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
 #[derive(Clone)]
-struct NameWrap<N>(N);
+pub struct NameWrap<N>(N);
 
 impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
     fn as_ref(&self) -> &[u8] {
