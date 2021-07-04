@@ -186,7 +186,11 @@ where
 
     let mut bytes = Vec::with_capacity(message.encoded_len());
     message.encode(&mut bytes).expect("Vec<u8> provides capacity as needed");
-    upgrade::write_one(&mut io, &bytes).await
+
+    upgrade::write_length_prefixed(&mut io, bytes).await?;
+    io.close().await?;
+
+    Ok(())
 }
 
 async fn recv<T>(mut socket: T) -> io::Result<IdentifyInfo>
@@ -195,7 +199,7 @@ where
 {
     socket.close().await?;
 
-    let msg = upgrade::read_one(&mut socket, 4096)
+    let msg = upgrade::read_length_prefixed(&mut socket, 4096)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
         .await?;
 
