@@ -106,7 +106,7 @@ where
     ///   * I/O upgrade: `C -> (PeerId, D)`.
     ///   * Transport output: `C -> (PeerId, D)`
     pub fn authenticate<C, D, U, E>(self, upgrade: U) -> Authenticated<
-        AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>
+        AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>
     > where
         T: Transport<Output = C>,
         C: AsyncRead + AsyncWrite + Unpin,
@@ -121,7 +121,7 @@ where
     /// Same as [`Builder::authenticate`] with the option to choose the [`upgrade::Version`] used to
     /// upgrade the connection.
     pub fn authenticate_with_version<C, D, U, E>(self, upgrade: U, version: upgrade::Version) -> Authenticated<
-        AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>
+        AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>
     > where
         T: Transport<Output = C>,
         C: AsyncRead + AsyncWrite + Unpin,
@@ -131,40 +131,8 @@ where
         E: Error + 'static,
     {
         Authenticated(Builder::new(self.inner.and_then(move |conn, endpoint| {
-            Authenticate {
-                inner: upgrade::apply_authentication(conn, upgrade, endpoint, version)
-            }
+                upgrade::apply_authentication(conn, upgrade, endpoint, version)
         })))
-    }
-}
-
-/// An upgrade that authenticates the remote peer, typically
-/// in the context of negotiating a secure channel.
-///
-/// Configured through [`Builder::authenticate`].
-#[pin_project::pin_project]
-pub struct Authenticate<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>
-{
-    #[pin]
-    inner: AuthenticationUpgradeApply<C, U>
-}
-
-impl<C, U> Future for Authenticate<C, U>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>,
-        Output = <U as InboundUpgrade<Negotiated<C>>>::Output,
-        Error = <U as InboundUpgrade<Negotiated<C>>>::Error
-    >
-{
-    type Output = <AuthenticationUpgradeApply<C, U> as Future>::Output;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        Future::poll(this.inner, cx)
     }
 }
 
@@ -202,6 +170,40 @@ where
     }
 }
 
+/// An upgrade that negotiates a (sub)stream multiplexer on
+/// top of an authenticated transport.
+///
+/// Configured through [`Authenticated::multiplex`].
+#[pin_project::pin_project]
+pub struct AuthenticatedUpgrade<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
+{
+    peer_id_and_role: Option<(PeerId, SimOpenRole)>,
+    #[pin]
+    upgrade: EitherUpgrade<C, U>,
+}
+
+impl<C, U, M, E> Future for AuthenticatedUpgrade<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+    U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>
+{
+    type Output = Result<((PeerId, M), SimOpenRole), UpgradeError<E>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        let m = match ready!(Future::poll(this.upgrade, cx)) {
+            Ok(m) => m,
+            Err(err) => return Poll::Ready(Err(err)),
+        };
+        let (peer_id, role) = this.peer_id_and_role.take().expect("AuthenticatedUpgrade future polled after completion.");
+        Poll::Ready(Ok(((peer_id, m), role)))
+    }
+}
+
 /// An transport with peer authentication, obtained from [`Builder::authenticate`].
 #[derive(Clone)]
 pub struct Authenticated<T>(Builder<T>);
@@ -223,7 +225,7 @@ where
     ///   * Transport output: `(PeerId, C) -> (PeerId, D)`.
     //
     // TODO: Do we need an `apply` with a version?
-    pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<Upgrade<T, U>>
+    pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, C), SimOpenRole), ConnectedPoint) -> AuthenticatedUpgrade<C, U> + Clone>>
     where
         T: Transport<Output = ((PeerId, C), SimOpenRole)>,
         C: AsyncRead + AsyncWrite + Unpin,
@@ -232,7 +234,19 @@ where
         U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
         E: Error + 'static,
     {
-        Authenticated(Builder::new(Upgrade::new(self.0.inner, upgrade)))
+        Authenticated(Builder::new(self.0.inner.and_then(move |((i, c), r), endpoint| {
+            let upgrade = match r {
+                SimOpenRole::Initiator => {
+                    // TODO: Offer version that allows choosing the Version.
+                    Either::Left(upgrade::apply_outbound(c, upgrade, upgrade::Version::default()))
+                },
+                SimOpenRole::Responder => {
+                    Either::Right(upgrade::apply_inbound(c, upgrade))
+
+                }
+            };
+            AuthenticatedUpgrade { peer_id_and_role: Some((i, r)), upgrade }
+        })))
     }
 
     /// Upgrades the transport with a (sub)stream multiplexer.
