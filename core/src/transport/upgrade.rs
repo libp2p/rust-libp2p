@@ -429,21 +429,29 @@ where
 /// The [`Transport::Dial`] future of an [`Upgrade`]d transport.
 pub struct DialUpgradeFuture<F, U, C>
 where
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>,
+        Output = <U as InboundUpgrade<Negotiated<C>>>::Output,
+        Error = <U as InboundUpgrade<Negotiated<C>>>::Error
+    >,
     C: AsyncRead + AsyncWrite + Unpin,
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<(PeerId, SimOpenRole)>, OutboundUpgradeApply<C, U>)>
+    upgrade: future::Either<
+        Option<U>,
+        (Option<(PeerId, SimOpenRole)>, Either<OutboundUpgradeApply<C, U>, InboundUpgradeApply<C, U>>),
+    >
 }
 
-impl<F, U, C, D> Future for DialUpgradeFuture<F, U, C>
+impl<F, U, C> Future for DialUpgradeFuture<F, U, C>
 where
     F: TryFuture<Ok = ((PeerId, C), SimOpenRole)>,
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>, Output = D>,
-    U::Error: Error
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>,
+        Output = <U as InboundUpgrade<Negotiated<C>>>::Output,
+        Error = <U as InboundUpgrade<Negotiated<C>>>::Error
+    >,
 {
-    type Output = Result<((PeerId, D), SimOpenRole), TransportUpgradeError<F::Error, U::Error>>;
+    type Output = Result<((PeerId, <U as InboundUpgrade<Negotiated<C>>>::Output), SimOpenRole), TransportUpgradeError<F::Error, <U as InboundUpgrade<Negotiated<C>>>::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -457,8 +465,15 @@ where
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
-                    let u = up.take().expect("DialUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((Some((i, r)), apply_outbound(c, u, upgrade::Version::V1)))
+                    let upgrade = up.take().map(|u| match r {
+                        SimOpenRole::Initiator => {
+                            Either::Left(apply_outbound(c, u, upgrade::Version::V1))
+                        },
+                        SimOpenRole::Responder => {
+                            Either::Right(apply_inbound(c, u))
+                        }
+                    }).take().expect("DialUpgradeFuture is constructed with Either::Left(Some).");
+                    future::Either::Right((Some((i, r)), upgrade))
                 }
                 future::Either::Right((ref mut i, ref mut up)) => {
                     let d = match ready!(Future::poll(Pin::new(up), cx).map_err(TransportUpgradeError::Upgrade)) {
@@ -475,7 +490,10 @@ where
 
 impl<F, U, C> Unpin for DialUpgradeFuture<F, U, C>
 where
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>,
+        Output = <U as InboundUpgrade<Negotiated<C>>>::Output,
+        Error = <U as InboundUpgrade<Negotiated<C>>>::Error
+    >,
     C: AsyncRead + AsyncWrite + Unpin,
 {
 }
