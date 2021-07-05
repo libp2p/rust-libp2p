@@ -1042,7 +1042,6 @@ where
                                 ));
                             },
                             kbucket::InsertResult::Pending { disconnected } => {
-                                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                                     KademliaEvent::PendingRoutablePeer { peer, address }
