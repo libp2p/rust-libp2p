@@ -93,7 +93,7 @@ fn src_connect_to_dst_listening_via_relay() {
         // Destination Node reporting listen address via relay.
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) if addr == dst_listen_addr_via_relay => break,
+                SwarmEvent::NewListenAddr { address, .. } if address == dst_listen_addr_via_relay => break,
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -289,7 +289,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
             match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr { address, .. } if address == dst_addr_via_relay => break,
                 e => panic!("{:?}", e),
             }
         }
@@ -556,7 +556,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         // Destination Node reporting listen address via relay.
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr { address, .. } if address == dst_addr_via_relay => break,
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -722,7 +722,7 @@ fn inactive_connection_timeout() {
             match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr { address, .. } if address == dst_addr_via_relay => break,
                 e => panic!("{:?}", e),
             }
         }
@@ -796,7 +796,7 @@ fn concurrent_connection_same_relay_same_dst() {
             match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr { address, .. } if address == dst_addr_via_relay => break,
                 e => panic!("{:?}", e),
             }
         }
@@ -924,10 +924,10 @@ fn yield_incoming_connection_through_correct_listener() {
                         break;
                     }
                 }
-                SwarmEvent::NewListenAddr(addr)
-                    if addr == relay_1_addr_incl_circuit
-                        || addr == relay_2_addr_incl_circuit
-                        || addr == dst_addr => {}
+                SwarmEvent::NewListenAddr { address, .. }
+                    if address == relay_1_addr_incl_circuit
+                        || address == relay_2_addr_incl_circuit
+                        || address == dst_addr => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
@@ -966,10 +966,10 @@ fn yield_incoming_connection_through_correct_listener() {
                         unreachable!();
                     }
                 }
-                SwarmEvent::NewListenAddr(addr)
-                    if addr == relay_1_addr_incl_circuit
-                        || addr == relay_2_addr_incl_circuit
-                        || addr == dst_addr => {}
+                SwarmEvent::NewListenAddr { address, .. }
+                    if address == relay_1_addr_incl_circuit
+                        || address == relay_2_addr_incl_circuit
+                        || address == dst_addr => {}
                 SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
                     peer,
                     result: Ok(_),
@@ -1044,7 +1044,7 @@ fn yield_incoming_connection_through_correct_listener() {
     pool.run_until(async {
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) if addr == Protocol::P2pCircuit.into() => break,
+                SwarmEvent::NewListenAddr { address, .. } if address == Protocol::P2pCircuit.into() => break,
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
