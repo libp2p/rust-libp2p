@@ -416,8 +416,8 @@ enum SimOpenState<R> {
 
 /// Role of the local node after protocol negotiation.
 ///
-/// Always equals [`Initiator`] unless [`Version::V1SimultaneousOpen`] is used
-/// in which case node may end up in either role after negotiation.
+/// Always equals [`Role::Initiator`] unless [`Version::V1SimultaneousOpen`] is
+/// used in which case node may end up in either role after negotiation.
 ///
 /// See [`Version::V1SimultaneousOpen`] for details.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
