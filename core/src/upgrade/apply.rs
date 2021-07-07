@@ -27,9 +27,14 @@ use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::{Role, NegotiationError};
 
+/// Wrapper around multistream-select `Version`.
+///
+/// See [`multistream_select::Version`] for details.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
+    /// See [`multistream_select::Version::V1`].
     V1,
+    /// See [`multistream_select::Version::V1Lazy`].
     V1Lazy,
 }
 
@@ -252,10 +257,16 @@ where
     }
 }
 
+/// Wrapper around multistream-select `Version`.
+///
+/// See [`multistream_select::Version`] for details.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AuthenticationVersion {
+    /// See [`multistream_select::Version::V1`].
     V1,
+    /// See [`multistream_select::Version::V1Lazy`].
     V1Lazy,
+    /// See [`multistream_select::Version::V1SimultaneousOpen`].
     V1SimultaneousOpen
 }
 
