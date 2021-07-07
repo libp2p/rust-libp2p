@@ -49,8 +49,8 @@ where
     }, protocols)
 }
 
-/// Used when selected as a [`crate::Role::Responder`] during [`Version::V1SimultaneousOpen`]
-/// negotiation.
+/// Used when selected as a [`crate::Role::Responder`] during [`crate::dialer_select_proto`]
+/// negotiation with [`crate::Version::V1SimultaneousOpen`]
 pub(crate) fn listener_select_proto_no_header<R, I>(
     io: MessageIO<R>,
     protocols: I,
