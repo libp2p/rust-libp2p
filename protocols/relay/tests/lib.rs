@@ -387,6 +387,7 @@ fn src_try_connect_to_offline_dst() {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
+                SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {},
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
