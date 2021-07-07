@@ -42,7 +42,6 @@ use libp2p::{
     NetworkBehaviour,
     PeerId,
     Transport,
-    core::upgrade,
     identity,
     floodsub::{self, Floodsub, FloodsubEvent},
     mdns::{Mdns, MdnsEvent},
