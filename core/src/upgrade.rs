@@ -70,7 +70,7 @@ mod transfer;
 use futures::future::Future;
 
 pub use crate::Negotiated;
-pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, SimOpenRole};
+pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Role};
 pub use self::{
     // TODO: Break.
     apply::{apply, apply_authentication, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply, AuthenticationUpgradeApply, Version, AuthenticationVersion},

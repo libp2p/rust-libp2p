@@ -34,7 +34,7 @@ use crate::{
     muxing::{StreamMuxer, StreamMuxerBox},
     upgrade::{
         self,
-        SimOpenRole,
+        Role,
         Version,
         AuthenticationVersion,
         OutboundUpgrade,
@@ -153,9 +153,9 @@ where
     ///
     ///   * I/O upgrade: `C -> D`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, D)`.
-    pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, SimOpenRole)> + Clone>>
+    pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, Role)> + Clone>>
     where
-        T: Transport<Output = ((PeerId, SimOpenRole), C)>,
+        T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
@@ -167,9 +167,9 @@ where
 
     /// Same as [`Authenticated::apply`] with the option to choose the
     /// [`Version`] used to upgrade the connection.
-    pub fn apply_with_version<C, D, U, E>(self, upgrade: U, version: Version) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, SimOpenRole)> + Clone>>
+    pub fn apply_with_version<C, D, U, E>(self, upgrade: U, version: Version) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, Role)> + Clone>>
     where
-        T: Transport<Output = ((PeerId, SimOpenRole), C)>,
+        T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
@@ -178,10 +178,10 @@ where
     {
         Authenticated(Builder::new(self.0.inner.and_then(move |((i, r), c), _endpoint| {
             let upgrade = match r {
-                SimOpenRole::Initiator => {
+                Role::Initiator => {
                     Either::Left(upgrade::apply_outbound(c, upgrade, version))
                 },
-                SimOpenRole::Responder => {
+                Role::Responder => {
                     Either::Right(upgrade::apply_inbound(c, upgrade))
 
                 }
@@ -201,9 +201,9 @@ where
     ///   * I/O upgrade: `C -> M`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, M)`.
     pub fn multiplex<C, M, U, E>(self, upgrade: U) -> Multiplexed<
-        AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
+        AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
     > where
-        T: Transport<Output = ((PeerId, SimOpenRole), C)>,
+        T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
@@ -216,9 +216,9 @@ where
     /// Same as [`Authenticated::multiplex`] with the option to choose the
     /// [`Version`] used to upgrade the connection.
     pub fn multiplex_with_version<C, M, U, E>(self, upgrade: U, version: Version) -> Multiplexed<
-        AndThen<T, impl FnOnce(((PeerId, SimOpenRole), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
+        AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
     > where
-        T: Transport<Output = ((PeerId, SimOpenRole), C)>,
+        T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
@@ -227,10 +227,10 @@ where
     {
         Multiplexed(self.0.inner.and_then(move |((i, r), c), _endpoint| {
             let upgrade = match r {
-                SimOpenRole::Initiator => {
+                Role::Initiator => {
                     Either::Left(upgrade::apply_outbound(c, upgrade, version))
                 },
-                SimOpenRole::Responder => {
+                Role::Responder => {
                     Either::Right(upgrade::apply_inbound(c, upgrade))
 
                 }

@@ -25,7 +25,7 @@ use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
-pub use multistream_select::{SimOpenRole, NegotiationError};
+pub use multistream_select::{Role, NegotiationError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
@@ -212,7 +212,7 @@ where
         loop {
             match mem::replace(&mut self.inner, OutboundUpgradeApplyState::Undefined) {
                 OutboundUpgradeApplyState::Init { mut future, upgrade } => {
-                    // TODO: Don't ignore the SimOpenRole here. Instead add assert!.
+                    // TODO: Don't ignore the Role here. Instead add assert!.
                     let (info, connection, _) = match Future::poll(Pin::new(&mut future), cx)? {
                         Poll::Ready(x) => x,
                         Poll::Pending => {
@@ -286,8 +286,8 @@ where
     U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = <U as InboundUpgrade<Negotiated<C>>>::Error> + Clone,
 
 {
-    fn add_responder<P, C>(input: (P, C)) -> (P, C, SimOpenRole) {
-        (input.0, input.1, SimOpenRole::Responder)
+    fn add_responder<P, C>(input: (P, C)) -> (P, C, Role) {
+        (input.0, input.1, Role::Responder)
     }
 
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
@@ -331,13 +331,13 @@ where
             multistream_select::DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
             MapOk<
                 ListenerSelectFuture<C, NameWrap<U::Info>>,
-                fn((NameWrap<U::Info>, Negotiated<C>)) -> (NameWrap<U::Info>, Negotiated<C>, SimOpenRole)
+                fn((NameWrap<U::Info>, Negotiated<C>)) -> (NameWrap<U::Info>, Negotiated<C>, Role)
             >,
         >,
         upgrade: U,
     },
     Upgrade {
-        role: SimOpenRole,
+        role: Role,
         future: Either<
             Pin<Box<<U as OutboundUpgrade<Negotiated<C>>>::Future>>,
             Pin<Box<<U as InboundUpgrade<Negotiated<C>>>::Future>>,
@@ -354,7 +354,7 @@ where
     U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = <U as InboundUpgrade<Negotiated<C>>>::Error> + Clone,
 {
     type Output = Result<
-        ((PeerId, SimOpenRole), D),
+        ((PeerId, Role), D),
         UpgradeError<<U as InboundUpgrade<Negotiated<C>>>::Error>,
     >;
 
@@ -370,8 +370,8 @@ where
                         }
                     };
                     let fut = match role {
-                        SimOpenRole::Initiator => Either::Left(Box::pin(upgrade.upgrade_outbound(io, info.0))),
-                        SimOpenRole::Responder => Either::Right(Box::pin(upgrade.upgrade_inbound(io, info.0))),
+                        Role::Initiator => Either::Left(Box::pin(upgrade.upgrade_outbound(io, info.0))),
+                        Role::Responder => Either::Right(Box::pin(upgrade.upgrade_inbound(io, info.0))),
                     };
                     self.inner = AuthenticationUpgradeApplyState::Upgrade {
                         future: fut,
