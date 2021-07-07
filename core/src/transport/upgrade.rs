@@ -238,8 +238,6 @@ where
             UpgradeAuthenticated { user_data: Some(i), upgrade }
         }))
     }
-
-    // TODO: Add changelog entry that multiplex_ext is removed.
 }
 
 /// An upgrade that negotiates a (sub)stream multiplexer on
