@@ -32,6 +32,6 @@ jobs:
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
     - name: Run tests, with all features
-      run: while cargo test --all-features --package libp2p-relay; do :; done
+      run: while cargo test --all-features --package libp2p-relay -- --nocapture; do :; done
       env:
           RUST_LOG: debug
