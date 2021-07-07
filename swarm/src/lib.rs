@@ -239,7 +239,7 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
     ExpiredListenAddr{
         /// The listener that is no longer listening on the address.
         listener_id: ListenerId,
-        /// The new address that is being listened on.
+        /// The expired address.
         address: Multiaddr
     },
     /// One of the listeners gracefully closed.
@@ -342,8 +342,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Starts listening on the given address.
-    ///
     /// Returns an error if the address is not supported.
+    ///
+    /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
+    /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         let id = self.network.listen_on(addr)?;
         self.behaviour.inject_new_listener(id);
