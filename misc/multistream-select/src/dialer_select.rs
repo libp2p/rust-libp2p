@@ -167,7 +167,6 @@ where
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
-    // TODO: Clone needed to embed ListenerSelectFuture. Still needed?
     I::Item: AsRef<[u8]> + Clone
 {
     type Output = Result<(I::Item, Negotiated<R>, Role), NegotiationError>;
