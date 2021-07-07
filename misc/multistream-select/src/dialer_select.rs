@@ -32,8 +32,9 @@ use std::{cmp::Ordering, convert::TryFrom as _, iter, mem, pin::Pin, task::{Cont
 ///
 /// This function is given an I/O stream and a list of protocols and returns a
 /// computation that performs the protocol negotiation with the remote. The
-/// returned `Future` resolves with the name of the negotiated protocol and
-/// a [`Negotiated`] I/O stream.
+/// returned `Future` resolves with the name of the negotiated protocol, a
+/// [`Negotiated`] I/O stream and the [`Role`] of the peer on the connection
+/// going forward.
 ///
 /// The chosen message flow for protocol negotiation depends on the numbers of
 /// supported protocols given. That is, this function delegates to serial or
@@ -72,7 +73,7 @@ where
     }
 }
 
-/// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
+/// Future, returned by `dialer_select_proto`, which selects a protocol and
 /// either trying protocols in-order, or by requesting all protocols supported
 /// by the remote upfront, from which the first protocol found in the dialer's
 /// list of protocols is selected.
@@ -414,7 +415,12 @@ enum SimOpenState<R> {
     Done,
 }
 
-// TODO: Rename this to `Role` in general?
+/// Role of the local node after protocol negotiation.
+///
+/// Always equals [`Initiator`] unless [`Version::V1SimultaneousOpen`] is used
+/// in which case node may end up in either role after negotiation.
+///
+/// See [`Version::V1SimultaneousOpen`] for details.
 pub enum SimOpenRole {
     Initiator,
     Responder,
@@ -478,8 +484,18 @@ where
                     };
 
                     match msg {
-                        // TODO: Document that this might still be the protocol send by the remote with
-                        // the sim open ID.
+                        // As an optimization, the simultaneous open
+                        // multistream-select variant sends both the
+                        // simultaneous open ID (`/libp2p/simultaneous-connect`)
+                        // and a protocol before flushing. In the case where the
+                        // remote acts as a listener already, it can accept or
+                        // decline the attached protocol within the same
+                        // round-trip.
+                        //
+                        // In this particular situation, the remote acts as a
+                        // dialer and uses the simultaneous open variant. Given
+                        // that nonces need to be exchanged first, the attached
+                        // protocol by the remote needs to be ignored.
                         Message::Protocol(_) => {
                             self.state = SimOpenState::ReadNonce { io, local_nonce };
                         }
@@ -590,7 +606,6 @@ where
     I: Iterator,
     I::Item: AsRef<[u8]>
 {
-    // TODO: Is it a hack that DialerSelectPar returns the simopenrole?
     type Output = Result<(I::Item, Negotiated<R>, SimOpenRole), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
