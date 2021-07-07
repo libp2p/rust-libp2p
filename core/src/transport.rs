@@ -195,8 +195,6 @@ pub trait Transport {
 
     /// Begins a series of protocol upgrades via an
     /// [`upgrade::Builder`](upgrade::Builder).
-    //
-    // TODO: Method still needed now that `upgrade` takes `self` only?
     fn upgrade(self) -> upgrade::Builder<Self>
     where
         Self: Sized,

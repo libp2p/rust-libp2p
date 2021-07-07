@@ -53,8 +53,9 @@ impl Default for Version {
 }
 
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-//
-// TODO: Link to apply_authentication for authentication protocols.
+///
+/// Note: Use [`apply_authentication`] when negotiating an authentication protocol on top of a
+/// transport allowing simultaneously opened connections.
 pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
@@ -212,14 +213,18 @@ where
         loop {
             match mem::replace(&mut self.inner, OutboundUpgradeApplyState::Undefined) {
                 OutboundUpgradeApplyState::Init { mut future, upgrade } => {
-                    // TODO: Don't ignore the Role here. Instead add assert!.
-                    let (info, connection, _) = match Future::poll(Pin::new(&mut future), cx)? {
+                    let (info, connection, role) = match Future::poll(Pin::new(&mut future), cx)? {
                         Poll::Ready(x) => x,
                         Poll::Pending => {
                             self.inner = OutboundUpgradeApplyState::Init { future, upgrade };
                             return Poll::Pending
                         }
                     };
+                    assert_eq!(
+                        role, Role::Initiator,
+                        "Expect negotiation not using `Version::V1SimultaneousOpen` to either return \
+                         as `Initiator` or fail.",
+                    );
                     self.inner = OutboundUpgradeApplyState::Upgrade {
                         future: Box::pin(upgrade.upgrade_outbound(connection, info.0))
                     };
@@ -276,7 +281,9 @@ impl From<AuthenticationVersion> for multistream_select::Version {
 
 /// Applies an authentication upgrade to the inbound or outbound direction of a connection.
 ///
-/// Note: This is like [`apply`] with additional support for
+/// Note: This is like [`apply`] with additional support for transports allowing simultaneously
+/// opened connections. Unless run on such transport and used to negotiate the authentication
+/// protocol you likely want to use [`apply`] instead of [`apply_authentication`].
 pub fn apply_authentication<C, D, U>(conn: C, up: U, cp: ConnectedPoint, v: AuthenticationVersion)
     -> AuthenticationUpgradeApply<C, U>
 where
