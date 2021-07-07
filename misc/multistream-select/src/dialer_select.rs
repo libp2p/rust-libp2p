@@ -66,7 +66,7 @@ where
                 Either::Right(dialer_select_proto_parallel(inner, iter, version))
             }
         },
-        Version::V1SimOpen => {
+        Version::V1SimultaneousOpen => {
             Either::Left(dialer_select_proto_serial(inner, iter, version))
         }
     }
@@ -198,7 +198,7 @@ where
                             // proposal in one go for efficiency.
                             *this.state = SeqState::SendProtocol { io, protocol };
                         }
-                        Version::V1SimOpen => {
+                        Version::V1SimultaneousOpen => {
                             *this.state = SeqState::SendSimOpen { io, protocol: None };
                         }
                     }
@@ -328,7 +328,7 @@ where
                         *this.state = SeqState::FlushProtocol { io, protocol }
                     } else {
                         match this.version {
-                            Version::V1 | Version::V1SimOpen => *this.state = SeqState::FlushProtocol { io, protocol },
+                            Version::V1 | Version::V1SimultaneousOpen => *this.state = SeqState::FlushProtocol { io, protocol },
                             // This is the only effect that `V1Lazy` has compared to `V1`:
                             // Optimistically settling on the only protocol that
                             // the dialer supports for this negotiation. Notably,

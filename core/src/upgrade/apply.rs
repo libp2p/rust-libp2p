@@ -47,7 +47,7 @@ impl Default for Version {
         match multistream_select::Version::default() {
             multistream_select::Version::V1 => Version::V1,
             multistream_select::Version::V1Lazy => Version::V1Lazy,
-            multistream_select::Version::V1SimOpen => unreachable!("see `v1_sim_open_is_not_default`"),
+            multistream_select::Version::V1SimultaneousOpen => unreachable!("see `v1_sim_open_is_not_default`"),
         }
     }
 }
@@ -251,7 +251,7 @@ where
 pub enum AuthenticationVersion {
     V1,
     V1Lazy,
-    V1SimOpen
+    V1SimultaneousOpen
 }
 
 impl Default for AuthenticationVersion {
@@ -259,7 +259,7 @@ impl Default for AuthenticationVersion {
         match multistream_select::Version::default() {
             multistream_select::Version::V1 => AuthenticationVersion::V1,
             multistream_select::Version::V1Lazy => AuthenticationVersion::V1Lazy,
-            multistream_select::Version::V1SimOpen => AuthenticationVersion::V1SimOpen,
+            multistream_select::Version::V1SimultaneousOpen => AuthenticationVersion::V1SimultaneousOpen,
         }
     }
 }
@@ -269,7 +269,7 @@ impl From<AuthenticationVersion> for multistream_select::Version {
         match v {
             AuthenticationVersion::V1 => multistream_select::Version::V1,
             AuthenticationVersion::V1Lazy => multistream_select::Version::V1Lazy,
-            AuthenticationVersion::V1SimOpen => multistream_select::Version::V1SimOpen,
+            AuthenticationVersion::V1SimultaneousOpen => multistream_select::Version::V1SimultaneousOpen,
         }
     }
 }
@@ -421,7 +421,7 @@ mod tests {
     fn v1_sim_open_is_not_default() {
         assert_ne!(
             multistream_select::Version::default(),
-            multistream_select::Version::V1SimOpen,
+            multistream_select::Version::V1SimultaneousOpen,
         );
     }
 }

@@ -142,13 +142,13 @@ pub enum Version {
     ///
     /// This multistream-select variant is specified in [1].
     ///
-    /// Note: [`V1SimOpen`] should only be used (a) on transports that allow simultaneously opened
+    /// Note: [`V1SimultaneousOpen`] should only be used (a) on transports that allow simultaneously opened
     /// connections, e.g. TCP with socket reuse and (2) during the first negotiation on the
     /// connection, most likely the secure channel protocol negotiation. In all other cases one
     /// should use [`V1`] or [`V1Lazy`].
     ///
     /// [1]: https://github.com/libp2p/specs/blob/master/connections/simopen.md
-    V1SimOpen,
+    V1SimultaneousOpen,
     // Draft: https://github.com/libp2p/specs/pull/95
     // V2,
 }
