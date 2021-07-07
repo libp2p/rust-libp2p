@@ -420,6 +420,7 @@ enum SimOpenState<R> {
 /// in which case node may end up in either role after negotiation.
 ///
 /// See [`Version::V1SimultaneousOpen`] for details.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
     Initiator,
     Responder,
