@@ -21,6 +21,7 @@
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
@@ -28,7 +29,6 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
 use libp2p_rendezvous::Namespace;
-use libp2p_swarm::AddressScore;
 use std::time::Duration;
 
 #[async_std::main]
@@ -45,16 +45,15 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
+            identify: Identify::new(IdentifyConfig::new(
+                "rendezvous-example/1.0.0".to_string(),
+                identity.public(),
+            )),
             rendezvous: Rendezvous::new(identity.clone(), rendezvous::Config::default()),
             ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
     );
-
-    // In production the external address should be the publicly facing IP address of the rendezvous point.
-    // This address is recorded in the registration entry by the rendezvous point.
-    let external_address = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
-    swarm.add_external_address(external_address, AddressScore::Infinite);
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
@@ -74,15 +73,14 @@ async fn main() {
             } if peer_id == rendezvous_point => {
                 log::error!("Lost connection to rendezvous point {}", error);
             }
-            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
+            // once `/identify` did its job, we know our external address and can register
+            SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. })) => {
                 swarm.behaviour_mut().rendezvous.register(
                     Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
                 );
-                log::info!("Connection established with rendezvous point {}", peer_id);
             }
-            // once `/identify` did its job, we know our external address and can register
             SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Registered {
                 namespace,
                 ttl,
@@ -117,12 +115,19 @@ async fn main() {
 #[derive(Debug)]
 enum MyEvent {
     Rendezvous(rendezvous::Event),
+    Identify(IdentifyEvent),
     Ping(PingEvent),
 }
 
 impl From<rendezvous::Event> for MyEvent {
     fn from(event: rendezvous::Event) -> Self {
         MyEvent::Rendezvous(event)
+    }
+}
+
+impl From<IdentifyEvent> for MyEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        MyEvent::Identify(event)
     }
 }
 
@@ -136,6 +141,7 @@ impl From<PingEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
+    identify: Identify,
     rendezvous: Rendezvous,
     ping: Ping,
 }

@@ -21,7 +21,6 @@
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::ping::{Ping, PingEvent};
 use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::{Swarm, SwarmEvent};
@@ -39,10 +38,6 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            identify: Identify::new(IdentifyConfig::new(
-                "rendezvous-example/1.0.0".to_string(),
-                identity.public(),
-            )),
             rendezvous: Rendezvous::new(identity.clone(), rendezvous::Config::default()),
             ping: Ping::default(),
         },
@@ -93,19 +88,12 @@ async fn main() {
 #[derive(Debug)]
 enum MyEvent {
     Rendezvous(rendezvous::Event),
-    Identify(IdentifyEvent),
     Ping(PingEvent),
 }
 
 impl From<rendezvous::Event> for MyEvent {
     fn from(event: rendezvous::Event) -> Self {
         MyEvent::Rendezvous(event)
-    }
-}
-
-impl From<IdentifyEvent> for MyEvent {
-    fn from(event: IdentifyEvent) -> Self {
-        MyEvent::Identify(event)
     }
 }
 
@@ -119,7 +107,6 @@ impl From<PingEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    identify: Identify,
     rendezvous: Rendezvous,
     ping: Ping,
 }
