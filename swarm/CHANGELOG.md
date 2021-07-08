@@ -19,8 +19,13 @@
   `NetworkBehaviourAction::CloseConnection` to close connections to a specific
   peer via an `ExpandedSwarm` or `NetworkBehaviour`. See [PR 2110] for details.
 
+- Expose the `ListenerId` in `SwarmEvent`s that are associated with a listener.
+  
+  See [PR 2123] for details.
+
 [PR 2100]: https://github.com/libp2p/rust-libp2p/pull/2100
 [PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
+[PR 2123]: https://github.com/libp2p/rust-libp2p/pull/2123
 
 # 0.29.0 [2021-04-13]
 

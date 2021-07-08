@@ -140,8 +140,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::NewListenAddr(addr) => {
-                        print_listener_peer(&addr, &opt.mode, local_peer_id)
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        print_listener_peer(&address, &opt.mode, local_peer_id)
                     }
                     _ => println!("{:?}", event),
                 },

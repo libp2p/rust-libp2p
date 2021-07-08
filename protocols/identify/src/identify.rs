@@ -498,7 +498,7 @@ mod tests {
                 let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    SwarmEvent::NewListenAddr { address, .. } => return address,
                     _ => {}
                 }
             }
@@ -577,7 +577,7 @@ mod tests {
                 let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    SwarmEvent::NewListenAddr { address, .. } => return address,
                     _ => {}
                 }
             }
