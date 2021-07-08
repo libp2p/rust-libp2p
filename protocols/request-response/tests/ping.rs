@@ -98,7 +98,7 @@ fn ping_protocol() {
     let peer1 = async move {
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::NewListenAddr { address, .. }=> tx.send(address).await.unwrap(),
                 SwarmEvent::Behaviour(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. }
@@ -312,7 +312,7 @@ fn ping_protocol_throttled() {
     let peer1 = async move {
         for i in 1 .. {
             match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                 SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. },

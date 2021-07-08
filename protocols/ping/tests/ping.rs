@@ -64,7 +64,7 @@ fn ping_pong() {
         let peer1 = async move {
             loop {
                 match swarm1.select_next_some().await {
-                    SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
+                    SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                     SwarmEvent::Behaviour(PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) }) => {
                         count1 -= 1;
                         if count1 == 0 {
@@ -137,7 +137,7 @@ fn max_failures() {
 
             loop {
                 match swarm1.select_next_some().await {
-                    SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
+                    SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                     SwarmEvent::Behaviour(PingEvent {
                         result: Ok(PingSuccess::Ping { .. }), ..
                     }) => {
