@@ -1042,15 +1042,23 @@ where
                                 ));
                             },
                             kbucket::InsertResult::Pending { disconnected } => {
-                                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                                     KademliaEvent::PendingRoutablePeer { peer, address }
                                 ));
-                                self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
-                                    peer_id: disconnected.into_preimage(),
-                                    condition: DialPeerCondition::Disconnected
-                                })
+
+                                // `disconnected` might already be in the process of re-connecting.
+                                // In other words `disconnected` might have already re-connected but
+                                // is not yet confirmed to support the Kademlia protocol via
+                                // [`KademliaHandlerEvent::ProtocolConfirmed`].
+                                //
+                                // Only try dialing peer if not currently connected.
+                                if !self.connected_peers.contains(disconnected.preimage()) {
+                                    self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
+                                        peer_id: disconnected.into_preimage(),
+                                        condition: DialPeerCondition::Disconnected
+                                    })
+                                }
                             },
                         }
                     }
