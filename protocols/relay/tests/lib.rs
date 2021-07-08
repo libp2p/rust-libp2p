@@ -73,7 +73,7 @@ fn src_connect_to_dst_listening_via_relay() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    let new_listener = dst_swarm
+    let dst_listener = dst_swarm
         .listen_on(dst_listen_addr_via_relay.clone())
         .unwrap();
 
@@ -98,7 +98,7 @@ fn src_connect_to_dst_listening_via_relay() {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == new_listener => {
+                } if listener_id == dst_listener => {
                     assert_eq!(address, dst_listen_addr_via_relay);
                     break;
                 }
@@ -290,7 +290,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    let new_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
@@ -300,7 +300,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == new_listener => {
+                } if listener_id == dst_listener => {
                     assert_eq!(address, dst_addr_via_relay);
                     break;
                 }
@@ -545,7 +545,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     // Destination Node listen via Relay.
-    let new_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
 
     pool.run_until(async {
         // Destination Node dialing Relay.
@@ -573,7 +573,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == new_listener => {
+                } if listener_id == dst_listener => {
                     assert_eq!(address, dst_addr_via_relay);
                     break;
                 }
@@ -815,7 +815,7 @@ fn concurrent_connection_same_relay_same_dst() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    let new_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
@@ -825,7 +825,7 @@ fn concurrent_connection_same_relay_same_dst() {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == new_listener => {
+                } if listener_id == dst_listener => {
                     assert_eq!(address, dst_addr_via_relay);
                     break;
                 }
@@ -936,10 +936,10 @@ fn yield_incoming_connection_through_correct_listener() {
     relay_3_swarm.listen_on(relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    let listener_relay_1 = dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
-    let listener_relay_2 = dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
+    let dst_listener_via_relay_1 = dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
+    let dst_listener_via_relay_2 = dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
     // Listen on own address in order for relay 3 to be able to connect to destination node.
-    let own_listener = dst_swarm.listen_on(dst_addr.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr.clone()).unwrap();
 
     // Wait for destination node to establish connections to relay 1 and 2.
     pool.run_until(async {
@@ -959,15 +959,15 @@ fn yield_incoming_connection_through_correct_listener() {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == listener_relay_2 => assert_eq!(address,relay_2_addr_incl_circuit),
+                } if listener_id == dst_listener_via_relay_2 => assert_eq!(address, relay_2_addr_incl_circuit),
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == listener_relay_1 => assert_eq!(address, relay_1_addr_incl_circuit),
+                } if listener_id == dst_listener_via_relay_1 => assert_eq!(address, relay_1_addr_incl_circuit),
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == own_listener => assert_eq!(address, dst_addr),
+                } if listener_id == dst_listener => assert_eq!(address, dst_addr),
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
