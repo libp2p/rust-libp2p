@@ -18,7 +18,7 @@ async-std-resolver = { version = "0.20", optional = true }
 smallvec = "1.6.1"
 
 [dev-dependencies]
-env_logger = "0.6"
+env_logger = "0.8"
 tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
 
