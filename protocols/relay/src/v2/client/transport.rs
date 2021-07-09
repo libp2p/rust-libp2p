@@ -226,7 +226,7 @@ impl<T: Transport + Clone> Transport for ClientTransport<T> {
                                 send_back: tx,
                             })
                             .await?;
-                        let stream = rx.await??;
+                        let stream = rx.await?.map_err(|()| RelayError::Connect)?;
                         Ok(stream)
                     }
                     .boxed(),
@@ -383,17 +383,22 @@ impl<T: Transport> Stream for RelayListener<T> {
                             remote_addr: Protocol::P2p(src_peer_id.into()).into(),
                         })));
                     }
-                    Poll::Ready(Some(ToListenerMsg::Reservation { addrs })) => {
+                    Poll::Ready(Some(ToListenerMsg::Reservation(Ok(Reservation { addrs })))) => {
                         let mut iter = addrs.into_iter();
                         let first = iter.next();
                         queued_new_addresses.extend(iter);
                         if let Some(addr) = first {
-                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
-                                addr,
-                            ))));
+                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
                         }
                     }
-                    Poll::Ready(None) => return Poll::Ready(None),
+                    Poll::Ready(Some(ToListenerMsg::Reservation(Err(())))) => {
+                        return Poll::Ready(Some(Err(EitherError::B(RelayError::Reservation))));
+                    }
+                    Poll::Ready(None) => {
+                        // TODO: Assumption safe here?
+                        panic!("Expect `from_behaviour` not to be dropped before listener.");
+
+                    },
                     Poll::Pending => {}
                 }
             }
@@ -435,7 +440,7 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 }
 
 /// Error that occurred during relay connection setup.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum RelayError {
     MissingRelayPeerId,
     MissingRelayAddr,
@@ -443,9 +448,10 @@ pub enum RelayError {
     InvalidHash,
     SendingMessageToBehaviour(mpsc::SendError),
     ResponseFromBehaviourCanceled,
-    DialingRelay,
     MultipleCircuitRelayProtocolsUnsupported,
     MalformedMultiaddr,
+    Reservation,
+    Connect,
 }
 
 impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
@@ -463,14 +469,6 @@ impl From<mpsc::SendError> for RelayError {
 impl From<oneshot::Canceled> for RelayError {
     fn from(_: oneshot::Canceled) -> Self {
         RelayError::ResponseFromBehaviourCanceled
-    }
-}
-
-impl From<OutgoingRelayReqError> for RelayError {
-    fn from(error: OutgoingRelayReqError) -> Self {
-        match error {
-            OutgoingRelayReqError::DialingRelay => RelayError::DialingRelay,
-        }
     }
 }
 
@@ -495,14 +493,17 @@ impl std::fmt::Display for RelayError {
             RelayError::ResponseFromBehaviourCanceled => {
                 write!(f, "Response from behaviour was canceled")
             }
-            RelayError::DialingRelay => {
-                write!(f, "Dialing relay failed")
-            }
             RelayError::MultipleCircuitRelayProtocolsUnsupported => {
                 write!(f, "Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")
             }
             RelayError::MalformedMultiaddr => {
                 write!(f, "One of the provided multiaddresses is malformed.")
+            }
+            RelayError::Reservation => {
+                write!(f, "Failed to get Reservation.")
+            }
+            RelayError::Connect => {
+                write!(f, "Failed to connect to destination.")
             }
         }
     }
@@ -520,7 +521,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<RelayedConnection, OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
@@ -531,9 +532,7 @@ pub enum TransportToBehaviourMsg {
 }
 
 pub enum ToListenerMsg {
-    Reservation {
-        addrs: Vec<Multiaddr>,
-    },
+    Reservation(Result<Reservation, ()>),
     IncomingRelayedConnection {
         stream: RelayedConnection,
         src_peer_id: PeerId,
@@ -542,7 +541,6 @@ pub enum ToListenerMsg {
     },
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum OutgoingRelayReqError {
-    DialingRelay,
+pub struct Reservation {
+    pub(crate) addrs: Vec<Multiaddr>,
 }

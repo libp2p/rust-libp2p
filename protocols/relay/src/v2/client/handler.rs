@@ -24,6 +24,7 @@ use crate::v2::protocol::{inbound_stop, outbound_hop};
 use futures::channel::mpsc::Sender;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
+use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::either::EitherError;
@@ -45,8 +46,7 @@ pub enum In {
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
-        send_back:
-            oneshot::Sender<Result<super::RelayedConnection, transport::OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<super::RelayedConnection, ()>>,
     },
 }
 
@@ -94,6 +94,7 @@ impl IntoProtocolsHandler for Prototype {
             reservation: None,
             alive_lend_out_substreams: Default::default(),
             circuit_deny_futs: Default::default(),
+            send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
         }
     }
@@ -138,6 +139,8 @@ pub struct Handler {
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
 
     circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
+
+    send_error_futs: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
 impl ProtocolsHandler for Handler {
@@ -172,7 +175,7 @@ impl ProtocolsHandler for Handler {
                     src_peer_id,
                     relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_addr.clone(),
-                })
+                });
             }
             _ => {
                 let src_peer_id = inbound_circuit.src_peer_id();
@@ -205,12 +208,14 @@ impl ProtocolsHandler for Handler {
                     None => (false, VecDeque::new()),
                 };
 
-                pending_msgs.push_back(transport::ToListenerMsg::Reservation {
-                    addrs: addrs
-                        .into_iter()
-                        .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
-                        .collect(),
-                });
+                pending_msgs.push_back(transport::ToListenerMsg::Reservation(Ok(
+                    transport::Reservation {
+                        addrs: addrs
+                            .into_iter()
+                            .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
+                            .collect(),
+                    },
+                )));
                 self.reservation = Some(Reservation::Accepted {
                     renewal_timeout,
                     pending_msgs,
@@ -297,8 +302,7 @@ impl ProtocolsHandler for Handler {
         error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         match open_info {
-            // TODO: Inform listener or just drop it?
-            OutboundOpenInfo::Reserve { to_listener: _ } => {
+            OutboundOpenInfo::Reserve { mut to_listener } => {
                 let renewal = self.reservation.take().is_some();
 
                 match error {
@@ -361,12 +365,18 @@ impl ProtocolsHandler for Handler {
                     }
                 }
 
+                self.send_error_futs.push(
+                    async move {
+                        let _ = to_listener.send(transport::ToListenerMsg::Reservation(Err(())));
+                    }
+                    .boxed(),
+                );
+
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::ReservationReqFailed { renewal },
                 ));
             }
-            // TODO: Should we inform listenerupgrade via send_back?
-            OutboundOpenInfo::Connect { send_back: _ } => {
+            OutboundOpenInfo::Connect { send_back } => {
                 match error {
                     ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
@@ -428,6 +438,8 @@ impl ProtocolsHandler for Handler {
                         }
                     }
                 };
+
+                let _ = send_back.send(Err(()));
 
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::OutboundCircuitReqFailed {},
@@ -534,6 +546,9 @@ impl ProtocolsHandler for Handler {
             }
         }
 
+        // Send errors to transport.
+        while let Poll::Ready(Some(())) = self.send_error_futs.poll_next_unpin(cx) {}
+
         // Update keep-alive handling.
         if self.reservation.is_none()
             && self.alive_lend_out_substreams.is_empty()
@@ -571,7 +586,6 @@ pub enum OutboundOpenInfo {
         to_listener: Sender<transport::ToListenerMsg>,
     },
     Connect {
-        send_back:
-            oneshot::Sender<Result<super::RelayedConnection, transport::OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<super::RelayedConnection, ()>>,
     },
 }

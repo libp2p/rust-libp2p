@@ -554,7 +554,7 @@ enum RqstPendingConnection {
     Circuit {
         dst_peer_id: PeerId,
         relay_addr: Multiaddr,
-        send_back: oneshot::Sender<Result<RelayedConnection, transport::OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
     },
 }
 
