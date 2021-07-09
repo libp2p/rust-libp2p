@@ -32,7 +32,7 @@ pub fn make_certificate(
 ) -> Result<rcgen::Certificate, rcgen::RcgenError> {
 
     // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
-    // Similarly, hash functions with an output length less than 256 bits MUST NOT be used
+    // Similarly, hash functions with an output length less than 256 bits MUST NOT be used.
     let signature_algorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
     // The key used to generate and sign this certificate
@@ -53,7 +53,7 @@ pub fn make_certificate(
             msg.extend(*b"libp2p-tls-handshake:");
             msg.extend(certif_keypair.public_key_der());
 
-            keypair.sign(&msg).expect("Let's hope the signing won't fail")
+            keypair.sign(&msg).map_err(|_| rcgen::RcgenError::RingUnspecified)?
         };
 
         // The public host key and the signature are ANS.1-encoded
@@ -111,10 +111,13 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, X509Error> 
             match e {
                 Error(e) => e,
                 Failure(e) => e,
-                Incomplete(_) => X509Error::Generic, // should never happen
+                Incomplete(_) => X509Error::InvalidCertificate, // should never happen
             }
         })?;
 
+    // The libp2p Public Key Extension is a X.509 extension
+    // with the Object Identier 1.3.6.1.4.1.53594.1.1,
+    // allocated by IANA to the libp2p project at Protocol Labs.
     let p2p_ext_oid = der_parser::oid::Oid::from(&[1, 3, 6, 1, 4, 1, 53594, 1, 1])
         .expect("This is a valid OID of p2p extension; qed");
 
@@ -132,7 +135,8 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, X509Error> 
             let public_key = identity::PublicKey::from_protobuf_encoding(&public_key)
                 .map_err(|_| X509Error::InvalidUserCertificate)?;
             let ext = P2pExtension { public_key, signature};
-            libp2p_extension = Some(ext)
+            libp2p_extension = Some(ext);
+            continue;
         }
 
         if ext.critical {
@@ -165,14 +169,14 @@ impl P2pCertificate<'_> {
         }
 
         // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
-        // Endpoints MUST abort the connection attempt if is not used.
+        // Endpoints MUST abort the connection attempt if it is not used.
         let alg_oid = self.certificate.signature_algorithm.algorithm.iter();
-        if alg_oid.is_none() {
-            return false;
-        }
-        let alg_oid = alg_oid.expect("Could not be empty; qed");
-        let signature_algorithm = rcgen::SignatureAlgorithm::from_oid(&alg_oid.collect::<Vec<_>>());
-        if signature_algorithm.is_err() {
+        if let Some(alg_oid) = alg_oid {
+            let signature_algorithm = rcgen::SignatureAlgorithm::from_oid(&alg_oid.collect::<Vec<_>>());
+            if signature_algorithm.is_err() {
+                return false;
+            }
+        } else {
             return false;
         }
 
