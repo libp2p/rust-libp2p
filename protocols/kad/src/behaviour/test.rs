@@ -196,6 +196,10 @@ fn bootstrap() {
                                 }
                                 first = false;
                                 if ok.num_remaining == 0 {
+                                    assert_eq!(
+                                        swarm.behaviour_mut().queries.size(), 0,
+                                        "Expect no remaining queries when `num_remaining` is zero.",
+                                    );
                                     let mut known = HashSet::new();
                                     for b in swarm.behaviour_mut().kbuckets.iter() {
                                         for e in b.iter() {
