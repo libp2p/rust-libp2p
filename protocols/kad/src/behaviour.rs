@@ -1113,7 +1113,7 @@ where
                         }).collect::<Vec<_>>().into_iter()
                 });
 
-                let num_remaining = remaining.len().saturating_sub(1) as u32;
+                let num_remaining = remaining.len() as u32;
 
                 if let Some(target) = remaining.next() {
                     let info = QueryInfo::Bootstrap {

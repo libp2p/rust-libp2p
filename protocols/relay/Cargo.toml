@@ -18,7 +18,7 @@ libp2p-core = { version = "0.29", path = "../../core" }
 libp2p-swarm = { version = "0.30", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
-prost = "0.7"
+prost = "0.8"
 rand = "0.7"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
@@ -26,7 +26,7 @@ void = "1"
 wasm-timer = "0.2"
 
 [build-dependencies]
-prost-build = "0.7"
+prost-build = "0.8"
 
 [dev-dependencies]
 env_logger = "0.8.3"
