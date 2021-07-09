@@ -37,16 +37,13 @@ use std::time::Duration;
 /// # Panics
 ///
 /// [`Config::max_circuit_duration`] may not exceed [`u32::MAX`].
-// TODO: Expose this as RelayConfig?
 pub struct Config {
-    // TODO: Should we use u32?
     pub max_reservations: usize,
-    pub _max_reservations_per_ip: u32,
-    // TODO: Good idea?
-    pub _max_reservations_per_asn: u32,
+    // TODO: Implement rate limiting.
+    // pub _max_reservations_per_ip: u32,
+    // pub _max_reservations_per_asn: u32,
     pub reservation_duration: Duration,
 
-    // TODO: Should we use u32?
     pub max_circuits: usize,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
@@ -56,9 +53,8 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             max_reservations: 128,
-            _max_reservations_per_ip: 4,
-            // TODO: Good idea?
-            _max_reservations_per_asn: 32,
+            // _max_reservations_per_ip: 4,
+            // _max_reservations_per_asn: 32,
             reservation_duration: Duration::from_secs(60 * 60),
 
             // TODO: Shouldn't we have a limit per IP and ASN as well?
@@ -485,12 +481,8 @@ impl NetworkBehaviour for Relay {
                     .map(|a| {
                         a.addr
                             .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                            // TODO: Is it really required to add the p2p circuit protocol at the end? Why?
-                            .with(Protocol::P2pCircuit)
                     })
                     .collect();
-                // TODO remove
-                assert!(!addrs.is_empty())
             }
 
             return Poll::Ready(event);

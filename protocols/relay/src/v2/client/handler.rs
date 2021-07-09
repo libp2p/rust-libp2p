@@ -212,7 +212,10 @@ impl ProtocolsHandler for Handler {
                     transport::Reservation {
                         addrs: addrs
                             .into_iter()
-                            .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
+                            .map(|a| {
+                                a.with(Protocol::P2pCircuit)
+                                    .with(Protocol::P2p(self.local_peer_id.into()))
+                            })
                             .collect(),
                     },
                 )));

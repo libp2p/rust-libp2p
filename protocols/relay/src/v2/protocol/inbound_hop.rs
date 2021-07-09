@@ -176,12 +176,15 @@ impl ReservationReq {
                         .unwrap()
                         .as_secs(),
                 ),
-                // TODO: Does this need to be set?
                 voucher: None,
             }),
             limit: Some(Limit {
-                // TODO: Handle unwrap
-                duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
                 data: Some(self.max_circuit_bytes),
             }),
             status: Some(Status::Ok.into()),
@@ -205,7 +208,6 @@ impl ReservationReq {
     async fn send(mut self, msg: HopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-            // TODO: Sure panicing is safe here?
             .expect("all the mandatory fields are always filled; QED");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;
@@ -265,7 +267,6 @@ impl CircuitReq {
     async fn send(&mut self, msg: HopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-            // TODO: Sure panicing is safe here?
             .expect("all the mandatory fields are always filled; QED");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;

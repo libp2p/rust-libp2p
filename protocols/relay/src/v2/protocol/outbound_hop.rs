@@ -75,7 +75,6 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let mut encoded_msg = Vec::new();
         msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
             .expect("all the mandatory fields are always filled; QED");
 
         let mut codec = UviBytes::default();
