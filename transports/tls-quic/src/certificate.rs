@@ -172,7 +172,7 @@ impl P2pCertificate<'_> {
         }
         let alg_oid = alg_oid.expect("Could not be empty; qed");
         let signature_algorithm = rcgen::SignatureAlgorithm::from_oid(&alg_oid.collect::<Vec<_>>());
-        if let Err(_) = signature_algorithm {
+        if signature_algorithm.is_err() {
             return false;
         }
 
@@ -210,9 +210,7 @@ impl P2pCertificate<'_> {
         // of the private host key at the time the certificate was signed.
         // Peers MUST verify the signature, and abort the connection attempt
         // if signature verification fails.
-        let proof = self.extension.public_key.verify(&msg, &self.extension.signature);
-
-        proof
+        self.extension.public_key.verify(&msg, &self.extension.signature)
     }
 }
 
