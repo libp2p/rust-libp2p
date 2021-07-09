@@ -46,7 +46,7 @@ libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }
 libp2p-tcp = { path = "../transports/tcp" }
 multihash = { version = "0.13", default-features = false, features = ["arb"] }
-quickcheck = "0.9.0"
+quickcheck = "1.0.3"
 wasm-timer = "0.2"
 
 [build-dependencies]

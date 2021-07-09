@@ -35,7 +35,7 @@ libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-noise = { path = "../../transports/noise" }
-quickcheck = "0.9.2"
+quickcheck = "1.0.3"
 hex = "0.4.2"
 derive_builder = "0.10.0"
 
