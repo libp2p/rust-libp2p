@@ -60,8 +60,12 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 addrs: vec![],
             }),
             limit: Some(Limit {
-                // TODO: Handle unwrap?
-                duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
                 data: Some(self.max_circuit_bytes),
             }),
             status: None,
@@ -69,7 +73,6 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let mut encoded_msg = Vec::new();
         msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
             .expect("all the mandatory fields are always filled; QED");
 
         let mut codec = UviBytes::default();

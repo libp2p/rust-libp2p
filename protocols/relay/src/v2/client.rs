@@ -46,7 +46,6 @@ use std::task::{Context, Poll};
 #[derive(Debug)]
 pub enum Event {
     /// An outbound reservation has been accepted.
-    // TODO: Should this be renamed to ReservationAccepted?
     ReservationReqAccepted {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
@@ -319,9 +318,6 @@ impl NetworkBehaviour for Client {
                 Poll::Pending => break,
             }
         }
-
-        // TODO: Should we return NetworkBehaviourAction::ReportObservedAddr when an outbound
-        // reservation is acknowledged with the addresses of the relay?
 
         Poll::Pending
     }

@@ -32,6 +32,11 @@ use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+/// Configuration for the [`Relay`] [`NetworkBehaviour`].
+///
+/// # Panics
+///
+/// [`Config::max_circuit_duration`] may not exceed [`u32::MAX`].
 // TODO: Expose this as RelayConfig?
 pub struct Config {
     // TODO: Should we use u32?
