@@ -320,7 +320,7 @@ async fn wait_for_reservation(
 
     // Wait for `NewListenAddr` event.
     match client.select_next_some().await {
-        SwarmEvent::NewListenAddr(addr) if addr == client_addr => {}
+        SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {}
         e => panic!("{:?}", e),
     }
 }

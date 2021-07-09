@@ -6,6 +6,12 @@
 
 - Implement `Keypair::from_protobuf_encoding` for ed25519 keys (see [PR 2090]).
 
+- Deprecate `upgrade::write_one`.
+  Deprecate `upgrade::write_with_len_prefix`.
+  Deprecate `upgrade::read_one`.
+  Introduce `upgrade::read_length_prefixed` and `upgrade::write_length_prefixed`.
+  See [PR 2111](https://github.com/libp2p/rust-libp2p/pull/2111).
+
 [PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090
 
 # 0.28.3 [2021-04-26]

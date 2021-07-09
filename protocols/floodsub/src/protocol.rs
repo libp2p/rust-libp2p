@@ -23,7 +23,7 @@ use crate::topic::Topic;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use prost::Message;
 use std::{error, fmt, io, iter, pin::Pin};
-use futures::{Future, io::{AsyncRead, AsyncWrite}};
+use futures::{Future, io::{AsyncRead, AsyncWrite}, AsyncWriteExt};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -55,7 +55,7 @@ where
 
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let packet = upgrade::read_one(&mut socket, 2048).await?;
+            let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
             let rpc = rpc_proto::Rpc::decode(&packet[..])?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
@@ -95,15 +95,15 @@ where
 #[derive(Debug)]
 pub enum FloodsubDecodeError {
     /// Error when reading the packet from the socket.
-    ReadError(upgrade::ReadOneError),
+    ReadError(io::Error),
     /// Error when decoding the raw buffer into a protobuf.
     ProtobufError(prost::DecodeError),
     /// Error when parsing the `PeerId` in the message.
     InvalidPeerId,
 }
 
-impl From<upgrade::ReadOneError> for FloodsubDecodeError {
-    fn from(err: upgrade::ReadOneError) -> Self {
+impl From<io::Error> for FloodsubDecodeError {
+    fn from(err: io::Error) -> Self {
         FloodsubDecodeError::ReadError(err)
     }
 }
@@ -166,7 +166,10 @@ where
     fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let bytes = self.into_bytes();
-            upgrade::write_one(&mut socket, bytes).await?;
+
+            upgrade::write_length_prefixed(&mut socket, bytes).await?;
+            socket.close().await?;
+
             Ok(())
         })
     }

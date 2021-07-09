@@ -293,6 +293,23 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// relative to other observed addresses.
         score: AddressScore,
     },
+
+    /// Instructs the `Swarm` to initiate a graceful close of one or all connections
+    /// with the given peer.
+    ///
+    /// Note: Closing a connection via
+    /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
+    /// corresponding [`ProtocolsHandler`].
+    /// Closing a connection via a [`ProtocolsHandler`] can be done
+    /// either in a collaborative manner across [`ProtocolsHandler`]s
+    /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
+    /// [`ProtocolsHandlerEvent::Close`](crate::ProtocolsHandlerEvent::Close).
+    CloseConnection {
+        /// The peer to disconnect.
+        peer_id: PeerId,
+        /// Whether to close a specific or all connections to the given peer.
+        connection: CloseConnection,
+    }
 }
 
 impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
@@ -312,7 +329,9 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                     event: f(event)
                 },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+                NetworkBehaviourAction::ReportObservedAddr { address, score },
+            NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
+                NetworkBehaviourAction::CloseConnection { peer_id, connection }
         }
     }
 
@@ -328,7 +347,9 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
             NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
                 NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+                NetworkBehaviourAction::ReportObservedAddr { address, score },
+            NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
+                NetworkBehaviourAction::CloseConnection { peer_id, connection }
         }
     }
 }
@@ -371,5 +392,20 @@ pub enum DialPeerCondition {
 impl Default for DialPeerCondition {
     fn default() -> Self {
         DialPeerCondition::Disconnected
+    }
+}
+
+/// The options which connections to close.
+#[derive(Debug, Clone)]
+pub enum CloseConnection {
+    /// Disconnect a particular connection.
+    One(ConnectionId),
+    /// Disconnect all connections.
+    All,
+}
+
+impl Default for CloseConnection {
+    fn default() -> Self {
+        CloseConnection::All
     }
 }
