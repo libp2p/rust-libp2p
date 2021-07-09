@@ -190,13 +190,26 @@ impl P2pCertificate<'_> {
         //    parameters              ANY DEFINED BY algorithm OPTIONAL
         // }
         let pki = &self.certificate.tbs_certificate.subject_pki;
+        let algo_oid = if let Some(algo_oid) = pki.algorithm.algorithm.iter() {
+            yasna::models::ObjectIdentifier::new(algo_oid.collect())
+        } else {
+            return false;
+        };
+        let params_der = if let Some(params) = &pki.algorithm.parameters {
+            if let Ok(der) = params.to_vec() {
+                Some(der)
+            } else {
+                return false
+            }
+        } else {
+            None
+        };
         let subject_pki = yasna::construct_der(|writer| {
             writer.write_sequence(|writer| {
                 writer.next().write_sequence(|writer| {
-                    let oid = yasna::models::ObjectIdentifier::new(pki.algorithm.algorithm.iter().unwrap().collect());
-                    writer.next().write_oid(&oid);
-                    if let Some(params) = &pki.algorithm.parameters {
-                        writer.next().write_der(&params.to_vec().unwrap());
+                    writer.next().write_oid(&algo_oid);
+                    if let Some(params_der) = params_der {
+                        writer.next().write_der(&params_der);
                     }
                 });
                 writer.next().write_bitvec_bytes(&pki.subject_public_key.data, pki.subject_public_key.data.len() * 8);
