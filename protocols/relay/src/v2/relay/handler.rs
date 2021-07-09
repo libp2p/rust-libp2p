@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::relay::CircuitId;
 use crate::v2::copy_future::CopyFuture;
 use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_hop, outbound_stop};
+use crate::v2::relay::CircuitId;
 use bytes::Bytes;
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
@@ -417,11 +417,16 @@ impl ProtocolsHandler for Handler {
             ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
                 Status::ConnectionFailed
             }
-            // TODO: This should not happen, as the remote has previously done a reservation.
-            // Doing a reservation but not supporting the stop protocol seems odd.
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
-            )) => Status::ConnectionFailed,
+            )) => {
+                // The remote has previously done a reservation. Doing a reservation but not
+                // supporting the stop protocol is pointless, thus disconnecting.
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::Failed),
+                ));
+                Status::ConnectionFailed
+            }
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
             )) => {
@@ -525,22 +530,18 @@ impl ProtocolsHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitClosed {
-                            circuit_id,
-                            dst_peer_id,
-                            error: None,
-                        },
-                    ))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitClosed {
+                        circuit_id,
+                        dst_peer_id,
+                        error: None,
+                    }))
                 }
                 Err(e) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitClosed {
-                            circuit_id,
-                            dst_peer_id,
-                            error: Some(e),
-                        },
-                    ))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitClosed {
+                        circuit_id,
+                        dst_peer_id,
+                        error: Some(e),
+                    }))
                 }
             }
         }
@@ -620,12 +621,10 @@ impl ProtocolsHandler for Handler {
 
                     self.circuits.push(circuit);
 
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitReqAccepted {
-                            circuit_id,
-                            dst_peer_id,
-                        },
-                    ));
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitReqAccepted {
+                        circuit_id,
+                        dst_peer_id,
+                    }));
                 }
                 Err((circuit_id, dst_peer_id, error)) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
@@ -644,12 +643,10 @@ impl ProtocolsHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitReqDenied {
-                            circuit_id,
-                            dst_peer_id,
-                        },
-                    ));
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitReqDenied {
+                        circuit_id,
+                        dst_peer_id,
+                    }));
                 }
                 Err(error) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
@@ -673,9 +670,7 @@ impl ProtocolsHandler for Handler {
             .map(|fut| fut.poll_unpin(cx))
         {
             self.active_reservation = None;
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                Event::ReservationTimedOut {},
-            ));
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::ReservationTimedOut {}));
         }
 
         if self.reservation_accept_futures.is_empty()
