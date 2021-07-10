@@ -795,6 +795,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         }
                     }
                 },
+                Poll::Ready(NetworkBehaviourAction::ReportPeerAddr { .. }) => {
+                    // TODO: Add address to address book
+                },
             }
         }
     }
