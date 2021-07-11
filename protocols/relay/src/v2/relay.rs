@@ -21,6 +21,9 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **relay**.
 
 mod handler;
+mod rate_limiter;
+
+pub use rate_limiter::Config as RateLimiterConfig;
 
 use crate::v2::message_proto;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
@@ -30,7 +33,8 @@ use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, Poll
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::ops::Add;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::num::NonZeroU32;
 
 /// Configuration for the [`Relay`] [`NetworkBehaviour`].
 ///
@@ -39,10 +43,11 @@ use std::time::Duration;
 /// [`Config::max_circuit_duration`] may not exceed [`u32::MAX`].
 pub struct Config {
     pub max_reservations: usize,
-    // TODO: Implement rate limiting.
-    // pub _max_reservations_per_ip: u32,
-    // pub _max_reservations_per_asn: u32,
     pub reservation_duration: Duration,
+
+    pub max_reservations_per_peer: RateLimiterConfig,
+    // pub max_reservations_per_ip: u32,
+    // pub max_reservations_per_asn: u32,
 
     pub max_circuits: usize,
     pub max_circuit_duration: Duration,
@@ -53,9 +58,15 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             max_reservations: 128,
-            // _max_reservations_per_ip: 4,
-            // _max_reservations_per_asn: 32,
             reservation_duration: Duration::from_secs(60 * 60),
+
+            max_reservations_per_peer: RateLimiterConfig {
+                // TODO: Made up values. Reconsider these.
+                limit: NonZeroU32::new(128).expect("128 > 0"),
+                interval: Duration::from_secs(60),
+            },
+            // max_reservations_per_ip: 4,
+            // max_reservations_per_asn: 32,
 
             // TODO: Shouldn't we have a limit per IP and ASN as well?
             max_circuits: 16,
@@ -128,6 +139,10 @@ pub struct Relay {
     reservations: HashMap<PeerId, HashSet<ConnectionId>>,
     circuits: CircuitsTracker,
 
+    peer_rate_limiter: rate_limiter::RateLimiter<PeerId>,
+    // ip_rate_limiter: rate_limiter::RateLimiter,
+    // asn_rate_limiter: rate_limiter::RateLimiter,
+
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<NetworkBehaviourAction<handler::In, Event>>,
 }
@@ -135,6 +150,7 @@ pub struct Relay {
 impl Relay {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
+            peer_rate_limiter: rate_limiter::RateLimiter::new(config.max_reservations_per_peer),
             config,
             local_peer_id,
             reservations: Default::default(),
@@ -211,6 +227,7 @@ impl NetworkBehaviour for Relay {
                     .map(|(_, cs)| cs.len())
                     .sum::<usize>()
                     < self.config.max_reservations
+                    && self.peer_rate_limiter.try_next(event_source, Instant::now())
                 {
                     self.reservations
                         .entry(event_source)
