@@ -1,4 +1,4 @@
-# 0.30.0 [unreleased]
+# 0.30.0 [2021-07-12]
 
 - Update dependencies.
 
@@ -20,7 +20,7 @@
   peer via an `ExpandedSwarm` or `NetworkBehaviour`. See [PR 2110] for details.
 
 - Expose the `ListenerId` in `SwarmEvent`s that are associated with a listener.
-  
+
   See [PR 2123] for details.
 
 [PR 2100]: https://github.com/libp2p/rust-libp2p/pull/2100

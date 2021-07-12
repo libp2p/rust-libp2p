@@ -1,4 +1,4 @@
-# 0.12.0 [unreleased]
+# 0.12.0 [2021-07-12]
 
 - Update dependencies.
 
