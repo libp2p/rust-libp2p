@@ -197,6 +197,7 @@ impl PutRecordJob {
         if self.inner.is_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
             let records = store.records()
+                .into_iter()
                 .filter_map(|r| {
                     let is_publisher = r.publisher.as_ref() == Some(&self.local_id);
                     if self.skipped.contains(&r.key) || (!publish && is_publisher) {
@@ -290,6 +291,7 @@ impl AddProviderJob {
     {
         if self.inner.is_ready(cx, now) {
             let records = store.provided()
+                .into_iter()
                 .map(|r| r.into_owned())
                 .collect::<Vec<_>>()
                 .into_iter();

@@ -60,8 +60,8 @@ pub enum Error {
 ///      to the closest nodes to the key.
 ///
 pub trait RecordStore<'a> {
-    type RecordsIter: Iterator<Item = Cow<'a, Record>>;
-    type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord>>;
+    type RecordsIter: IntoIterator<Item = Cow<'a, Record>>;
+    type ProvidedIter: IntoIterator<Item = Cow<'a, ProviderRecord>>;
 
     /// Gets a record from the store, given its key.
     fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>>;
