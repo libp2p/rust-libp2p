@@ -371,8 +371,7 @@ fn append_txt_record(
     if value.len() > MAX_TXT_VALUE_LENGTH {
         return Err(MdnsResponseError::TxtRecordTooLong);
     }
-    let mut buffer = Vec::new();
-    buffer.push(value.len() as u8);
+    let mut buffer = vec![value.len() as u8];
     append_character_string(&mut buffer, value)?;
 
     append_u16(out, buffer.len() as u16);
