@@ -194,9 +194,9 @@ impl P2pCertificate<'_> {
     /// This method validates the certificate according to libp2p TLS 1.3 specs.
     /// The certificate MUST:
     /// 1. be valid at the time it is received by the peer;
-    /// 2. be self signed;
-    /// 3. use the NamedCurve encoding;
-    /// 4. use hash functions with an output length not less than 256 bits;
+    /// 2. use the NamedCurve encoding;
+    /// 3. use hash functions with an output length not less than 256 bits;
+    /// 4. be self signed;
     /// 5. contain a valid signature in the specific libp2p extension.
     pub fn is_valid(&self) -> bool {
 
@@ -206,28 +206,22 @@ impl P2pCertificate<'_> {
             return false
         }
 
-        // Endpoints MUST abort the connection attempt if the certificate’s
-        // self-signature is not valid.
-        // FIXME: not all algorithms are supported.
-        let self_signed = self.certificate.verify_signature(None).is_ok();
-        if !self_signed {
-            return false
-        }
-
         // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
-        // Endpoints MUST abort the connection attempt if it is not used.
         // Similarly, hash functions with an output length less than 256 bits
         // MUST NOT be used, due to the possibility of collision attacks.
         // In particular, MD5 and SHA1 MUST NOT be used.
-        // FIXME: update https://github.com/rusticata/oid-registry/ and use oids from it
-        let alg_oid = self.certificate.signature_algorithm.algorithm.iter();
-        if let Some(alg_oid) = alg_oid {
-            let signature_algorithm = rcgen::SignatureAlgorithm::from_oid(&alg_oid.collect::<Vec<_>>());
-            if signature_algorithm.is_err() {
-                return false;
+        if let Some(signature_scheme) = self.signature_scheme() {
+            // Endpoints MUST abort the connection attempt if the certificate’s
+            // self-signature is not valid.
+            let raw_certificate = self.certificate.tbs_certificate.as_ref();
+            let signature = self.certificate.signature_value.data;
+            let self_signed = self.check_signature(signature_scheme, raw_certificate, signature);
+            if !self_signed {
+                return false
             }
         } else {
-            return false;
+            // Endpoints MUST abort the connection attempt if it is not used.
+            return false
         }
 
         // Dump PKI in the DER format:
@@ -274,6 +268,157 @@ impl P2pCertificate<'_> {
         // Peers MUST verify the signature, and abort the connection attempt
         // if signature verification fails.
         self.extension.public_key.verify(&msg, &self.extension.signature)
+    }
+
+    /// Return the signature scheme corresponding to [`AlgorithmIdentifier`]s
+    /// of `subject_pki` and `signature_algorithm`
+    /// according to https://tools.ietf.org/id/draft-ietf-tls-tls13-21.html#rfc.section.4.2.3.
+    pub fn signature_scheme(&self) -> Option<rustls::SignatureScheme> {
+        // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
+        // Endpoints MUST abort the connection attempt if it is not used.
+        use rustls::SignatureScheme::*;
+        use oid_registry::*;
+        let signature_algorithm = &self.certificate.signature_algorithm;
+        let pki_algorithm = &self.certificate.tbs_certificate.subject_pki.algorithm;
+
+        if pki_algorithm.algorithm == OID_PKCS1_RSAENCRYPTION {
+            if signature_algorithm.algorithm == OID_PKCS1_SHA256WITHRSA {
+                return Some(RSA_PKCS1_SHA256)
+            }
+            if signature_algorithm.algorithm == OID_PKCS1_SHA384WITHRSA {
+                return Some(RSA_PKCS1_SHA384)
+            }
+            if signature_algorithm.algorithm == OID_PKCS1_SHA512WITHRSA {
+                return Some(RSA_PKCS1_SHA512)
+            }
+            if signature_algorithm.algorithm == OID_PKCS1_RSASSAPSS {
+                // FIXME move OIDs to `oid_registry`
+                #[allow(non_snake_case)]
+                let OID_NIST_HASH_SHA384 = der_parser::oid::Oid::from(&[2,16,840,1,101,3,4,2,2])
+                    .expect("This is a valid OID; qed");
+                #[allow(non_snake_case)]
+                let OID_NIST_HASH_SHA512 = der_parser::oid::Oid::from(&[2,16,840,1,101,3,4,2,3])
+                    .expect("This is a valid OID; qed");
+
+                // According to https://datatracker.ietf.org/doc/html/rfc4055#section-3.1:
+                // Inside of params there shuld be a sequence of:
+                // - Hash Algorithm
+                // - Mask Algorithm
+                // - Salt Length
+                // - Trailer Field
+
+                // We are interested in Hash Algorithm only, however the der parser parses
+                // params into a mess, so here is a workaround to fix it:
+                let params = signature_algorithm.parameters.as_ref()?;
+                let params = params.as_sequence().ok()?;
+                let first_param = params.get(0)?;
+                let hash_oid_der = first_param.as_slice().ok()?;
+                let (_, obj) = der_parser::parse_der(hash_oid_der).ok()?;
+                let hash_oid = obj.as_sequence().ok()?.get(0)?.as_oid_val().ok()?;
+
+                if hash_oid == OID_NIST_HASH_SHA256 {
+                    return Some(RSA_PSS_SHA256)
+                }
+                if hash_oid == OID_NIST_HASH_SHA384 {
+                    return Some(RSA_PSS_SHA384)
+                }
+                if hash_oid == OID_NIST_HASH_SHA512 {
+                    return Some(RSA_PSS_SHA512)
+                }
+
+                // Default hash algo is SHA-1, however:
+                // In particular, MD5 and SHA1 MUST NOT be used.
+                return None
+            }
+        }
+
+        if pki_algorithm.algorithm == OID_KEY_TYPE_EC_PUBLIC_KEY {
+            let signature_param = pki_algorithm.parameters.as_ref()?.as_oid().ok()?;
+            // FIXME move OIDs to `oid_registry`
+            let p256 = der_parser::oid::Oid::from(&[1,2,840,10045,3,1,7])
+                .expect("This is a valid OID; qed");
+            let p384 = der_parser::oid::Oid::from(&[1,3,132,0,34])
+                .expect("This is a valid OID; qed");
+            let p521 = der_parser::oid::Oid::from(&[1,3,132,0,35])
+                .expect("This is a valid OID; qed");
+            if signature_param == &p256 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA256 {
+                return Some(ECDSA_NISTP256_SHA256)
+            }
+            if signature_param == &p384 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA384 {
+                return Some(ECDSA_NISTP384_SHA384)
+            }
+            if signature_param == &p521 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA512 {
+                return Some(ECDSA_NISTP521_SHA512)
+            }
+            return None
+        }
+
+        if signature_algorithm.algorithm == OID_SIG_ED25519 {
+            return Some(ED25519)
+        }
+        // FIXME move OID to `oid_registry`
+        #[allow(non_snake_case)]
+        let OID_SIG_ED448 = der_parser::oid::Oid::from(&[1,3,101,113])
+            .expect("This is a valid OID; qed");
+        if signature_algorithm.algorithm == OID_SIG_ED448 {
+           return Some(ED448)
+        }
+
+        None
+    }
+
+    /// Get a [`ring::signature::UnparsedPublicKey`] for this `signature_scheme`.
+    /// Return `None` if the `signature_scheme` does not match the public key signature
+    /// and hashing algorithm.
+    pub fn public_key(&self, signature_scheme: rustls::SignatureScheme) -> Option<ring::signature::UnparsedPublicKey<&[u8]>> {
+        use rustls::SignatureScheme::*;
+        use ring::signature;
+
+        let current_signature_scheme = self.signature_scheme()?;
+        if signature_scheme != current_signature_scheme {
+            // This certificate was signed with a different signature scheme
+            return None
+        }
+
+        let verification_algorithm: &dyn signature::VerificationAlgorithm = match signature_scheme {
+            RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_2048_8192_SHA256,
+            RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_2048_8192_SHA384,
+            RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_2048_8192_SHA512,
+            ECDSA_NISTP256_SHA256 => &signature::ECDSA_P256_SHA256_ASN1,
+            ECDSA_NISTP384_SHA384 => &signature::ECDSA_P384_SHA384_ASN1,
+            ECDSA_NISTP521_SHA512 => {
+                // See https://github.com/briansmith/ring/issues/824
+                return None
+            },
+            RSA_PSS_SHA256 => &signature::RSA_PSS_2048_8192_SHA256,
+            RSA_PSS_SHA384 => &signature::RSA_PSS_2048_8192_SHA384,
+            RSA_PSS_SHA512 => &signature::RSA_PSS_2048_8192_SHA512,
+            ED25519 => &signature::ED25519,
+            ED448 => {
+                // See https://github.com/briansmith/ring/issues/463
+                return None
+            },
+            // Similarly, hash functions with an output length less than 256 bits
+            // MUST NOT be used, due to the possibility of collision attacks.
+            // In particular, MD5 and SHA1 MUST NOT be used.
+            RSA_PKCS1_SHA1 => return None,
+            ECDSA_SHA1_Legacy => return None,
+            Unknown(_) => return None,
+        };
+        let spki = &self.certificate.tbs_certificate.subject_pki;
+        let key = signature::UnparsedPublicKey::new(verification_algorithm, spki.subject_public_key.data);
+        Some(key)
+    }
+    /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
+    /// in the certificate.
+    pub fn check_signature(
+        &self, signature_scheme: rustls::SignatureScheme, message: &[u8], signature: &[u8],
+    ) -> bool {
+        if let Some(pk) = self.public_key(signature_scheme) {
+            pk.verify(message, signature).is_ok()
+        } else {
+            false
+        }
     }
 }
 
