@@ -30,4 +30,4 @@ async-io = ["async-io-crate", "if-watch"]
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
 tokio-crate = { package = "tokio", version = "1.0.1", default-features = false, features = ["net", "rt"] }
-env_logger = "0.8.2"
+env_logger = "0.9.0"
