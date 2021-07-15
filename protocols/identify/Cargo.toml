@@ -20,7 +20,7 @@ wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"
-env_logger = "0.8"
+env_logger = "0.9"
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-tcp = { path = "../../transports/tcp" }
