@@ -1,3 +1,7 @@
+- Introduce `Keypair::to_protobuf_encoding`, see [PR 2142]
+
+[PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
+
 # 0.29.0 [2021-07-12]
 
 - Switch from `parity-multiaddr` to upstream `multiaddr`.
