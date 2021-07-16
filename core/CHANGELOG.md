@@ -1,4 +1,8 @@
-- Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145])
+- Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding`.
+  Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id`.
+  Change `PeerId::from_public_key(PublicKey)` to `PeerId::from_public_key(&PublicKey)`.
+  Add `From<&PublicKey> for PeerId`.
+  See [PR 2145]
 
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 

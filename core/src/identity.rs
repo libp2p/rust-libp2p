@@ -245,7 +245,7 @@ impl PublicKey {
     }
 
     /// Convert the `PublicKey` into the corresponding `PeerId`.
-    pub fn into_peer_id(self) -> PeerId {
+    pub fn to_peer_id(&self) -> PeerId {
         self.into()
     }
 }
@@ -264,7 +264,7 @@ mod tests {
         let encoded = base64::decode(base_64_encoded).unwrap();
 
         let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
-        let peer_id = keypair.public().into_peer_id();
+        let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
     }

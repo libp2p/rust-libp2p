@@ -52,7 +52,7 @@ impl fmt::Display for PeerId {
 
 impl PeerId {
     /// Builds a `PeerId` from a public key.
-    pub fn from_public_key(key: PublicKey) -> PeerId {
+    pub fn from_public_key(key: &PublicKey) -> PeerId {
         let key_enc = key.to_protobuf_encoding();
 
         let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
@@ -121,6 +121,12 @@ impl PeerId {
 
 impl From<PublicKey> for PeerId {
     fn from(key: PublicKey) -> PeerId {
+        PeerId::from_public_key(&key)
+    }
+}
+
+impl From<&PublicKey> for PeerId {
+    fn from(key: &PublicKey) -> PeerId {
         PeerId::from_public_key(key)
     }
 }
@@ -184,20 +190,20 @@ mod tests {
     #[test]
     fn peer_id_is_public_key() {
         let key = identity::Keypair::generate_ed25519().public();
-        let peer_id = key.clone().into_peer_id();
+        let peer_id = key.to_peer_id();
         assert_eq!(peer_id.is_public_key(&key), Some(true));
     }
 
     #[test]
     fn peer_id_into_bytes_then_from_bytes() {
-        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
         let second = PeerId::from_bytes(&peer_id.to_bytes()).unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn peer_id_to_base58_then_back() {
-        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
         assert_eq!(peer_id, second);
     }

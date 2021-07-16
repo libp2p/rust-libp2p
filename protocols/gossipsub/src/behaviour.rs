@@ -181,7 +181,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 
                 PublishConfig::Signing {
                     keypair,
-                    author: public_key.into_peer_id(),
+                    author: public_key.to_peer_id(),
                     inline_key: key,
                 }
             }
