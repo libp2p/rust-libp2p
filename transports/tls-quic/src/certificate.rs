@@ -215,8 +215,8 @@ impl P2pCertificate<'_> {
             // self-signature is not valid.
             let raw_certificate = self.certificate.tbs_certificate.as_ref();
             let signature = self.certificate.signature_value.data;
-            let self_signed = self.check_signature(signature_scheme, raw_certificate, signature);
-            if !self_signed {
+            // check if self signed
+            if !self.verify_signature(signature_scheme, raw_certificate, signature) {
                 return false
             }
         } else {
@@ -411,7 +411,7 @@ impl P2pCertificate<'_> {
     }
     /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
     /// in the certificate.
-    pub fn check_signature(
+    pub fn verify_signature(
         &self, signature_scheme: rustls::SignatureScheme, message: &[u8], signature: &[u8],
     ) -> bool {
         if let Some(pk) = self.public_key(signature_scheme) {
