@@ -244,25 +244,25 @@ impl Encoder for Codec {
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
             Frame::Open { stream_id } => {
-                (u64::from(stream_id.num) << 3, Bytes::new())
+                (stream_id.num << 3, Bytes::new())
             },
             Frame::Data { stream_id: LocalStreamId { num, role: Endpoint::Listener }, data } => {
-                (u64::from(num) << 3 | 1, data)
+                (num << 3 | 1, data)
             },
             Frame::Data { stream_id: LocalStreamId { num, role: Endpoint::Dialer }, data } => {
-                (u64::from(num) << 3 | 2, data)
+                (num << 3 | 2, data)
             },
             Frame::Close { stream_id: LocalStreamId { num, role: Endpoint::Listener } } => {
-                (u64::from(num) << 3 | 3, Bytes::new())
+                (num << 3 | 3, Bytes::new())
             },
             Frame::Close { stream_id: LocalStreamId { num, role: Endpoint::Dialer } } => {
-                (u64::from(num) << 3 | 4, Bytes::new())
+                (num << 3 | 4, Bytes::new())
             },
             Frame::Reset { stream_id: LocalStreamId { num, role: Endpoint::Listener } } => {
-                (u64::from(num) << 3 | 5, Bytes::new())
+                (num << 3 | 5, Bytes::new())
             },
             Frame::Reset { stream_id: LocalStreamId { num, role: Endpoint::Dialer } } => {
-                (u64::from(num) << 3 | 6, Bytes::new())
+                (num << 3 | 6, Bytes::new())
             },
         };
 

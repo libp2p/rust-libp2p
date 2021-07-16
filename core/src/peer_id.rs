@@ -68,8 +68,8 @@ impl PeerId {
 
     /// Parses a `PeerId` from bytes.
     pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
-        Ok(PeerId::from_multihash(Multihash::from_bytes(&data)?)
-            .map_err(|mh| Error::UnsupportedCode(mh.code()))?)
+        PeerId::from_multihash(Multihash::from_bytes(&data)?)
+            .map_err(|mh| Error::UnsupportedCode(mh.code()))
     }
 
     /// Tries to turn a `Multihash` into a `PeerId`.
