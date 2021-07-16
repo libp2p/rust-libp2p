@@ -54,7 +54,7 @@ impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.clone().into_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.clone().into_protobuf_encoding())
+            pubkey: Some(config.local_public_key.to_protobuf_encoding())
         };
         let mut buf = Vec::with_capacity(exchange.encoded_len());
         exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
