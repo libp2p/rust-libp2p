@@ -89,6 +89,10 @@ pub use libp2p_ping as ping;
 #[cfg_attr(docsrs, doc(cfg(feature = "plaintext")))]
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
+#[cfg(feature = "quic")]
+#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
+#[doc(inline)]
+pub use libp2p_quic as quic;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
 #[cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))]
