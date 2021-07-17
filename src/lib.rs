@@ -91,6 +91,7 @@ pub use libp2p_ping as ping;
 pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "quic")]
 #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_quic as quic;
 #[doc(inline)]
