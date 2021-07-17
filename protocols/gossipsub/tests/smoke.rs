@@ -153,7 +153,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
-    let peer_id = public_key.clone().to_peer_id();
+    let peer_id = public_key.to_peer_id();
 
     // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
     // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we

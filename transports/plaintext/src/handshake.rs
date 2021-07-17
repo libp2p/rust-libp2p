@@ -95,7 +95,7 @@ impl HandshakeContext<Local> {
         };
 
         // Check the validity of the remote's `Exchange`.
-        if peer_id != public_key.clone().to_peer_id() {
+        if peer_id != public_key.to_peer_id() {
             debug!("the remote's `PeerId` isn't consistent with the remote's public key");
             return Err(PlainTextError::InvalidPeerId)
         }
