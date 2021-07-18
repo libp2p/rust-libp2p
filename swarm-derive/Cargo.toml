@@ -17,5 +17,5 @@ syn = { version = "1.0.8", default-features = false, features = ["clone-impls", 
 quote = "1.0"
 
 [dev-dependencies]
-libp2p = { path = "../" }
+libp2p = { path = "../", features = ["identify", "kad", "ping"] }
 futures = "0.3.1"

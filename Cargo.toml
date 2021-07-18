@@ -10,28 +10,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-default = [
-    "deflate",
-    "dns-async-std",
-    "floodsub",
-    "identify",
-    "kad",
-    "gossipsub",
-    "mdns",
-    "mplex",
-    "noise",
-    "ping",
-    "plaintext",
-    "pnet",
-    "relay",
-    "request-response",
-    "secp256k1",
-    "tcp-async-io",
-    "uds",
-    "wasm-ext",
-    "websocket",
-    "yamux",
-]
 deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
@@ -98,6 +76,23 @@ libp2p-websocket = { version = "0.30.0", path = "transports/websocket", optional
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.9.0"
 tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
+
+[dev-dependencies.libp2p]
+path = "."
+features = [
+    "dns-async-std",
+    "floodsub",
+    "gossipsub",
+    "kad",
+    "mdns",
+    "mplex",
+    "noise",
+    "ping",
+    "pnet",
+    "tcp-async-io",
+    "websocket",
+    "yamux",
+]
 
 [workspace]
 resolver = "2"
