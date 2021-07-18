@@ -114,7 +114,7 @@ impl PeerId {
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
         let alg = Code::try_from(self.multihash.code())
             .expect("Internal multihash is always a valid `Code`");
-        let enc = public_key.clone().to_protobuf_encoding();
+        let enc = public_key.to_protobuf_encoding();
         Some(alg.digest(&enc) == self.multihash)
     }
 }
