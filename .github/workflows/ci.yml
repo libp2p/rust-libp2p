@@ -117,7 +117,7 @@ jobs:
     - uses: actions/checkout@v2.3.4
 
     - name: Check rustdoc links
-      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
+      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
 
   check-clippy:
     runs-on: ubuntu-latest
