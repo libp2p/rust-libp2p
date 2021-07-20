@@ -21,6 +21,8 @@
 use crate::protocol;
 use futures::prelude::*;
 use futures::future::BoxFuture;
+
+use libp2p_core::{UpgradeError, upgrade::NegotiationError};
 use libp2p_swarm::{
     KeepAlive,
     NegotiatedSubstream,
@@ -188,6 +190,22 @@ pub struct PingHandler {
     /// substream, this is always a future that waits for the
     /// next inbound ping to be answered.
     inbound: Option<PongFuture>,
+    /// Tracks the state of our handler.
+    state: State
+}
+
+/// Models our knowledge of the other peer's support of the ping protocol.
+#[derive(Debug, Clone, Copy)]
+enum State {
+    /// We are inactive because the other peer doesn't support ping.
+    Inactive {
+        /// Whether or not we've reported the missing support yet.
+        ///
+        /// This is used to avoid repeated events being emitted for a specific connection.
+        reported: bool
+    },
+    /// We are actively pinging the other peer.
+    Active,
 }
 
 impl PingHandler {
@@ -200,6 +218,7 @@ impl PingHandler {
             failures: 0,
             outbound: None,
             inbound: None,
+            state: State::Active,
         }
     }
 }
@@ -230,12 +249,20 @@ impl ProtocolsHandler for PingHandler {
 
     fn inject_dial_upgrade_error(&mut self, _info: (), error: ProtocolsHandlerUpgrErr<Void>) {
         self.outbound = None; // Request a new substream on the next `poll`.
-        self.pending_errors.push_front(
-            match error {
-                // Note: This timeout only covers protocol negotiation.
-                ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
-                e => PingFailure::Other { error: Box::new(e) },
-            })
+
+        let error = match error {
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                self.state = State::Inactive {
+                    reported: false
+                };
+                return;
+            },
+            // Note: This timeout only covers protocol negotiation.
+            ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
+            e => PingFailure::Other { error: Box::new(e) },
+        };
+
+        self.pending_errors.push_front(error);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -247,6 +274,17 @@ impl ProtocolsHandler for PingHandler {
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult, Self::Error>> {
+        match self.state {
+            State::Inactive { reported: true } => {
+                return Poll::Pending // nothing to do on this connection
+            },
+            State::Inactive { reported: false } => {
+                self.state = State::Inactive { reported: true };
+                return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(PingFailure::Unsupported)));
+            },
+            State::Active => {}
+        }
+
         // Respond to inbound pings.
         if let Some(fut) = self.inbound.as_mut() {
             match fut.poll_unpin(cx) {
