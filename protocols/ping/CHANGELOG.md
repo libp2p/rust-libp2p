@@ -1,3 +1,13 @@
+# Unreleased
+
+- Don't close connection if ping protocol is unsupported by remote.
+  Previously, a failed protocol negotation for ping caused a force close of the connection.
+  As a result, all nodes in a network had to support ping.
+  To allow networks where some nodes don't support ping, we now emit
+  `PingFailure::Unsupported` once for every connection on which ping is not supported.
+
+  Fixes [#2109](https://github.com/libp2p/rust-libp2p/issues/2109).
+
 # 0.30.0 [2021-07-12]
 
 - Update dependencies.
