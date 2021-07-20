@@ -140,6 +140,8 @@ pub enum PingFailure {
     /// The ping timed out, i.e. no response was received within the
     /// configured ping timeout.
     Timeout,
+    /// The peer does not support the ping protocol.
+    Unsupported,
     /// The ping failed for reasons other than a timeout.
     Other { error: Box<dyn std::error::Error + Send + 'static> }
 }
@@ -148,7 +150,8 @@ impl fmt::Display for PingFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PingFailure::Timeout => f.write_str("Ping timeout"),
-            PingFailure::Other { error } => write!(f, "Ping error: {}", error)
+            PingFailure::Other { error } => write!(f, "Ping error: {}", error),
+            PingFailure::Unsupported => write!(f, "Ping protocol not supported"),
         }
     }
 }
@@ -157,7 +160,8 @@ impl Error for PingFailure {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             PingFailure::Timeout => None,
-            PingFailure::Other { error } => Some(&**error)
+            PingFailure::Other { error } => Some(&**error),
+            PingFailure::Unsupported => None,
         }
     }
 }
