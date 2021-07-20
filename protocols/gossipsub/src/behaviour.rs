@@ -2804,10 +2804,6 @@ where
         )
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
     fn inject_connected(&mut self, peer_id: &PeerId) {
         // Ignore connections from blacklisted peers.
         if self.blacklisted_peers.contains(peer_id) {
