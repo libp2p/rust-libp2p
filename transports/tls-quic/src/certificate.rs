@@ -292,14 +292,6 @@ impl P2pCertificate<'_> {
                 return Some(RSA_PKCS1_SHA512)
             }
             if signature_algorithm.algorithm == OID_PKCS1_RSASSAPSS {
-                // FIXME move OIDs to `oid_registry`
-                #[allow(non_snake_case)]
-                let OID_NIST_HASH_SHA384 = der_parser::oid::Oid::from(&[2,16,840,1,101,3,4,2,2])
-                    .expect("This is a valid OID; qed");
-                #[allow(non_snake_case)]
-                let OID_NIST_HASH_SHA512 = der_parser::oid::Oid::from(&[2,16,840,1,101,3,4,2,3])
-                    .expect("This is a valid OID; qed");
-
                 // According to https://datatracker.ietf.org/doc/html/rfc4055#section-3.1:
                 // Inside of params there shuld be a sequence of:
                 // - Hash Algorithm
@@ -333,21 +325,14 @@ impl P2pCertificate<'_> {
         }
 
         if pki_algorithm.algorithm == OID_KEY_TYPE_EC_PUBLIC_KEY {
-            let signature_param = pki_algorithm.parameters.as_ref()?.as_oid().ok()?;
-            // FIXME move OIDs to `oid_registry`
-            let p256 = der_parser::oid::Oid::from(&[1,2,840,10045,3,1,7])
-                .expect("This is a valid OID; qed");
-            let p384 = der_parser::oid::Oid::from(&[1,3,132,0,34])
-                .expect("This is a valid OID; qed");
-            let p521 = der_parser::oid::Oid::from(&[1,3,132,0,35])
-                .expect("This is a valid OID; qed");
-            if signature_param == &p256 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA256 {
+            let signature_param = pki_algorithm.parameters.as_ref()?.as_oid_val().ok()?;
+            if signature_param == OID_EC_P256 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA256 {
                 return Some(ECDSA_NISTP256_SHA256)
             }
-            if signature_param == &p384 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA384 {
+            if signature_param == OID_NIST_EC_P384 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA384 {
                 return Some(ECDSA_NISTP384_SHA384)
             }
-            if signature_param == &p521 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA512 {
+            if signature_param == OID_NIST_EC_P521 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA512 {
                 return Some(ECDSA_NISTP521_SHA512)
             }
             return None
@@ -356,10 +341,6 @@ impl P2pCertificate<'_> {
         if signature_algorithm.algorithm == OID_SIG_ED25519 {
             return Some(ED25519)
         }
-        // FIXME move OID to `oid_registry`
-        #[allow(non_snake_case)]
-        let OID_SIG_ED448 = der_parser::oid::Oid::from(&[1,3,101,113])
-            .expect("This is a valid OID; qed");
         if signature_algorithm.algorithm == OID_SIG_ED448 {
            return Some(ED448)
         }
