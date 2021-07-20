@@ -1,0 +1,2 @@
+[alias]
+lint = "clippy -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style"
