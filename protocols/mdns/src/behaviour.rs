@@ -26,7 +26,7 @@ use if_watch::{IfEvent, IfWatcher};
 use lazy_static::lazy_static;
 use libp2p_core::connection::ListenerId;
 use libp2p_core::{
-    address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
+    address_translation, multiaddr::Protocol, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
@@ -252,19 +252,6 @@ impl NetworkBehaviour for Mdns {
             .filter(move |(p, _, expires)| p == peer_id && *expires > now)
             .map(|(_, addr, _)| addr.clone())
             .collect()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-    ) {
-        void::unreachable(ev)
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {

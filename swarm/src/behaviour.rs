@@ -80,7 +80,9 @@ pub trait NetworkBehaviour: Send + 'static {
     /// The addresses will be tried in the order returned by this function, which means that they
     /// should be ordered by decreasing likelihood of reachability. In other words, the first
     /// address should be the most likely to be reachable.
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr>;
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        vec![]
+    }
 
     /// Indicate to the behaviour that we connected to the node with the given peer id.
     ///
@@ -88,7 +90,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// This method is only called when the first connection to the peer is established, preceded by
     /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
-    fn inject_connected(&mut self, peer_id: &PeerId);
+    fn inject_connected(&mut self, _: &PeerId) { }
 
     /// Indicates to the behaviour that we disconnected from the node with the given peer id.
     ///
@@ -97,7 +99,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// This method is only called when the last established connection to the peer is closed,
     /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
-    fn inject_disconnected(&mut self, peer_id: &PeerId);
+    fn inject_disconnected(&mut self, _: &PeerId) { }
 
     /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint)
@@ -127,10 +129,10 @@ pub trait NetworkBehaviour: Send + 'static {
     /// has previously been called with this `PeerId`.
     fn inject_event(
         &mut self,
-        peer_id: PeerId,
-        connection: ConnectionId,
-        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
-    );
+        _: PeerId,
+        _: ConnectionId,
+        _: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
+    ) { }
 
     /// Indicates to the behaviour that we tried to reach an address, but failed.
     ///

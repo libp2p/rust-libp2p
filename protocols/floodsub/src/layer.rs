@@ -23,7 +23,7 @@ use crate::topic::Topic;
 use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{PeerId, connection::ConnectionId};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -247,10 +247,6 @@ impl NetworkBehaviour for Floodsub {
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         Default::default()
-    }
-
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
     }
 
     fn inject_connected(&mut self, id: &PeerId) {
