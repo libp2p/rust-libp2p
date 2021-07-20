@@ -1,3 +1,9 @@
+# Unreleased
+
+- Provide default implementations for all functions of `NetworkBehaviour`,
+  except for `new_handler` and `poll`.
+  This should make it easier to create new implementations.
+
 # 0.30.0 [2021-07-12]
 
 - Update dependencies.
