@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 /// Rate limiter using the [Token Bucket] algorithm.
 ///
 /// [Token Bucket]: https://en.wikipedia.org/wiki/Token_bucket
-pub(crate) struct RateLimiter<Id> {
+pub struct RateLimiter<Id> {
     limit: u32,
     interval: Duration,
 
@@ -65,7 +65,7 @@ impl<Id: Eq + PartialEq + Hash + Clone> RateLimiter<Id> {
         self.refill(now);
 
         match self.buckets.get_mut(&id) {
-            // If the bucet exists, try to take a token.
+            // If the bucket exists, try to take a token.
             Some(balance) => match balance.checked_sub(1) {
                 Some(a) => {
                     *balance = a;

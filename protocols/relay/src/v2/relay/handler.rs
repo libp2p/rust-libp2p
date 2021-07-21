@@ -82,6 +82,7 @@ pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
         inbound_reservation_req: inbound_hop::ReservationReq,
+        remote_addr: Multiaddr,
     },
     /// An inbound reservation request has been accepted.
     ReservationReqAccepted {
@@ -154,8 +155,9 @@ pub struct Prototype {
 impl IntoProtocolsHandler for Prototype {
     type Handler = Handler;
 
-    fn into_handler(self, _remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
+    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         Handler {
+            remote_addr: endpoint.get_remote_address().clone(),
             config: self.config,
             queued_events: Default::default(),
             pending_error: Default::default(),
@@ -182,6 +184,8 @@ impl IntoProtocolsHandler for Prototype {
 /// [`ProtocolsHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
 pub struct Handler {
+    remote_addr: Multiaddr,
+
     /// Static [`Handler`] [`Config`].
     config: Config,
 
@@ -263,6 +267,7 @@ impl ProtocolsHandler for Handler {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::ReservationReqReceived {
                         inbound_reservation_req,
+                        remote_addr: self.remote_addr.clone(),
                     },
                 ));
             }

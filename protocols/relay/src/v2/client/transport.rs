@@ -396,7 +396,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                     }
                     Poll::Ready(None) => {
                         // TODO: Assumption safe here?
-                        panic!("Expect `from_behaviour` not to be dropped before listener.");
+                        panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
 
                     },
                     Poll::Pending => {}

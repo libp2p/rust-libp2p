@@ -23,7 +23,7 @@
 mod handler;
 mod rate_limiter;
 
-pub use rate_limiter::Config as RateLimiterConfig;
+pub use rate_limiter::{Config as GenericRateLimiterConfig, RateLimiter as GenericRateLimiter};
 
 use crate::v2::message_proto;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
@@ -31,10 +31,11 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::net::IpAddr;
+use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use std::num::NonZeroU32;
 
 /// Configuration for the [`Relay`] [`NetworkBehaviour`].
 ///
@@ -45,9 +46,8 @@ pub struct Config {
     pub max_reservations: usize,
     pub reservation_duration: Duration,
 
-    pub max_reservations_per_peer: RateLimiterConfig,
-    // pub max_reservations_per_ip: u32,
-    // pub max_reservations_per_asn: u32,
+    // TODO: Mutable state in a config. Good idea?
+    pub reservation_rate_limiters: Vec<Box<dyn RateLimiter>>,
 
     pub max_circuits: usize,
     pub max_circuit_duration: Duration,
@@ -56,17 +56,26 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        let reservation_rate_limiters = {
+            vec![
+                new_per_peer(GenericRateLimiterConfig {
+                    // TODO: Made up values. Reconsider these.
+                    limit: NonZeroU32::new(128).expect("128 > 0"),
+                    interval: Duration::from_secs(60),
+                }),
+                new_per_ip(GenericRateLimiterConfig {
+                    // TODO: Made up values. Reconsider these.
+                    limit: NonZeroU32::new(128).expect("128 > 0"),
+                    interval: Duration::from_secs(60),
+                }),
+            ]
+        };
+
         Config {
             max_reservations: 128,
             reservation_duration: Duration::from_secs(60 * 60),
 
-            max_reservations_per_peer: RateLimiterConfig {
-                // TODO: Made up values. Reconsider these.
-                limit: NonZeroU32::new(128).expect("128 > 0"),
-                interval: Duration::from_secs(60),
-            },
-            // max_reservations_per_ip: 4,
-            // max_reservations_per_asn: 32,
+            reservation_rate_limiters,
 
             // TODO: Shouldn't we have a limit per IP and ASN as well?
             max_circuits: 16,
@@ -139,10 +148,6 @@ pub struct Relay {
     reservations: HashMap<PeerId, HashSet<ConnectionId>>,
     circuits: CircuitsTracker,
 
-    peer_rate_limiter: rate_limiter::RateLimiter<PeerId>,
-    // ip_rate_limiter: rate_limiter::RateLimiter,
-    // asn_rate_limiter: rate_limiter::RateLimiter,
-
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<NetworkBehaviourAction<handler::In, Event>>,
 }
@@ -150,7 +155,6 @@ pub struct Relay {
 impl Relay {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
-            peer_rate_limiter: rate_limiter::RateLimiter::new(config.max_reservations_per_peer),
             config,
             local_peer_id,
             reservations: Default::default(),
@@ -218,16 +222,24 @@ impl NetworkBehaviour for Relay {
         event: handler::Event,
     ) {
         match event {
+            // TODO: Make sure this is not a relayed connection already.
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
+                remote_addr,
             } => {
+                let now = Instant::now();
+
                 let event = if self
                     .reservations
                     .iter()
                     .map(|(_, cs)| cs.len())
                     .sum::<usize>()
                     < self.config.max_reservations
-                    && self.peer_rate_limiter.try_next(event_source, Instant::now())
+                    && self
+                        .config
+                        .reservation_rate_limiters
+                        .iter_mut()
+                        .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
                 {
                     self.reservations
                         .entry(event_source)
@@ -238,6 +250,7 @@ impl NetworkBehaviour for Relay {
                         addrs: vec![],
                     }
                 } else {
+                    println!("===== else ");
                     handler::In::DenyReservationReq {
                         inbound_reservation_req,
                         status: message_proto::Status::ResourceLimitExceeded,
@@ -306,6 +319,7 @@ impl NetworkBehaviour for Relay {
                     ));
             }
             handler::Event::CircuitReqReceived(inbound_circuit_req) => {
+                // TODO: Make sure this is not a relayed connection already.
                 if self.circuits.len() >= self.config.max_circuits {
                     self.queued_actions
                         .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -589,5 +603,39 @@ impl Add<u64> for CircuitId {
 
     fn add(self, rhs: u64) -> Self {
         CircuitId(self.0 + rhs)
+    }
+}
+
+fn multiaddr_to_ip(addr: &Multiaddr) -> Option<IpAddr> {
+    addr.iter().find_map(|p| match p {
+        Protocol::Ip4(addr) => Some(addr.into()),
+        Protocol::Ip6(addr) => Some(addr.into()),
+        _ => None,
+    })
+}
+
+// TODO: Should this and the below be moved to its own module, or rate_limiter.rs?
+pub trait RateLimiter: Send {
+    fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool;
+
+}
+
+fn new_per_peer(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
+    let mut limiter = GenericRateLimiter::new(config);
+    Box::new(move |peer_id, _addr: &Multiaddr, now| limiter.try_next(peer_id, now))
+}
+
+fn new_per_ip(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
+    let mut limiter = GenericRateLimiter::new(config);
+    Box::new(move |_peer_id, addr: &Multiaddr, now| {
+        multiaddr_to_ip(addr)
+            .map(|a| limiter.try_next(a, now))
+            .unwrap_or(true)
+    })
+}
+
+impl<T: FnMut(PeerId, &Multiaddr, Instant) -> bool + Send> RateLimiter for T {
+    fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool {
+        self(peer, addr, now)
     }
 }
