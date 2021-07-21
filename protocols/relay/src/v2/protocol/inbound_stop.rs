@@ -191,7 +191,7 @@ impl Circuit {
     async fn send(&mut self, msg: StopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("BytesMut to have sufficient capacity.");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;
 

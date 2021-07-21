@@ -75,7 +75,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let mut encoded_msg = Vec::new();
         msg.encode(&mut encoded_msg)
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("Vec to have sufficient capacity.");
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_MESSAGE_SIZE);
