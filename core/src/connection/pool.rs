@@ -1062,9 +1062,9 @@ impl ConnectionLimits {
         self
     }
 
-    /// Configures the maximum number of concurrent total established connections (inbound or
+    /// Configures the maximum number of concurrent established connections (both inbound and
     /// outbound).
-    pub fn with_max_established_total(mut self, limit: Option<u32>) -> Self {
+    pub fn with_max_established(mut self, limit: Option<u32>) -> Self {
         self.max_established_total = limit;
         self
     }
