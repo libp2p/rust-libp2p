@@ -225,11 +225,7 @@ mod tests {
 
     #[test]
     fn quick_check() {
-        fn prop(
-            limit: NonZeroU32,
-            interval: Duration,
-            events: Vec<(u32, Duration)>,
-        ) -> TestResult {
+        fn prop(limit: NonZeroU32, interval: Duration, events: Vec<(u32, Duration)>) -> TestResult {
             if interval.is_zero() {
                 return TestResult::discard();
             }
@@ -241,12 +237,22 @@ mod tests {
             });
 
             for (id, d) in events {
-                now = now + d;
+                now = if let Some(now) = now.checked_add(d) {
+                    now
+                } else {
+                    return TestResult::discard();
+                };
                 l.try_next(id, now);
             }
 
-            // TODO: This might panic.
-            now = now + interval * limit.into();
+            now = if let Some(now) = interval
+                .checked_mul(limit.into())
+                .and_then(|full_interval| now.checked_add(full_interval))
+            {
+                now
+            } else {
+                return TestResult::discard();
+            };
             assert!(l.try_next(1, now));
 
             assert_eq!(l.buckets.len(), 1);
