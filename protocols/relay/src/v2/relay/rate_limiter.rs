@@ -84,12 +84,15 @@ impl<Id: Eq + PartialEq + Hash + Clone> RateLimiter<Id> {
     }
 
     fn refill(&mut self, now: Instant) {
+        // Note when used with a high number of buckets: This loop refills all the to-be-refilled
+        // buckets at once, thus potentially delaying the parent call to `try_next`.
         loop {
             match self.refill_schedule.get(0) {
                 // Only continue if (a) there is a bucket and (b) the bucket has not already been
                 // refilled recently.
                 Some((last_refill, _)) if now.duration_since(*last_refill) >= self.interval => {}
-                // Otherwise stop refilling.
+                // Otherwise stop refilling. Items in `refill_schedule` are sorted, thus, if the
+                // first ain't ready, none of them are.
                 _ => return,
             };
 
@@ -108,6 +111,7 @@ impl<Id: Eq + PartialEq + Hash + Clone> RateLimiter<Id> {
             let duration_since = now.duration_since(last_refill);
             let new_tokens = duration_since
                 .as_micros()
+                // Note that the use of `as_micros` limits the number of tokens to 10^6 per second.
                 .checked_div(self.interval.as_micros())
                 .and_then(|i| i.try_into().ok())
                 .unwrap_or(u32::MAX);
@@ -121,7 +125,7 @@ impl<Id: Eq + PartialEq + Hash + Clone> RateLimiter<Id> {
                 self.refill_schedule.push_back((now, id));
             } else {
                 // If the balance is above the limit, the bucket can be removed, given that a
-                // non-existing bucket is seen as a bucket with `limit` tokens.
+                // non-existing bucket is equivalent to a bucket with `limit` tokens.
                 self.buckets.remove(&id);
             }
         }
