@@ -86,7 +86,7 @@ fn variable_msg_length() {
             let client_fut = async {
                 debug!("dialing {:?}", server_address);
                 let (received_server_id, mut client_channel) = client_transport.dial(server_address).unwrap().await.unwrap();
-                assert_eq!(received_server_id, server_id.public().into_peer_id());
+                assert_eq!(received_server_id, server_id.public().to_peer_id());
 
                 debug!("Client: writing message.");
                 client_channel.write_all(&mut msg_to_send).await.expect("no error");

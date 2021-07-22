@@ -1,3 +1,15 @@
+# 0.30.0 [unreleased]
+
+- Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
+
+- Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
+
+- Change `PeerId::from_public_key(PublicKey)` to `PeerId::from_public_key(&PublicKey)` (see [PR 2145]).
+
+- Add `From<&PublicKey> for PeerId` (see [PR 2145]).
+
+[PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+
 # 0.29.0 [2021-07-12]
 
 - Switch from `parity-multiaddr` to upstream `multiaddr`.
