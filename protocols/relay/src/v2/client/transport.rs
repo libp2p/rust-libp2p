@@ -472,7 +472,7 @@ impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
 
 
 
-/// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::Relay)
+/// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::relay::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
