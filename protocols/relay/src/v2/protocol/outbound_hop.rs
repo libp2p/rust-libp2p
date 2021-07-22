@@ -29,10 +29,11 @@ use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{iter};
+use std::iter;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
+use wasm_timer::Instant;
 
 pub enum Upgrade {
     Reserve,

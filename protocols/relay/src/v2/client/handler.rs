@@ -38,7 +38,8 @@ use libp2p_swarm::{
 use log::debug;
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wasm_timer::Instant;
 
 pub enum In {
     Reserve {
