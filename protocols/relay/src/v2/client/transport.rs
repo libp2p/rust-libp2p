@@ -34,6 +34,7 @@ use pin_project::pin_project;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use thiserror::Error;
 
 /// A [`Transport`] wrapping another [`Transport`] enabling client relay capabilities.
 ///
@@ -439,17 +440,27 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 }
 
 /// Error that occurred during relay connection setup.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RelayError {
+    #[error("Missing relay peer id.")]
     MissingRelayPeerId,
+    #[error("Missing relay address.")]
     MissingRelayAddr,
+    #[error("Missing destination peer id.")]
     MissingDstPeerId,
+    #[error("Invalid peer id hash.")]
     InvalidHash,
-    SendingMessageToBehaviour(mpsc::SendError),
-    ResponseFromBehaviourCanceled,
+    #[error("Failed to send message to relay behaviour: {0:?}")]
+    SendingMessageToBehaviour(#[from] mpsc::SendError),
+    #[error("Response from behaviour was canceled")]
+    ResponseFromBehaviourCanceled(#[from] oneshot::Canceled),
+    #[error("Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")]
     MultipleCircuitRelayProtocolsUnsupported,
+    #[error("One of the provided multiaddresses is malformed.")]
     MalformedMultiaddr,
+    #[error("Failed to get Reservation.")]
     Reservation,
+    #[error("Failed to connect to destination.")]
     Connect,
 }
 
@@ -459,56 +470,7 @@ impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
     }
 }
 
-impl From<mpsc::SendError> for RelayError {
-    fn from(error: mpsc::SendError) -> Self {
-        RelayError::SendingMessageToBehaviour(error)
-    }
-}
 
-impl From<oneshot::Canceled> for RelayError {
-    fn from(_: oneshot::Canceled) -> Self {
-        RelayError::ResponseFromBehaviourCanceled
-    }
-}
-
-impl std::fmt::Display for RelayError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RelayError::MissingRelayPeerId => {
-                write!(f, "Missing relay peer id.")
-            }
-            RelayError::MissingRelayAddr => {
-                write!(f, "Missing relay address.")
-            }
-            RelayError::MissingDstPeerId => {
-                write!(f, "Missing destination peer id.")
-            }
-            RelayError::InvalidHash => {
-                write!(f, "Invalid peer id hash.")
-            }
-            RelayError::SendingMessageToBehaviour(e) => {
-                write!(f, "Failed to send message to relay behaviour: {:?}", e)
-            }
-            RelayError::ResponseFromBehaviourCanceled => {
-                write!(f, "Response from behaviour was canceled")
-            }
-            RelayError::MultipleCircuitRelayProtocolsUnsupported => {
-                write!(f, "Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")
-            }
-            RelayError::MalformedMultiaddr => {
-                write!(f, "One of the provided multiaddresses is malformed.")
-            }
-            RelayError::Reservation => {
-                write!(f, "Failed to get Reservation.")
-            }
-            RelayError::Connect => {
-                write!(f, "Failed to connect to destination.")
-            }
-        }
-    }
-}
-
-impl std::error::Error for RelayError {}
 
 /// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).

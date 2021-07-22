@@ -27,7 +27,8 @@ use libp2p_core::{upgrade, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::io::Cursor;
-use std::{error, fmt, iter};
+use std::iter;
+use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {}
@@ -83,64 +84,24 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
+    #[error("Failed to decode message: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Failed to parse peer id.")]
     ParsePeerId,
+    #[error("Expected 'peer' field to be set.")]
     MissingPeer,
+    #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
-}
-
-impl From<std::io::Error> for UpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        UpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        UpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for UpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            UpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            UpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::ParsePeerId => {
-                write!(f, "Failed to parse peer id.")
-            }
-            UpgradeError::MissingPeer => {
-                write!(f, "Expected 'peer' field to be set.")
-            }
-            UpgradeError::UnexpectedTypeStatus => {
-                write!(f, "Unexpected message type 'status'")
-            }
-        }
-    }
-}
-
-impl error::Error for UpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            UpgradeError::Decode(e) => Some(e),
-            UpgradeError::Io(e) => Some(e),
-            UpgradeError::ParseTypeField => None,
-            UpgradeError::ParsePeerId => None,
-            UpgradeError::MissingPeer => None,
-            UpgradeError::UnexpectedTypeStatus => None,
-        }
-    }
 }
 
 pub struct Circuit {

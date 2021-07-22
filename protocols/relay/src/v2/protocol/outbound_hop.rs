@@ -30,7 +30,8 @@ use prost::Message;
 use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{error, fmt, iter};
+use std::{iter};
+use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
 
 pub enum Upgrade {
@@ -168,94 +169,36 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
+    #[error("Failed to decode message: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Expected 'status' field to be set.")]
     MissingStatusField,
+    #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
+    #[error("Expected at least one address in reservation.")]
     NoAddressesinReservation,
+    #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
+    #[error("Invalid addresses in reservation.")]
     InvalidReservationAddrs,
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
+    #[error("Unexpected message type 'reserve'")]
     UnexpectedTypeReserve,
+    #[error("Failed to parse response type field.")]
     ParseStatusField,
+    #[error("Unexpected message status '{0:?}'")]
     UnexpectedStatus(Status),
-}
-
-impl From<std::io::Error> for UpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        UpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        UpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for UpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            UpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            UpgradeError::MissingStatusField => {
-                write!(f, "Expected 'status' field to be set.")
-            }
-            UpgradeError::MissingReservationField => {
-                write!(f, "Expected 'reservation' field to be set.")
-            }
-            UpgradeError::NoAddressesinReservation => {
-                write!(f, "Expected at least one address in reservation.")
-            }
-            UpgradeError::InvalidReservationExpiration => {
-                write!(f, "Invalid expiration timestamp in reservation.")
-            }
-            UpgradeError::InvalidReservationAddrs => {
-                write!(f, "Invalid addresses in reservation.")
-            }
-            UpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::UnexpectedTypeConnect => {
-                write!(f, "Unexpected message type 'connect'")
-            }
-            UpgradeError::UnexpectedTypeReserve => {
-                write!(f, "Unexpected message type 'reserve'")
-            }
-            UpgradeError::ParseStatusField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::UnexpectedStatus(status) => {
-                write!(f, "Unexpected message status '{:?}'", status)
-            }
-        }
-    }
-}
-
-impl error::Error for UpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            UpgradeError::Decode(e) => Some(e),
-            UpgradeError::Io(e) => Some(e),
-            UpgradeError::MissingStatusField => None,
-            UpgradeError::MissingReservationField => None,
-            UpgradeError::NoAddressesinReservation => None,
-            UpgradeError::InvalidReservationExpiration => None,
-            UpgradeError::InvalidReservationAddrs => None,
-            UpgradeError::ParseTypeField => None,
-            UpgradeError::UnexpectedTypeConnect => None,
-            UpgradeError::UnexpectedTypeReserve => None,
-            UpgradeError::ParseStatusField => None,
-            UpgradeError::UnexpectedStatus(_) => None,
-        }
-    }
 }
 
 fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
