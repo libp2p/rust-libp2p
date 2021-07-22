@@ -42,13 +42,14 @@ use std::time::{Duration, Instant};
 pub struct Config {
     pub max_reservations: usize,
     pub reservation_duration: Duration,
-
     // TODO: Mutable state in a config. Good idea?
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
     pub max_circuits: usize,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
+    // TODO: Mutable state in a config. Good idea?
+    pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 }
 
 impl Default for Config {
@@ -66,16 +67,28 @@ impl Default for Config {
             }),
         ];
 
+        let circuit_src_rate_limiters = vec![
+            rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
+                // TODO: Made up values. Reconsider these.
+                limit: NonZeroU32::new(128).expect("128 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+            rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
+                // TODO: Made up values. Reconsider these.
+                limit: NonZeroU32::new(128).expect("128 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+        ];
+
         Config {
             max_reservations: 128,
             reservation_duration: Duration::from_secs(60 * 60),
-
             reservation_rate_limiters,
 
-            // TODO: Shouldn't we have a limit per IP and ASN as well?
             max_circuits: 16,
             max_circuit_duration: Duration::from_secs(2 * 60),
             max_circuit_bytes: 1 << 17, // 128 kibibyte
+            circuit_src_rate_limiters,
         }
     }
 }
@@ -217,7 +230,6 @@ impl NetworkBehaviour for Relay {
         event: handler::Event,
     ) {
         match event {
-            // TODO: Make sure this is not a relayed connection already.
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
                 remote_addr,
@@ -324,6 +336,8 @@ impl NetworkBehaviour for Relay {
                 inbound_circuit_req,
                 remote_addr,
             } => {
+                let now = Instant::now();
+
                 let action = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
                     // Deny connection requests over relayed connections.
                     //
@@ -337,7 +351,13 @@ impl NetworkBehaviour for Relay {
                             status: message_proto::Status::PermissionDenied,
                         },
                     }
-                } else if self.circuits.len() >= self.config.max_circuits {
+                } else if self.circuits.len() >= self.config.max_circuits
+                    || !self
+                        .config
+                        .circuit_src_rate_limiters
+                        .iter_mut()
+                        .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
+                {
                     // Deny connection exceeding limits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
@@ -354,9 +374,6 @@ impl NetworkBehaviour for Relay {
                     .map(|cs| cs.iter().next())
                     .flatten()
                 {
-                    // TODO: Restrict the amount of circuits between two peers and one single
-                    // peer.
-
                     // Accept connection request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,

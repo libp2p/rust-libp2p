@@ -395,7 +395,6 @@ impl<T: Transport> Stream for RelayListener<T> {
                         return Poll::Ready(Some(Err(EitherError::B(RelayError::Reservation))));
                     }
                     Poll::Ready(None) => {
-                        // TODO: Assumption safe here?
                         panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
 
                     },
