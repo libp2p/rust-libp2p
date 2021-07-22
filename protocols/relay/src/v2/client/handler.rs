@@ -532,7 +532,7 @@ impl ProtocolsHandler for Handler {
         }
 
         // Deny incoming circuit requests.
-        while let Poll::Ready(Some((src_peer_id, result))) =
+        if let Poll::Ready(Some((src_peer_id, result))) =
             self.circuit_deny_futs.poll_next_unpin(cx)
         {
             match result {

@@ -27,7 +27,7 @@ use futures_timer::Delay;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -88,7 +88,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
             let HopMessage {
                 r#type,
@@ -131,7 +131,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                         Some(
                             unix_timestamp_to_instant(expires)
                                 .and_then(|instant| instant.checked_duration_since(Instant::now()))
-                                .map(|duration| Delay::new(duration))
+                                .map(Delay::new)
                                 .ok_or(UpgradeError::InvalidReservationExpiration)?,
                         )
                     } else {
@@ -209,9 +209,7 @@ fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-        )?
-        .try_into()
-        .ok()?,
+        )?,
     ))
 }
 

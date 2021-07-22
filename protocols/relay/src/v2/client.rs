@@ -375,17 +375,17 @@ impl RelayedConnection {
                     read_buffer,
                     drop_notifier,
                 };
-                return Poll::Ready(Ok(()));
+                Poll::Ready(Ok(()))
             }
             Poll::Ready(Err(e)) => {
-                return Poll::Ready(Err(e));
+                Poll::Ready(Err(e))
             }
             Poll::Pending => {
                 **self = RelayedConnection::InboundAccepting {
                     accept,
                     drop_notifier,
                 };
-                return Poll::Pending;
+                Poll::Pending
             }
         }
     }

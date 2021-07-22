@@ -56,7 +56,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
             let StopMessage {
                 r#type,

@@ -62,7 +62,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
             let HopMessage {
                 r#type,
@@ -83,7 +83,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 hop_message::Type::Connect => {
                     let dst = PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
                         .map_err(|_| UpgradeError::ParsePeerId)?;
-                    Ok(Req::Connect(CircuitReq { substream, dst }))
+                    Ok(Req::Connect(CircuitReq { dst, substream }))
                 }
                 hop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
             }

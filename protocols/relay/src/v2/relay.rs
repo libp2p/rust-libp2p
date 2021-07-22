@@ -64,7 +64,7 @@ impl Default for Config {
             // For each IP address one reservation every minute with up to 60 reservations per hour.
             rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
                 limit: NonZeroU32::new(60).expect("60 > 0"),
-                interval: Duration::from_secs(60 * 1),
+                interval: Duration::from_secs(60),
             }),
         ];
 
@@ -77,7 +77,7 @@ impl Default for Config {
             // For each source IP address one circuit every minute with up to 60 circuits per hour.
             rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
                 limit: NonZeroU32::new(60).expect("60 > 0"),
-                interval: Duration::from_secs(60 * 1),
+                interval: Duration::from_secs(60),
             }),
         ];
 
@@ -580,9 +580,9 @@ impl CircuitsTracker {
     }
 
     fn accepted(&mut self, circuit_id: CircuitId) {
-        self.circuits
-            .get_mut(&circuit_id)
-            .map(|c| c.status = CircuitStatus::Accepted);
+        if let Some(c) = self.circuits.get_mut(&circuit_id) {
+            c.status = CircuitStatus::Accepted;
+        };
     }
 
     fn remove(&mut self, circuit_id: CircuitId) -> Option<Circuit> {

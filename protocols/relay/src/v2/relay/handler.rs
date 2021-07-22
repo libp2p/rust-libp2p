@@ -536,7 +536,7 @@ impl ProtocolsHandler for Handler {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
             self.circuits.poll_next_unpin(cx)
         {
             match result {
@@ -557,7 +557,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some(result)) = self.reservation_accept_futures.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(result)) = self.reservation_accept_futures.poll_next_unpin(cx) {
             match result {
                 Ok(()) => {
                     let renewed = self
@@ -576,7 +576,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some(result)) = self.reservation_deny_futures.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(result)) = self.reservation_deny_futures.poll_next_unpin(cx) {
             match result {
                 Ok(()) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
@@ -591,7 +591,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some(result)) = self.circuit_accept_futures.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(result)) = self.circuit_accept_futures.poll_next_unpin(cx) {
             match result {
                 Ok(parts) => {
                     let CircuitParts {
@@ -649,7 +649,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
             self.circuit_deny_futures.poll_next_unpin(cx)
         {
             match result {
