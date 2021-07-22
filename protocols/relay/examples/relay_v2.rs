@@ -31,7 +31,6 @@ use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use std::error::Error;
-use std::task::{Context, Poll};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -99,26 +98,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/tcp/4001".parse()?)?;
 
-    let mut listening = false;
-    block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
+    block_on(async {
         loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {
+            match swarm.next().await.expect("Infinite Stream.") {
+                SwarmEvent::Behaviour(Event::Relay(event)) => {
                     println!("{:?}", event)
                 }
-                Poll::Ready(Some(_)) => {}
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
-                        }
-                    }
-                    break;
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    println!("Listening on {:?}", address);
                 }
+                _ => {}
             }
         }
-        Poll::Pending
-    }))
+    })
 }
