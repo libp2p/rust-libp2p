@@ -509,7 +509,6 @@ impl ProtocolsHandler for Handler {
         ));
     }
 
-    // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
     }

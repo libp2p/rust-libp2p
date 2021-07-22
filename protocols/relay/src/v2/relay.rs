@@ -55,28 +55,28 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let reservation_rate_limiters = vec![
+            // For each peer ID one reservation every 2 minutes with up to 30 reservations per hour.
             rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
-                // TODO: Made up values. Reconsider these.
-                limit: NonZeroU32::new(128).expect("128 > 0"),
-                interval: Duration::from_secs(60),
+                limit: NonZeroU32::new(30).expect("30 > 0"),
+                interval: Duration::from_secs(60 * 2),
             }),
+            // For each IP address one reservation every minute with up to 60 reservations per hour.
             rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
-                // TODO: Made up values. Reconsider these.
-                limit: NonZeroU32::new(128).expect("128 > 0"),
-                interval: Duration::from_secs(60),
+                limit: NonZeroU32::new(60).expect("60 > 0"),
+                interval: Duration::from_secs(60 * 1),
             }),
         ];
 
         let circuit_src_rate_limiters = vec![
+            // For each source peer ID one circuit every 2 minute with up to 30 circuits per hour.
             rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
-                // TODO: Made up values. Reconsider these.
-                limit: NonZeroU32::new(128).expect("128 > 0"),
-                interval: Duration::from_secs(60),
+                limit: NonZeroU32::new(30).expect("30 > 0"),
+                interval: Duration::from_secs(60 * 2),
             }),
+            // For each source IP address one circuit every minute with up to 60 circuits per hour.
             rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
-                // TODO: Made up values. Reconsider these.
-                limit: NonZeroU32::new(128).expect("128 > 0"),
-                interval: Duration::from_secs(60),
+                limit: NonZeroU32::new(60).expect("60 > 0"),
+                interval: Duration::from_secs(60 * 1),
             }),
         ];
 
@@ -237,7 +237,7 @@ impl NetworkBehaviour for Relay {
                 let now = Instant::now();
 
                 let handler_event = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
-                    // Deny reservation requests over relayed connections.
+                    // Deny reservation requests over relayed circuits.
                     handler::In::DenyReservationReq {
                         inbound_reservation_req,
                         status: message_proto::Status::PermissionDenied,
@@ -339,9 +339,9 @@ impl NetworkBehaviour for Relay {
                 let now = Instant::now();
 
                 let action = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
-                    // Deny connection requests over relayed connections.
+                    // Deny circuit requests over relayed circuit.
                     //
-                    // An attacker could otherwise build recursive or cyclic connections.
+                    // An attacker could otherwise build recursive or cyclic circuits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
@@ -358,7 +358,7 @@ impl NetworkBehaviour for Relay {
                         .iter_mut()
                         .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
                 {
-                    // Deny connection exceeding limits.
+                    // Deny circuit exceeding limits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
@@ -374,7 +374,7 @@ impl NetworkBehaviour for Relay {
                     .map(|cs| cs.iter().next())
                     .flatten()
                 {
-                    // Accept connection request if reservation present.
+                    // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,
                         src_peer_id: event_source,
@@ -395,7 +395,7 @@ impl NetworkBehaviour for Relay {
                         },
                     }
                 } else {
-                    // Deny connection request if no reservation present.
+                    // Deny circuit request if no reservation present.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
