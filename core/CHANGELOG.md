@@ -1,4 +1,4 @@
-# 0.29.0 [unreleased]
+# 0.29.0 [2021-07-12]
 
 - Switch from `parity-multiaddr` to upstream `multiaddr`.
 

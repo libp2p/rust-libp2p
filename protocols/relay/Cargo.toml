@@ -31,7 +31,7 @@ wasm-timer = "0.2"
 prost-build = "0.8"
 
 [dev-dependencies]
-env_logger = "0.8.3"
+env_logger = "0.9.0"
 libp2p = { path = "../.." }
 libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }

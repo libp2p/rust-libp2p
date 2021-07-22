@@ -207,7 +207,7 @@ where
         Ok(v) => v,
         Err(err) => {
             debug!("Invalid message: {:?}", err);
-            return Err(err.into())
+            return Err(err)
         }
     };
 

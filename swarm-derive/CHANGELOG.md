@@ -1,3 +1,9 @@
+# 0.24.0 [2021-07-12]
+
+- Handle `NetworkBehaviourAction::CloseConnection`. See [PR 2110] for details.
+
+[PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
+
 # 0.23.0 [2021-04-14]
 
 - Extend `NetworkBehaviour` callbacks, more concretely introducing new `fn
