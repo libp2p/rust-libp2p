@@ -98,7 +98,10 @@ pub enum Event {
     /// An inbound reservation has timed out.
     ReservationTimedOut {},
     /// An inbound circuit request has been received.
-    CircuitReqReceived(inbound_hop::CircuitReq),
+    CircuitReqReceived {
+        inbound_circuit_req: inbound_hop::CircuitReq,
+        remote_addr: Multiaddr,
+    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
@@ -271,9 +274,12 @@ impl ProtocolsHandler for Handler {
                     },
                 ));
             }
-            inbound_hop::Req::Connect(circuit_req) => {
+            inbound_hop::Req::Connect(inbound_circuit_req) => {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::CircuitReqReceived(circuit_req),
+                    Event::CircuitReqReceived {
+                        inbound_circuit_req,
+                        remote_addr: self.remote_addr.clone(),
+                    },
                 ));
             }
         }
