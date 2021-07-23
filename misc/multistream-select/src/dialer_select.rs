@@ -32,8 +32,9 @@ use std::{cmp::Ordering, convert::TryFrom as _, iter, mem, pin::Pin, task::{Cont
 ///
 /// This function is given an I/O stream and a list of protocols and returns a
 /// computation that performs the protocol negotiation with the remote. The
-/// returned `Future` resolves with the name of the negotiated protocol and
-/// a [`Negotiated`] I/O stream.
+/// returned `Future` resolves with the name of the negotiated protocol, a
+/// [`Negotiated`] I/O stream and the [`Role`] of the peer on the connection
+/// going forward.
 ///
 /// The chosen message flow for protocol negotiation depends on the numbers of
 /// supported protocols given. That is, this function delegates to serial or
@@ -66,13 +67,13 @@ where
                 Either::Right(dialer_select_proto_parallel(inner, iter, version))
             }
         },
-        Version::V1SimOpen => {
+        Version::V1SimultaneousOpen => {
             Either::Left(dialer_select_proto_serial(inner, iter, version))
         }
     }
 }
 
-/// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
+/// Future, returned by `dialer_select_proto`, which selects a protocol and
 /// either trying protocols in-order, or by requesting all protocols supported
 /// by the remote upfront, from which the first protocol found in the dialer's
 /// list of protocols is selected.
@@ -166,10 +167,9 @@ where
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
-    // TODO: Clone needed to embed ListenerSelectFuture. Still needed?
     I::Item: AsRef<[u8]> + Clone
 {
-    type Output = Result<(I::Item, Negotiated<R>, SimOpenRole), NegotiationError>;
+    type Output = Result<(I::Item, Negotiated<R>, Role), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -198,7 +198,7 @@ where
                             // proposal in one go for efficiency.
                             *this.state = SeqState::SendProtocol { io, protocol };
                         }
-                        Version::V1SimOpen => {
+                        Version::V1SimultaneousOpen => {
                             *this.state = SeqState::SendSimOpen { io, protocol: None };
                         }
                     }
@@ -287,10 +287,10 @@ where
                     };
 
                     match selection_res {
-                        SimOpenRole::Initiator => {
+                        Role::Initiator => {
                             *this.state = SeqState::SendProtocol { io, protocol };
                         }
-                        SimOpenRole::Responder => {
+                        Role::Responder => {
                             let protocols: Vec<_> = this.protocols.collect();
                             *this.state = SeqState::Responder {
                                 responder: crate::listener_select::listener_select_proto_no_header(io, std::iter::once(protocol).chain(protocols.into_iter())),
@@ -301,7 +301,7 @@ where
 
                 SeqState::Responder { mut responder } => {
                     match Pin::new(&mut responder ).poll(cx) {
-                        Poll::Ready(res) => return Poll::Ready(res.map(|(p, io)| (p, io, SimOpenRole::Responder))),
+                        Poll::Ready(res) => return Poll::Ready(res.map(|(p, io)| (p, io, Role::Responder))),
                         Poll::Pending => {
                             *this.state = SeqState::Responder { responder };
                             return Poll::Pending
@@ -328,7 +328,7 @@ where
                         *this.state = SeqState::FlushProtocol { io, protocol }
                     } else {
                         match this.version {
-                            Version::V1 | Version::V1SimOpen => *this.state = SeqState::FlushProtocol { io, protocol },
+                            Version::V1 | Version::V1SimultaneousOpen => *this.state = SeqState::FlushProtocol { io, protocol },
                             // This is the only effect that `V1Lazy` has compared to `V1`:
                             // Optimistically settling on the only protocol that
                             // the dialer supports for this negotiation. Notably,
@@ -337,7 +337,7 @@ where
                                 log::debug!("Dialer: Expecting proposed protocol: {}", p);
                                 let hl = HeaderLine::from(Version::V1Lazy);
                                 let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
-                                return Poll::Ready(Ok((protocol, io, SimOpenRole::Initiator)))
+                                return Poll::Ready(Ok((protocol, io, Role::Initiator)))
                             }
                         }
                     }
@@ -382,7 +382,7 @@ where
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
                             log::debug!("Dialer: Received confirmation for protocol: {}", p);
                             let io = Negotiated::completed(io.into_inner());
-                            return Poll::Ready(Ok((protocol, io, SimOpenRole::Initiator)));
+                            return Poll::Ready(Ok((protocol, io, Role::Initiator)));
                         }
                         Message::NotAvailable => {
                             log::debug!("Dialer: Received rejection of protocol: {}",
@@ -408,14 +408,20 @@ enum SimOpenState<R> {
     SendNonce { io: MessageIO<R> },
     FlushNonce { io: MessageIO<R>, local_nonce: u64 },
     ReadNonce { io: MessageIO<R>, local_nonce: u64 },
-    SendRole { io: MessageIO<R>, local_role: SimOpenRole },
-    FlushRole { io: MessageIO<R>, local_role: SimOpenRole },
-    ReadRole { io: MessageIO<R>, local_role: SimOpenRole },
+    SendRole { io: MessageIO<R>, local_role: Role },
+    FlushRole { io: MessageIO<R>, local_role: Role },
+    ReadRole { io: MessageIO<R>, local_role: Role },
     Done,
 }
 
-// TODO: Rename this to `Role` in general?
-pub enum SimOpenRole {
+/// Role of the local node after protocol negotiation.
+///
+/// Always equals [`Role::Initiator`] unless [`Version::V1SimultaneousOpen`] is
+/// used in which case node may end up in either role after negotiation.
+///
+/// See [`Version::V1SimultaneousOpen`] for details.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
     Initiator,
     Responder,
 }
@@ -426,7 +432,7 @@ where
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Result<(MessageIO<R>, SimOpenRole), NegotiationError>;
+    type Output = Result<(MessageIO<R>, Role), NegotiationError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
 
@@ -478,8 +484,18 @@ where
                     };
 
                     match msg {
-                        // TODO: Document that this might still be the protocol send by the remote with
-                        // the sim open ID.
+                        // As an optimization, the simultaneous open
+                        // multistream-select variant sends both the
+                        // simultaneous open ID (`/libp2p/simultaneous-connect`)
+                        // and a protocol before flushing. In the case where the
+                        // remote acts as a listener already, it can accept or
+                        // decline the attached protocol within the same
+                        // round-trip.
+                        //
+                        // In this particular situation, the remote acts as a
+                        // dialer and uses the simultaneous open variant. Given
+                        // that nonces need to be exchanged first, the attached
+                        // protocol by the remote needs to be ignored.
                         Message::Protocol(_) => {
                             self.state = SimOpenState::ReadNonce { io, local_nonce };
                         }
@@ -492,13 +508,13 @@ where
                                 Ordering::Greater => {
                                     self.state = SimOpenState::SendRole {
                                         io,
-                                        local_role: SimOpenRole::Initiator,
+                                        local_role: Role::Initiator,
                                     };
                                 },
                                 Ordering::Less => {
                                     self.state = SimOpenState::SendRole {
                                         io,
-                                        local_role: SimOpenRole::Responder,
+                                        local_role: Role::Responder,
                                     };
                                 }
                             }
@@ -516,8 +532,8 @@ where
                     }
 
                     let msg = match local_role {
-                        SimOpenRole::Initiator => Message::Initiator,
-                        SimOpenRole::Responder => Message::Responder,
+                        Role::Initiator => Message::Initiator,
+                        Role::Responder => Message::Responder,
                     };
 
                     if let Err(err) = Pin::new(&mut io).start_send(msg) {
@@ -549,8 +565,8 @@ where
                     };
 
                     let result = match local_role {
-                        SimOpenRole::Initiator if remote_msg == Message::Responder => Ok((io, local_role)),
-                        SimOpenRole::Responder if remote_msg == Message::Initiator => Ok((io, local_role)),
+                        Role::Initiator if remote_msg == Message::Responder => Ok((io, local_role)),
+                        Role::Responder if remote_msg == Message::Initiator => Ok((io, local_role)),
 
                         _ => Err(ProtocolError::InvalidMessage.into())
                     };
@@ -590,8 +606,7 @@ where
     I: Iterator,
     I::Item: AsRef<[u8]>
 {
-    // TODO: Is it a hack that DialerSelectPar returns the simopenrole?
-    type Output = Result<(I::Item, Negotiated<R>, SimOpenRole), NegotiationError>;
+    type Output = Result<(I::Item, Negotiated<R>, Role), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -689,7 +704,7 @@ where
                     log::debug!("Dialer: Expecting proposed protocol: {}", p);
                     let io = Negotiated::expecting(io.into_reader(), p, None);
 
-                    return Poll::Ready(Ok((protocol, io, SimOpenRole::Initiator)))
+                    return Poll::Ready(Ok((protocol, io, Role::Initiator)))
                 }
 
                 ParState::Done => panic!("ParState::poll called after completion")

@@ -96,7 +96,7 @@ mod tests;
 
 pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
 pub use self::protocol::ProtocolError;
-pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture, SimOpenRole};
+pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture, Role};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
 
 /// Supported multistream-select versions.
@@ -137,7 +137,18 @@ pub enum Version {
     /// [1]: https://github.com/multiformats/go-multistream/issues/20
     /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
     V1Lazy,
-    V1SimOpen,
+    /// A variant of version 1 that selects a single initiator when both peers are acting as such,
+    /// in other words when both peers simultaneously open a connection.
+    ///
+    /// This multistream-select variant is specified in [1].
+    ///
+    /// Note: [`Version::V1SimultaneousOpen`] should only be used (a) on transports that allow
+    /// simultaneously opened connections, e.g. TCP with socket reuse and (2) during the first
+    /// negotiation on the connection, most likely the secure channel protocol negotiation. In all
+    /// other cases one should use [`Version::V1`] or [`Version::V1Lazy`].
+    ///
+    /// [1]: https://github.com/libp2p/specs/blob/master/connections/simopen.md
+    V1SimultaneousOpen,
     // Draft: https://github.com/libp2p/specs/pull/95
     // V2,
 }

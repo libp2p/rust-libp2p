@@ -16,7 +16,6 @@ use libp2p_core::{
     muxing::{StreamMuxer, StreamMuxerBox},
     network::{Network, NetworkConfig},
     transport,
-    upgrade,
 };
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;

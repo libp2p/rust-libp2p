@@ -38,7 +38,6 @@ use libp2p_core::{
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
-    upgrade,
     multihash::{Code, Multihash, MultihashDigest},
 };
 use libp2p_noise as noise;

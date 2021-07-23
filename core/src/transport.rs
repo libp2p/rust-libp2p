@@ -46,7 +46,6 @@ pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
-pub use self::upgrade::Upgrade;
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -196,8 +195,6 @@ pub trait Transport {
 
     /// Begins a series of protocol upgrades via an
     /// [`upgrade::Builder`](upgrade::Builder).
-    //
-    // TODO: Method still needed now that `upgrade` takes `self` only?
     fn upgrade(self) -> upgrade::Builder<Self>
     where
         Self: Sized,

@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = transport
         .upgrade()
-        .authenticate_with_version(noise::NoiseConfig::xx(noise_keys).into_authenticated(), upgrade::Version::V1SimOpen)
+        .authenticate_with_version(noise::NoiseConfig::xx(noise_keys).into_authenticated(), upgrade::AuthenticationVersion::V1SimultaneousOpen)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 

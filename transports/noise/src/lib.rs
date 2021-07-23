@@ -317,8 +317,9 @@ where
 /// See [`NoiseConfig::into_authenticated`].
 ///
 /// On success, the upgrade yields the [`PeerId`] obtained from the
-/// `RemoteIdentity`. The output of this upgrade is thus directly suitable
-/// for creating an [`authenticated`](libp2p_core::transport::upgrade::Authenticate)
+/// `RemoteIdentity`. The output of this upgrade is thus directly suitable for
+/// creating an
+/// [`authenticated`](libp2p_core::transport::upgrade::Builder::authenticate)
 /// transport for use with a [`Network`](libp2p_core::Network).
 #[derive(Clone)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {

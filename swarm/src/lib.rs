@@ -1186,7 +1186,6 @@ mod tests {
     use futures::{future, executor};
     use libp2p_core::{
         identity,
-        upgrade,
         multiaddr,
         transport
     };

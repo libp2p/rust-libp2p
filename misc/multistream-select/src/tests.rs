@@ -69,7 +69,7 @@ fn select_proto_basic() {
 
     async_std::task::block_on(run(Version::V1));
     async_std::task::block_on(run(Version::V1Lazy));
-    async_std::task::block_on(run(Version::V1SimOpen));
+    async_std::task::block_on(run(Version::V1SimultaneousOpen));
 }
 
 /// Tests the expected behaviour of failed negotiations.
@@ -163,7 +163,7 @@ fn negotiation_failed() {
 
     for (listen_protos, dial_protos) in protos {
         for dial_payload in payloads.clone() {
-            for &version in &[Version::V1, Version::V1Lazy, Version::V1SimOpen] {
+            for &version in &[Version::V1, Version::V1Lazy, Version::V1SimultaneousOpen] {
                 async_std::task::block_on(run(Test {
                     version,
                     listen_protos: listen_protos.clone(),
@@ -235,7 +235,7 @@ fn select_proto_serial() {
 
     async_std::task::block_on(run(Version::V1));
     async_std::task::block_on(run(Version::V1Lazy));
-    async_std::task::block_on(run(Version::V1SimOpen));
+    async_std::task::block_on(run(Version::V1SimultaneousOpen));
 }
 
 #[test]
@@ -264,5 +264,5 @@ fn simultaneous_open() {
         futures::future::join(server, client).await;
     }
 
-    futures::executor::block_on(run(Version::V1SimOpen));
+    futures::executor::block_on(run(Version::V1SimultaneousOpen));
 }

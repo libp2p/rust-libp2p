@@ -68,7 +68,7 @@ pub enum HeaderLine {
 impl From<Version> for HeaderLine {
     fn from(v: Version) -> HeaderLine {
         match v {
-            Version::V1 | Version::V1Lazy | Version::V1SimOpen => HeaderLine::V1,
+            Version::V1 | Version::V1Lazy | Version::V1SimultaneousOpen => HeaderLine::V1,
         }
     }
 }
