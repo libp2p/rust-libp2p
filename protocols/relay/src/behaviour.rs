@@ -756,6 +756,7 @@ impl NetworkBehaviour for Relay {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum BehaviourToListenerMsg {
     ConnectionToRelayEstablished,
     IncomingRelayedConnection {

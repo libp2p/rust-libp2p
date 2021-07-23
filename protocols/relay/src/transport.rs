@@ -198,7 +198,7 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
                 };
 
                 let (to_listener, from_behaviour) = mpsc::channel(0);
-                let mut to_behaviour = self.to_behaviour.clone();
+                let mut to_behaviour = self.to_behaviour;
                 let msg_to_behaviour = Some(
                     async move {
                         to_behaviour
@@ -242,7 +242,7 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
                 let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
                 let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
 
-                let mut to_behaviour = self.to_behaviour.clone();
+                let mut to_behaviour = self.to_behaviour;
                 Ok(EitherFuture::Second(
                     async move {
                         let (tx, rx) = oneshot::channel();

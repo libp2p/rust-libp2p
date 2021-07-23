@@ -330,6 +330,7 @@ where
 
 /// The possible errors of a [`GenDnsConfig`] wrapped transport.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum DnsErr<TErr> {
     /// The underlying transport encountered an error.
     Transport(TErr),

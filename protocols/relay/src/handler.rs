@@ -733,6 +733,7 @@ impl ProtocolsHandler for RelayHandler {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum RelayOutboundOpenInfo {
     Relay {
         dst_peer_id: PeerId,
