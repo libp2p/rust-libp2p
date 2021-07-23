@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let transport = relay_wrapped_transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();

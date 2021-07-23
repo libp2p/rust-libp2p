@@ -95,7 +95,7 @@ fn connect() {
 fn build_relay() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.clone().to_peer_id();
 
     let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
 
@@ -118,7 +118,7 @@ fn build_relay() -> Swarm<Relay> {
 fn build_client() -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.clone().to_peer_id();
 
     let (transport, behaviour) =
         client::Client::new_transport_and_behaviour(local_peer_id, MemoryTransport::default());
@@ -143,7 +143,7 @@ where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     let transport = transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
@@ -223,7 +223,7 @@ async fn wait_for_reservation(
 ) {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::NewListenAddr(addr) if addr != client_addr => {}
+            SwarmEvent::NewListenAddr { address, .. } if address != client_addr => {}
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
                 renewal,
@@ -237,7 +237,7 @@ async fn wait_for_reservation(
 
     // Wait for `NewListenAddr` event.
     match client.select_next_some().await {
-        SwarmEvent::NewListenAddr(addr) if addr == client_addr => {}
+        SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {}
         e => panic!("{:?}", e),
     }
 }
@@ -245,7 +245,7 @@ async fn wait_for_reservation(
 async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::IncomingConnection { .. } => {},
+            SwarmEvent::IncomingConnection { .. } => {}
             SwarmEvent::ConnectionEstablished { endpoint, .. }
                 if endpoint.get_remote_address() == addr =>
             {
@@ -262,7 +262,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
 async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::NewListenAddr(addr) if addr == *new_addr => break,
+            SwarmEvent::NewListenAddr{address , ..} if address == *new_addr => break,
             e => panic!("{:?}", e),
         }
     }

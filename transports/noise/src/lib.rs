@@ -354,7 +354,7 @@ where
     fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
         Box::pin(self.config.upgrade_inbound(socket, info)
             .and_then(|(remote, io)| match remote {
-                RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
+                RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
                 _ => future::err(NoiseError::AuthenticationFailed)
             }))
     }
@@ -377,7 +377,7 @@ where
     fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
         Box::pin(self.config.upgrade_outbound(socket, info)
             .and_then(|(remote, io)| match remote {
-                RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
+                RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
                 _ => future::err(NoiseError::AuthenticationFailed)
             }))
     }

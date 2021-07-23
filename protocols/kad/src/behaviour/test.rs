@@ -64,7 +64,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
-    let local_id = local_public_key.clone().into_peer_id();
+    let local_id = local_public_key.to_peer_id();
     let store = MemoryStore::new(local_id.clone());
     let behaviour = Kademlia::with_config(local_id.clone(), store, cfg.clone());
 

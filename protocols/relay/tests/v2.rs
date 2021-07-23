@@ -188,7 +188,7 @@ fn reuse_connection() {
 fn build_relay() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.clone().to_peer_id();
 
     let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
 
@@ -211,7 +211,7 @@ fn build_relay() -> Swarm<Relay> {
 fn build_client() -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.clone().to_peer_id();
 
     let (transport, behaviour) =
         client::Client::new_transport_and_behaviour(local_peer_id, MemoryTransport::default());
@@ -235,7 +235,7 @@ where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     let transport = transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();

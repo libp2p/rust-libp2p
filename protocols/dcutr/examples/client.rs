@@ -142,8 +142,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::NewListenAddr(addr))) => {
-                    println!("Listening on {:?}", addr);
+                Poll::Ready(Some(SwarmEvent::NewListenAddr{address, ..})) => {
+                    println!("Listening on {:?}", address);
                 }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {
                     println!("{:?}", event)
