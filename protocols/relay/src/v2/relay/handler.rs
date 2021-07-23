@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::relay::CircuitId;
 use crate::v2::copy_future::CopyFuture;
 use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_hop, outbound_stop};
+use crate::v2::relay::CircuitId;
 use bytes::Bytes;
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
@@ -38,7 +38,8 @@ use libp2p_swarm::{
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wasm_timer::Instant;
 
 pub struct Config {
     pub reservation_duration: Duration,
@@ -82,6 +83,7 @@ pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
         inbound_reservation_req: inbound_hop::ReservationReq,
+        remote_addr: Multiaddr,
     },
     /// An inbound reservation request has been accepted.
     ReservationReqAccepted {
@@ -97,7 +99,10 @@ pub enum Event {
     /// An inbound reservation has timed out.
     ReservationTimedOut {},
     /// An inbound circuit request has been received.
-    CircuitReqReceived(inbound_hop::CircuitReq),
+    CircuitReqReceived {
+        inbound_circuit_req: inbound_hop::CircuitReq,
+        remote_addr: Multiaddr,
+    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
@@ -154,8 +159,9 @@ pub struct Prototype {
 impl IntoProtocolsHandler for Prototype {
     type Handler = Handler;
 
-    fn into_handler(self, _remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
+    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         Handler {
+            remote_addr: endpoint.get_remote_address().clone(),
             config: self.config,
             queued_events: Default::default(),
             pending_error: Default::default(),
@@ -182,6 +188,8 @@ impl IntoProtocolsHandler for Prototype {
 /// [`ProtocolsHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
 pub struct Handler {
+    remote_addr: Multiaddr,
+
     /// Static [`Handler`] [`Config`].
     config: Config,
 
@@ -263,12 +271,16 @@ impl ProtocolsHandler for Handler {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::ReservationReqReceived {
                         inbound_reservation_req,
+                        remote_addr: self.remote_addr.clone(),
                     },
                 ));
             }
-            inbound_hop::Req::Connect(circuit_req) => {
+            inbound_hop::Req::Connect(inbound_circuit_req) => {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::CircuitReqReceived(circuit_req),
+                    Event::CircuitReqReceived {
+                        inbound_circuit_req,
+                        remote_addr: self.remote_addr.clone(),
+                    },
                 ));
             }
         }
@@ -417,11 +429,16 @@ impl ProtocolsHandler for Handler {
             ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
                 Status::ConnectionFailed
             }
-            // TODO: This should not happen, as the remote has previously done a reservation.
-            // Doing a reservation but not supporting the stop protocol seems odd.
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
-            )) => Status::ConnectionFailed,
+            )) => {
+                // The remote has previously done a reservation. Doing a reservation but not
+                // supporting the stop protocol is pointless, thus disconnecting.
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::Failed),
+                ));
+                Status::ConnectionFailed
+            }
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
             )) => {
@@ -493,7 +510,6 @@ impl ProtocolsHandler for Handler {
         ));
     }
 
-    // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
     }
@@ -520,32 +536,28 @@ impl ProtocolsHandler for Handler {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
             self.circuits.poll_next_unpin(cx)
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitClosed {
-                            circuit_id,
-                            dst_peer_id,
-                            error: None,
-                        },
-                    ))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitClosed {
+                        circuit_id,
+                        dst_peer_id,
+                        error: None,
+                    }))
                 }
                 Err(e) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitClosed {
-                            circuit_id,
-                            dst_peer_id,
-                            error: Some(e),
-                        },
-                    ))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitClosed {
+                        circuit_id,
+                        dst_peer_id,
+                        error: Some(e),
+                    }))
                 }
             }
         }
 
-        while let Poll::Ready(Some(result)) = self.reservation_accept_futures.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(result)) = self.reservation_accept_futures.poll_next_unpin(cx) {
             match result {
                 Ok(()) => {
                     let renewed = self
@@ -564,7 +576,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some(result)) = self.reservation_deny_futures.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(result)) = self.reservation_deny_futures.poll_next_unpin(cx) {
             match result {
                 Ok(()) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
@@ -579,7 +591,7 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some(result)) = self.circuit_accept_futures.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(result)) = self.circuit_accept_futures.poll_next_unpin(cx) {
             match result {
                 Ok(parts) => {
                     let CircuitParts {
@@ -620,12 +632,10 @@ impl ProtocolsHandler for Handler {
 
                     self.circuits.push(circuit);
 
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitReqAccepted {
-                            circuit_id,
-                            dst_peer_id,
-                        },
-                    ));
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitReqAccepted {
+                        circuit_id,
+                        dst_peer_id,
+                    }));
                 }
                 Err((circuit_id, dst_peer_id, error)) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
@@ -639,17 +649,15 @@ impl ProtocolsHandler for Handler {
             }
         }
 
-        while let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
             self.circuit_deny_futures.poll_next_unpin(cx)
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::CircuitReqDenied {
-                            circuit_id,
-                            dst_peer_id,
-                        },
-                    ));
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::CircuitReqDenied {
+                        circuit_id,
+                        dst_peer_id,
+                    }));
                 }
                 Err(error) => {
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
@@ -673,9 +681,7 @@ impl ProtocolsHandler for Handler {
             .map(|fut| fut.poll_unpin(cx))
         {
             self.active_reservation = None;
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                Event::ReservationTimedOut {},
-            ));
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::ReservationTimedOut {}));
         }
 
         if self.reservation_accept_futures.is_empty()

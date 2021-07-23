@@ -34,6 +34,7 @@ use pin_project::pin_project;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use thiserror::Error;
 
 /// A [`Transport`] wrapping another [`Transport`] enabling client relay capabilities.
 ///
@@ -167,7 +168,7 @@ impl<T: Transport + Clone> Transport for ClientTransport<T> {
                 };
 
                 let (to_listener, from_behaviour) = mpsc::channel(0);
-                let mut to_behaviour = self.to_behaviour.clone();
+                let mut to_behaviour = self.to_behaviour;
                 let msg_to_behaviour = Some(
                     async move {
                         to_behaviour
@@ -212,7 +213,7 @@ impl<T: Transport + Clone> Transport for ClientTransport<T> {
                 let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
                 let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
 
-                let mut to_behaviour = self.to_behaviour.clone();
+                let mut to_behaviour = self.to_behaviour;
                 Ok(EitherFuture::Second(
                     async move {
                         let (tx, rx) = oneshot::channel();
@@ -226,7 +227,7 @@ impl<T: Transport + Clone> Transport for ClientTransport<T> {
                                 send_back: tx,
                             })
                             .await?;
-                        let stream = rx.await??;
+                        let stream = rx.await?.map_err(|()| RelayError::Connect)?;
                         Ok(stream)
                     }
                     .boxed(),
@@ -383,17 +384,21 @@ impl<T: Transport> Stream for RelayListener<T> {
                             remote_addr: Protocol::P2p(src_peer_id.into()).into(),
                         })));
                     }
-                    Poll::Ready(Some(ToListenerMsg::Reservation { addrs })) => {
+                    Poll::Ready(Some(ToListenerMsg::Reservation(Ok(Reservation { addrs })))) => {
                         let mut iter = addrs.into_iter();
                         let first = iter.next();
                         queued_new_addresses.extend(iter);
                         if let Some(addr) = first {
-                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
-                                addr,
-                            ))));
+                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
                         }
                     }
-                    Poll::Ready(None) => return Poll::Ready(None),
+                    Poll::Ready(Some(ToListenerMsg::Reservation(Err(())))) => {
+                        return Poll::Ready(Some(Err(EitherError::B(RelayError::Reservation))));
+                    }
+                    Poll::Ready(None) => {
+                        panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
+
+                    },
                     Poll::Pending => {}
                 }
             }
@@ -435,17 +440,28 @@ impl<T: Transport> Future for RelayedListenerUpgrade<T> {
 }
 
 /// Error that occurred during relay connection setup.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Error)]
 pub enum RelayError {
+    #[error("Missing relay peer id.")]
     MissingRelayPeerId,
+    #[error("Missing relay address.")]
     MissingRelayAddr,
+    #[error("Missing destination peer id.")]
     MissingDstPeerId,
+    #[error("Invalid peer id hash.")]
     InvalidHash,
-    SendingMessageToBehaviour(mpsc::SendError),
-    ResponseFromBehaviourCanceled,
-    DialingRelay,
+    #[error("Failed to send message to relay behaviour: {0:?}")]
+    SendingMessageToBehaviour(#[from] mpsc::SendError),
+    #[error("Response from behaviour was canceled")]
+    ResponseFromBehaviourCanceled(#[from] oneshot::Canceled),
+    #[error("Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")]
     MultipleCircuitRelayProtocolsUnsupported,
+    #[error("One of the provided multiaddresses is malformed.")]
     MalformedMultiaddr,
+    #[error("Failed to get Reservation.")]
+    Reservation,
+    #[error("Failed to connect to destination.")]
+    Connect,
 }
 
 impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
@@ -454,63 +470,9 @@ impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
     }
 }
 
-impl From<mpsc::SendError> for RelayError {
-    fn from(error: mpsc::SendError) -> Self {
-        RelayError::SendingMessageToBehaviour(error)
-    }
-}
 
-impl From<oneshot::Canceled> for RelayError {
-    fn from(_: oneshot::Canceled) -> Self {
-        RelayError::ResponseFromBehaviourCanceled
-    }
-}
 
-impl From<OutgoingRelayReqError> for RelayError {
-    fn from(error: OutgoingRelayReqError) -> Self {
-        match error {
-            OutgoingRelayReqError::DialingRelay => RelayError::DialingRelay,
-        }
-    }
-}
-
-impl std::fmt::Display for RelayError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RelayError::MissingRelayPeerId => {
-                write!(f, "Missing relay peer id.")
-            }
-            RelayError::MissingRelayAddr => {
-                write!(f, "Missing relay address.")
-            }
-            RelayError::MissingDstPeerId => {
-                write!(f, "Missing destination peer id.")
-            }
-            RelayError::InvalidHash => {
-                write!(f, "Invalid peer id hash.")
-            }
-            RelayError::SendingMessageToBehaviour(e) => {
-                write!(f, "Failed to send message to relay behaviour: {:?}", e)
-            }
-            RelayError::ResponseFromBehaviourCanceled => {
-                write!(f, "Response from behaviour was canceled")
-            }
-            RelayError::DialingRelay => {
-                write!(f, "Dialing relay failed")
-            }
-            RelayError::MultipleCircuitRelayProtocolsUnsupported => {
-                write!(f, "Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")
-            }
-            RelayError::MalformedMultiaddr => {
-                write!(f, "One of the provided multiaddresses is malformed.")
-            }
-        }
-    }
-}
-
-impl std::error::Error for RelayError {}
-
-/// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::Relay)
+/// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::relay::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
@@ -520,7 +482,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<RelayedConnection, OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
@@ -531,9 +493,7 @@ pub enum TransportToBehaviourMsg {
 }
 
 pub enum ToListenerMsg {
-    Reservation {
-        addrs: Vec<Multiaddr>,
-    },
+    Reservation(Result<Reservation, ()>),
     IncomingRelayedConnection {
         stream: RelayedConnection,
         src_peer_id: PeerId,
@@ -542,7 +502,6 @@ pub enum ToListenerMsg {
     },
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum OutgoingRelayReqError {
-    DialingRelay,
+pub struct Reservation {
+    pub(crate) addrs: Vec<Multiaddr>,
 }

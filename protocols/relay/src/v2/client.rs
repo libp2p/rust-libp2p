@@ -46,7 +46,6 @@ use std::task::{Context, Poll};
 #[derive(Debug)]
 pub enum Event {
     /// An outbound reservation has been accepted.
-    // TODO: Should this be renamed to ReservationAccepted?
     ReservationReqAccepted {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
@@ -320,9 +319,6 @@ impl NetworkBehaviour for Client {
             }
         }
 
-        // TODO: Should we return NetworkBehaviourAction::ReportObservedAddr when an outbound
-        // reservation is acknowledged with the addresses of the relay?
-
         Poll::Pending
     }
 }
@@ -379,17 +375,17 @@ impl RelayedConnection {
                     read_buffer,
                     drop_notifier,
                 };
-                return Poll::Ready(Ok(()));
+                Poll::Ready(Ok(()))
             }
             Poll::Ready(Err(e)) => {
-                return Poll::Ready(Err(e));
+                Poll::Ready(Err(e))
             }
             Poll::Pending => {
                 **self = RelayedConnection::InboundAccepting {
                     accept,
                     drop_notifier,
                 };
-                return Poll::Pending;
+                Poll::Pending
             }
         }
     }
@@ -554,7 +550,7 @@ enum RqstPendingConnection {
     Circuit {
         dst_peer_id: PeerId,
         relay_addr: Multiaddr,
-        send_back: oneshot::Sender<Result<RelayedConnection, transport::OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
     },
 }
 

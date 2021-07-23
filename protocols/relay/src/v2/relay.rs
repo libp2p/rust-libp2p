@@ -21,6 +21,7 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **relay**.
 
 mod handler;
+pub mod rate_limiter;
 
 use crate::v2::message_proto;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
@@ -28,38 +29,67 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use wasm_timer::Instant;
 
-// TODO: Expose this as RelayConfig?
+/// Configuration for the [`Relay`] [`NetworkBehaviour`].
+///
+/// # Panics
+///
+/// [`Config::max_circuit_duration`] may not exceed [`u32::MAX`].
 pub struct Config {
-    // TODO: Should we use u32?
     pub max_reservations: usize,
-    pub _max_reservations_per_ip: u32,
-    // TODO: Good idea?
-    pub _max_reservations_per_asn: u32,
     pub reservation_duration: Duration,
+    // TODO: Mutable state in a config. Good idea?
+    pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
-    // TODO: Should we use u32?
     pub max_circuits: usize,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
+    // TODO: Mutable state in a config. Good idea?
+    pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let reservation_rate_limiters = vec![
+            // For each peer ID one reservation every 2 minutes with up to 30 reservations per hour.
+            rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
+                limit: NonZeroU32::new(30).expect("30 > 0"),
+                interval: Duration::from_secs(60 * 2),
+            }),
+            // For each IP address one reservation every minute with up to 60 reservations per hour.
+            rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
+                limit: NonZeroU32::new(60).expect("60 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+        ];
+
+        let circuit_src_rate_limiters = vec![
+            // For each source peer ID one circuit every 2 minute with up to 30 circuits per hour.
+            rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
+                limit: NonZeroU32::new(30).expect("30 > 0"),
+                interval: Duration::from_secs(60 * 2),
+            }),
+            // For each source IP address one circuit every minute with up to 60 circuits per hour.
+            rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
+                limit: NonZeroU32::new(60).expect("60 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+        ];
+
         Config {
             max_reservations: 128,
-            _max_reservations_per_ip: 4,
-            // TODO: Good idea?
-            _max_reservations_per_asn: 32,
             reservation_duration: Duration::from_secs(60 * 60),
+            reservation_rate_limiters,
 
-            // TODO: Shouldn't we have a limit per IP and ASN as well?
             max_circuits: 16,
             max_circuit_duration: Duration::from_secs(2 * 60),
             max_circuit_bytes: 1 << 17, // 128 kibibyte
+            circuit_src_rate_limiters,
         }
     }
 }
@@ -203,14 +233,35 @@ impl NetworkBehaviour for Relay {
         match event {
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
+                remote_addr,
             } => {
-                let event = if self
+                let now = Instant::now();
+
+                let handler_event = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
+                    // Deny reservation requests over relayed circuits.
+                    handler::In::DenyReservationReq {
+                        inbound_reservation_req,
+                        status: message_proto::Status::PermissionDenied,
+                    }
+                } else if self
                     .reservations
                     .iter()
                     .map(|(_, cs)| cs.len())
                     .sum::<usize>()
-                    < self.config.max_reservations
+                    >= self.config.max_reservations
+                    || !self
+                        .config
+                        .reservation_rate_limiters
+                        .iter_mut()
+                        .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
                 {
+                    // Deny reservation exceeding limits.
+                    handler::In::DenyReservationReq {
+                        inbound_reservation_req,
+                        status: message_proto::Status::ResourceLimitExceeded,
+                    }
+                } else {
+                    // Accept reservation.
                     self.reservations
                         .entry(event_source)
                         .or_default()
@@ -219,19 +270,14 @@ impl NetworkBehaviour for Relay {
                         inbound_reservation_req,
                         addrs: vec![],
                     }
-                } else {
-                    handler::In::DenyReservationReq {
-                        inbound_reservation_req,
-                        status: message_proto::Status::ResourceLimitExceeded,
-                    }
                 };
 
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
-                        event,
-                    })
+                        event: handler_event,
+                    });
             }
             handler::Event::ReservationReqAccepted { renewed } => {
                 // Ensure local eventual consistent reservation state matches handler (source of
@@ -287,27 +333,49 @@ impl NetworkBehaviour for Relay {
                         },
                     ));
             }
-            handler::Event::CircuitReqReceived(inbound_circuit_req) => {
-                if self.circuits.len() >= self.config.max_circuits {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            handler: NotifyHandler::One(connection),
-                            peer_id: event_source,
-                            event: handler::In::DenyCircuitReq {
-                                circuit_id: None,
-                                inbound_circuit_req,
-                                status: message_proto::Status::ResourceLimitExceeded,
-                            },
-                        });
+            handler::Event::CircuitReqReceived {
+                inbound_circuit_req,
+                remote_addr,
+            } => {
+                let now = Instant::now();
+
+                let action = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
+                    // Deny circuit requests over relayed circuit.
+                    //
+                    // An attacker could otherwise build recursive or cyclic circuits.
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
+                        event: handler::In::DenyCircuitReq {
+                            circuit_id: None,
+                            inbound_circuit_req,
+                            status: message_proto::Status::PermissionDenied,
+                        },
+                    }
+                } else if self.circuits.len() >= self.config.max_circuits
+                    || !self
+                        .config
+                        .circuit_src_rate_limiters
+                        .iter_mut()
+                        .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
+                {
+                    // Deny circuit exceeding limits.
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
+                        event: handler::In::DenyCircuitReq {
+                            circuit_id: None,
+                            inbound_circuit_req,
+                            status: message_proto::Status::ResourceLimitExceeded,
+                        },
+                    }
                 } else if let Some(dst_conn) = self
                     .reservations
                     .get(&inbound_circuit_req.dst())
                     .map(|cs| cs.iter().next())
                     .flatten()
                 {
-                    // TODO: Restrict the amount of circuits between two peers and one single
-                    // peer.
-
+                    // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,
                         src_peer_id: event_source,
@@ -316,30 +384,30 @@ impl NetworkBehaviour for Relay {
                         dst_connection_id: *dst_conn,
                     });
 
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            handler: NotifyHandler::One(*dst_conn),
-                            peer_id: event_source,
-                            event: handler::In::NegotiateOutboundConnect {
-                                circuit_id,
-                                inbound_circuit_req,
-                                relay_peer_id: self.local_peer_id,
-                                src_peer_id: event_source,
-                                src_connection_id: connection,
-                            },
-                        });
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(*dst_conn),
+                        peer_id: event_source,
+                        event: handler::In::NegotiateOutboundConnect {
+                            circuit_id,
+                            inbound_circuit_req,
+                            relay_peer_id: self.local_peer_id,
+                            src_peer_id: event_source,
+                            src_connection_id: connection,
+                        },
+                    }
                 } else {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            handler: NotifyHandler::One(connection),
-                            peer_id: event_source,
-                            event: handler::In::DenyCircuitReq {
-                                circuit_id: None,
-                                inbound_circuit_req,
-                                status: message_proto::Status::NoReservation,
-                            },
-                        });
-                }
+                    // Deny circuit request if no reservation present.
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
+                        event: handler::In::DenyCircuitReq {
+                            circuit_id: None,
+                            inbound_circuit_req,
+                            status: message_proto::Status::NoReservation,
+                        },
+                    }
+                };
+                self.queued_actions.push_back(action);
             }
             handler::Event::CircuitReqDenied {
                 circuit_id,
@@ -480,12 +548,8 @@ impl NetworkBehaviour for Relay {
                     .map(|a| {
                         a.addr
                             .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                            // TODO: Is it really required to add the p2p circuit protocol at the end? Why?
-                            .with(Protocol::P2pCircuit)
                     })
                     .collect();
-                // TODO remove
-                assert!(!addrs.is_empty())
             }
 
             return Poll::Ready(event);
@@ -516,9 +580,9 @@ impl CircuitsTracker {
     }
 
     fn accepted(&mut self, circuit_id: CircuitId) {
-        self.circuits
-            .get_mut(&circuit_id)
-            .map(|c| c.status = CircuitStatus::Accepted);
+        if let Some(c) = self.circuits.get_mut(&circuit_id) {
+            c.status = CircuitStatus::Accepted;
+        };
     }
 
     fn remove(&mut self, circuit_id: CircuitId) -> Option<Circuit> {

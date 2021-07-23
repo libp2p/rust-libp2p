@@ -479,6 +479,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
                     }
+                    std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
+                    }
                     std::task::Poll::Pending => break,
                 }
             }

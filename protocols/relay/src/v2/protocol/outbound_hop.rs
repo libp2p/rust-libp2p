@@ -27,11 +27,13 @@ use futures_timer::Delay;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::io::Cursor;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{error, fmt, iter};
+use std::iter;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
+use wasm_timer::Instant;
 
 pub enum Upgrade {
     Reserve,
@@ -75,8 +77,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let mut encoded_msg = Vec::new();
         msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("Vec to have sufficient capacity.");
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_MESSAGE_SIZE);
@@ -87,7 +88,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
             let HopMessage {
                 r#type,
@@ -130,7 +131,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                         Some(
                             unix_timestamp_to_instant(expires)
                                 .and_then(|instant| instant.checked_duration_since(Instant::now()))
-                                .map(|duration| Delay::new(duration))
+                                .map(Delay::new)
                                 .ok_or(UpgradeError::InvalidReservationExpiration)?,
                         )
                     } else {
@@ -169,94 +170,36 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
+    #[error("Failed to decode message: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Expected 'status' field to be set.")]
     MissingStatusField,
+    #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
+    #[error("Expected at least one address in reservation.")]
     NoAddressesinReservation,
+    #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
+    #[error("Invalid addresses in reservation.")]
     InvalidReservationAddrs,
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
+    #[error("Unexpected message type 'reserve'")]
     UnexpectedTypeReserve,
+    #[error("Failed to parse response type field.")]
     ParseStatusField,
+    #[error("Unexpected message status '{0:?}'")]
     UnexpectedStatus(Status),
-}
-
-impl From<std::io::Error> for UpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        UpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        UpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for UpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            UpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            UpgradeError::MissingStatusField => {
-                write!(f, "Expected 'status' field to be set.")
-            }
-            UpgradeError::MissingReservationField => {
-                write!(f, "Expected 'reservation' field to be set.")
-            }
-            UpgradeError::NoAddressesinReservation => {
-                write!(f, "Expected at least one address in reservation.")
-            }
-            UpgradeError::InvalidReservationExpiration => {
-                write!(f, "Invalid expiration timestamp in reservation.")
-            }
-            UpgradeError::InvalidReservationAddrs => {
-                write!(f, "Invalid addresses in reservation.")
-            }
-            UpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::UnexpectedTypeConnect => {
-                write!(f, "Unexpected message type 'connect'")
-            }
-            UpgradeError::UnexpectedTypeReserve => {
-                write!(f, "Unexpected message type 'reserve'")
-            }
-            UpgradeError::ParseStatusField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::UnexpectedStatus(status) => {
-                write!(f, "Unexpected message status '{:?}'", status)
-            }
-        }
-    }
-}
-
-impl error::Error for UpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            UpgradeError::Decode(e) => Some(e),
-            UpgradeError::Io(e) => Some(e),
-            UpgradeError::MissingStatusField => None,
-            UpgradeError::MissingReservationField => None,
-            UpgradeError::NoAddressesinReservation => None,
-            UpgradeError::InvalidReservationExpiration => None,
-            UpgradeError::InvalidReservationAddrs => None,
-            UpgradeError::ParseTypeField => None,
-            UpgradeError::UnexpectedTypeConnect => None,
-            UpgradeError::UnexpectedTypeReserve => None,
-            UpgradeError::ParseStatusField => None,
-            UpgradeError::UnexpectedStatus(_) => None,
-        }
-    }
 }
 
 fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
@@ -266,9 +209,7 @@ fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-        )?
-        .try_into()
-        .ok()?,
+        )?,
     ))
 }
 

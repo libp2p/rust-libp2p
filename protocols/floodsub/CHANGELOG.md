@@ -1,6 +1,11 @@
-# 0.30.0 [unreleased]
+# 0.30.0 [2021-07-12]
 
 - Update dependencies.
+
+- Change `FloodsubDecodeError::ReadError` from a `upgrade::ReadOneError` to
+  `std::io::Error`. See [PR 2111].
+
+[PR 2111]: https://github.com/libp2p/rust-libp2p/pull/2111
 
 # 0.29.0 [2021-04-13]
 

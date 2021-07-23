@@ -28,8 +28,9 @@ use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::convert::TryInto;
 use std::io::Cursor;
+use std::iter;
 use std::time::Duration;
-use std::{error, fmt, iter};
+use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {
@@ -60,8 +61,12 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 addrs: vec![],
             }),
             limit: Some(Limit {
-                // TODO: Handle unwrap?
-                duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
                 data: Some(self.max_circuit_bytes),
             }),
             status: None,
@@ -69,8 +74,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let mut encoded_msg = Vec::new();
         msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("Vec to have sufficient capacity.");
 
         let mut codec = UviBytes::default();
         codec.set_max_len(MAX_MESSAGE_SIZE);
@@ -81,7 +85,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
             let StopMessage {
                 r#type,
@@ -121,67 +125,24 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
+    #[error("Failed to decode message: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Expected 'status' field to be set.")]
     MissingStatusField,
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
+    #[error("Failed to parse response type field.")]
     ParseStatusField,
+    #[error("Unexpected message status '{0:?}'")]
     UnexpectedStatus(Status),
-}
-
-impl From<std::io::Error> for UpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        UpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        UpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for UpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            UpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            UpgradeError::MissingStatusField => {
-                write!(f, "Expected 'status' field to be set.")
-            }
-            UpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::UnexpectedTypeConnect => {
-                write!(f, "Unexpected message type 'connect'")
-            }
-            UpgradeError::ParseStatusField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::UnexpectedStatus(status) => {
-                write!(f, "Unexpected message status '{:?}'", status)
-            }
-        }
-    }
-}
-
-impl error::Error for UpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            UpgradeError::Decode(e) => Some(e),
-            UpgradeError::Io(e) => Some(e),
-            UpgradeError::MissingStatusField => None,
-            UpgradeError::ParseTypeField => None,
-            UpgradeError::UnexpectedTypeConnect => None,
-            UpgradeError::ParseStatusField => None,
-            UpgradeError::UnexpectedStatus(_) => None,
-        }
-    }
 }

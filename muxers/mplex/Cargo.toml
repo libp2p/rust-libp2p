@@ -24,7 +24,7 @@ unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 [dev-dependencies]
 async-std = "1.7.0"
 criterion = "0.3"
-env_logger = "0.8"
+env_logger = "0.9"
 futures = "0.3"
 libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-plaintext = { path = "../../transports/plaintext" }

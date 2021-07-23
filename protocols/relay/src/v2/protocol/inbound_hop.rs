@@ -28,8 +28,9 @@ use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::convert::TryInto;
 use std::io::Cursor;
+use std::iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{error, fmt, iter};
+use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {
@@ -61,7 +62,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
 
             let HopMessage {
                 r#type,
@@ -82,7 +83,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 hop_message::Type::Connect => {
                     let dst = PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
                         .map_err(|_| UpgradeError::ParsePeerId)?;
-                    Ok(Req::Connect(CircuitReq { substream, dst }))
+                    Ok(Req::Connect(CircuitReq { dst, substream }))
                 }
                 hop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
             }
@@ -91,64 +92,24 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
+    #[error("Failed to decode message: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Failed to parse peer id.")]
     ParsePeerId,
+    #[error("Expected 'peer' field to be set.")]
     MissingPeer,
+    #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
-}
-
-impl From<std::io::Error> for UpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        UpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        UpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for UpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            UpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            UpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            UpgradeError::ParsePeerId => {
-                write!(f, "Failed to parse peer id.")
-            }
-            UpgradeError::MissingPeer => {
-                write!(f, "Expected 'peer' field to be set.")
-            }
-            UpgradeError::UnexpectedTypeStatus => {
-                write!(f, "Unexpected message type 'status'")
-            }
-        }
-    }
-}
-
-impl error::Error for UpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            UpgradeError::Decode(e) => Some(e),
-            UpgradeError::Io(e) => Some(e),
-            UpgradeError::ParseTypeField => None,
-            UpgradeError::ParsePeerId => None,
-            UpgradeError::MissingPeer => None,
-            UpgradeError::UnexpectedTypeStatus => None,
-        }
-    }
 }
 
 pub enum Req {
@@ -176,12 +137,15 @@ impl ReservationReq {
                         .unwrap()
                         .as_secs(),
                 ),
-                // TODO: Does this need to be set?
                 voucher: None,
             }),
             limit: Some(Limit {
-                // TODO: Handle unwrap
-                duration: Some(self.max_circuit_duration.as_secs().try_into().unwrap()),
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
                 data: Some(self.max_circuit_bytes),
             }),
             status: Some(Status::Ok.into()),
@@ -205,8 +169,7 @@ impl ReservationReq {
     async fn send(mut self, msg: HopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-            // TODO: Sure panicing is safe here?
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("BytesMut to have sufficient capacity.");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;
         self.substream.close().await?;
@@ -265,8 +228,7 @@ impl CircuitReq {
     async fn send(&mut self, msg: HopMessage) -> Result<(), std::io::Error> {
         let mut msg_bytes = BytesMut::new();
         msg.encode(&mut msg_bytes)
-            // TODO: Sure panicing is safe here?
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("BytesMut to have sufficient capacity.");
         self.substream.send(msg_bytes.freeze()).await?;
         self.substream.flush().await?;
 

@@ -305,23 +305,31 @@ async fn wait_for_reservation(
     relay_peer_id: PeerId,
     is_renewal: bool,
 ) {
+    let mut new_listen_addr = false;
+    let mut reservation_req_accepted = false;
+
     loop {
         match client.select_next_some().await {
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
                 renewal,
-            })) if relay_peer_id == peer_id && renewal == is_renewal => break,
+            })) if relay_peer_id == peer_id && renewal == is_renewal => {
+                reservation_req_accepted = true;
+                if new_listen_addr {
+                    break;
+                }
+            }
+            SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {
+                new_listen_addr = true;
+                if reservation_req_accepted {
+                    break;
+                }
+            }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
-    }
-
-    // Wait for `NewListenAddr` event.
-    match client.select_next_some().await {
-        SwarmEvent::NewListenAddr(addr) if addr == client_addr => {}
-        e => panic!("{:?}", e),
     }
 }
 
