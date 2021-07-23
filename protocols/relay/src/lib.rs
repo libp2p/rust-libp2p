@@ -35,7 +35,7 @@
 //! #
 //! # let local_key = identity::Keypair::generate_ed25519();
 //! # let local_public_key = local_key.public();
-//! # let local_peer_id = local_public_key.clone().into_peer_id();
+//! # let local_peer_id = local_public_key.to_peer_id();
 //! # let plaintext = PlainText2Config {
 //! #     local_public_key: local_public_key.clone(),
 //! # };

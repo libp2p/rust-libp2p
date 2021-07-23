@@ -229,11 +229,23 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
         error: PendingConnectionError<io::Error>,
     },
     /// One of our listeners has reported a new local listening address.
-    NewListenAddr(Multiaddr),
+    NewListenAddr{
+        /// The listener that is listening on the new address.
+        listener_id: ListenerId,
+        /// The new address that is being listened on.
+        address: Multiaddr
+    },
     /// One of our listeners has reported the expiration of a listening address.
-    ExpiredListenAddr(Multiaddr),
+    ExpiredListenAddr{
+        /// The listener that is no longer listening on the address.
+        listener_id: ListenerId,
+        /// The expired address.
+        address: Multiaddr
+    },
     /// One of the listeners gracefully closed.
     ListenerClosed {
+        /// The listener that closed.
+        listener_id: ListenerId,
         /// The addresses that the listener was listening on. These addresses are now considered
         /// expired, similar to if a [`ExpiredListenAddr`](SwarmEvent::ExpiredListenAddr) event
         /// has been generated for each of them.
@@ -244,6 +256,8 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
     },
     /// One of the listeners reported a non-fatal error.
     ListenerError {
+        /// The listener that errored.
+        listener_id: ListenerId,
         /// The listener error.
         error: io::Error,
     },
@@ -328,8 +342,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Starts listening on the given address.
-    ///
     /// Returns an error if the address is not supported.
+    ///
+    /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
+    /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         let id = self.network.listen_on(addr)?;
         self.behaviour.inject_new_listener(id);
@@ -588,13 +604,19 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.listened_addrs.push(listen_addr.clone())
                     }
                     this.behaviour.inject_new_listen_addr(listener_id, &listen_addr);
-                    return Poll::Ready(SwarmEvent::NewListenAddr(listen_addr));
+                    return Poll::Ready(SwarmEvent::NewListenAddr {
+                        listener_id, 
+                        address: listen_addr
+                    });
                 }
                 Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr }) => {
                     log::debug!("Listener {:?}; Expired address {:?}.", listener_id, listen_addr);
                     this.listened_addrs.retain(|a| a != &listen_addr);
                     this.behaviour.inject_expired_listen_addr(listener_id, &listen_addr);
-                    return Poll::Ready(SwarmEvent::ExpiredListenAddr(listen_addr));
+                    return Poll::Ready(SwarmEvent::ExpiredListenAddr{
+                        listener_id,
+                        address: listen_addr
+                    });
                 }
                 Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason }) => {
                     log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
@@ -606,6 +628,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         Err(err) => Err(err),
                     });
                     return Poll::Ready(SwarmEvent::ListenerClosed {
+                        listener_id,
                         addresses,
                         reason,
                     });
@@ -613,6 +636,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Poll::Ready(NetworkEvent::ListenerError { listener_id, error }) => {
                     this.behaviour.inject_listener_error(listener_id, &error);
                     return Poll::Ready(SwarmEvent::ListenerError {
+                        listener_id,
                         error,
                     });
                 },

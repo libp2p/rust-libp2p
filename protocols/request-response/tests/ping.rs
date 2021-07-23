@@ -98,7 +98,7 @@ fn ping_protocol() {
     let peer1 = async move {
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::NewListenAddr { address, .. }=> tx.send(address).await.unwrap(),
                 SwarmEvent::Behaviour(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. }
@@ -312,7 +312,7 @@ fn ping_protocol_throttled() {
     let peer1 = async move {
         for i in 1 .. {
             match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                 SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. },
@@ -383,7 +383,7 @@ fn ping_protocol_throttled() {
 
 fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = id_keys.public().into_peer_id();
+    let peer_id = id_keys.public().to_peer_id();
     let noise_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)

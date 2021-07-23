@@ -175,8 +175,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
-                    if let SwarmEvent::NewListenAddr(addr) = event {
-                        println!("Listening on {:?}", addr);
+                    if let SwarmEvent::NewListenAddr { address, .. } = event {
+                        println!("Listening on {:?}", address);
                     }
                 }
                 Poll::Ready(None) => return Poll::Ready(Ok(())),

@@ -64,7 +64,7 @@ fn ping_pong() {
         let peer1 = async move {
             loop {
                 match swarm1.select_next_some().await {
-                    SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
+                    SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                     SwarmEvent::Behaviour(PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) }) => {
                         count1 -= 1;
                         if count1 == 0 {
@@ -137,7 +137,7 @@ fn max_failures() {
 
             loop {
                 match swarm1.select_next_some().await {
-                    SwarmEvent::NewListenAddr(listener) => tx.send(listener).await.unwrap(),
+                    SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                     SwarmEvent::Behaviour(PingEvent {
                         result: Ok(PingSuccess::Ping { .. }), ..
                     }) => {
@@ -195,7 +195,7 @@ fn mk_transport(muxer: MuxerChoice) -> (
     transport::Boxed<(PeerId, StreamMuxerBox)>
 ) {
     let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = id_keys.public().into_peer_id();
+    let peer_id = id_keys.public().to_peer_id();
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)
