@@ -1,4 +1,6 @@
-# Unreleased
+# 0.31.0 [unreleased]
+
+- Update dependencies.
 
 - Provide default implementations for all functions of `NetworkBehaviour`,
   except for `new_handler`, `inject_event` and `poll`.

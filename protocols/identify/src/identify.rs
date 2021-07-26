@@ -471,7 +471,7 @@ mod tests {
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
                     .with_agent_version("b".to_string()));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -480,7 +480,7 @@ mod tests {
             let protocol = Identify::new(
                 IdentifyConfig::new("c".to_string(), pubkey.clone())
                     .with_agent_version("d".to_string()));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -548,7 +548,7 @@ mod tests {
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
                     // Delay identification requests so we can test the push protocol.
                     .with_initial_delay(Duration::from_secs(u32::MAX as u64)));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -559,7 +559,7 @@ mod tests {
                     .with_agent_version("b".to_string())
                     // Delay identification requests so we can test the push protocol.
                     .with_initial_delay(Duration::from_secs(u32::MAX as u64)));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -605,7 +605,7 @@ mod tests {
                     }
                 }
 
-                swarm2.behaviour_mut().push(std::iter::once(pubkey1.clone().into_peer_id()));
+                swarm2.behaviour_mut().push(std::iter::once(pubkey1.to_peer_id()));
             }
         })
     }

@@ -53,8 +53,8 @@ pub struct Remote {
 impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
-            id: Some(config.local_public_key.clone().into_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.clone().into_protobuf_encoding())
+            id: Some(config.local_public_key.to_peer_id().to_bytes()),
+            pubkey: Some(config.local_public_key.to_protobuf_encoding())
         };
         let mut buf = Vec::with_capacity(exchange.encoded_len());
         exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
@@ -95,7 +95,7 @@ impl HandshakeContext<Local> {
         };
 
         // Check the validity of the remote's `Exchange`.
-        if peer_id != public_key.clone().into_peer_id() {
+        if peer_id != public_key.to_peer_id() {
             debug!("the remote's `PeerId` isn't consistent with the remote's public key");
             return Err(PlainTextError::InvalidPeerId)
         }
