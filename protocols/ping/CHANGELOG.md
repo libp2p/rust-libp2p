@@ -1,4 +1,6 @@
-# Unreleased
+# 0.31.0 [unreleased]
+
+- Update dependencies.
 
 - Don't close connection if ping protocol is unsupported by remote.
   Previously, a failed protocol negotation for ping caused a force close of the connection.

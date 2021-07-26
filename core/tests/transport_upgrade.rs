@@ -80,7 +80,7 @@ where
 #[test]
 fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
-    let listener_id = listener_keys.public().into_peer_id();
+    let listener_id = listener_keys.public().to_peer_id();
     let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&listener_keys).unwrap();
     let listener_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
@@ -96,7 +96,7 @@ fn upgrade_pipeline() {
         });
 
     let dialer_keys = identity::Keypair::generate_ed25519();
-    let dialer_id = dialer_keys.public().into_peer_id();
+    let dialer_id = dialer_keys.public().to_peer_id();
     let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&dialer_keys).unwrap();
     let dialer_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)

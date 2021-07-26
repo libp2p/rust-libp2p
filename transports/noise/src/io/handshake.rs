@@ -432,7 +432,7 @@ where
     let mut pb = payload_proto::NoiseHandshakePayload::default();
 
     if state.send_identity {
-        pb.identity_key = state.identity.public.clone().into_protobuf_encoding()
+        pb.identity_key = state.identity.public.to_protobuf_encoding()
     }
 
     if let Some(ref sig) = state.identity.signature {
