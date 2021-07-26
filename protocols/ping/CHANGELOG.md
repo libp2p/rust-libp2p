@@ -8,7 +8,12 @@
   To allow networks where some nodes don't support ping, we now emit
   `PingFailure::Unsupported` once for every connection on which ping is not supported.
 
-  Fixes [#2109](https://github.com/libp2p/rust-libp2p/issues/2109).
+  In case you want to stick with the old behavior, you need to close the connection
+  manually on `PingFailure::Unsupported`.
+
+  Fixes [#2109](https://github.com/libp2p/rust-libp2p/issues/2109). Also see [PR 2149].
+
+  [PR 2149]: https://github.com/libp2p/rust-libp2p/pull/2149/
 
 # 0.30.0 [2021-07-12]
 
