@@ -194,7 +194,7 @@ pub struct PingHandler {
     state: State
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
     /// We are inactive because the other peer doesn't support ping.
     Inactive {
@@ -398,4 +398,3 @@ enum PingState {
     /// A ping is being sent and the response awaited.
     Ping(PingFuture),
 }
-
