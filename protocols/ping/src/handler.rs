@@ -252,6 +252,8 @@ impl ProtocolsHandler for PingHandler {
 
         let error = match error {
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                debug_assert_eq!(self.state, State::Active);
+
                 self.state = State::Inactive {
                     reported: false
                 };
