@@ -132,7 +132,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _: PeerId,
         _: ConnectionId,
         _: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
-    ) { }
+    );
 
     /// Indicates to the behaviour that we tried to reach an address, but failed.
     ///

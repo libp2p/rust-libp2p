@@ -1156,6 +1156,15 @@ impl NetworkBehaviour for DummyBehaviour {
         protocols_handler::DummyProtocolsHandler::default()
     }
 
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
+    ) {
+        match event { }
+    }
+
     fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) ->
         Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as
         ProtocolsHandler>::InEvent, Self::OutEvent>>

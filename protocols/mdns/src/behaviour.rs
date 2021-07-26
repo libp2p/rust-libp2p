@@ -259,6 +259,15 @@ impl NetworkBehaviour for Mdns {
             .set_interval_at(Instant::now(), self.query_interval);
     }
 
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: libp2p_core::connection::ConnectionId,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
+    ) {
+        match event { }
+    }
+
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
