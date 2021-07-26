@@ -194,7 +194,6 @@ pub struct PingHandler {
     state: State
 }
 
-/// Models our knowledge of the other peer's support of the ping protocol.
 #[derive(Debug, Clone, Copy)]
 enum State {
     /// We are inactive because the other peer doesn't support ping.
