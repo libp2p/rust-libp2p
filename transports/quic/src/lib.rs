@@ -102,7 +102,7 @@ pub trait ToLibp2p {
     fn to_keypair(&self) -> identity::Keypair;
     fn to_public(&self) -> identity::PublicKey;
     fn to_peer_id(&self) -> PeerId {
-        self.to_public().into_peer_id()
+        self.to_public().to_peer_id()
     }
 }
 

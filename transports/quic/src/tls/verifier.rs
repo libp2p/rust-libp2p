@@ -234,5 +234,5 @@ fn parse_libp2p_extension(extension: Input<'_>) -> Result<Libp2pExtension<'_>, E
 pub fn extract_peerid_or_panic(certificate: &[u8]) -> PeerId {
     let r = parse_certificate(certificate)
         .expect("we already checked that the certificate was valid during the handshake; qed");
-    PeerId::from_public_key(r.1.peer_key)
+    PeerId::from_public_key(&r.1.peer_key)
 }

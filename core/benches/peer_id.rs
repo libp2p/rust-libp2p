@@ -24,7 +24,7 @@ use libp2p_core::{identity, PeerId};
 fn from_bytes(c: &mut Criterion) {
     let peer_id_bytes = identity::Keypair::generate_ed25519()
         .public()
-        .into_peer_id()
+        .to_peer_id()
         .to_bytes();
 
     c.bench_function("from_bytes", |b| {
@@ -37,7 +37,7 @@ fn from_bytes(c: &mut Criterion) {
 fn clone(c: &mut Criterion) {
     let peer_id = identity::Keypair::generate_ed25519()
         .public()
-        .into_peer_id();
+        .to_peer_id();
 
     c.bench_function("clone", |b| {
         b.iter(|| {
@@ -51,7 +51,7 @@ fn sort_vec(c: &mut Criterion) {
         .map(|_| {
             identity::Keypair::generate_ed25519()
                 .public()
-                .into_peer_id()
+                .to_peer_id()
         })
         .collect();
 

@@ -152,8 +152,7 @@ jobs:
     - name: Run cargo clippy
       uses: actions-rs/cargo@v1.0.3
       with:
-        command: clippy
-        args: -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style
+        command: custom-clippy # cargo alias to allow reuse of config locally
 
   integration-test:
     name: Integration tests

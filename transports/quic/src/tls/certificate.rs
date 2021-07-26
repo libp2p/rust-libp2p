@@ -54,7 +54,7 @@ pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::
     // Generate the libp2p-specific extension.
     let libp2p_extension: rcgen::CustomExtension = {
         let extension_content = {
-            let serialized_pubkey = keypair.public().into_protobuf_encoding();
+            let serialized_pubkey = keypair.public().to_protobuf_encoding();
             yasna::construct_der(|writer| {
                 writer.write_sequence(|writer| {
                     writer
