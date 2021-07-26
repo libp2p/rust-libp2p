@@ -1249,7 +1249,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = MemoryTransport::default();
 
@@ -1295,7 +1295,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = MemoryTransport::default();
 
@@ -1322,7 +1322,7 @@ fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = MemoryTransport::default();
 
