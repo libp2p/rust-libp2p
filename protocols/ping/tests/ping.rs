@@ -31,7 +31,7 @@ use libp2p_core::{
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping::*;
-use libp2p_swarm::{KeepAlive, NetworkBehaviour, Swarm, SwarmEvent, protocols_handler::DummyProtocolsHandler};
+use libp2p_swarm::{DummyBehaviour, KeepAlive, NetworkBehaviour, Swarm, SwarmEvent, protocols_handler::DummyProtocolsHandler};
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux as yamux;
 use futures::{prelude::*, channel::mpsc};
@@ -265,45 +265,5 @@ enum MuxerChoice {
 impl Arbitrary for MuxerChoice {
     fn arbitrary<G: Gen>(g: &mut G) -> MuxerChoice {
         *[MuxerChoice::Mplex, MuxerChoice::Yamux].choose(g).unwrap()
-    }
-}
-
-struct DummyBehaviour;
-
-impl NetworkBehaviour for DummyBehaviour {
-    type ProtocolsHandler = DummyProtocolsHandler;
-
-    type OutEvent = ();
-
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        DummyProtocolsHandler {
-            keep_alive: KeepAlive::Yes
-        }
-    }
-
-    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        vec![]
-    }
-
-    fn inject_connected(&mut self, _peer_id: &PeerId) {
-
-    }
-
-    fn inject_disconnected(&mut self, _peer_id: &PeerId) {
-
-    }
-
-    fn inject_event(
-        &mut self,
-        _peer_id: PeerId,
-        _connection: libp2p_core::connection::ConnectionId,
-        _event: <<Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler as libp2p_swarm::ProtocolsHandler>::OutEvent
-    ) {
-
-    }
-
-    fn poll(&mut self, _cx: &mut std::task::Context<'_>, _params: &mut impl libp2p_swarm::PollParameters)
-        -> Poll<libp2p_swarm::NetworkBehaviourAction<<<Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler as libp2p_swarm::ProtocolsHandler>::InEvent, Self::OutEvent>> {
-        Poll::Pending
     }
 }
