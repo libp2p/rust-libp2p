@@ -1,15 +1,17 @@
+use crate::crypto::Crypto;
 use crate::endpoint::{EndpointConfig, TransportChannel};
 use crate::muxer::QuicMuxer;
-use crate::{PublicKey, QuicConfig, QuicError};
+use crate::{QuicConfig, QuicError};
+use ed25519_dalek::PublicKey;
 use futures::channel::oneshot;
-use futures::future::{ready, Ready};
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::transport::{Boxed, ListenerEvent, Transport, TransportError};
 use libp2p_core::PeerId;
 use parking_lot::Mutex;
+use quinn_proto::crypto::Session;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -17,14 +19,19 @@ use std::task::{Context, Poll};
 use udp_socket::SocketType;
 
 #[derive(Clone)]
-pub struct QuicTransport {
-    inner: Arc<Mutex<QuicTransportInner>>,
+pub struct QuicTransport<C: Crypto> {
+    inner: Arc<Mutex<QuicTransportInner<C>>>,
 }
 
-impl QuicTransport {
+impl<C: Crypto> QuicTransport<C>
+where
+    <C::Session as Session>::ClientConfig: Send + Unpin,
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
     /// Creates a new quic transport.
     pub async fn new(
-        config: QuicConfig,
+        config: QuicConfig<C>,
         addr: Multiaddr,
     ) -> Result<Self, TransportError<QuicError>> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
@@ -56,14 +63,14 @@ impl QuicTransport {
     }
 }
 
-impl std::fmt::Debug for QuicTransport {
+impl<C: Crypto> std::fmt::Debug for QuicTransport<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("QuicTransport").finish()
     }
 }
 
-struct QuicTransportInner {
-    channel: TransportChannel,
+struct QuicTransportInner<C: Crypto> {
+    channel: TransportChannel<C>,
     addresses: Addresses,
 }
 
@@ -72,12 +79,16 @@ enum Addresses {
     Ip(Option<IpAddr>),
 }
 
-impl Transport for QuicTransport {
-    type Output = (PeerId, QuicMuxer);
+impl<C: Crypto> Transport for QuicTransport<C>
+where
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
+    type Output = (PeerId, QuicMuxer<C>);
     type Error = QuicError;
     type Listener = Self;
-    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = QuicDial;
+    type ListenerUpgrade = QuicUpgrade<C>;
+    type Dial = QuicDial<C>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         multiaddr_to_socketaddr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
@@ -98,7 +109,7 @@ impl Transport for QuicTransport {
         }
         tracing::debug!("dialing {}", socket_addr);
         let rx = self.inner.lock().channel.dial(socket_addr, public_key);
-        Ok(QuicDial { rx })
+        Ok(QuicDial::Dialing(rx))
     }
 
     fn address_translation(&self, _listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -106,9 +117,8 @@ impl Transport for QuicTransport {
     }
 }
 
-impl Stream for QuicTransport {
-    type Item =
-        Result<ListenerEvent<Ready<Result<(PeerId, QuicMuxer), QuicError>>, QuicError>, QuicError>;
+impl<C: Crypto> Stream for QuicTransport<C> {
+    type Item = Result<ListenerEvent<QuicUpgrade<C>, QuicError>, QuicError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let mut inner = self.inner.lock();
@@ -150,7 +160,7 @@ impl Stream for QuicTransport {
             Poll::Ready(Some(Ok(muxer))) => Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                 local_addr: muxer.local_addr(),
                 remote_addr: muxer.remote_addr(),
-                upgrade: ready(Ok((muxer.peer_id(), muxer))),
+                upgrade: QuicUpgrade::new(muxer),
             }))),
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
             Poll::Ready(None) => Poll::Ready(None),
@@ -160,22 +170,70 @@ impl Stream for QuicTransport {
 }
 
 #[allow(clippy::large_enum_variant)]
-pub struct QuicDial {
-    rx: oneshot::Receiver<Result<QuicMuxer, QuicError>>,
+pub enum QuicDial<C: Crypto> {
+    Dialing(oneshot::Receiver<Result<QuicMuxer<C>, QuicError>>),
+    Upgrade(QuicUpgrade<C>),
 }
 
-impl Future for QuicDial {
-    type Output = Result<(PeerId, QuicMuxer), QuicError>;
+impl<C: Crypto> Future for QuicDial<C>
+where
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
+    type Output = Result<(PeerId, QuicMuxer<C>), QuicError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
-            match Pin::new(&mut self.rx).poll(cx) {
-                Poll::Ready(Ok(Ok(muxer))) => {
-                    return Poll::Ready(Ok((muxer.peer_id(), muxer)));
+            match &mut *self {
+                Self::Dialing(rx) => match Pin::new(rx).poll(cx) {
+                    Poll::Ready(Ok(Ok(muxer))) => {
+                        *self = Self::Upgrade(QuicUpgrade::new(muxer));
+                    }
+                    Poll::Ready(Ok(Err(err))) => return Poll::Ready(Err(err)),
+                    Poll::Ready(Err(_)) => panic!("endpoint crashed"),
+                    Poll::Pending => return Poll::Pending,
+                },
+                Self::Upgrade(upgrade) => return Pin::new(upgrade).poll(cx),
+            }
+        }
+    }
+}
+
+pub struct QuicUpgrade<C: Crypto> {
+    muxer: Option<QuicMuxer<C>>,
+}
+
+impl<C: Crypto> QuicUpgrade<C> {
+    fn new(muxer: QuicMuxer<C>) -> Self {
+        Self { muxer: Some(muxer) }
+    }
+}
+
+impl<C: Crypto> Future for QuicUpgrade<C>
+where
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
+    type Output = Result<(PeerId, QuicMuxer<C>), QuicError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let inner = Pin::into_inner(self);
+        let muxer = inner.muxer.as_mut().expect("future polled after ready");
+        match muxer.poll_event(cx) {
+            Poll::Pending => {
+                if let Some(peer_id) = muxer.peer_id() {
+                    muxer.set_accept_incoming(true);
+                    Poll::Ready(Ok((
+                        peer_id,
+                        inner.muxer.take().expect("future polled after ready"),
+                    )))
+                } else {
+                    Poll::Pending
                 }
-                Poll::Ready(Ok(Err(err))) => return Poll::Ready(Err(err)),
-                Poll::Ready(Err(_)) => panic!("endpoint crashed"),
-                Poll::Pending => return Poll::Pending,
+            }
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+            Poll::Ready(Ok(_)) => {
+                panic!("muxer.incoming is set to false so no events can be produced");
             }
         }
     }

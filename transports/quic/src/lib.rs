@@ -1,16 +1,25 @@
+mod crypto;
 mod endpoint;
 mod muxer;
+#[cfg(feature = "tls")]
+mod tls;
 mod transport;
 
+pub use crate::crypto::Crypto;
+#[cfg(feature = "noise")]
+pub use crate::crypto::NoiseCrypto;
+#[cfg(feature = "tls")]
+pub use crate::crypto::TlsCrypto;
 pub use crate::muxer::{QuicMuxer, QuicMuxerError};
 pub use crate::transport::{QuicDial, QuicTransport};
-pub use quinn_noise::{KeyLog, KeyLogFile, Keypair, PublicKey, SecretKey};
+pub use ed25519_dalek::{Keypair, PublicKey, SecretKey};
+#[cfg(feature = "noise")]
+pub use quinn_noise::{KeyLog, KeyLogFile};
 pub use quinn_proto::{ConfigError, ConnectError, ConnectionError, TransportConfig};
 
-use libp2p_core::identity;
 use libp2p_core::transport::TransportError;
-use libp2p_core::{Multiaddr, PeerId};
-use std::sync::Arc;
+use libp2p_core::{identity, Multiaddr, PeerId};
+use quinn_proto::crypto::Session;
 use thiserror::Error;
 
 pub fn generate_keypair() -> Keypair {
@@ -18,14 +27,14 @@ pub fn generate_keypair() -> Keypair {
 }
 
 /// Quic configuration.
-pub struct QuicConfig {
+pub struct QuicConfig<C: Crypto> {
     pub keypair: Keypair,
     pub psk: Option<[u8; 32]>,
     pub transport: TransportConfig,
-    pub keylogger: Option<Arc<dyn KeyLog>>,
+    pub keylogger: Option<C::Keylogger>,
 }
 
-impl Default for QuicConfig {
+impl<C: Crypto> Default for QuicConfig<C> {
     fn default() -> Self {
         Self {
             keypair: Keypair::generate(&mut rand_core::OsRng {}),
@@ -36,7 +45,7 @@ impl Default for QuicConfig {
     }
 }
 
-impl std::fmt::Debug for QuicConfig {
+impl<C: Crypto> std::fmt::Debug for QuicConfig<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("QuicConfig")
             .field("keypair", &self.keypair.public)
@@ -46,7 +55,12 @@ impl std::fmt::Debug for QuicConfig {
     }
 }
 
-impl QuicConfig {
+impl<C: Crypto> QuicConfig<C>
+where
+    <C::Session as Session>::ClientConfig: Send + Unpin,
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
     /// Creates a new config from a keypair.
     pub fn new(keypair: Keypair) -> Self {
         Self {
@@ -57,7 +71,7 @@ impl QuicConfig {
 
     /// Enable keylogging.
     pub fn enable_keylogger(&mut self) -> &mut Self {
-        self.keylogger = Some(Arc::new(KeyLogFile::new()));
+        self.keylogger = Some(C::keylogger());
         self
     }
 
@@ -65,7 +79,7 @@ impl QuicConfig {
     pub async fn listen_on(
         self,
         addr: Multiaddr,
-    ) -> Result<QuicTransport, TransportError<QuicError>> {
+    ) -> Result<QuicTransport<C>, TransportError<QuicError>> {
         QuicTransport::new(self, addr).await
     }
 }
@@ -112,6 +126,6 @@ impl ToLibp2p for PublicKey {
     fn to_public(&self) -> identity::PublicKey {
         let public_key = self.to_bytes();
         let public_key = identity::ed25519::PublicKey::decode(&public_key[..]).unwrap();
-        identity::PublicKey::Ed25519(public_key.into())
+        identity::PublicKey::Ed25519(public_key)
     }
 }

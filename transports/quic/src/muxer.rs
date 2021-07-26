@@ -1,13 +1,11 @@
+use crate::crypto::Crypto;
 use crate::endpoint::ConnectionChannel;
-use crate::ToLibp2p;
 use async_io::Timer;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::{Multiaddr, PeerId};
 use parking_lot::Mutex;
-use quinn_noise::NoiseSession;
-use quinn_proto::crypto::Session;
 use quinn_proto::generic::Connection;
 use quinn_proto::{
     ConnectionError, Dir, Event, FinishError, ReadError, ReadableError, StreamEvent, StreamId,
@@ -22,18 +20,24 @@ use std::time::Instant;
 use thiserror::Error;
 
 /// State for a single opened QUIC connection.
-#[derive(Debug)]
-pub struct QuicMuxer {
-    inner: Mutex<QuicMuxerInner>,
+pub struct QuicMuxer<C: Crypto> {
+    inner: Mutex<QuicMuxerInner<C>>,
+}
+
+impl<C: Crypto> std::fmt::Debug for QuicMuxer<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "QuicMuxer")
+    }
 }
 
 /// Mutex protected fields of [`QuicMuxer`].
-#[derive(Debug)]
-struct QuicMuxerInner {
+struct QuicMuxerInner<C: Crypto> {
+    /// Accept incoming streams.
+    accept_incoming: bool,
     /// Endpoint channel.
-    endpoint: ConnectionChannel,
+    endpoint: ConnectionChannel<C>,
     /// Inner connection object that yields events.
-    connection: Connection<NoiseSession>,
+    connection: Connection<C::Session>,
     /// Connection waker.
     waker: Option<Waker>,
     /// Connection timer.
@@ -55,10 +59,11 @@ struct SubstreamState {
     write_waker: Option<Waker>,
 }
 
-impl QuicMuxer {
-    pub fn new(endpoint: ConnectionChannel, connection: Connection<NoiseSession>) -> Self {
+impl<C: Crypto> QuicMuxer<C> {
+    pub fn new(endpoint: ConnectionChannel<C>, connection: Connection<C::Session>) -> Self {
         Self {
             inner: Mutex::new(QuicMuxerInner {
+                accept_incoming: false,
                 endpoint,
                 connection,
                 waker: None,
@@ -74,14 +79,10 @@ impl QuicMuxer {
         self.inner.lock().connection.is_handshaking()
     }
 
-    pub fn peer_id(&self) -> PeerId {
-        self.inner
-            .lock()
-            .connection
-            .crypto_session()
-            .peer_identity()
-            .expect("In an IK handshake the PeerId is always available")
-            .to_peer_id()
+    pub fn peer_id(&self) -> Option<PeerId> {
+        let inner = self.inner.lock();
+        let session = inner.connection.crypto_session();
+        C::peer_id(&session)
     }
 
     pub fn local_addr(&self) -> Multiaddr {
@@ -99,9 +100,14 @@ impl QuicMuxer {
         let addr = inner.connection.remote_address();
         crate::transport::socketaddr_to_multiaddr(&addr)
     }
+
+    pub(crate) fn set_accept_incoming(&self, accept: bool) {
+        let mut inner = self.inner.lock();
+        inner.accept_incoming = accept;
+    }
 }
 
-impl StreamMuxer for QuicMuxer {
+impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
     type Substream = StreamId;
     type OutboundSubstream = ();
     type Error = QuicMuxerError;
@@ -213,10 +219,12 @@ impl StreamMuxer for QuicMuxer {
 
         // TODO quinn doesn't support `StreamMuxerEvent::AddressChange`.
 
-        if let Some(id) = inner.connection.streams().accept(Dir::Bi) {
-            inner.substreams.insert(id, Default::default());
-            tracing::trace!("opened incoming substream {}", id);
-            return Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(id)));
+        if inner.accept_incoming {
+            if let Some(id) = inner.connection.streams().accept(Dir::Bi) {
+                inner.substreams.insert(id, Default::default());
+                tracing::trace!("opened incoming substream {}", id);
+                return Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(id)));
+            }
         }
 
         if inner.substreams.is_empty() {

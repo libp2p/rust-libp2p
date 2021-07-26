@@ -5,19 +5,37 @@ use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
 use libp2p::multiaddr::Protocol;
-use libp2p::quic::{Keypair, QuicConfig, ToLibp2p};
 use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p_quic::{Crypto, Keypair, QuicConfig, ToLibp2p};
+use quinn_proto::crypto::Session;
 use rand::RngCore;
 use std::{io, iter};
 
-async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>> {
+#[cfg(feature = "noise")]
+#[async_std::test]
+async fn smoke_noise() -> Result<()> {
+    smoke::<libp2p_quic::NoiseCrypto>().await
+}
+
+#[cfg(feature = "tls")]
+#[async_std::test]
+async fn smoke_tls() -> Result<()> {
+    smoke::<libp2p_quic::TlsCrypto>().await
+}
+
+async fn create_swarm<C: Crypto>(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
+where
+    <C::Session as Session>::ClientConfig: Send + Unpin,
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
     let keypair = Keypair::generate(&mut rand_core::OsRng {});
     let peer_id = keypair.to_peer_id();
-    let mut transport = QuicConfig::new(keypair);
+    let mut transport = QuicConfig::<C>::new(keypair);
     if keylog {
         transport.enable_keylogger();
     }
@@ -33,8 +51,12 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     Ok(Swarm::new(transport, behaviour, peer_id))
 }
 
-#[async_std::test]
-async fn smoke() -> Result<()> {
+async fn smoke<C: Crypto>() -> Result<()>
+where
+    <C::Session as Session>::ClientConfig: Send + Unpin,
+    <C::Session as Session>::HeaderKey: Unpin,
+    <C::Session as Session>::PacketKey: Unpin,
+{
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init()
@@ -42,8 +64,8 @@ async fn smoke() -> Result<()> {
     log_panics::init();
     let mut rng = rand::thread_rng();
 
-    let mut a = create_swarm(true).await?;
-    let mut b = create_swarm(false).await?;
+    let mut a = create_swarm::<C>(true).await?;
+    let mut b = create_swarm::<C>(false).await?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
