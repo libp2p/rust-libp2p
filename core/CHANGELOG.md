@@ -1,4 +1,4 @@
-- Introduce `Keypair::to_protobuf_encoding`, see [PR 2142]
+- Introduce `Keypair::to_protobuf_encoding`, see [PR 2142].
 
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
 
