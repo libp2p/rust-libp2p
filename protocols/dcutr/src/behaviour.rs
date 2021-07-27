@@ -116,7 +116,6 @@ impl NetworkBehaviour for Behaviour {
                     });
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
-                println!("Listener: Dialing");
                 self.queued_actions.push_back(NetworkBehaviourAction::DialAddress {
                     // TODO: Handle empty addresses.
                     // TODO: What about the other addresses?
@@ -124,7 +123,6 @@ impl NetworkBehaviour for Behaviour {
                 });
             }
             handler::Event::OutboundConnectNeg(remote_addrs) => {
-                println!("Dialer: Dialing");
                 self.queued_actions.push_back(NetworkBehaviourAction::DialAddress {
                     // TODO: Handle empty addresses.
                     // TODO: What about the other addresses?

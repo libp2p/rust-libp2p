@@ -43,7 +43,6 @@ fn connect() {
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-    println!("relay_addr: {:?}", relay_addr);
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
 
@@ -58,38 +57,33 @@ fn connect() {
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id.into()));
-    println!("dst_relayed_addr: {:?}", dst_relayed_addr);
     let dst_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-    println!("dst_addr: {:?}", dst_addr);
 
     dst.listen_on(dst_relayed_addr.clone()).unwrap();
     dst.listen_on(dst_addr.clone()).unwrap();
-    // TODO: Needed?
     dst.add_external_address(dst_addr.clone(), AddressScore::Infinite);
 
-    println!("Wait for reservation");
     pool.run_until(wait_for_reservation(
         &mut dst,
         dst_relayed_addr.clone(),
         relay_peer_id,
         false, // No renewal.
     ));
-    println!("Got reservation");
     spawn_swarm_on_pool(&pool, dst);
 
     let mut src = build_client();
     let src_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-    println!("src addr: {:?}", src_addr);
     src.listen_on(src_addr.clone()).unwrap();
     pool.run_until(wait_for_new_listen_addr(&mut src, &src_addr));
-    // TODO: Needed?
     src.add_external_address(src_addr.clone(), AddressScore::Infinite);
 
     src.dial_addr(dst_relayed_addr.clone()).unwrap();
 
     pool.run_until(wait_for_connection_established(&mut src, &dst_relayed_addr));
-    println!("Waiting for direct connection");
-    pool.run_until(wait_for_connection_established(&mut src, &dst_addr));
+    pool.run_until(wait_for_connection_established(
+        &mut src,
+        &dst_addr.with(Protocol::P2p(dst_peer_id.into())),
+    ));
 }
 
 fn build_relay() -> Swarm<Relay> {
@@ -262,7 +256,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
 async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::NewListenAddr{address , ..} if address == *new_addr => break,
+            SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => break,
             e => panic!("{:?}", e),
         }
     }
