@@ -76,7 +76,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for RelayListen {
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
             let CircuitRelay {
                 r#type,
                 src_peer,
