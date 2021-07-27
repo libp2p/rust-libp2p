@@ -69,6 +69,9 @@ pub struct Kademlia<TStore> {
     /// Configuration of the wire protocol.
     protocol_config: KademliaProtocolConfig,
 
+    /// Configuration of [`RecordStore`] filtering.
+    record_filtering: KademliaRecordFiltering,
+
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
 
@@ -430,6 +433,7 @@ where
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
             kbucket_inserts: config.kbucket_inserts,
             protocol_config: config.protocol_config,
+            record_filtering: config.record_filtering,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
