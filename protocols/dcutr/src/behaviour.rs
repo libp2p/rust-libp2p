@@ -25,7 +25,7 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};

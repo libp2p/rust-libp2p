@@ -26,7 +26,7 @@ use libp2p::dcutr;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::noise;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
-use libp2p::relay::v2::relay::{self, Relay};
+
 use libp2p::relay::v2::client::{self, Client};
 use libp2p::dns::DnsConfig;
 use libp2p::swarm::{AddressScore, Swarm, SwarmEvent};

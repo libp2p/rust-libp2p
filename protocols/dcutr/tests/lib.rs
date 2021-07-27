@@ -27,7 +27,7 @@ use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p::core::PublicKey;
-use libp2p::core::{identity, upgrade, PeerId};
+use libp2p::core::{identity, PeerId};
 use libp2p::dcutr;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext::PlainText2Config;

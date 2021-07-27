@@ -19,19 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{hole_punch, HolePunch};
-use asynchronous_codec::{Framed, FramedParts};
-use bytes::{Bytes, BytesMut};
+use asynchronous_codec::{Framed};
+use bytes::{BytesMut};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryFrom};
 use std::error;
 use std::fmt;
 use std::io::Cursor;
 use std::iter;
 use unsigned_varint::codec::UviBytes;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use futures_timer::Delay;
 
 const PROTOCOL_NAME: &[u8; 15] = b"/libp2p/connect";
@@ -402,7 +402,6 @@ impl error::Error for InboundUpgradeError {
             InboundUpgradeError::UnexpectedTypeConnect => None,
             InboundUpgradeError::UnexpectedTypeSync => None,
             InboundUpgradeError::ParseStatusField => None,
-            InboundUpgradeError::InvalidAddrs => None,
         }
     }
 }
