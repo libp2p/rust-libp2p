@@ -29,12 +29,16 @@ use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
 /// The events produced by the [`Behaviour`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Event {
     InitiateDirectConnectionUpgrade {
         remote_peer_id: PeerId,
         local_relayed_addr: Multiaddr,
     },
+    RemoteInitiatedDirectConnectionUpgrade {
+        remote_peer_id: PeerId,
+        remote_relayed_addr: Multiaddr,
+    }
 }
 
 pub struct Behaviour {
@@ -55,6 +59,9 @@ impl NetworkBehaviour for Behaviour {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        // TODO: When handler is created via new_handler, the connection is inbound. It should only
+        // ever be us initiating a dcutr request on this handler then, as one never initiates a
+        // request on an outbound handler. Should this be enforced?
         handler::Prototype::new()
     }
 
@@ -112,7 +119,7 @@ impl NetworkBehaviour for Behaviour {
         handler_event: handler::Event,
     ) {
         match handler_event {
-            handler::Event::InboundConnectReq(inbound_connect) => {
+            handler::Event::InboundConnectReq{inbound_connect, remote_addr} => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -122,6 +129,11 @@ impl NetworkBehaviour for Behaviour {
                             obs_addrs: vec![],
                         },
                     });
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {
+                        remote_peer_id: event_source,
+                        remote_relayed_addr: remote_addr,
+                    }));
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
                 self.queued_actions

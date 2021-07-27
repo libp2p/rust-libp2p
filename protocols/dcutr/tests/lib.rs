@@ -80,7 +80,13 @@ fn connect() {
     src.dial_addr(dst_relayed_addr.clone()).unwrap();
 
     pool.run_until(wait_for_connection_established(&mut src, &dst_relayed_addr));
-    // pool.run_until(wait_for_dcutr_event(&mut src, new_addr: &Multiaddr))
+    assert_eq!(
+        dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
+            remote_peer_id: dst_peer_id,
+            remote_relayed_addr: dst_relayed_addr
+        },
+        pool.run_until(wait_for_dcutr_event(&mut src))
+    );
     pool.run_until(wait_for_connection_established(
         &mut src,
         &dst_addr.with(Protocol::P2p(dst_peer_id.into())),
@@ -256,14 +262,17 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
 
 async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
     match client.select_next_some().await {
-        SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {},
+        SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
         e => panic!("{:?}", e),
     }
 }
 
-async fn wait_for_dcutr_event(client: &mut Swarm<Client>, new_addr: &Multiaddr) -> dcutr::behaviour::Event {
-    match client.select_next_some().await {
-        SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
-        e => panic!("{:?}", e),
+async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::Event {
+    loop {
+        match client.select_next_some().await {
+            SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
+            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+            e => panic!("{:?}", e),
+        }
     }
 }

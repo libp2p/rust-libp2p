@@ -42,7 +42,10 @@ pub enum In {
 }
 
 pub enum Event {
-    InboundConnectReq(protocol::InboundConnect),
+    InboundConnectReq {
+        inbound_connect: protocol::InboundConnect,
+        remote_addr: Multiaddr,
+    },
     // TODO: Rename to InboundConnectNegotiated?
     InboundConnectNeg(Vec<Multiaddr>),
     OutboundConnectNeg(Vec<Multiaddr>),
@@ -60,8 +63,11 @@ impl Prototype {
 impl IntoProtocolsHandler for Prototype {
     type Handler = Handler;
 
-    fn into_handler(self, _remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
+    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+        // TODO: In case this is not a relayed connection, the handler should never do nor receive
+        // anything. Should this be enforced?
         Handler {
+            remote_addr: endpoint.get_remote_address().clone(),
             queued_events: Default::default(),
             inbound_connects: Default::default(),
         }
@@ -73,6 +79,7 @@ impl IntoProtocolsHandler for Prototype {
 }
 
 pub struct Handler {
+    remote_addr: Multiaddr,
     /// Queue of events to return when polled.
     queued_events: VecDeque<
         ProtocolsHandlerEvent<
@@ -106,9 +113,10 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
     ) {
         self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnectReq(
+            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnectReq {
                 inbound_connect,
-            )));
+                remote_addr: self.remote_addr.clone(),
+            }));
     }
 
     fn inject_fully_negotiated_outbound(
