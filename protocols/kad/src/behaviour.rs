@@ -131,6 +131,32 @@ pub enum KademliaBucketInserts {
     Manual,
 }
 
+/// The configurable filtering strategies for the acceptance of
+/// incoming records.
+///
+/// This can be used for e.g. signature verification or validating
+/// the accompanying [`Key`].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum KademliaRecordFiltering {
+    /// Whenever a (provider) record is received,
+    /// the record is forwarded immediately to the [`RecordStore`].
+    Unfiltered,
+    /// Whenever a record is received, an event of type [`KademliaEvent::InboundPutRecordRequest`] is emitted.
+    /// The event loop should then asynchronously validate this record,
+    /// and if deemed correct, should call [`Kademlia::put_record`].
+    ///
+    /// Provider records are forwarded directly to the [`RecordStore`].
+    FilterRecords,
+    /// Whenever a (provider) record is received, an event is emitted.
+    /// Provider records generate a [`KademliaEvent::InboundAddProviderRequest`],
+    /// normal records generate a [`KademliaEvent::InboundPutRecordRequest`].
+    ///
+    /// The event loop should then asynchronously validate this record,
+    /// and if deemed correct, should call [`Kademlia::put_record`] or
+    /// [`Kademlia::add_provider`], whichever is applicable.
+    FilterBoth,
+}
+
 /// The configuration for the `Kademlia` behaviour.
 ///
 /// The configuration is consumed by [`Kademlia::new`].
@@ -142,6 +168,7 @@ pub struct KademliaConfig {
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
+    record_filtering: KademliaRecordFiltering,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
@@ -175,6 +202,7 @@ impl Default for KademliaConfig {
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
+            record_filtering: KademliaRecordFiltering::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
@@ -256,6 +284,15 @@ impl KademliaConfig {
     /// Does not apply to provider records.
     pub fn set_record_ttl(&mut self, record_ttl: Option<Duration>) -> &mut Self {
         self.record_ttl = record_ttl;
+        self
+    }
+
+    /// Sets whether or not records should be filtered before being stored.
+    ///
+    /// See [`KademliaRecordFiltering`] for the different values.
+    /// Defaults to [`KademliaRecordFiltering::Unfiltered`].
+    pub fn set_record_filtering(&mut self, filtering: KademliaRecordFiltering) -> &mut Self {
+        self.record_filtering = filtering;
         self
     }
 
