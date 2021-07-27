@@ -31,10 +31,10 @@ use std::task::{Context, Poll};
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
 pub enum Event {
-    // InitiateDirectConnectionUpgrade {
-//     remote_peer_id: PeerId,
-//     remote_relayed_addr:
-// }
+    InitiateDirectConnectionUpgrade {
+        remote_peer_id: PeerId,
+        local_relayed_addr: Multiaddr,
+    },
 }
 
 pub struct Behaviour {
@@ -80,6 +80,11 @@ impl NetworkBehaviour for Behaviour {
                         handler: NotifyHandler::One(*connection_id),
                         event: handler::In::Connect { obs_addrs: vec![] },
                     });
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::InitiateDirectConnectionUpgrade {
+                        remote_peer_id: *peer_id,
+                        local_relayed_addr: local_addr.clone(),
+                    }));
             }
             _ => {}
         }
