@@ -68,7 +68,7 @@ fn main() {
         thread::spawn(move || loop {
             let keypair = identity::ed25519::Keypair::generate();
             let secret = keypair.secret();
-            let peer_id = identity::PublicKey::Ed25519(keypair.public()).into_peer_id();
+            let peer_id = identity::PublicKey::Ed25519(keypair.public()).to_peer_id();
             let base58 = peer_id.to_base58();
             if base58[2..].starts_with(&prefix) {
                 println!("Found {:?}", peer_id);

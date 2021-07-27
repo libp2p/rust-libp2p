@@ -173,7 +173,7 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.into_protobuf_encoding();
+    let pubkey_bytes = info.public_key.to_protobuf_encoding();
 
     let message = structs_proto::Identify {
         agent_version: Some(info.agent_version),
@@ -207,7 +207,7 @@ where
         Ok(v) => v,
         Err(err) => {
             debug!("Invalid message: {:?}", err);
-            return Err(err.into())
+            return Err(err)
         }
     };
 

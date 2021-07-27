@@ -383,7 +383,7 @@ fn ping_protocol_throttled() {
 
 fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = id_keys.public().into_peer_id();
+    let peer_id = id_keys.public().to_peer_id();
     let noise_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)

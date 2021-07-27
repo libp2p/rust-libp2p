@@ -211,7 +211,7 @@ impl ProtocolsHandler for IdentifyHandler {
                 };
                 Poll::Ready(ev)
             }
-            Poll::Ready(Err(err)) => Poll::Ready(ProtocolsHandlerEvent::Close(err.into()))
+            Poll::Ready(Err(err)) => Poll::Ready(ProtocolsHandlerEvent::Close(err))
         }
     }
 }
