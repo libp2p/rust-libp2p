@@ -24,15 +24,18 @@ use crate::handler;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-};
+use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
-pub enum Event {}
+pub enum Event {
+    // InitiateDirectConnectionUpgrade {
+//     remote_peer_id: PeerId,
+//     remote_relayed_addr:
+// }
+}
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
@@ -67,22 +70,22 @@ impl NetworkBehaviour for Behaviour {
         connection_id: &ConnectionId,
         connected_point: &ConnectedPoint,
     ) {
-        if connected_point
-            .get_remote_address()
-            .iter()
-            .any(|p| p == Protocol::P2pCircuit)
-        {
-            self.queued_actions
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: *peer_id,
-                    handler: NotifyHandler::One(*connection_id),
-                    event: handler::In::Connect { obs_addrs: vec![] },
-                });
+        match connected_point {
+            ConnectedPoint::Listener { local_addr, .. }
+                if local_addr.iter().any(|p| p == Protocol::P2pCircuit) =>
+            {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: *peer_id,
+                        handler: NotifyHandler::One(*connection_id),
+                        event: handler::In::Connect { obs_addrs: vec![] },
+                    });
+            }
+            _ => {}
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
-    }
+    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {}
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {
         todo!();
@@ -116,18 +119,20 @@ impl NetworkBehaviour for Behaviour {
                     });
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
-                self.queued_actions.push_back(NetworkBehaviourAction::DialAddress {
-                    // TODO: Handle empty addresses.
-                    // TODO: What about the other addresses?
-                    address: remote_addrs.into_iter().next().unwrap(),
-                });
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::DialAddress {
+                        // TODO: Handle empty addresses.
+                        // TODO: What about the other addresses?
+                        address: remote_addrs.into_iter().next().unwrap(),
+                    });
             }
             handler::Event::OutboundConnectNeg(remote_addrs) => {
-                self.queued_actions.push_back(NetworkBehaviourAction::DialAddress {
-                    // TODO: Handle empty addresses.
-                    // TODO: What about the other addresses?
-                    address: remote_addrs.into_iter().next().unwrap(),
-                });
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::DialAddress {
+                        // TODO: Handle empty addresses.
+                        // TODO: What about the other addresses?
+                        address: remote_addrs.into_iter().next().unwrap(),
+                    });
             }
         }
     }
