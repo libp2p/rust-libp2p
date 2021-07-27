@@ -82,6 +82,15 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: ProtocolsHandler::OutEvent
+    ) {
+
+    }
+
     fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
         Poll<NetworkBehaviourAction<THandler::InEvent, Self::OutEvent>>
     {
