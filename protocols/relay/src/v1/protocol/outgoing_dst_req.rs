@@ -101,7 +101,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
                 substream
                     .next()
                     .await
-                    .ok_or(OutgoingDstReqError::Io(std::io::Error::new(
+                    .ok_or_else(|| OutgoingDstReqError::Io(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
                         "",
                     )))??;
