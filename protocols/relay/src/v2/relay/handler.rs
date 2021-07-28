@@ -79,6 +79,7 @@ pub enum In {
 }
 
 /// The events produced by the [`Handler`].
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
