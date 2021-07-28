@@ -45,6 +45,7 @@ impl Keypair {
 
     /// Decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
     /// produced by [`Keypair::encode`], zeroing the input on success.
+    ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
