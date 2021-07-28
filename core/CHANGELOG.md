@@ -1,5 +1,7 @@
 # 0.30.0 [unreleased]
 
+- Add `Keypair::to_protobuf_encoding` (see [PR 2142]).
+
 - Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
 
 - Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
@@ -9,6 +11,7 @@
 - Add `From<&PublicKey> for PeerId` (see [PR 2145]).
 
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+[PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
 
 # 0.29.0 [2021-07-12]
 
