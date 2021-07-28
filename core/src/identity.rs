@@ -285,12 +285,12 @@ mod tests {
     #[test]
     fn keypair_protobuf_roundtrip() {
         let expected_keypair = Keypair::generate_ed25519();
-        let expected_peer_id = expected_keypair.public().into_peer_id();
+        let expected_peer_id = expected_keypair.public().to_peer_id();
 
         let encoded = expected_keypair.to_protobuf_encoding().unwrap();
 
         let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
-        let peer_id = keypair.public().into_peer_id();
+        let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
     }
