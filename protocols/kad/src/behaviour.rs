@@ -139,6 +139,8 @@ pub enum KademliaBucketInserts {
 ///
 /// This can be used for e.g. signature verification or validating
 /// the accompanying [`Key`].
+///
+/// [`Key`]: crate::record::Key
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KademliaRecordFiltering {
     /// Whenever a (provider) record is received,
@@ -146,7 +148,7 @@ pub enum KademliaRecordFiltering {
     Unfiltered,
     /// Whenever a record is received, an event of type [`KademliaEvent::InboundPutRecordRequest`] is emitted.
     /// The event loop should then asynchronously validate this record,
-    /// and if deemed correct, should call [`Kademlia::put_record`].
+    /// and if deemed correct, should call [`RecordStore::put`].
     ///
     /// Provider records are forwarded directly to the [`RecordStore`].
     FilterRecords,
@@ -155,8 +157,8 @@ pub enum KademliaRecordFiltering {
     /// normal records generate a [`KademliaEvent::InboundPutRecordRequest`].
     ///
     /// The event loop should then asynchronously validate this record,
-    /// and if deemed correct, should call [`Kademlia::put_record`] or
-    /// [`Kademlia::add_provider`], whichever is applicable.
+    /// and if deemed correct, should call [`RecordStore::put`] or
+    /// [`RecordStore::add_provider`], whichever is applicable.
     FilterBoth,
 }
 
@@ -2380,7 +2382,7 @@ pub enum KademliaEvent {
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
 
-    /// A peer sent a [`PutRecord`] request and filtering is enabled.
+    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
     ///
     /// Cfr. [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
     InboundPutRecordRequest {
@@ -2389,7 +2391,7 @@ pub enum KademliaEvent {
         record: Record,
     },
 
-    /// A peer sent a [`AddProvider`] request and filtering [`KademliaRecordFiltering::FilterBoth`] is enabled.
+    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaRecordFiltering::FilterBoth`] is enabled.
     ///
     /// Cfr. [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
     InboundAddProviderRequest { record: ProviderRecord },
