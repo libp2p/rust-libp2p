@@ -823,6 +823,8 @@ mod test {
     use super::*;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
+    use crate::Topic;
+    use crate::topic::IdentityHash;
 
     #[test]
     fn create_thing() {
@@ -832,6 +834,21 @@ mod test {
             .unwrap();
 
         dbg!(builder);
+    }
+
+    #[inline]
+    fn get_gossipsub_message() -> GossipsubMessage {
+        GossipsubMessage {
+            source: None,
+            data: vec![12, 34, 56],
+            sequence_number: None,
+            topic: Topic::<IdentityHash>::new("test").hash(),
+        }
+    }
+
+    #[inline]
+    fn get_expected_message_id() -> MessageId {
+        MessageId::from([49, 55, 56, 51, 56, 52, 49, 51, 52, 51, 52, 55, 51, 51, 53, 52, 54, 54, 52, 49, 101])
     }
 
     fn message_id_plain_function(message: &GossipsubMessage) -> MessageId {
@@ -850,7 +867,8 @@ mod test {
             .build()
             .unwrap();
 
-        dbg!(builder);
+        let result = builder.message_id(&get_gossipsub_message());
+        assert_eq!(result, get_expected_message_id());
     }
 
     #[test]
@@ -869,7 +887,8 @@ mod test {
             .build()
             .unwrap();
 
-        dbg!(builder);
+        let result = builder.message_id(&get_gossipsub_message());
+        assert_eq!(result, get_expected_message_id());
     }
 
     #[test]
@@ -889,7 +908,8 @@ mod test {
             .build()
             .unwrap();
 
-        dbg!(builder);
+        let result = builder.message_id(&get_gossipsub_message());
+        assert_eq!(result, get_expected_message_id());
     }
 
 }
