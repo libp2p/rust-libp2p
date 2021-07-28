@@ -19,6 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A node's network identity keys.
+//!
+//! Such identity keys can be randomly generated on every startup,
+//! but using already existing, fixed keys is usually required.
+//! Though libp2p uses other crates (e.g. `ed25519_dalek`) internally,
+//! such details are not exposed as part of libp2p's public interface
+//! to keep them easily upgradable or replaceable (e.g. to `ed25519_zebra`).
+//! Consequently, keys of external ed25519 or secp256k1 crates cannot be
+//! directly converted into libp2p network identities.
+//! Instead, loading fixed keys must use the standard, thus more portable
+//! binary representation of the specific key type
+//! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
+//! All key types have functions to enable conversion to/from their binary representations.
 
 pub mod ed25519;
 #[cfg(not(target_arch = "wasm32"))]
