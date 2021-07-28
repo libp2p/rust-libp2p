@@ -821,6 +821,8 @@ impl std::fmt::Debug for GossipsubConfig {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     #[test]
     fn create_thing() {
@@ -831,4 +833,63 @@ mod test {
 
         dbg!(builder);
     }
+
+    fn message_id_plain_function(message: &GossipsubMessage) -> MessageId {
+        let mut s = DefaultHasher::new();
+        message.data.hash(&mut s);
+        let mut v = s.finish().to_string();
+        v.push('e');
+        MessageId::from(v)
+    }
+
+    #[test]
+    fn create_config_with_message_id_as_plain_function() {
+        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+            .protocol_id_prefix("purple")
+            .message_id_fn(message_id_plain_function)
+            .build()
+            .unwrap();
+
+        dbg!(builder);
+    }
+
+    #[test]
+    fn create_config_with_message_id_as_closure() {
+        let closure = |message: &GossipsubMessage| {
+            let mut s = DefaultHasher::new();
+            message.data.hash(&mut s);
+            let mut v = s.finish().to_string();
+            v.push('e');
+            MessageId::from(v)
+        };
+
+        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+            .protocol_id_prefix("purple")
+            .message_id_fn(closure)
+            .build()
+            .unwrap();
+
+        dbg!(builder);
+    }
+
+    #[test]
+    fn create_config_with_message_id_as_closure_with_variable_capture() {
+        let captured: char = 'e';
+        let closure = move |message: &GossipsubMessage| {
+            let mut s = DefaultHasher::new();
+            message.data.hash(&mut s);
+            let mut v = s.finish().to_string();
+            v.push(captured);
+            MessageId::from(v)
+        };
+
+        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+            .protocol_id_prefix("purple")
+            .message_id_fn(closure)
+            .build()
+            .unwrap();
+
+        dbg!(builder);
+    }
+
 }
