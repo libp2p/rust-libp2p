@@ -1062,11 +1062,12 @@ impl ConnectionLimits {
         self
     }
 
-    /// Configures the maximum number of concurrent established connections (both inbound and
-    /// outbound).
+    /// Configures the maximum number of concurrent established connections (both
+    /// inbound and outbound).
+    ///
     /// Note: This should be used in conjunction with
-    /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible eclipse attacks (all connections being
-    /// inbound.
+    /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible
+    /// eclipse attacks (all connections being inbound).
     pub fn with_max_established(mut self, limit: Option<u32>) -> Self {
         self.max_established_total = limit;
         self
