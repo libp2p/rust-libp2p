@@ -129,9 +129,9 @@ pub trait NetworkBehaviour: Send + 'static {
     /// has previously been called with this `PeerId`.
     fn inject_event(
         &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        _: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
+        peer_id: PeerId,
+        connection: ConnectionId,
+        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     );
 
     /// Indicates to the behaviour that we tried to reach an address, but failed.

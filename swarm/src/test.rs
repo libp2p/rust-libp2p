@@ -82,12 +82,7 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
-    ) {
+    fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {
 
     }
 

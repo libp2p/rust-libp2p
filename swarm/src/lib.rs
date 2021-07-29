@@ -1162,7 +1162,7 @@ impl NetworkBehaviour for DummyBehaviour {
         _: ConnectionId,
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
     ) {
-        match event { }
+        void::unreachable(event)
     }
 
     fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) ->
