@@ -1358,6 +1358,15 @@ impl libp2p_swarm::NetworkBehaviour for KeepAliveBehaviour {
         }
     }
 
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+    ) {
+        void::unreachable(event);
+    }
+
     fn poll(
         &mut self,
         _: &mut Context<'_>,
