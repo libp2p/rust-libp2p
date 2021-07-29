@@ -987,7 +987,7 @@ impl ConnectionCounters {
     fn check_max_established(&self, endpoint: &ConnectedPoint)
         -> Result<(), ConnectionLimit>
     {
-        // Check total connection limit
+        // Check total connection limit.
         Self::check(self.num_established(), self.limits.max_established_total)?;
         // Check incoming/outgoing connection limits
         match endpoint {
