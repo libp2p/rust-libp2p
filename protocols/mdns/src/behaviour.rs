@@ -254,11 +254,6 @@ impl NetworkBehaviour for Mdns {
             .collect()
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        self.timeout
-            .set_interval_at(Instant::now(), self.query_interval);
-    }
-
     fn inject_event(
         &mut self,
         _: PeerId,
@@ -266,6 +261,11 @@ impl NetworkBehaviour for Mdns {
         ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
     ) {
         void::unreachable(ev)
+    }
+
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
+        self.timeout
+            .set_interval_at(Instant::now(), self.query_interval);
     }
 
     fn poll(
