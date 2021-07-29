@@ -2,6 +2,8 @@
 
 - Add `ConnectionLimit::with_max_established` (see [PR 2137]).
 
+[PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137/
+
 - Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
 
 - Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
