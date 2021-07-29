@@ -83,7 +83,6 @@ where
     }
 
     fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {
-
     }
 
     fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
