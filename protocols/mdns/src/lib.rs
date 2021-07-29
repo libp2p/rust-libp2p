@@ -46,5 +46,4 @@ lazy_static! {
 pub use crate::behaviour::{Mdns, MdnsConfig, MdnsEvent};
 
 mod behaviour;
-mod dns;
-mod query;
+mod packet;
