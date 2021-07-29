@@ -21,7 +21,6 @@
 use crate::protocol;
 use futures::prelude::*;
 use futures::future::BoxFuture;
-
 use libp2p_core::{UpgradeError, upgrade::NegotiationError};
 use libp2p_swarm::{
     KeepAlive,
