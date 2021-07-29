@@ -86,7 +86,7 @@ where
         &mut self,
         _: PeerId,
         _: ConnectionId,
-        _: ProtocolsHandler::OutEvent
+        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
     ) {
 
     }
