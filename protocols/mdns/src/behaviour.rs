@@ -258,7 +258,7 @@ impl NetworkBehaviour for Mdns {
         &mut self,
         _: PeerId,
         _: libp2p_core::connection::ConnectionId,
-        ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
+        ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         void::unreachable(ev)
     }
