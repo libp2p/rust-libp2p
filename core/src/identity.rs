@@ -19,6 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A node's network identity keys.
+//!
+//! Such identity keys can be randomly generated on every startup,
+//! but using already existing, fixed keys is usually required.
+//! Though libp2p uses other crates (e.g. `ed25519_dalek`) internally,
+//! such details are not exposed as part of libp2p's public interface
+//! to keep them easily upgradable or replaceable (e.g. to `ed25519_zebra`).
+//! Consequently, keys of external ed25519 or secp256k1 crates cannot be
+//! directly converted into libp2p network identities.
+//! Instead, loading fixed keys must use the standard, thus more portable
+//! binary representation of the specific key type
+//! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
+//! All key types have functions to enable conversion to/from their binary representations.
 
 pub mod ed25519;
 #[cfg(not(target_arch = "wasm32"))]
@@ -115,6 +127,33 @@ impl Keypair {
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
         }
     }
+
+    /// Encode a private key as protobuf structure.
+    pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
+        use prost::Message;
+
+        let pk = match self {
+            Self::Ed25519(data) => keys_proto::PrivateKey {
+                r#type: keys_proto::KeyType::Ed25519.into(),
+                data: data.encode().into(),
+            },
+            #[cfg(not(target_arch = "wasm32"))]
+            Self::Rsa(_) => {
+                return Err(DecodingError::new(
+                    "Encoding RSA key into Protobuf is unsupported",
+                ))
+            }
+            #[cfg(feature = "secp256k1")]
+            Self::Secp256k1(_) => {
+                return Err(DecodingError::new(
+                    "Encoding Secp256k1 key into Protobuf is unsupported",
+                ))
+            }
+        };
+
+        Ok(pk.encode_to_vec())
+    }
+
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
@@ -254,6 +293,19 @@ impl PublicKey {
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    #[test]
+    fn keypair_protobuf_roundtrip() {
+        let expected_keypair = Keypair::generate_ed25519();
+        let expected_peer_id = expected_keypair.public().to_peer_id();
+
+        let encoded = expected_keypair.to_protobuf_encoding().unwrap();
+
+        let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
+        let peer_id = keypair.public().to_peer_id();
+
+        assert_eq!(expected_peer_id, peer_id);
+    }
 
     #[test]
     fn keypair_from_protobuf_encoding() {
