@@ -201,13 +201,6 @@ impl NetworkBehaviour for Identify {
         IdentifyHandler::new(self.config.initial_delay, self.config.interval)
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {
-    }
-
     fn inject_connection_established(&mut self, peer_id: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address } => address.clone(),
@@ -517,8 +510,8 @@ mod tests {
                 pin_mut!(swarm2_fut);
 
                 match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
-                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received { 
-                        info, 
+                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        info,
                         ..
                     })) => {
                         assert_eq!(info.public_key, pubkey2);
@@ -528,8 +521,8 @@ mod tests {
                         assert!(info.listen_addrs.is_empty());
                         return;
                     }
-                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received { 
-                        info, 
+                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        info,
                         ..
                     })) => {
                         assert_eq!(info.public_key, pubkey1);

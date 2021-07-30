@@ -605,7 +605,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                     this.behaviour.inject_new_listen_addr(listener_id, &listen_addr);
                     return Poll::Ready(SwarmEvent::NewListenAddr {
-                        listener_id, 
+                        listener_id,
                         address: listen_addr
                     });
                 }
@@ -1156,20 +1156,14 @@ impl NetworkBehaviour for DummyBehaviour {
         protocols_handler::DummyProtocolsHandler::default()
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
+    ) {
+        void::unreachable(event)
     }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_event(&mut self, _: PeerId, _: ConnectionId,
-        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
     fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) ->
         Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as

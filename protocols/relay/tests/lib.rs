@@ -1358,24 +1358,13 @@ impl libp2p_swarm::NetworkBehaviour for KeepAliveBehaviour {
         }
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
     fn inject_event(
         &mut self,
         _: PeerId,
         _: ConnectionId,
-        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
+        void::unreachable(event);
     }
 
     fn poll(
