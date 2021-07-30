@@ -94,13 +94,7 @@ use futures::{
     executor::ThreadPoolBuilder,
     stream::FusedStream,
 };
-use libp2p_core::{
-    Executor,
-    Transport,
-    Multiaddr,
-    Negotiated,
-    PeerId,
-    connection::{
+use libp2p_core::{Executor, Multiaddr, Negotiated, PeerId, Transport, connection::{
         ConnectionError,
         ConnectionId,
         ConnectionLimit,
@@ -110,10 +104,7 @@ use libp2p_core::{
         ListenerId,
         PendingConnectionError,
         Substream
-    },
-    transport::{self, TransportError},
-    muxing::StreamMuxerBox,
-    network::{
+    }, muxing::StreamMuxerBox, network::{
         self,
         ConnectionLimits,
         Network,
@@ -121,9 +112,7 @@ use libp2p_core::{
         NetworkEvent,
         NetworkConfig,
         peer::ConnectedPeer,
-    },
-    upgrade::{ProtocolName},
-};
+    }, transport::{self, TransportError}, upgrade::{ProtocolName}};
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, pin::Pin, task::{Context, Poll}};
@@ -1144,8 +1133,29 @@ impl error::Error for DialError {
 }
 
 /// Dummy implementation of [`NetworkBehaviour`] that doesn't do anything.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct DummyBehaviour {
+    keep_alive: KeepAlive
+}
+
+impl DummyBehaviour {
+    pub fn with_keep_alive(keep_alive: KeepAlive) -> Self {
+        Self {
+            keep_alive
+        }
+    }
+
+    pub fn keep_alive_mut(&mut self) -> &mut KeepAlive {
+        &mut self.keep_alive
+    }
+}
+
+impl Default for DummyBehaviour {
+    fn default() -> Self {
+        Self {
+            keep_alive: KeepAlive::No
+        }
+    }
 }
 
 impl NetworkBehaviour for DummyBehaviour {
@@ -1153,7 +1163,9 @@ impl NetworkBehaviour for DummyBehaviour {
     type OutEvent = void::Void;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        protocols_handler::DummyProtocolsHandler::default()
+        protocols_handler::DummyProtocolsHandler {
+            keep_alive: self.keep_alive
+        }
     }
 
     fn inject_event(

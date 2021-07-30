@@ -24,24 +24,18 @@ use futures::stream::{Stream, StreamExt};
 use futures::task::Spawn;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::NetworkBehaviour;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::either::EitherTransport;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
-use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{identity, upgrade, PeerId};
 use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
-use libp2p_swarm::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
-};
-use libp2p_swarm::{
-    AddressRecord, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
-};
+use libp2p_swarm::protocols_handler::KeepAlive;
+use libp2p_swarm::{AddressRecord, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent};
 use std::iter;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -720,7 +714,7 @@ fn inactive_connection_timeout() {
     let mut relay_swarm = build_keep_alive_swarm();
 
     // Connections only kept alive by Source Node and Destination Node.
-    relay_swarm.behaviour_mut().keep_alive.keep_alive = KeepAlive::No;
+    *relay_swarm.behaviour_mut().keep_alive.keep_alive_mut() = KeepAlive::No;
 
     let relay_peer_id = *relay_swarm.local_peer_id();
     let dst_peer_id = *dst_swarm.local_peer_id();
@@ -1183,7 +1177,7 @@ impl NetworkBehaviourEventProcess<()> for CombinedBehaviour {
 #[derive(NetworkBehaviour)]
 struct CombinedKeepAliveBehaviour {
     relay: Relay,
-    keep_alive: KeepAliveBehaviour,
+    keep_alive: DummyBehaviour,
 }
 
 impl NetworkBehaviourEventProcess<()> for CombinedKeepAliveBehaviour {
@@ -1310,13 +1304,13 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
 
     let combined_behaviour = CombinedKeepAliveBehaviour {
         relay: relay_behaviour,
-        keep_alive: KeepAliveBehaviour::default(),
+        keep_alive: DummyBehaviour::with_keep_alive(KeepAlive::Yes),
     };
 
     Swarm::new(transport, combined_behaviour, local_peer_id)
 }
 
-fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
+fn build_keep_alive_only_swarm() -> Swarm<DummyBehaviour> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let plaintext = PlainText2Config {
@@ -1332,127 +1326,7 @@ fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::new(transport, KeepAliveBehaviour::default(), local_peer_id)
-}
-
-#[derive(Clone)]
-pub struct KeepAliveBehaviour {
-    keep_alive: KeepAlive,
-}
-
-impl Default for KeepAliveBehaviour {
-    fn default() -> Self {
-        Self {
-            keep_alive: KeepAlive::Yes,
-        }
-    }
-}
-
-impl libp2p_swarm::NetworkBehaviour for KeepAliveBehaviour {
-    type ProtocolsHandler = KeepAliveProtocolsHandler;
-    type OutEvent = void::Void;
-
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        KeepAliveProtocolsHandler {
-            keep_alive: self.keep_alive,
-        }
-    }
-
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-    ) {
-        void::unreachable(event);
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
-        Poll::Pending
-    }
-}
-
-/// Implementation of `ProtocolsHandler` that doesn't handle anything.
-#[derive(Clone, Debug)]
-pub struct KeepAliveProtocolsHandler {
-    pub keep_alive: KeepAlive,
-}
-
-impl ProtocolsHandler for KeepAliveProtocolsHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
-    type Error = Void;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
-    }
-
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<
-        ProtocolsHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
-        Poll::Pending
-    }
+    Swarm::new(transport, DummyBehaviour::with_keep_alive(KeepAlive::Yes), local_peer_id)
 }
 
 struct DummyPollParameters {}
