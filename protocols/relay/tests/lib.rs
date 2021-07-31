@@ -35,8 +35,7 @@ use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::KeepAlive;
-use libp2p_swarm::{AddressRecord, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent};
-use std::iter;
+use libp2p_swarm::{DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use void::Void;
@@ -1327,33 +1326,6 @@ fn build_keep_alive_only_swarm() -> Swarm<DummyBehaviour> {
         .boxed();
 
     Swarm::new(transport, DummyBehaviour::with_keep_alive(KeepAlive::Yes), local_peer_id)
-}
-
-struct DummyPollParameters {}
-
-impl PollParameters for DummyPollParameters {
-    type SupportedProtocolsIter = iter::Empty<Vec<u8>>;
-    type ListenedAddressesIter = iter::Empty<Multiaddr>;
-    type ExternalAddressesIter = iter::Empty<AddressRecord>;
-
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
-        unimplemented!();
-    }
-
-    /// Returns the list of the addresses we're listening on.
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        unimplemented!();
-    }
-
-    /// Returns the list of the addresses nodes can use to reach us.
-    fn external_addresses(&self) -> Self::ExternalAddressesIter {
-        unimplemented!();
-    }
-
-    /// Returns the peer id of the local node.
-    fn local_peer_id(&self) -> &PeerId {
-        unimplemented!();
-    }
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, mut swarm: Swarm<B>) {
