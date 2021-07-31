@@ -1,10 +1,34 @@
-# 0.29.0 [unreleased]
+# 0.30.0 [unreleased]
+
+- Add `ConnectionLimit::with_max_established` (see [PR 2137]).
+
+- Add `Keypair::to_protobuf_encoding` (see [PR 2142]).
+
+- Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
+
+- Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
+
+- Change `PeerId::from_public_key(PublicKey)` to `PeerId::from_public_key(&PublicKey)` (see [PR 2145]).
+
+- Add `From<&PublicKey> for PeerId` (see [PR 2145]).
+
+[PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+[PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
+[PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137/
+
+# 0.29.0 [2021-07-12]
 
 - Switch from `parity-multiaddr` to upstream `multiaddr`.
 
 - Update dependencies.
 
 - Implement `Keypair::from_protobuf_encoding` for ed25519 keys (see [PR 2090]).
+
+- Deprecate `upgrade::write_one`.
+  Deprecate `upgrade::write_with_len_prefix`.
+  Deprecate `upgrade::read_one`.
+  Introduce `upgrade::read_length_prefixed` and `upgrade::write_length_prefixed`.
+  See [PR 2111](https://github.com/libp2p/rust-libp2p/pull/2111).
 
 [PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090
 

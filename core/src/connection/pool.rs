@@ -987,6 +987,9 @@ impl ConnectionCounters {
     fn check_max_established(&self, endpoint: &ConnectedPoint)
         -> Result<(), ConnectionLimit>
     {
+        // Check total connection limit.
+        Self::check(self.num_established(), self.limits.max_established_total)?;
+        // Check incoming/outgoing connection limits
         match endpoint {
             ConnectedPoint::Dialer { .. } =>
                 Self::check(self.established_outgoing, self.limits.max_established_outgoing),
@@ -1031,6 +1034,7 @@ pub struct ConnectionLimits {
     max_established_incoming: Option<u32>,
     max_established_outgoing: Option<u32>,
     max_established_per_peer: Option<u32>,
+    max_established_total: Option<u32>,
 }
 
 impl ConnectionLimits {
@@ -1055,6 +1059,17 @@ impl ConnectionLimits {
     /// Configures the maximum number of concurrent established outbound connections.
     pub fn with_max_established_outgoing(mut self, limit: Option<u32>) -> Self {
         self.max_established_outgoing = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established connections (both
+    /// inbound and outbound).
+    ///
+    /// Note: This should be used in conjunction with
+    /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible
+    /// eclipse attacks (all connections being inbound).
+    pub fn with_max_established(mut self, limit: Option<u32>) -> Self {
+        self.max_established_total = limit;
         self
     }
 

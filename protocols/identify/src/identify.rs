@@ -201,13 +201,6 @@ impl NetworkBehaviour for Identify {
         IdentifyHandler::new(self.config.initial_delay, self.config.interval)
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {
-    }
-
     fn inject_connection_established(&mut self, peer_id: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address } => address.clone(),
@@ -478,7 +471,7 @@ mod tests {
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
                     .with_agent_version("b".to_string()));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -487,7 +480,7 @@ mod tests {
             let protocol = Identify::new(
                 IdentifyConfig::new("c".to_string(), pubkey.clone())
                     .with_agent_version("d".to_string()));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -498,7 +491,7 @@ mod tests {
                 let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    SwarmEvent::NewListenAddr { address, .. } => return address,
                     _ => {}
                 }
             }
@@ -517,8 +510,8 @@ mod tests {
                 pin_mut!(swarm2_fut);
 
                 match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
-                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received { 
-                        info, 
+                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        info,
                         ..
                     })) => {
                         assert_eq!(info.public_key, pubkey2);
@@ -528,8 +521,8 @@ mod tests {
                         assert!(info.listen_addrs.is_empty());
                         return;
                     }
-                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received { 
-                        info, 
+                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        info,
                         ..
                     })) => {
                         assert_eq!(info.public_key, pubkey1);
@@ -555,7 +548,7 @@ mod tests {
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
                     // Delay identification requests so we can test the push protocol.
                     .with_initial_delay(Duration::from_secs(u32::MAX as u64)));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -566,7 +559,7 @@ mod tests {
                     .with_agent_version("b".to_string())
                     // Delay identification requests so we can test the push protocol.
                     .with_initial_delay(Duration::from_secs(u32::MAX as u64)));
-            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -577,7 +570,7 @@ mod tests {
                 let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    SwarmEvent::NewListenAddr { address, .. } => return address,
                     _ => {}
                 }
             }
@@ -612,7 +605,7 @@ mod tests {
                     }
                 }
 
-                swarm2.behaviour_mut().push(std::iter::once(pubkey1.clone().into_peer_id()));
+                swarm2.behaviour_mut().push(std::iter::once(pubkey1.to_peer_id()));
             }
         })
     }

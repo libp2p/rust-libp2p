@@ -27,13 +27,13 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade::{self, read_one, write_one}
+    upgrade::{self, read_length_prefixed, write_length_prefixed}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
-use futures::{channel::mpsc, executor::LocalPool, prelude::*, task::SpawnExt};
+use futures::{channel::mpsc, executor::LocalPool, prelude::*, task::SpawnExt, AsyncWriteExt};
 use rand::{self, Rng};
 use std::{io, iter};
 use std::{collections::HashSet, num::NonZeroU16};
@@ -98,7 +98,7 @@ fn ping_protocol() {
     let peer1 = async move {
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::NewListenAddr { address, .. }=> tx.send(address).await.unwrap(),
                 SwarmEvent::Behaviour(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. }
@@ -312,7 +312,7 @@ fn ping_protocol_throttled() {
     let peer1 = async move {
         for i in 1 .. {
             match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
                 SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. },
@@ -383,7 +383,7 @@ fn ping_protocol_throttled() {
 
 fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = id_keys.public().into_peer_id();
+    let peer_id = id_keys.public().to_peer_id();
     let noise_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)
@@ -421,13 +421,13 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_one(io, 1024)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Ping(vec))
-            })
-            .await
+        let vec = read_length_prefixed(io, 1024).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into())
+        }
+
+        Ok(Ping(vec))
     }
 
     async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T)
@@ -435,13 +435,13 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncRead + Unpin + Send
     {
-        read_one(io, 1024)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Pong(vec))
-            })
-            .await
+        let vec = read_length_prefixed(io, 1024).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into())
+        }
+
+        Ok(Pong(vec))
     }
 
     async fn write_request<T>(&mut self, _: &PingProtocol, io: &mut T, Ping(data): Ping)
@@ -449,7 +449,10 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).await
+        write_length_prefixed(io, data).await?;
+        io.close().await?;
+
+        Ok(())
     }
 
     async fn write_response<T>(&mut self, _: &PingProtocol, io: &mut T, Pong(data): Pong)
@@ -457,6 +460,9 @@ impl RequestResponseCodec for PingCodec {
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).await
+        write_length_prefixed(io, data).await?;
+        io.close().await?;
+
+        Ok(())
     }
 }

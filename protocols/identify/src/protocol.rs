@@ -173,7 +173,7 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.into_protobuf_encoding();
+    let pubkey_bytes = info.public_key.to_protobuf_encoding();
 
     let message = structs_proto::Identify {
         agent_version: Some(info.agent_version),
@@ -186,7 +186,11 @@ where
 
     let mut bytes = Vec::with_capacity(message.encoded_len());
     message.encode(&mut bytes).expect("Vec<u8> provides capacity as needed");
-    upgrade::write_one(&mut io, &bytes).await
+
+    upgrade::write_length_prefixed(&mut io, bytes).await?;
+    io.close().await?;
+
+    Ok(())
 }
 
 async fn recv<T>(mut socket: T) -> io::Result<IdentifyInfo>
@@ -195,7 +199,7 @@ where
 {
     socket.close().await?;
 
-    let msg = upgrade::read_one(&mut socket, 4096)
+    let msg = upgrade::read_length_prefixed(&mut socket, 4096)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
         .await?;
 
@@ -203,7 +207,7 @@ where
         Ok(v) => v,
         Err(err) => {
             debug!("Invalid message: {:?}", err);
-            return Err(err.into())
+            return Err(err)
         }
     };
 

@@ -181,10 +181,10 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     .get_or_create(&vec![("peer".into(), "unknown".into())])
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::NewListenAddr(_) => {
+            libp2p_swarm::SwarmEvent::NewListenAddr { .. } => {
                 self.swarm.new_listen_addr.inc();
             }
-            libp2p_swarm::SwarmEvent::ExpiredListenAddr(_) => {
+            libp2p_swarm::SwarmEvent::ExpiredListenAddr { .. } => {
                 self.swarm.expired_listen_addr.inc();
             }
             libp2p_swarm::SwarmEvent::ListenerClosed { .. } => {

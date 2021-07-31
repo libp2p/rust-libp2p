@@ -82,12 +82,6 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
-    fn inject_connected(&mut self, _: &PeerId) {
-    }
-
-    fn inject_disconnected(&mut self, _: &PeerId) {
-    }
-
     fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {
     }
 
@@ -167,6 +161,8 @@ where
         self.inject_listener_closed = Vec::new();
         self.poll = 0;
     }
+
+    pub fn inner(&mut self) -> &mut TInner { &mut self.inner }
 }
 
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>

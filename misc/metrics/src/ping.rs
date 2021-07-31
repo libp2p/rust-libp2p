@@ -35,6 +35,9 @@ impl From<&libp2p_ping::PingFailure> for FailureLabels {
             libp2p_ping::PingFailure::Timeout => FailureLabels {
                 reason: Failure::Timeout,
             },
+            libp2p_ping::PingFailure::Unsupported => FailureLabels {
+                reason: Failure::Unsupported,
+            },
             libp2p_ping::PingFailure::Other { .. } => FailureLabels {
                 reason: Failure::Other,
             },
@@ -45,6 +48,7 @@ impl From<&libp2p_ping::PingFailure> for FailureLabels {
 #[derive(Clone, Hash, PartialEq, Eq, Encode)]
 enum Failure {
     Timeout,
+    Unsupported,
     Other,
 }
 

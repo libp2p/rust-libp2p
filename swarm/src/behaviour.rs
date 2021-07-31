@@ -80,7 +80,9 @@ pub trait NetworkBehaviour: Send + 'static {
     /// The addresses will be tried in the order returned by this function, which means that they
     /// should be ordered by decreasing likelihood of reachability. In other words, the first
     /// address should be the most likely to be reachable.
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr>;
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        vec![]
+    }
 
     /// Indicate to the behaviour that we connected to the node with the given peer id.
     ///
@@ -88,7 +90,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// This method is only called when the first connection to the peer is established, preceded by
     /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
-    fn inject_connected(&mut self, peer_id: &PeerId);
+    fn inject_connected(&mut self, _: &PeerId) { }
 
     /// Indicates to the behaviour that we disconnected from the node with the given peer id.
     ///
@@ -97,7 +99,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// This method is only called when the last established connection to the peer is closed,
     /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
-    fn inject_disconnected(&mut self, peer_id: &PeerId);
+    fn inject_disconnected(&mut self, _: &PeerId) { }
 
     /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint)
@@ -293,6 +295,23 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// relative to other observed addresses.
         score: AddressScore,
     },
+
+    /// Instructs the `Swarm` to initiate a graceful close of one or all connections
+    /// with the given peer.
+    ///
+    /// Note: Closing a connection via
+    /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
+    /// corresponding [`ProtocolsHandler`].
+    /// Closing a connection via a [`ProtocolsHandler`] can be done
+    /// either in a collaborative manner across [`ProtocolsHandler`]s
+    /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
+    /// [`ProtocolsHandlerEvent::Close`](crate::ProtocolsHandlerEvent::Close).
+    CloseConnection {
+        /// The peer to disconnect.
+        peer_id: PeerId,
+        /// Whether to close a specific or all connections to the given peer.
+        connection: CloseConnection,
+    }
 }
 
 impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
@@ -312,7 +331,9 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
                     event: f(event)
                 },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+                NetworkBehaviourAction::ReportObservedAddr { address, score },
+            NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
+                NetworkBehaviourAction::CloseConnection { peer_id, connection }
         }
     }
 
@@ -328,7 +349,9 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
             NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
                 NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+                NetworkBehaviourAction::ReportObservedAddr { address, score },
+            NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
+                NetworkBehaviourAction::CloseConnection { peer_id, connection }
         }
     }
 }
@@ -371,5 +394,20 @@ pub enum DialPeerCondition {
 impl Default for DialPeerCondition {
     fn default() -> Self {
         DialPeerCondition::Disconnected
+    }
+}
+
+/// The options which connections to close.
+#[derive(Debug, Clone)]
+pub enum CloseConnection {
+    /// Disconnect a particular connection.
+    One(ConnectionId),
+    /// Disconnect all connections.
+    All,
+}
+
+impl Default for CloseConnection {
+    fn default() -> Self {
+        CloseConnection::All
     }
 }

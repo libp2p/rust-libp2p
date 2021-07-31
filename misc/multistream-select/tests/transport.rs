@@ -42,7 +42,7 @@ type TestNetwork = Network<TestTransport, (), (), TestHandler>;
 
 fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
     let keys = identity::Keypair::generate_ed25519();
-    let id = keys.public().into_peer_id();
+    let id = keys.public().to_peer_id();
     (id, MemoryTransport::default()
         .upgrade(up)
         .authenticate(PlainText2Config { local_public_key: keys.public() })

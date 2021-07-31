@@ -156,8 +156,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.as_bytes());
             }
             event = swarm.select_next_some() => {
-                if let SwarmEvent::NewListenAddr(addr) = event {
-                    println!("Listening on {:?}", addr);
+                if let SwarmEvent::NewListenAddr { address, .. } = event {
+                    println!("Listening on {:?}", address);
                 }
             }
         }
