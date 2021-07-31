@@ -19,24 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    ConnectedPoint,
-    PeerId,
     connection::{
         self,
-        Connected,
-        Connection,
-        ConnectionId,
-        ConnectionLimit,
-        ConnectionError,
-        ConnectionHandler,
-        IncomingInfo,
-        IntoConnectionHandler,
-        OutgoingInfo,
-        Substream,
-        PendingConnectionError,
         manager::{self, Manager, ManagerConfig},
+        Connected, Connection, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
+        IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
+    ConnectedPoint, PeerId,
 };
 use either::Either;
 use fnv::FnvHashMap;
@@ -72,7 +62,7 @@ pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
 }
 
 impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> fmt::Debug
-for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+    for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
@@ -82,7 +72,9 @@ for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 }
 
 impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> Unpin
-for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {}
+    for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+{
+}
 
 /// Event that can happen on the `Pool`.
 pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
@@ -153,7 +145,7 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
 }
 
 impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> fmt::Debug
-for PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+    for PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 where
     TOutEvent: fmt::Debug,
     TTransErr: fmt::Debug,
@@ -162,37 +154,46 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            PoolEvent::ConnectionEstablished { ref connection, .. } => {
-                f.debug_tuple("PoolEvent::ConnectionEstablished")
-                    .field(connection)
-                    .finish()
-            },
-            PoolEvent::ConnectionClosed { ref id, ref connected, ref error, .. } => {
-                f.debug_struct("PoolEvent::ConnectionClosed")
-                    .field("id", id)
-                    .field("connected", connected)
-                    .field("error", error)
-                    .finish()
-            },
-            PoolEvent::PendingConnectionError { ref id, ref error, .. } => {
-                f.debug_struct("PoolEvent::PendingConnectionError")
-                    .field("id", id)
-                    .field("error", error)
-                    .finish()
-            },
-            PoolEvent::ConnectionEvent { ref connection, ref event } => {
-                f.debug_struct("PoolEvent::ConnectionEvent")
-                    .field("peer", &connection.peer_id())
-                    .field("event", event)
-                    .finish()
-            },
-            PoolEvent::AddressChange { ref connection, ref new_endpoint, ref old_endpoint } => {
-                f.debug_struct("PoolEvent::AddressChange")
-                    .field("peer", &connection.peer_id())
-                    .field("new_endpoint", new_endpoint)
-                    .field("old_endpoint", old_endpoint)
-                    .finish()
-            },
+            PoolEvent::ConnectionEstablished { ref connection, .. } => f
+                .debug_tuple("PoolEvent::ConnectionEstablished")
+                .field(connection)
+                .finish(),
+            PoolEvent::ConnectionClosed {
+                ref id,
+                ref connected,
+                ref error,
+                ..
+            } => f
+                .debug_struct("PoolEvent::ConnectionClosed")
+                .field("id", id)
+                .field("connected", connected)
+                .field("error", error)
+                .finish(),
+            PoolEvent::PendingConnectionError {
+                ref id, ref error, ..
+            } => f
+                .debug_struct("PoolEvent::PendingConnectionError")
+                .field("id", id)
+                .field("error", error)
+                .finish(),
+            PoolEvent::ConnectionEvent {
+                ref connection,
+                ref event,
+            } => f
+                .debug_struct("PoolEvent::ConnectionEvent")
+                .field("peer", &connection.peer_id())
+                .field("event", event)
+                .finish(),
+            PoolEvent::AddressChange {
+                ref connection,
+                ref new_endpoint,
+                ref old_endpoint,
+            } => f
+                .debug_struct("PoolEvent::AddressChange")
+                .field("peer", &connection.peer_id())
+                .field("new_endpoint", new_endpoint)
+                .field("old_endpoint", old_endpoint)
+                .finish(),
         }
     }
 }
@@ -201,11 +202,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 {
     /// Creates a new empty `Pool`.
-    pub fn new(
-        local_id: PeerId,
-        manager_config: ManagerConfig,
-        limits: ConnectionLimits
-    ) -> Self {
+    pub fn new(local_id: PeerId, manager_config: ManagerConfig, limits: ConnectionLimits) -> Self {
         Pool {
             local_id,
             counters: ConnectionCounters::new(limits),
@@ -233,16 +230,17 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         info: IncomingInfo<'_>,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
-        TFut: Future<
-            Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>
-        > + Send + 'static,
+        TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
+            + Send
+            + 'static,
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
-            Substream = Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
-        > + Send + 'static,
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+                Error = THandlerErr,
+            > + Send
+            + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
@@ -268,16 +266,17 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         info: OutgoingInfo<'_>,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
-        TFut: Future<
-            Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>
-        > + Send + 'static,
+        TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
+            + Send
+            + 'static,
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
-            Substream = Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
-        > + Send + 'static,
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+                Error = THandlerErr,
+            > + Send
+            + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
@@ -301,16 +300,17 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         peer: Option<PeerId>,
     ) -> ConnectionId
     where
-        TFut: Future<
-            Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>
-        > + Send + 'static,
+        TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
+            + Send
+            + 'static,
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
-            Substream = Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
-        > + Send + 'static,
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+                Error = THandlerErr,
+            > + Send
+            + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
@@ -330,12 +330,12 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
             move |(peer_id, muxer)| {
                 if let Some(peer) = expected_peer {
                     if peer != peer_id {
-                        return future::err(PendingConnectionError::InvalidPeerId)
+                        return future::err(PendingConnectionError::InvalidPeerId);
                     }
                 }
 
                 if local_id == peer_id {
-                    return future::err(PendingConnectionError::InvalidPeerId)
+                    return future::err(PendingConnectionError::InvalidPeerId);
                 }
 
                 let connected = Connected { peer_id, endpoint };
@@ -354,16 +354,20 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     /// Returns the assigned connection ID on success. An error is returned
     /// if the configured maximum number of established connections for the
     /// connected peer has been reached.
-    pub fn add<TMuxer>(&mut self, c: Connection<TMuxer, THandler::Handler>, i: Connected)
-        -> Result<ConnectionId, ConnectionLimit>
+    pub fn add<TMuxer>(
+        &mut self,
+        c: Connection<TMuxer, THandler::Handler>,
+        i: Connected,
+    ) -> Result<ConnectionId, ConnectionLimit>
     where
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
-            Substream = connection::Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
-        > + Send + 'static,
+                Substream = connection::Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+                Error = THandlerErr,
+            > + Send
+            + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
@@ -373,60 +377,59 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         TMuxer::OutboundSubstream: Send + 'static,
     {
         self.counters.check_max_established(&i.endpoint)?;
-        self.counters.check_max_established_per_peer(self.num_peer_established(&i.peer_id))?;
+        self.counters
+            .check_max_established_per_peer(self.num_peer_established(&i.peer_id))?;
         let id = self.manager.add(c, i.clone());
         self.counters.inc_established(&i.endpoint);
-        self.established.entry(i.peer_id).or_default().insert(id, i.endpoint);
+        self.established
+            .entry(i.peer_id)
+            .or_default()
+            .insert(id, i.endpoint);
         Ok(id)
     }
 
     /// Gets an entry representing a connection in the pool.
     ///
     /// Returns `None` if the pool has no connection with the given ID.
-    pub fn get(&mut self, id: ConnectionId)
-        -> Option<PoolConnection<'_, TInEvent>>
-    {
+    pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, TInEvent>> {
         match self.manager.entry(id) {
-            Some(manager::Entry::Established(entry)) =>
-                Some(PoolConnection::Established(EstablishedConnection {
-                    entry
-                })),
-            Some(manager::Entry::Pending(entry)) =>
+            Some(manager::Entry::Established(entry)) => {
+                Some(PoolConnection::Established(EstablishedConnection { entry }))
+            }
+            Some(manager::Entry::Pending(entry)) => {
                 Some(PoolConnection::Pending(PendingConnection {
                     entry,
                     pending: &mut self.pending,
                     counters: &mut self.counters,
-                })),
-            None => None
+                }))
+            }
+            None => None,
         }
     }
 
     /// Gets an established connection from the pool by ID.
-    pub fn get_established(&mut self, id: ConnectionId)
-        -> Option<EstablishedConnection<'_, TInEvent>>
-    {
+    pub fn get_established(
+        &mut self,
+        id: ConnectionId,
+    ) -> Option<EstablishedConnection<'_, TInEvent>> {
         match self.get(id) {
             Some(PoolConnection::Established(c)) => Some(c),
-            _ => None
+            _ => None,
         }
     }
 
     /// Gets a pending outgoing connection by ID.
-    pub fn get_outgoing(&mut self, id: ConnectionId)
-        -> Option<PendingConnection<'_, TInEvent>>
-    {
+    pub fn get_outgoing(&mut self, id: ConnectionId) -> Option<PendingConnection<'_, TInEvent>> {
         match self.pending.get(&id) {
-            Some((ConnectedPoint::Dialer { .. }, _peer)) =>
-                match self.manager.entry(id) {
-                    Some(manager::Entry::Pending(entry)) =>
-                        Some(PendingConnection {
-                            entry,
-                            pending: &mut self.pending,
-                            counters: &mut self.counters,
-                        }),
-                    _ => unreachable!("by consistency of `self.pending` with `self.manager`")
-                }
-            _ => None
+            Some((ConnectedPoint::Dialer { .. }, _peer)) => match self.manager.entry(id) {
+                Some(manager::Entry::Pending(entry)) => Some(PendingConnection {
+                    entry,
+                    pending: &mut self.pending,
+                    counters: &mut self.counters,
+                }),
+                _ => unreachable!("by consistency of `self.pending` with `self.manager`"),
+            },
+            _ => None,
         }
     }
 
@@ -460,7 +463,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
                     let connected = e.remove();
                     self.disconnected.push(Disconnected {
-                        id, connected, num_established
+                        id,
+                        connected,
+                        num_established,
                     });
                     num_established += 1;
                 }
@@ -491,16 +496,20 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     }
 
     /// Returns an iterator over all established connections of `peer`.
-    pub fn iter_peer_established<'a>(&'a mut self, peer: &PeerId)
-        -> EstablishedConnectionIter<'a,
-            impl Iterator<Item = ConnectionId>,
-            TInEvent,
-            TOutEvent,
-            THandler,
-            TTransErr,
-            THandlerErr>
-    {
-        let ids = self.iter_peer_established_info(peer)
+    pub fn iter_peer_established<'a>(
+        &'a mut self,
+        peer: &PeerId,
+    ) -> EstablishedConnectionIter<
+        'a,
+        impl Iterator<Item = ConnectionId>,
+        TInEvent,
+        TOutEvent,
+        THandler,
+        TTransErr,
+        THandlerErr,
+    > {
+        let ids = self
+            .iter_peer_established_info(peer)
             .map(|(id, _endpoint)| *id)
             .collect::<SmallVec<[ConnectionId; 10]>>()
             .into_iter();
@@ -511,45 +520,50 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     /// Returns an iterator for information on all pending incoming connections.
     pub fn iter_pending_incoming(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
         self.iter_pending_info()
-            .filter_map(|(_, ref endpoint, _)| {
-                match endpoint {
-                    ConnectedPoint::Listener { local_addr, send_back_addr } => {
-                        Some(IncomingInfo { local_addr, send_back_addr })
-                    },
-                    ConnectedPoint::Dialer { .. } => None,
-                }
+            .filter_map(|(_, ref endpoint, _)| match endpoint {
+                ConnectedPoint::Listener {
+                    local_addr,
+                    send_back_addr,
+                } => Some(IncomingInfo {
+                    local_addr,
+                    send_back_addr,
+                }),
+                ConnectedPoint::Dialer { .. } => None,
             })
     }
 
     /// Returns an iterator for information on all pending outgoing connections.
     pub fn iter_pending_outgoing(&self) -> impl Iterator<Item = OutgoingInfo<'_>> {
         self.iter_pending_info()
-            .filter_map(|(_, ref endpoint, ref peer_id)| {
-                match endpoint {
-                    ConnectedPoint::Listener { .. } => None,
-                    ConnectedPoint::Dialer { address } =>
-                        Some(OutgoingInfo { address, peer_id: peer_id.as_ref() }),
-                }
+            .filter_map(|(_, ref endpoint, ref peer_id)| match endpoint {
+                ConnectedPoint::Listener { .. } => None,
+                ConnectedPoint::Dialer { address } => Some(OutgoingInfo {
+                    address,
+                    peer_id: peer_id.as_ref(),
+                }),
             })
     }
 
     /// Returns an iterator over all connection IDs and associated endpoints
     /// of established connections to `peer` known to the pool.
-    pub fn iter_peer_established_info(&self, peer: &PeerId)
-        -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint)> + fmt::Debug + '_
-    {
+    pub fn iter_peer_established_info(
+        &self,
+        peer: &PeerId,
+    ) -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint)> + fmt::Debug + '_ {
         match self.established.get(peer) {
             Some(conns) => Either::Left(conns.iter()),
-            None => Either::Right(std::iter::empty())
+            None => Either::Right(std::iter::empty()),
         }
     }
 
     /// Returns an iterator over all pending connection IDs together
     /// with associated endpoints and expected peer IDs in the pool.
-    pub fn iter_pending_info(&self)
-        -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint, &Option<PeerId>)> + '_
-    {
-        self.pending.iter().map(|(id, (endpoint, info))| (id, endpoint, info))
+    pub fn iter_pending_info(
+        &self,
+    ) -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint, &Option<PeerId>)> + '_ {
+        self.pending
+            .iter()
+            .map(|(id, (endpoint, info))| (id, endpoint, info))
     }
 
     /// Returns an iterator over all connected peers, i.e. those that have
@@ -562,9 +576,10 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     ///
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<
-        PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
-    >     {
+    pub fn poll<'a>(
+        &'a mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>> {
         // Drain events resulting from forced disconnections.
         //
         // Note: The `Disconnected` entries in `self.disconnected`
@@ -573,15 +588,18 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         // events in an order that properly counts down `num_established`.
         // See also `Pool::disconnect`.
         if let Some(Disconnected {
-            id, connected, num_established
-        }) = self.disconnected.pop() {
+            id,
+            connected,
+            num_established,
+        }) = self.disconnected.pop()
+        {
             return Poll::Ready(PoolEvent::ConnectionClosed {
                 id,
                 connected,
                 num_established,
                 error: None,
                 pool: self,
-            })
+            });
         }
 
         // Poll the connection `Manager`.
@@ -601,11 +619,15 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                             error,
                             handler: Some(handler),
                             peer,
-                            pool: self
-                        })
+                            pool: self,
+                        });
                     }
-                },
-                manager::Event::ConnectionClosed { id, connected, error } => {
+                }
+                manager::Event::ConnectionClosed {
+                    id,
+                    connected,
+                    error,
+                } => {
                     let num_established =
                         if let Some(conns) = self.established.get_mut(&connected.peer_id) {
                             if let Some(endpoint) = conns.remove(&id) {
@@ -619,8 +641,12 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                         self.established.remove(&connected.peer_id);
                     }
                     return Poll::Ready(PoolEvent::ConnectionClosed {
-                        id, connected, error, num_established, pool: self
-                    })
+                        id,
+                        connected,
+                        error,
+                        num_established,
+                        pool: self,
+                    });
                 }
                 manager::Event::ConnectionEstablished { entry } => {
                     let id = entry.id();
@@ -636,12 +662,13 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                                 error: PendingConnectionError::ConnectionLimit(e),
                                 handler: None,
                                 peer,
-                                pool: self
-                            })
+                                pool: self,
+                            });
                         }
 
                         // Check per-peer established connection limit.
-                        let current = num_peer_established(&self.established, &entry.connected().peer_id);
+                        let current =
+                            num_peer_established(&self.established, &entry.connected().peer_id);
                         if let Err(e) = self.counters.check_max_established_per_peer(current) {
                             let connected = entry.remove();
                             return Poll::Ready(PoolEvent::PendingConnectionError {
@@ -650,8 +677,8 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                                 error: PendingConnectionError::ConnectionLimit(e),
                                 handler: None,
                                 peer,
-                                pool: self
-                            })
+                                pool: self,
+                            });
                         }
 
                         // Peer ID checks must already have happened. See `add_pending`.
@@ -669,54 +696,62 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                         // Add the connection to the pool.
                         let peer = entry.connected().peer_id;
                         let conns = self.established.entry(peer).or_default();
-                        let num_established = NonZeroU32::new(u32::try_from(conns.len() + 1).unwrap())
-                            .expect("n + 1 is always non-zero; qed");
+                        let num_established =
+                            NonZeroU32::new(u32::try_from(conns.len() + 1).unwrap())
+                                .expect("n + 1 is always non-zero; qed");
                         self.counters.inc_established(&endpoint);
                         conns.insert(id, endpoint);
                         match self.get(id) {
-                            Some(PoolConnection::Established(connection)) =>
+                            Some(PoolConnection::Established(connection)) => {
                                 return Poll::Ready(PoolEvent::ConnectionEstablished {
-                                    connection, num_established
-                                }),
-                            _ => unreachable!("since `entry` is an `EstablishedEntry`.")
+                                    connection,
+                                    num_established,
+                                })
+                            }
+                            _ => unreachable!("since `entry` is an `EstablishedEntry`."),
                         }
                     }
-                },
+                }
                 manager::Event::ConnectionEvent { entry, event } => {
                     let id = entry.id();
                     match self.get(id) {
-                        Some(PoolConnection::Established(connection)) =>
-                            return Poll::Ready(PoolEvent::ConnectionEvent {
-                                connection,
-                                event,
-                            }),
-                        _ => unreachable!("since `entry` is an `EstablishedEntry`.")
+                        Some(PoolConnection::Established(connection)) => {
+                            return Poll::Ready(PoolEvent::ConnectionEvent { connection, event })
+                        }
+                        _ => unreachable!("since `entry` is an `EstablishedEntry`."),
                     }
-                },
-                manager::Event::AddressChange { entry, new_endpoint, old_endpoint } => {
+                }
+                manager::Event::AddressChange {
+                    entry,
+                    new_endpoint,
+                    old_endpoint,
+                } => {
                     let id = entry.id();
 
                     match self.established.get_mut(&entry.connected().peer_id) {
-                        Some(list) => *list.get_mut(&id)
-                            .expect("state inconsistency: entry is `EstablishedEntry` but absent \
-                                from `established`") = new_endpoint.clone(),
-                        None => unreachable!("since `entry` is an `EstablishedEntry`.")
+                        Some(list) => {
+                            *list.get_mut(&id).expect(
+                                "state inconsistency: entry is `EstablishedEntry` but absent \
+                                from `established`",
+                            ) = new_endpoint.clone()
+                        }
+                        None => unreachable!("since `entry` is an `EstablishedEntry`."),
                     };
 
                     match self.get(id) {
-                        Some(PoolConnection::Established(connection)) =>
+                        Some(PoolConnection::Established(connection)) => {
                             return Poll::Ready(PoolEvent::AddressChange {
                                 connection,
                                 new_endpoint,
                                 old_endpoint,
-                            }),
-                        _ => unreachable!("since `entry` is an `EstablishedEntry`.")
+                            })
+                        }
+                        _ => unreachable!("since `entry` is an `EstablishedEntry`."),
                     }
-                },
+                }
             }
         }
     }
-
 }
 
 /// A connection in a [`Pool`].
@@ -732,9 +767,7 @@ pub struct PendingConnection<'a, TInEvent> {
     counters: &'a mut ConnectionCounters,
 }
 
-impl<TInEvent>
-    PendingConnection<'_, TInEvent>
-{
+impl<TInEvent> PendingConnection<'_, TInEvent> {
     /// Returns the local connection ID.
     pub fn id(&self) -> ConnectionId {
         self.entry.id()
@@ -742,17 +775,29 @@ impl<TInEvent>
 
     /// Returns the (expected) identity of the remote peer, if known.
     pub fn peer_id(&self) -> &Option<PeerId> {
-        &self.pending.get(&self.entry.id()).expect("`entry` is a pending entry").1
+        &self
+            .pending
+            .get(&self.entry.id())
+            .expect("`entry` is a pending entry")
+            .1
     }
 
     /// Returns information about this endpoint of the connection.
     pub fn endpoint(&self) -> &ConnectedPoint {
-        &self.pending.get(&self.entry.id()).expect("`entry` is a pending entry").0
+        &self
+            .pending
+            .get(&self.entry.id())
+            .expect("`entry` is a pending entry")
+            .0
     }
 
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(self) {
-        let endpoint = self.pending.remove(&self.entry.id()).expect("`entry` is a pending entry").0;
+        let endpoint = self
+            .pending
+            .remove(&self.entry.id())
+            .expect("`entry` is a pending entry")
+            .0;
         self.counters.dec_pending(&endpoint);
         self.entry.abort();
     }
@@ -763,8 +808,7 @@ pub struct EstablishedConnection<'a, TInEvent> {
     entry: manager::EstablishedEntry<'a, TInEvent>,
 }
 
-impl<TInEvent> fmt::Debug
-for EstablishedConnection<'_, TInEvent>
+impl<TInEvent> fmt::Debug for EstablishedConnection<'_, TInEvent>
 where
     TInEvent: fmt::Debug,
 {
@@ -815,7 +859,7 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(),()>> {
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
         self.entry.poll_ready_notify_handler(cx)
     }
 
@@ -830,7 +874,7 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
 /// An iterator over established connections in a pool.
 pub struct EstablishedConnectionIter<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
     pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>,
-    ids: I
+    ids: I,
 }
 
 // Note: Ideally this would be an implementation of `Iterator`, but that
@@ -839,19 +883,19 @@ pub struct EstablishedConnectionIter<'a, I, TInEvent, TOutEvent, THandler, TTran
 impl<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     EstablishedConnectionIter<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 where
-    I: Iterator<Item = ConnectionId>
+    I: Iterator<Item = ConnectionId>,
 {
     /// Obtains the next connection, if any.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>>
-    {
+    pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>> {
         while let Some(id) = self.ids.next() {
-            if self.pool.manager.is_established(&id) { // (*)
+            if self.pool.manager.is_established(&id) {
+                // (*)
                 match self.pool.manager.entry(id) {
                     Some(manager::Entry::Established(entry)) => {
                         return Some(EstablishedConnection { entry })
                     }
-                    _ => panic!("Established entry not found in manager.") // see (*)
+                    _ => panic!("Established entry not found in manager."), // see (*)
                 }
             }
         }
@@ -864,17 +908,18 @@ where
     }
 
     /// Returns the first connection, if any, consuming the iterator.
-    pub fn into_first<'b>(mut self)
-        -> Option<EstablishedConnection<'b, TInEvent>>
-    where 'a: 'b
+    pub fn into_first<'b>(mut self) -> Option<EstablishedConnection<'b, TInEvent>>
+    where
+        'a: 'b,
     {
         while let Some(id) = self.ids.next() {
-            if self.pool.manager.is_established(&id) { // (*)
+            if self.pool.manager.is_established(&id) {
+                // (*)
                 match self.pool.manager.entry(id) {
                     Some(manager::Entry::Established(entry)) => {
                         return Some(EstablishedConnection { entry })
                     }
-                    _ => panic!("Established entry not found in manager.") // see (*)
+                    _ => panic!("Established entry not found in manager."), // see (*)
                 }
             }
         }
@@ -950,29 +995,45 @@ impl ConnectionCounters {
 
     fn inc_pending(&mut self, endpoint: &ConnectedPoint) {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => { self.pending_outgoing += 1; }
-            ConnectedPoint::Listener { .. } => { self.pending_incoming += 1; }
+            ConnectedPoint::Dialer { .. } => {
+                self.pending_outgoing += 1;
+            }
+            ConnectedPoint::Listener { .. } => {
+                self.pending_incoming += 1;
+            }
         }
     }
 
     fn dec_pending(&mut self, endpoint: &ConnectedPoint) {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => { self.pending_outgoing -= 1; }
-            ConnectedPoint::Listener { .. } => { self.pending_incoming -= 1; }
+            ConnectedPoint::Dialer { .. } => {
+                self.pending_outgoing -= 1;
+            }
+            ConnectedPoint::Listener { .. } => {
+                self.pending_incoming -= 1;
+            }
         }
     }
 
     fn inc_established(&mut self, endpoint: &ConnectedPoint) {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => { self.established_outgoing += 1; }
-            ConnectedPoint::Listener { .. } => { self.established_incoming += 1; }
+            ConnectedPoint::Dialer { .. } => {
+                self.established_outgoing += 1;
+            }
+            ConnectedPoint::Listener { .. } => {
+                self.established_incoming += 1;
+            }
         }
     }
 
     fn dec_established(&mut self, endpoint: &ConnectedPoint) {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => { self.established_outgoing -= 1; }
-            ConnectedPoint::Listener { .. } => { self.established_incoming -= 1; }
+            ConnectedPoint::Dialer { .. } => {
+                self.established_outgoing -= 1;
+            }
+            ConnectedPoint::Listener { .. } => {
+                self.established_incoming -= 1;
+            }
         }
     }
 
@@ -984,18 +1045,19 @@ impl ConnectionCounters {
         Self::check(self.pending_incoming, self.limits.max_pending_incoming)
     }
 
-    fn check_max_established(&self, endpoint: &ConnectedPoint)
-        -> Result<(), ConnectionLimit>
-    {
+    fn check_max_established(&self, endpoint: &ConnectedPoint) -> Result<(), ConnectionLimit> {
         // Check total connection limit.
         Self::check(self.num_established(), self.limits.max_established_total)?;
         // Check incoming/outgoing connection limits
         match endpoint {
-            ConnectedPoint::Dialer { .. } =>
-                Self::check(self.established_outgoing, self.limits.max_established_outgoing),
-            ConnectedPoint::Listener { .. } => {
-                Self::check(self.established_incoming, self.limits.max_established_incoming)
-            }
+            ConnectedPoint::Dialer { .. } => Self::check(
+                self.established_outgoing,
+                self.limits.max_established_outgoing,
+            ),
+            ConnectedPoint::Listener { .. } => Self::check(
+                self.established_incoming,
+                self.limits.max_established_incoming,
+            ),
         }
     }
 
@@ -1006,22 +1068,21 @@ impl ConnectionCounters {
     fn check(current: u32, limit: Option<u32>) -> Result<(), ConnectionLimit> {
         if let Some(limit) = limit {
             if current >= limit {
-                return Err(ConnectionLimit { limit, current })
+                return Err(ConnectionLimit { limit, current });
             }
         }
         Ok(())
     }
-
 }
 
 /// Counts the number of established connections to the given peer.
 fn num_peer_established(
     established: &FnvHashMap<PeerId, FnvHashMap<ConnectionId, ConnectedPoint>>,
-    peer: &PeerId
+    peer: &PeerId,
 ) -> u32 {
-    established.get(peer).map_or(0, |conns|
-        u32::try_from(conns.len())
-            .expect("Unexpectedly large number of connections for a peer."))
+    established.get(peer).map_or(0, |conns| {
+        u32::try_from(conns.len()).expect("Unexpectedly large number of connections for a peer.")
+    })
 }
 
 /// The configurable connection limits.

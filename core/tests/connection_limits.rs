@@ -20,16 +20,16 @@
 
 mod util;
 
-use futures::{ready, future::poll_fn};
+use futures::{future::poll_fn, ready};
 use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
-    PeerId,
     connection::PendingConnectionError,
-    network::{NetworkEvent, NetworkConfig, ConnectionLimits, DialError},
+    network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
+    PeerId,
 };
 use rand::Rng;
 use std::task::Poll;
-use util::{TestHandler, test_network};
+use util::{test_network, TestHandler};
 
 #[test]
 fn max_outgoing() {
@@ -40,14 +40,16 @@ fn max_outgoing() {
     let mut network = test_network(cfg);
 
     let target = PeerId::random();
-    for _ in 0 .. outgoing_limit {
-        network.peer(target.clone())
+    for _ in 0..outgoing_limit {
+        network
+            .peer(target.clone())
             .dial(Multiaddr::empty(), Vec::new(), TestHandler())
             .ok()
             .expect("Unexpected connection limit.");
     }
 
-    match network.peer(target.clone())
+    match network
+        .peer(target.clone())
         .dial(Multiaddr::empty(), Vec::new(), TestHandler())
         .expect_err("Unexpected dialing success.")
     {
@@ -60,10 +62,14 @@ fn max_outgoing() {
 
     let info = network.info();
     assert_eq!(info.num_peers(), 0);
-    assert_eq!(info.connection_counters().num_pending_outgoing(), outgoing_limit);
+    assert_eq!(
+        info.connection_counters().num_pending_outgoing(),
+        outgoing_limit
+    );
 
     // Abort all dialing attempts.
-    let mut peer = network.peer(target.clone())
+    let mut peer = network
+        .peer(target.clone())
         .into_dialing()
         .expect("Unexpected peer state");
 
@@ -72,7 +78,10 @@ fn max_outgoing() {
         attempt.abort();
     }
 
-    assert_eq!(network.info().connection_counters().num_pending_outgoing(), 0);
+    assert_eq!(
+        network.info().connection_counters().num_pending_outgoing(),
+        0
+    );
 }
 
 #[test]
@@ -87,35 +96,34 @@ fn max_established_incoming() {
     let mut network1 = test_network(config(limit));
     let mut network2 = test_network(config(limit));
 
-    let listen_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127,0,0,1)), Tcp(0u16)];
+    let listen_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
     let _ = network1.listen_on(listen_addr.clone()).unwrap();
     let (addr_sender, addr_receiver) = futures::channel::oneshot::channel();
     let mut addr_sender = Some(addr_sender);
 
     // Spawn the listener.
-    let listener = async_std::task::spawn(poll_fn(move |cx| {
-        loop {
-            match ready!(network1.poll(cx)) {
-                NetworkEvent::NewListenerAddress { listen_addr, .. } => {
-                    addr_sender.take().unwrap().send(listen_addr).unwrap();
-                }
-                NetworkEvent::IncomingConnection { connection, .. } => {
-                    network1.accept(connection, TestHandler()).unwrap();
-                }
-                NetworkEvent::ConnectionEstablished { .. } => {}
-                NetworkEvent::IncomingConnectionError {
-                    error: PendingConnectionError::ConnectionLimit(err), ..
-                } => {
-                    assert_eq!(err.limit, limit);
-                    assert_eq!(err.limit, err.current);
-                    let info = network1.info();
-                    let counters = info.connection_counters();
-                    assert_eq!(counters.num_established_incoming(), limit);
-                    assert_eq!(counters.num_established(), limit);
-                    return Poll::Ready(())
-                }
-                e => panic!("Unexpected network event: {:?}", e)
+    let listener = async_std::task::spawn(poll_fn(move |cx| loop {
+        match ready!(network1.poll(cx)) {
+            NetworkEvent::NewListenerAddress { listen_addr, .. } => {
+                addr_sender.take().unwrap().send(listen_addr).unwrap();
             }
+            NetworkEvent::IncomingConnection { connection, .. } => {
+                network1.accept(connection, TestHandler()).unwrap();
+            }
+            NetworkEvent::ConnectionEstablished { .. } => {}
+            NetworkEvent::IncomingConnectionError {
+                error: PendingConnectionError::ConnectionLimit(err),
+                ..
+            } => {
+                assert_eq!(err.limit, limit);
+                assert_eq!(err.limit, err.current);
+                let info = network1.info();
+                let counters = info.connection_counters();
+                assert_eq!(counters.num_established_incoming(), limit);
+                assert_eq!(counters.num_established(), limit);
+                return Poll::Ready(());
+            }
+            e => panic!("Unexpected network event: {:?}", e),
         }
     }));
 
@@ -152,15 +160,15 @@ fn max_established_incoming() {
                         let counters = info.connection_counters();
                         assert_eq!(counters.num_established_outgoing(), limit);
                         assert_eq!(counters.num_established(), limit);
-                        return Poll::Ready(())
+                        return Poll::Ready(());
                     }
-                    e => panic!("Unexpected network event: {:?}", e)
+                    e => panic!("Unexpected network event: {:?}", e),
                 }
             }
-        }).await
+        })
+        .await
     });
 
     // Wait for the listener to complete.
     async_std::task::block_on(listener);
 }
-

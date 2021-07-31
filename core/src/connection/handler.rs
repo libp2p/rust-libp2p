@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use super::{Connected, SubstreamEndpoint};
 use crate::Multiaddr;
 use std::{task::Context, task::Poll};
-use super::{Connected, SubstreamEndpoint};
 
 /// The interface of a connection handler.
 ///
@@ -53,7 +53,11 @@ pub trait ConnectionHandler {
     /// Implementations are allowed to panic in the case of dialing if the `user_data` in
     /// `endpoint` doesn't correspond to what was returned earlier when polling, or is used
     /// multiple times.
-    fn inject_substream(&mut self, substream: Self::Substream, endpoint: SubstreamEndpoint<Self::OutboundOpenInfo>);
+    fn inject_substream(
+        &mut self,
+        substream: Self::Substream,
+        endpoint: SubstreamEndpoint<Self::OutboundOpenInfo>,
+    );
 
     /// Notifies the handler of an event.
     fn inject_event(&mut self, event: Self::InEvent);
@@ -64,8 +68,10 @@ pub trait ConnectionHandler {
     /// Polls the handler for events.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self, cx: &mut Context<'_>)
-        -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>;
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>;
 }
 
 /// Prototype for a `ConnectionHandler`.
@@ -82,7 +88,7 @@ pub trait IntoConnectionHandler {
 
 impl<T> IntoConnectionHandler for T
 where
-    T: ConnectionHandler
+    T: ConnectionHandler,
 {
     type Handler = Self;
 
@@ -105,26 +111,27 @@ pub enum ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
 impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// If this is `OutboundSubstreamRequest`, maps the content to something else.
     pub fn map_outbound_open_info<F, I>(self, map: F) -> ConnectionHandlerEvent<I, TCustom>
-    where F: FnOnce(TOutboundOpenInfo) -> I
+    where
+        F: FnOnce(TOutboundOpenInfo) -> I,
     {
         match self {
             ConnectionHandlerEvent::OutboundSubstreamRequest(val) => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest(map(val))
-            },
+            }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
         }
     }
 
     /// If this is `Custom`, maps the content to something else.
     pub fn map_custom<F, I>(self, map: F) -> ConnectionHandlerEvent<TOutboundOpenInfo, I>
-    where F: FnOnce(TCustom) -> I
+    where
+        F: FnOnce(TCustom) -> I,
     {
         match self {
             ConnectionHandlerEvent::OutboundSubstreamRequest(val) => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest(val)
-            },
+            }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
         }
     }
 }
-
