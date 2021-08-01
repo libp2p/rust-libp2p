@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::borrow::Cow;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
 use libp2p_core::PeerId;
 
@@ -71,7 +71,8 @@ pub struct GossipsubConfig {
     validate_messages: bool,
     validation_mode: ValidationMode,
     message_id_fn: Arc<dyn Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static>,
-    fast_message_id_fn: Option<Arc<dyn Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static>>,
+    fast_message_id_fn:
+        Option<Arc<dyn Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static>>,
     allow_self_origin: bool,
     do_px: bool,
     prune_peers: usize,
@@ -577,7 +578,8 @@ impl GossipsubConfigBuilder {
     /// The function takes a [`GossipsubMessage`] as input and outputs a String to be
     /// interpreted as the message id.
     pub fn message_id_fn<F>(&mut self, id_fn: F) -> &mut Self
-    where F: Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static
+    where
+        F: Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static,
     {
         self.config.message_id_fn = Arc::new(id_fn);
         self
@@ -591,11 +593,9 @@ impl GossipsubConfigBuilder {
     ///
     /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be interpreted
     /// as the fast message id. Default is None.
-    pub fn fast_message_id_fn<F>(
-        &mut self,
-        fast_id_fn: F
-    ) -> &mut Self
-    where F: Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static,
+    pub fn fast_message_id_fn<F>(&mut self, fast_id_fn: F) -> &mut Self
+    where
+        F: Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static,
     {
         self.config.fast_message_id_fn = Some(Arc::new(fast_id_fn));
         self
@@ -821,10 +821,10 @@ impl std::fmt::Debug for GossipsubConfig {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::topic::IdentityHash;
+    use crate::Topic;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    use crate::Topic;
-    use crate::topic::IdentityHash;
 
     #[test]
     fn create_thing() {
@@ -836,7 +836,6 @@ mod test {
         dbg!(builder);
     }
 
-    #[inline]
     fn get_gossipsub_message() -> GossipsubMessage {
         GossipsubMessage {
             source: None,
@@ -846,9 +845,10 @@ mod test {
         }
     }
 
-    #[inline]
     fn get_expected_message_id() -> MessageId {
-        MessageId::from([49, 55, 56, 51, 56, 52, 49, 51, 52, 51, 52, 55, 51, 51, 53, 52, 54, 54, 52, 49, 101])
+        MessageId::from([
+            49, 55, 56, 51, 56, 52, 49, 51, 52, 51, 52, 55, 51, 51, 53, 52, 54, 54, 52, 49, 101,
+        ])
     }
 
     fn message_id_plain_function(message: &GossipsubMessage) -> MessageId {
@@ -911,5 +911,4 @@ mod test {
         let result = builder.message_id(&get_gossipsub_message());
         assert_eq!(result, get_expected_message_id());
     }
-
 }
