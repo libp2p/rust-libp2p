@@ -31,7 +31,7 @@ use libp2p_core::{
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping::*;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux as yamux;
 use futures::{prelude::*, channel::mpsc};
@@ -83,18 +83,18 @@ fn ping_pong() {
 
             loop {
                 match swarm2.select_next_some().await {
-                    SwarmEvent::Behaviour(PingEvent { 
-                        peer, 
-                        result: Ok(PingSuccess::Ping { rtt }) 
+                    SwarmEvent::Behaviour(PingEvent {
+                        peer,
+                        result: Ok(PingSuccess::Ping { rtt })
                     }) => {
                         count2 -= 1;
                         if count2 == 0 {
                             return (pid2.clone(), peer, rtt)
                         }
                     },
-                    SwarmEvent::Behaviour(PingEvent { 
-                        result: Err(e), 
-                        .. 
+                    SwarmEvent::Behaviour(PingEvent {
+                        result: Err(e),
+                        ..
                     }) => panic!("Ping failure: {:?}", e),
                     _ => {}
                 }
@@ -187,6 +187,52 @@ fn max_failures() {
     }
 
     QuickCheck::new().tests(10).quickcheck(prop as fn(_,_))
+}
+
+#[test]
+fn unsupported_doesnt_fail() {
+    let (peer1_id, trans) = mk_transport(MuxerChoice::Mplex);
+    let mut swarm1 = Swarm::new(trans, DummyBehaviour::with_keep_alive(KeepAlive::Yes), peer1_id.clone());
+
+    let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
+    let mut swarm2 = Swarm::new(trans, Ping::new(PingConfig::new().with_keep_alive(true)), peer2_id.clone());
+
+    let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
+
+    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+    swarm1.listen_on(addr).unwrap();
+
+    async_std::task::spawn(async move {
+        loop {
+            match swarm1.select_next_some().await {
+                SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
+                _ => {}
+            }
+        }
+    });
+
+    let result = async_std::task::block_on(async move {
+        swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+
+        loop {
+            match swarm2.select_next_some().await {
+                SwarmEvent::Behaviour(PingEvent {
+                    result: Err(PingFailure::Unsupported), ..
+                }) => {
+                    swarm2.disconnect_peer_id(peer1_id).unwrap();
+                }
+                SwarmEvent::ConnectionClosed { cause: Some(e), .. } => {
+                    break Err(e);
+                }
+                SwarmEvent::ConnectionClosed { cause: None, .. } => {
+                    break Ok(());
+                }
+                _ => {}
+            }
+        }
+    });
+
+    result.expect("node with ping should not fail connection due to unsupported protocol");
 }
 
 
