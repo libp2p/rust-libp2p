@@ -117,7 +117,7 @@ pub struct Mdns {
     /// Discovery timer.
     timeout: Timer,
 
-    // Mutlicast address.
+    // Multicast address.
     multicast_addr: IpAddr,
 }
 
