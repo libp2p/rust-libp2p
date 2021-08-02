@@ -2921,11 +2921,6 @@ where
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
     ) {
-        // Ignore connections from blacklisted peers.
-        if self.blacklisted_peers.contains(peer_id) {
-            return;
-        }
-
         // Check if the peer is an outbound peer
         if let ConnectedPoint::Dialer { .. } = endpoint {
             // Diverging from the go implementation we only want to consider a peer as outbound peer
