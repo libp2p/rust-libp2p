@@ -31,7 +31,7 @@ use core::fmt;
 pub struct Keypair(ed25519::Keypair);
 
 impl Keypair {
-    /// Generate a new Ed25519 keypair.
+    /// Generate a new random Ed25519 keypair.
     pub fn generate() -> Keypair {
         Keypair::from(SecretKey::generate())
     }
@@ -43,8 +43,10 @@ impl Keypair {
         self.0.to_bytes()
     }
 
-    /// Decode a keypair from the format produced by `encode`,
-    /// zeroing the input on success.
+    /// Decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
+    /// produced by [`Keypair::encode`], zeroing the input on success.
+    ///
+    /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
             .map(|k| { kp.zeroize(); Keypair(k) })

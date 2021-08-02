@@ -83,7 +83,7 @@ impl fmt::Debug for SecretKey {
 }
 
 impl SecretKey {
-    /// Generate a new Secp256k1 secret key.
+    /// Generate a new random Secp256k1 secret key.
     pub fn generate() -> SecretKey {
         SecretKey(libsecp256k1::SecretKey::random(&mut rand::thread_rng()))
     }
@@ -91,6 +91,8 @@ impl SecretKey {
     /// Create a secret key from a byte slice, zeroing the slice on success.
     /// If the bytes do not constitute a valid Secp256k1 secret key, an
     /// error is returned.
+    ///
+    /// Note that the expected binary format is the same as `libsecp256k1`'s.
     pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
         let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
