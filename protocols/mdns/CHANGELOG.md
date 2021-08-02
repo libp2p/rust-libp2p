@@ -1,6 +1,8 @@
 # 0.32.0 [unreleased]
 
 - Update dependencies.
+- Add support for IPv6. To enable set the multicast address
+  in `MdnsConfig` to `IPV6_MDNS_MULTICAST_ADDRESS`.
 
 # 0.31.0 [2021-07-12]
 
