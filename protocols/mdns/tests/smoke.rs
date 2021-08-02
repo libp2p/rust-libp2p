@@ -40,17 +40,18 @@ async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>>
 async fn run_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
-    let mut discovered = false;
+    let mut discovered_a = false;
+    let mut discovered_b = false;
     loop {
         futures::select! {
             ev = a.select_next_some() => match ev {
                 SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *b.local_peer_id() {
-                            if discovered {
+                            if discovered_a {
                                 return Ok(());
                             } else {
-                                discovered = true;
+                                discovered_b = true;
                             }
                         }
                     }
@@ -61,10 +62,10 @@ async fn run_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
                 SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *a.local_peer_id() {
-                            if discovered {
+                            if discovered_b {
                                 return Ok(());
                             } else {
-                                discovered = true;
+                                discovered_a = true;
                             }
                         }
                     }

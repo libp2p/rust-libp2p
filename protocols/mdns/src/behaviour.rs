@@ -317,7 +317,6 @@ impl NetworkBehaviour for Mdns {
                         IpAddr::V6(multicast) => {
                             if let IpAddr::V6(addr) = inet.addr() {
                                 log::trace!("joining multicast on iface {}", addr);
-                                // TODO: determine interface ID now it generates errors.
                                 if let Err(err) = socket.join_multicast_v6(&multicast, 0) {
                                     log::error!("join multicast failed: {}", err);
                                 } else {
