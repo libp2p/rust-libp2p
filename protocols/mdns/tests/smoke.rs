@@ -81,7 +81,7 @@ async fn test_discovery_async_std_ipv4() -> Result<(), Box<dyn Error>> {
 }
 
 #[async_std::test]
-async fn test_discovery_asyncstd_ipv6() -> Result<(), Box<dyn Error>> {
+async fn test_discovery_async_std_ipv6() -> Result<(), Box<dyn Error>> {
     let mut config = MdnsConfig::default();
     config.multicast_addr = *IPV6_MDNS_MULTICAST_ADDRESS;
     run_test(MdnsConfig::default()).await
