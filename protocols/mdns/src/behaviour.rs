@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::IPV4_MDNS_MULTICAST_ADDRESS;
 use crate::dns::{build_query, build_query_response, build_service_discovery_response};
 use crate::query::MdnsPacket;
 use async_io::{Async, Timer};
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
-use lazy_static::lazy_static;
 use libp2p_core::connection::ListenerId;
 use libp2p_core::{
     address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
@@ -44,12 +44,6 @@ use std::{
     task::Poll,
     time::{Duration, Instant},
 };
-
-lazy_static! {
-    static ref IPV4_MDNS_MULTICAST_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 251));
-    static ref IPV6_MDNS_MULTICAST_ADDRESS: IpAddr =
-        IpAddr::V6(Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB));
-}
 
 /// Configuration for mDNS.
 #[derive(Clone, Debug)]
