@@ -76,7 +76,7 @@ async fn run_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
 }
 
 #[async_std::test]
-async fn test_discovery_asyncstd_ipv4() -> Result<(), Box<dyn Error>> {
+async fn test_discovery_async_std_ipv4() -> Result<(), Box<dyn Error>> {
     run_test(MdnsConfig::default()).await
 }
 
