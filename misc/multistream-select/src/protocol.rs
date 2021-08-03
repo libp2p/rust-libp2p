@@ -391,9 +391,9 @@ impl From<io::Error> for ProtocolError {
     }
 }
 
-impl Into<io::Error> for ProtocolError {
-    fn into(self) -> io::Error {
-        if let ProtocolError::IoError(e) = self {
+impl From<ProtocolError> for io::Error {
+    fn from(err: ProtocolError) -> Self {
+        if let ProtocolError::IoError(e) = err {
             return e
         }
         io::ErrorKind::InvalidData.into()
