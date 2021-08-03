@@ -34,7 +34,6 @@ pub enum In {
     Connect {
         obs_addrs: Vec<Multiaddr>,
     },
-    // TODO: Needs both the inbound stream and the observed addresses.
     AcceptInboundConnect {
         obs_addrs: Vec<Multiaddr>,
         inbound_connect: protocol::InboundConnect,
@@ -51,7 +50,6 @@ pub enum Event {
     OutboundConnectNeg(Vec<Multiaddr>),
 }
 
-// TODO: Detour through Prototype needed?
 pub struct Prototype {}
 
 impl Prototype {

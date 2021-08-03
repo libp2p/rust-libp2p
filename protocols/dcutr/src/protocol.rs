@@ -34,6 +34,7 @@ use unsigned_varint::codec::UviBytes;
 use std::time::{Instant};
 use futures_timer::Delay;
 
+// TODO: Golang seems to use "/libp2p/holepunch/1.0.0"
 const PROTOCOL_NAME: &[u8; 15] = b"/libp2p/connect";
 
 // TODO: Should this be split up in two files? Inbound and outbound?

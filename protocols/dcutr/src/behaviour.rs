@@ -38,7 +38,9 @@ pub enum Event {
     RemoteInitiatedDirectConnectionUpgrade {
         remote_peer_id: PeerId,
         remote_relayed_addr: Multiaddr,
-    }
+    },
+    // TODO: Emit
+    DirectConnectionUpgradeSucceeded,
 }
 
 pub struct Behaviour {
@@ -88,16 +90,21 @@ impl NetworkBehaviour for Behaviour {
                         event: handler::In::Connect { obs_addrs: vec![] },
                     });
                 self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::InitiateDirectConnectionUpgrade {
-                        remote_peer_id: *peer_id,
-                        local_relayed_addr: local_addr.clone(),
-                    }));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::InitiateDirectConnectionUpgrade {
+                            remote_peer_id: *peer_id,
+                            local_relayed_addr: local_addr.clone(),
+                        },
+                    ));
             }
             _ => {}
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {}
+    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
+        // TODO: How to handle retry? Golang seems to simply wait 2 seconds between each failure?
+        // Shouldn't we do the whole CONNECT SYNC again to make sure we are aligned?
+    }
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {
         todo!();
@@ -119,7 +126,10 @@ impl NetworkBehaviour for Behaviour {
         handler_event: handler::Event,
     ) {
         match handler_event {
-            handler::Event::InboundConnectReq{inbound_connect, remote_addr} => {
+            handler::Event::InboundConnectReq {
+                inbound_connect,
+                remote_addr,
+            } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -130,10 +140,12 @@ impl NetworkBehaviour for Behaviour {
                         },
                     });
                 self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {
-                        remote_peer_id: event_source,
-                        remote_relayed_addr: remote_addr,
-                    }));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::RemoteInitiatedDirectConnectionUpgrade {
+                            remote_peer_id: event_source,
+                            remote_relayed_addr: remote_addr,
+                        },
+                    ));
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
                 self.queued_actions
