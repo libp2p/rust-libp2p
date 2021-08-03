@@ -2313,6 +2313,20 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug)]
 pub enum KademliaEvent {
+    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
+    ///
+    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
+    InboundPutRecordRequest {
+        source: PeerId,
+        connection: ConnectionId,
+        record: Record,
+    },
+
+    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaRecordFiltering::FilterBoth`] is enabled.
+    ///
+    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`] for details..
+    InboundAddProviderRequest { record: ProviderRecord },
+
     /// An inbound request has been received and handled.
     //
     // Note on the difference between 'request' and 'query': A request is a
@@ -2379,20 +2393,6 @@ pub enum KademliaEvent {
     /// See [`Kademlia::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
-
-    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
-    ///
-    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
-    InboundPutRecordRequest {
-        source: PeerId,
-        connection: ConnectionId,
-        record: Record,
-    },
-
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaRecordFiltering::FilterBoth`] is enabled.
-    ///
-    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`] for details..
-    InboundAddProviderRequest { record: ProviderRecord },
 }
 
 /// Information about a received and handled inbound request.
