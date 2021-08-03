@@ -1,11 +1,9 @@
-# 0.34.0 [unreleased]
-
-- Allow message_id_fn's to accept closures that capture variables.
-  [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
-
 # 0.33.0 [unreleased]
 
 - Update dependencies.
+
+- Allow `message_id_fn`s to accept closures that capture variables.
+  [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
 
 # 0.32.0 [2021-07-12]
 
