@@ -70,7 +70,7 @@ pub struct Kademlia<TStore> {
     protocol_config: KademliaProtocolConfig,
 
     /// Configuration of [`RecordStore`] filtering.
-    record_filtering: KademliaRecordFiltering,
+    record_filtering: KademliaStoreInserts,
 
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
@@ -142,7 +142,7 @@ pub enum KademliaBucketInserts {
 ///
 /// [`Key`]: crate::record::Key
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KademliaRecordFiltering {
+pub enum KademliaStoreInserts {
     /// Whenever a (provider) record is received,
     /// the record is forwarded immediately to the [`RecordStore`].
     Unfiltered,
@@ -171,7 +171,7 @@ pub struct KademliaConfig {
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
-    record_filtering: KademliaRecordFiltering,
+    record_filtering: KademliaStoreInserts,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
@@ -205,7 +205,7 @@ impl Default for KademliaConfig {
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
-            record_filtering: KademliaRecordFiltering::Unfiltered,
+            record_filtering: KademliaStoreInserts::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
@@ -292,9 +292,9 @@ impl KademliaConfig {
 
     /// Sets whether or not records should be filtered before being stored.
     ///
-    /// See [`KademliaRecordFiltering`] for the different values.
-    /// Defaults to [`KademliaRecordFiltering::Unfiltered`].
-    pub fn set_record_filtering(&mut self, filtering: KademliaRecordFiltering) -> &mut Self {
+    /// See [`KademliaStoreInserts`] for the different values.
+    /// Defaults to [`KademliaStoreInserts::Unfiltered`].
+    pub fn set_record_filtering(&mut self, filtering: KademliaStoreInserts) -> &mut Self {
         self.record_filtering = filtering;
         self
     }
@@ -1613,7 +1613,7 @@ where
             // The record is cloned because of the weird libp2p protocol
             // requirement to send back the value in the response, although this
             // is a waste of resources.
-            if self.record_filtering != KademliaRecordFiltering::Unfiltered {
+            if self.record_filtering != KademliaStoreInserts::Unfiltered {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::InboundPutRecordRequest {
@@ -1671,7 +1671,7 @@ where
                 expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
                 addresses: provider.multiaddrs,
             };
-            if self.record_filtering != KademliaRecordFiltering::Unfiltered {
+            if self.record_filtering != KademliaStoreInserts::Unfiltered {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::InboundAddProviderRequest { record },
@@ -2315,16 +2315,16 @@ pub struct PeerRecord {
 pub enum KademliaEvent {
     /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
     ///
-    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
+    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
     InboundPutRecordRequest {
         source: PeerId,
         connection: ConnectionId,
         record: Record,
     },
 
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaRecordFiltering::FilterBoth`] is enabled.
+    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaStoreInserts::FilterBoth`] is enabled.
     ///
-    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`] for details..
+    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
     InboundAddProviderRequest { record: ProviderRecord },
 
     /// An inbound request has been received and handled.
