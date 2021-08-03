@@ -25,6 +25,6 @@ socket2 = { version = "0.4.0", features = ["all"] }
 void = "1.0.2"
 
 [dev-dependencies]
-async-std = "1.9.0"
-if-addrs = "0.6.5"
-tokio = { version = "1.2.0", default-features = false, features = ["rt", "rt-multi-thread"] }
+async-std = { version = "1.9.0", features = ["attributes"] }
+libp2p = { path = "../.." }
+tokio = { version = "1.2.0", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
