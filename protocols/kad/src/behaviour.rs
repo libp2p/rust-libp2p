@@ -156,9 +156,7 @@ pub enum KademliaRecordFiltering {
     /// Provider records generate a [`KademliaEvent::InboundAddProviderRequest`],
     /// normal records generate a [`KademliaEvent::InboundPutRecordRequest`].
     ///
-    /// The event loop should then asynchronously validate this record,
-    /// and if deemed correct, should call [`RecordStore::put`] or
-    /// [`RecordStore::add_provider`], whichever is applicable.
+    /// When deemed valid, a (provider) record needs to be explicitly stored in the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`], whichever is applicable. A mutable reference to the [`RecordStore`] can be retrieved via [`Kademlia::store_mut`].
     FilterBoth,
 }
 
