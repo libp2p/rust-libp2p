@@ -2393,7 +2393,7 @@ pub enum KademliaEvent {
 
     /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaRecordFiltering::FilterBoth`] is enabled.
     ///
-    /// Cfr. [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
+    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`] for details..
     InboundAddProviderRequest { record: ProviderRecord },
 }
 
