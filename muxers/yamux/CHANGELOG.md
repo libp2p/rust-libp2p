@@ -1,11 +1,9 @@
-# Unreleased
-
-- Implement `From<io::Error> for YamuxError` instead of `Into`.
-  [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)
-
 # 0.34.0 [unreleased]
 
 - Update dependencies.
+
+- Implement `From<io::Error> for YamuxError` instead of `Into`.
+  [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)
 
 # 0.33.0 [2021-07-12]
 
