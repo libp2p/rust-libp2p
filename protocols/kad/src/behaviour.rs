@@ -2384,7 +2384,7 @@ pub enum KademliaEvent {
 
     /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
     ///
-    /// Cfr. [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
+    /// See [`KademliaRecordFiltering`] and [`KademliaConfig::set_record_filtering`].
     InboundPutRecordRequest {
         source: PeerId,
         connection: ConnectionId,
