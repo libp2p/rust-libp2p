@@ -1,10 +1,12 @@
 # 0.33.0 [unreleased]
 
-- Improve internal peer tracking (see [PR 2175]).
+- Improve internal peer tracking.
+  [PR 2175](https://github.com/libp2p/rust-libp2p/pull/2175)
 
 - Update dependencies.
 
-[PR 2175]: https://github.com/libp2p/rust-libp2p/pull/2175
+- Allow `message_id_fn`s to accept closures that capture variables.
+  [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
 
 # 0.32.0 [2021-07-12]
 
