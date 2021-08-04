@@ -2864,6 +2864,7 @@ where
                 None => {
                     if !self.blacklisted_peers.contains(peer_id) {
                         error!("Disconnected node, not in connected nodes");
+                        debug_assert!("All peers should exist in peer_topics");
                     }
                     return;
                 }
