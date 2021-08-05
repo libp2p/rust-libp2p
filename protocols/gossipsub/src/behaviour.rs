@@ -2862,10 +2862,10 @@ where
             let topics = match self.peer_topics.get(peer_id) {
                 Some(topics) => (topics),
                 None => {
-                    if !self.blacklisted_peers.contains(peer_id) {
-                        error!("Disconnected node, not in connected nodes");
-                        debug_assert!("All peers should exist in peer_topics");
-                    }
+                    debug_assert!(
+                        self.blacklisted_peers.contains(peer_id),
+                        "Disconnected node not in connected list"
+                    );
                     return;
                 }
             };
