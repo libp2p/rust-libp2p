@@ -152,7 +152,7 @@ impl Mdns {
             Async::new(socket)?
         };
         let if_watch = if_watch::IfWatcher::new().await?;
-        // randomize timer to prevent all converging and firing at the same time.
+        // Randomize timer to prevent timers across nodes to converge and fire at the same time.
         let query_interval = {
             use rand::Rng;
             let mut rng = rand::thread_rng();
