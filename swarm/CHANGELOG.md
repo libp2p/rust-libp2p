@@ -8,9 +8,10 @@
 
 - Remove `Swarm` type alias and rename `ExpandedSwarm` to `Swarm`. Reduce direct
   trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
-  through associated types on `TBehaviour`.
+  through associated types on `TBehaviour`. See [PR 2182].
 
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150/
+[PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 
 # 0.30.0 [2021-07-12]
 
