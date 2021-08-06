@@ -28,7 +28,7 @@ use crate::protocols_handler::{
 };
 
 use smallvec::SmallVec;
-use std::{error, task::Context, task::Poll, time::Duration};
+use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 /// A `ProtocolsHandler` that opens a new substream for each request.
@@ -119,12 +119,12 @@ where
 impl<TInbound, TOutbound, TEvent> ProtocolsHandler for OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TInbound: InboundUpgradeSend + Send + 'static,
-    TOutbound: OutboundUpgradeSend,
+    TOutbound: Debug + OutboundUpgradeSend,
     TInbound::Output: Into<TEvent>,
     TOutbound::Output: Into<TEvent>,
     TOutbound::Error: error::Error + Send + 'static,
     SubstreamProtocol<TInbound, ()>: Clone,
-    TEvent: Send + 'static,
+    TEvent: Debug + Send + 'static,
 {
     type InEvent = TOutbound;
     type OutEvent = TEvent;

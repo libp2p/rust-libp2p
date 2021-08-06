@@ -27,6 +27,7 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr
 };
 use libp2p_core::Multiaddr;
+use std::fmt::Debug;
 use std::task::{Context, Poll};
 
 /// Wrapper around a protocol handler that turns the output event into something else.
@@ -49,7 +50,7 @@ impl<TProtoHandler, TMap, TNewOut> ProtocolsHandler for MapOutEvent<TProtoHandle
 where
     TProtoHandler: ProtocolsHandler,
     TMap: FnMut(TProtoHandler::OutEvent) -> TNewOut,
-    TNewOut: Send + 'static,
+    TNewOut: Debug + Send + 'static,
     TMap: Send + 'static,
 {
     type InEvent = TProtoHandler::InEvent;

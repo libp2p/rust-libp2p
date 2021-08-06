@@ -55,7 +55,7 @@ impl<T> KademliaHandlerProto<T> {
     }
 }
 
-impl<T: Clone + Send + 'static> IntoProtocolsHandler for KademliaHandlerProto<T> {
+impl<T: Clone + fmt::Debug + Send + 'static> IntoProtocolsHandler for KademliaHandlerProto<T> {
     type Handler = KademliaHandler<T>;
 
     fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
@@ -457,7 +457,7 @@ impl<TUserData> KademliaHandler<TUserData> {
 
 impl<TUserData> ProtocolsHandler for KademliaHandler<TUserData>
 where
-    TUserData: Clone + Send + 'static,
+    TUserData: Clone + fmt::Debug + Send + 'static,
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;

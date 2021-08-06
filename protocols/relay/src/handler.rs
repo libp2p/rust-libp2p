@@ -33,6 +33,7 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use log::warn;
+use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use wasm_timer::Instant;
@@ -195,6 +196,12 @@ pub enum RelayHandlerEvent {
     },
 }
 
+impl fmt::Debug for RelayHandlerEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
+}
+
 /// Event that can be sent to the relay handler.
 pub enum RelayHandlerIn {
     /// Tell the handler whether it is handling a connection used to listen for incoming relayed
@@ -231,6 +238,12 @@ pub enum RelayHandlerIn {
         /// Incoming relay request from the source node.
         incoming_relay_req: protocol::IncomingRelayReq,
     },
+}
+
+impl fmt::Debug for RelayHandlerIn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
 }
 
 impl RelayHandler {

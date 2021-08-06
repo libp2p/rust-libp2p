@@ -100,6 +100,7 @@ use libp2p_core::{Executor, Multiaddr, Negotiated, PeerId, Transport, connection
         ConnectionLimit,
         ConnectedPoint,
         EstablishedConnection,
+        ConnectionHandler,
         IntoConnectionHandler,
         ListenerId,
         PendingConnectionError,
@@ -278,8 +279,6 @@ where
 {
     network: Network<
         transport::Boxed<(PeerId, StreamMuxerBox)>,
-        THandlerInEvent<TBehaviour>,
-        THandlerOutEvent<TBehaviour>,
         NodeHandlerWrapperBuilder<THandler<TBehaviour>>,
     >,
 
@@ -682,7 +681,7 @@ where
                                 }
                             },
                         PendingNotifyHandler::Any(ids) => {
-                            if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
+                            if let Some((event, ids)) = notify_any::<_, _, TBehaviour>(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::Any(ids);
                                 this.pending_event = Some((peer_id, handler, event));
                                 return Poll::Pending
@@ -759,7 +758,7 @@ where
                             }
                             NotifyHandler::Any => {
                                 let ids = peer.connections().into_ids().collect();
-                                if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
+                                if let Some((event, ids)) = notify_any::<_, _, TBehaviour>(ids, &mut peer, event, cx) {
                                     let handler = PendingNotifyHandler::Any(ids);
                                     this.pending_event = Some((peer_id, handler, event));
                                     return Poll::Pending
@@ -838,15 +837,17 @@ fn notify_one<'a, THandlerInEvent>(
 ///
 /// Returns `None` if either all connections are closing or the event
 /// was successfully sent to a handler, in either case the event is consumed.
-fn notify_any<'a, TTrans, THandlerInEvent, THandlerOutEvent, THandler>(
+fn notify_any<'a, TTrans, THandler, TBehaviour>(
     ids: SmallVec<[ConnectionId; 10]>,
-    peer: &mut ConnectedPeer<'a, TTrans, THandlerInEvent, THandlerOutEvent, THandler>,
-    event: THandlerInEvent,
+    peer: &mut ConnectedPeer<'a, TTrans, THandler>,
+    event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
-) -> Option<(THandlerInEvent, SmallVec<[ConnectionId; 10]>)>
+) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>
 where
     TTrans: Transport,
+    TBehaviour: NetworkBehaviour,
     THandler: IntoConnectionHandler,
+    THandler::Handler: ConnectionHandler<InEvent = THandlerInEvent<TBehaviour>, OutEvent = THandlerOutEvent<TBehaviour>>
 {
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)

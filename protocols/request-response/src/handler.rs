@@ -46,6 +46,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
+    fmt,
     io,
     sync::{atomic::{AtomicU64, Ordering}, Arc},
     time::Duration,
@@ -114,7 +115,6 @@ where
 
 /// The events emitted by the [`RequestResponseHandler`].
 #[doc(hidden)]
-#[derive(Debug)]
 pub enum RequestResponseHandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec
@@ -145,6 +145,12 @@ where
     InboundTimeout(RequestId),
     /// An inbound request failed to negotiate a mutually supported protocol.
     InboundUnsupportedProtocols(RequestId),
+}
+
+impl<TCodec: RequestResponseCodec> fmt::Debug for RequestResponseHandlerEvent<TCodec> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
 }
 
 impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
@@ -345,4 +351,3 @@ where
         Poll::Pending
     }
 }
-
