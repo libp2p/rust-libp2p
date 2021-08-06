@@ -6,6 +6,10 @@
   except for `new_handler`, `inject_event` and `poll`.
   This should make it easier to create new implementations. See [PR 2150].
 
+- Remove `Swarm` type alias and rename `ExpandedSwarm` to `Swarm`. Reduce direct
+  trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
+  through associated types on `TBehaviour`.
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150/
 
 # 0.30.0 [2021-07-12]
