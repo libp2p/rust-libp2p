@@ -71,10 +71,10 @@ impl From<proto::message::ConnectionType> for KadConnectionType {
     }
 }
 
-impl Into<proto::message::ConnectionType> for KadConnectionType {
-    fn into(self) -> proto::message::ConnectionType {
+impl From<KadConnectionType> for proto::message::ConnectionType {
+    fn from(val: KadConnectionType) -> Self {
         use proto::message::ConnectionType::*;
-        match self {
+        match val {
             KadConnectionType::NotConnected => NotConnected,
             KadConnectionType::Connected => Connected,
             KadConnectionType::CanConnect => CanConnect,
@@ -123,13 +123,13 @@ impl TryFrom<proto::message::Peer> for KadPeer {
     }
 }
 
-impl Into<proto::message::Peer> for KadPeer {
-    fn into(self) -> proto::message::Peer {
+impl From<KadPeer> for proto::message::Peer {
+    fn from(peer: KadPeer) -> Self {
         proto::message::Peer {
-            id: self.node_id.to_bytes(),
-            addrs: self.multiaddrs.into_iter().map(|a| a.to_vec()).collect(),
+            id: peer.node_id.to_bytes(),
+            addrs: peer.multiaddrs.into_iter().map(|a| a.to_vec()).collect(),
             connection: {
-                let ct: proto::message::ConnectionType = self.connection_ty.into();
+                let ct: proto::message::ConnectionType = peer.connection_ty.into();
                 ct as i32
             }
         }

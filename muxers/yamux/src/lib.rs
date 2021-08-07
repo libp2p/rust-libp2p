@@ -360,9 +360,9 @@ where
 #[error("yamux error: {0}")]
 pub struct YamuxError(#[from] yamux::ConnectionError);
 
-impl Into<io::Error> for YamuxError {
-    fn into(self: YamuxError) -> io::Error {
-        match self.0 {
+impl From<YamuxError> for io::Error {
+    fn from(err: YamuxError) -> Self {
+        match err.0 {
             yamux::ConnectionError::Io(e) => e,
             e => io::Error::new(io::ErrorKind::Other, e)
         }
