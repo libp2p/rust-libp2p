@@ -43,7 +43,7 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry("swarm");
+        let sub_registry = registry.sub_registry_with_prefix("swarm");
 
         let connections_incoming = Counter::default();
         sub_registry.register(

@@ -56,7 +56,7 @@ impl Metrics {
     /// let metrics = Metrics::new(&mut registry);
     /// ```
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry("libp2p");
+        let sub_registry = registry.sub_registry_with_prefix("libp2p");
         Self {
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),

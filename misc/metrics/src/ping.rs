@@ -60,7 +60,7 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry("ping");
+        let sub_registry = registry.sub_registry_with_prefix("ping");
 
         let rtt = Histogram::new(exponential_buckets(0.001, 2.0, 12));
         sub_registry.register_with_unit(

@@ -46,7 +46,7 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry("kad");
+        let sub_registry = registry.sub_registry_with_prefix("kad");
 
         let query_result_get_record_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(

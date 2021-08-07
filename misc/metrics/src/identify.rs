@@ -34,7 +34,7 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry("identify");
+        let sub_registry = registry.sub_registry_with_prefix("identify");
 
         let error = Counter::default();
         sub_registry.register(
