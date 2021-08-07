@@ -26,6 +26,9 @@ message Record {
     // The remaining TTL of the record, in seconds.
     // Currently specific to rust-libp2p.
     uint32 ttl = 777;
+
+	// Client mode or server mode.
+	bool client = false;
 };
 
 message Message {

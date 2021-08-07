@@ -147,6 +147,8 @@ pub struct KademliaConfig {
     connection_idle_timeout: Duration,
     kbucket_inserts: KademliaBucketInserts,
     caching: KademliaCaching,
+    // Set the peer mode.
+    client: bool,
 }
 
 /// The configuration for Kademlia "write-back" caching after successful
@@ -180,6 +182,8 @@ impl Default for KademliaConfig {
             connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: KademliaBucketInserts::OnConnected,
             caching: KademliaCaching::Enabled { max_peers: 1 },
+            // By default, a peer will not be in client mode.
+            client: false,
         }
     }
 }
@@ -350,6 +354,19 @@ impl KademliaConfig {
     /// did not return the record, i.e. the standard Kademlia behaviour.
     pub fn set_caching(&mut self, c: KademliaCaching) -> &mut Self {
         self.caching = c;
+        self
+    }
+
+    /// Enable or disable the `client` mode of a node.
+    ///
+    /// Client mode is disabled by default.
+    ///
+    /// In `client` mode, the peer would not be added to any other peer's 
+    /// routing table. The client peer can send queries over the Kademlia
+    /// network, but will not receive any queries from the other peer's in
+    /// the network.
+    pub fn set_client_mode(&mut self, t: bool) -> &mut Self {
+        self.client = t;
         self
     }
 }
@@ -1557,6 +1574,7 @@ where
             protocol_config: self.protocol_config.clone(),
             allow_listening: true,
             idle_timeout: self.connection_idle_timeout,
+            client: false,
         })
     }
 
