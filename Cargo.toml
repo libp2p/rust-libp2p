@@ -131,3 +131,7 @@ members = [
 [[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
+
+[[example]]
+name = "kademlia-example"
+required-features = ["tcp-tokio", "mdns"]
