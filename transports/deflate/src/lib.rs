@@ -105,11 +105,12 @@ impl<S> DeflateOutput<S> {
     /// Tries to write the content of `self.write_out` to `self.inner`.
     /// Returns `Ready(Ok(()))` if `self.write_out` is empty.
     fn flush_write_out(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>
-        where S: AsyncWrite + Unpin
+    where
+        S: AsyncWrite + Unpin,
     {
         loop {
             if self.write_out.is_empty() {
-                return Poll::Ready(Ok(()))
+                return Poll::Ready(Ok(()));
             }
 
             match AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, &self.write_out) {
@@ -123,9 +124,14 @@ impl<S> DeflateOutput<S> {
 }
 
 impl<S> AsyncRead for DeflateOutput<S>
-    where S: AsyncRead + Unpin
+where
+    S: AsyncRead + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         // We use a `this` variable because the compiler doesn't allow multiple mutable borrows
         // across a `Deref`.
         let this = &mut *self;
@@ -133,31 +139,38 @@ impl<S> AsyncRead for DeflateOutput<S>
         loop {
             // Read from `self.inner` into `self.read_interm` if necessary.
             if this.read_interm.is_empty() && !this.inner_read_eof {
-                this.read_interm.resize(this.read_interm.capacity() + 256, 0);
+                this.read_interm
+                    .resize(this.read_interm.capacity() + 256, 0);
 
                 match AsyncRead::poll_read(Pin::new(&mut this.inner), cx, &mut this.read_interm) {
                     Poll::Ready(Ok(0)) => {
                         this.inner_read_eof = true;
                         this.read_interm.clear();
                     }
-                    Poll::Ready(Ok(n)) => {
-                        this.read_interm.truncate(n)
-                    },
+                    Poll::Ready(Ok(n)) => this.read_interm.truncate(n),
                     Poll::Ready(Err(err)) => {
                         this.read_interm.clear();
-                        return Poll::Ready(Err(err))
-                    },
+                        return Poll::Ready(Err(err));
+                    }
                     Poll::Pending => {
                         this.read_interm.clear();
-                        return Poll::Pending
-                    },
+                        return Poll::Pending;
+                    }
                 }
             }
             debug_assert!(!this.read_interm.is_empty() || this.inner_read_eof);
 
             let before_out = this.decompress.total_out();
             let before_in = this.decompress.total_in();
-            let ret = this.decompress.decompress(&this.read_interm, buf, if this.inner_read_eof { flate2::FlushDecompress::Finish } else { flate2::FlushDecompress::None })?;
+            let ret = this.decompress.decompress(
+                &this.read_interm,
+                buf,
+                if this.inner_read_eof {
+                    flate2::FlushDecompress::Finish
+                } else {
+                    flate2::FlushDecompress::None
+                },
+            )?;
 
             // Remove from `self.read_interm` the bytes consumed by the decompressor.
             let consumed = (this.decompress.total_in() - before_in) as usize;
@@ -165,18 +178,21 @@ impl<S> AsyncRead for DeflateOutput<S>
 
             let read = (this.decompress.total_out() - before_out) as usize;
             if read != 0 || ret == flate2::Status::StreamEnd {
-                return Poll::Ready(Ok(read))
+                return Poll::Ready(Ok(read));
             }
         }
     }
 }
 
 impl<S> AsyncWrite for DeflateOutput<S>
-    where S: AsyncWrite + Unpin
+where
+    S: AsyncWrite + Unpin,
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         // We use a `this` variable because the compiler doesn't allow multiple mutable borrows
         // across a `Deref`.
         let this = &mut *self;
@@ -195,8 +211,12 @@ impl<S> AsyncWrite for DeflateOutput<S>
         // Instead, we invoke the compressor in a loop until it accepts some of our data.
         loop {
             let before_in = this.compress.total_in();
-            this.write_out.reserve(256);  // compress_vec uses the Vec's capacity
-            let ret = this.compress.compress_vec(buf, &mut this.write_out, flate2::FlushCompress::None)?;
+            this.write_out.reserve(256); // compress_vec uses the Vec's capacity
+            let ret = this.compress.compress_vec(
+                buf,
+                &mut this.write_out,
+                flate2::FlushCompress::None,
+            )?;
             let written = (this.compress.total_in() - before_in) as usize;
 
             if written != 0 || ret == flate2::Status::StreamEnd {
@@ -211,15 +231,17 @@ impl<S> AsyncWrite for DeflateOutput<S>
         let this = &mut *self;
 
         ready!(this.flush_write_out(cx))?;
-        this.compress.compress_vec(&[], &mut this.write_out, flate2::FlushCompress::Sync)?;
+        this.compress
+            .compress_vec(&[], &mut this.write_out, flate2::FlushCompress::Sync)?;
 
         loop {
             ready!(this.flush_write_out(cx))?;
 
             debug_assert!(this.write_out.is_empty());
             // We ask the compressor to flush everything into `self.write_out`.
-            this.write_out.reserve(256);  // compress_vec uses the Vec's capacity
-            this.compress.compress_vec(&[], &mut this.write_out, flate2::FlushCompress::None)?;
+            this.write_out.reserve(256); // compress_vec uses the Vec's capacity
+            this.compress
+                .compress_vec(&[], &mut this.write_out, flate2::FlushCompress::None)?;
             if this.write_out.is_empty() {
                 break;
             }
@@ -238,8 +260,9 @@ impl<S> AsyncWrite for DeflateOutput<S>
 
             // We ask the compressor to flush everything into `self.write_out`.
             debug_assert!(this.write_out.is_empty());
-            this.write_out.reserve(256);  // compress_vec uses the Vec's capacity
-            this.compress.compress_vec(&[], &mut this.write_out, flate2::FlushCompress::Finish)?;
+            this.write_out.reserve(256); // compress_vec uses the Vec's capacity
+            this.compress
+                .compress_vec(&[], &mut this.write_out, flate2::FlushCompress::Finish)?;
             if this.write_out.is_empty() {
                 break;
             }
