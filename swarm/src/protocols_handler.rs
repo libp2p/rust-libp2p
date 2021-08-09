@@ -57,7 +57,7 @@ use libp2p_core::{
     PeerId,
     upgrade::UpgradeError,
 };
-use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
+use std::{cmp::Ordering, error, fmt::{self, Debug}, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 pub use dummy::DummyProtocolsHandler;
@@ -101,11 +101,11 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// continue reading data until the remote closes its side of the connection.
 pub trait ProtocolsHandler: Send + 'static {
     /// Custom event that can be received from the outside.
-    type InEvent: fmt::Debug + Send + 'static;
+    type InEvent: Debug + Send + 'static;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
-    type OutEvent: fmt::Debug + Send + 'static;
+    type OutEvent: Debug + Send + 'static;
     /// The type of errors returned by [`ProtocolsHandler::poll`].
-    type Error: error::Error + fmt::Debug + Send + 'static;
+    type Error: error::Error + Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.
