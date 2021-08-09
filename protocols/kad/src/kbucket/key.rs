@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use uint::*;
-use libp2p_core::{PeerId, multihash::Multihash};
+use crate::record;
+use libp2p_core::{multihash::Multihash, PeerId};
+use sha2::digest::generic_array::{typenum::U32, GenericArray};
 use sha2::{Digest, Sha256};
-use sha2::digest::generic_array::{GenericArray, typenum::U32};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
-use crate::record;
+use uint::*;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -52,7 +52,7 @@ impl<T> Key<T> {
     /// [`Key::into_preimage`].
     pub fn new(preimage: T) -> Key<T>
     where
-        T: Borrow<[u8]>
+        T: Borrow<[u8]>,
     {
         let bytes = KeyBytes::new(preimage.borrow());
         Key { preimage, bytes }
@@ -71,7 +71,7 @@ impl<T> Key<T> {
     /// Computes the distance of the keys according to the XOR metric.
     pub fn distance<U>(&self, other: &U) -> Distance
     where
-        U: AsRef<KeyBytes>
+        U: AsRef<KeyBytes>,
     {
         self.bytes.distance(other)
     }
@@ -93,22 +93,16 @@ impl<T> Into<KeyBytes> for Key<T> {
 }
 
 impl From<Multihash> for Key<Multihash> {
-   fn from(m: Multihash) -> Self {
-       let bytes = KeyBytes(Sha256::digest(&m.to_bytes()));
-       Key {
-           preimage: m,
-           bytes
-       }
-   }
+    fn from(m: Multihash) -> Self {
+        let bytes = KeyBytes(Sha256::digest(&m.to_bytes()));
+        Key { preimage: m, bytes }
+    }
 }
 
 impl From<PeerId> for Key<PeerId> {
     fn from(p: PeerId) -> Self {
-       let bytes = KeyBytes(Sha256::digest(&p.to_bytes()));
-       Key {
-           preimage: p,
-           bytes
-       }
+        let bytes = KeyBytes(Sha256::digest(&p.to_bytes()));
+        Key { preimage: p, bytes }
     }
 }
 
@@ -153,7 +147,7 @@ impl KeyBytes {
     /// value through a random oracle.
     pub fn new<T>(value: T) -> Self
     where
-        T: Borrow<[u8]>
+        T: Borrow<[u8]>,
     {
         KeyBytes(Sha256::digest(value.borrow()))
     }
@@ -161,7 +155,7 @@ impl KeyBytes {
     /// Computes the distance of the keys according to the XOR metric.
     pub fn distance<U>(&self, other: &U) -> Distance
     where
-        U: AsRef<KeyBytes>
+        U: AsRef<KeyBytes>,
     {
         let a = U256::from(self.0.as_slice());
         let b = U256::from(other.as_ref().0.as_slice());
@@ -201,8 +195,8 @@ impl Distance {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quickcheck::*;
     use libp2p_core::multihash::Code;
+    use quickcheck::*;
     use rand::Rng;
 
     impl Arbitrary for Key<PeerId> {
@@ -231,7 +225,7 @@ mod tests {
         fn prop(a: Key<PeerId>, b: Key<PeerId>) -> bool {
             a.distance(&b) == b.distance(&a)
         }
-        quickcheck(prop as fn(_,_) -> _)
+        quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
@@ -246,18 +240,18 @@ mod tests {
                 TestResult::from_bool(a.distance(&c) <= Distance(ab_plus_bc))
             }
         }
-        quickcheck(prop as fn(_,_,_) -> _)
+        quickcheck(prop as fn(_, _, _) -> _)
     }
 
     #[test]
     fn unidirectionality() {
         fn prop(a: Key<PeerId>, b: Key<PeerId>) -> bool {
             let d = a.distance(&b);
-            (0 .. 100).all(|_| {
+            (0..100).all(|_| {
                 let c = Key::from(PeerId::random());
                 a.distance(&c) != d || b == c
             })
         }
-        quickcheck(prop as fn(_,_) -> _)
+        quickcheck(prop as fn(_, _) -> _)
     }
 }
