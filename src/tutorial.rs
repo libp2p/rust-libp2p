@@ -347,7 +347,7 @@
 //! cargo run --example ping -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
-//! Note: The [`Multiaddr`] at the end being on of the [`Multiaddr`] printed
+//! Note: The [`Multiaddr`] at the end being one of the [`Multiaddr`] printed
 //! earlier in terminal window one.
 //! Both peers have to be in the same network with which the address is associated. 
 //! In our case any printed addresses can be used, as both peers run on the same 
