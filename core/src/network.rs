@@ -42,6 +42,10 @@ use crate::{
         ListenersStream,
         PendingConnectionError,
         Substream,
+        handler::{
+            THandlerInEvent,
+            THandlerOutEvent,
+        },
         manager::ManagerConfig,
         pool::{Pool, PoolEvent},
     },
@@ -60,10 +64,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
-// TODO: Still needed?
-type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-type THandlerOutEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// Implementation of `Stream` that handles the nodes.
 pub struct Network<TTrans, THandler>

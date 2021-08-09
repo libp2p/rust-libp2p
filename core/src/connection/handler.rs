@@ -91,6 +91,10 @@ where
     }
 }
 
+pub(crate) type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
+pub(crate) type THandlerOutEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
+pub(crate) type THandlerError<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
+
 /// Event produced by a handler.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {

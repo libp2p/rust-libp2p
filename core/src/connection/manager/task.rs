@@ -31,18 +31,16 @@ use crate::{
         IntoConnectionHandler,
         PendingConnectionError,
         Substream,
+        handler::{
+            THandlerInEvent,
+            THandlerOutEvent,
+            THandlerError,
+        },
     },
 };
 use futures::{prelude::*, channel::mpsc, stream};
 use std::{pin::Pin, task::Context, task::Poll};
 use super::ConnectResult;
-
-// TODO: Rename H to THandler.
-
-// TODO: Still needed?
-type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-type THandlerOutEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
-type THandlerError<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
 
 /// Identifier of a [`Task`] in a [`Manager`](super::Manager).
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

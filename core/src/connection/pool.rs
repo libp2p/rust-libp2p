@@ -34,6 +34,11 @@ use crate::{
         OutgoingInfo,
         Substream,
         PendingConnectionError,
+        handler::{
+            THandlerInEvent,
+            THandlerOutEvent,
+            THandlerError,
+        },
         manager::{self, Manager, ManagerConfig},
     },
     muxing::StreamMuxer,
@@ -44,12 +49,6 @@ use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{convert::TryFrom as _, error, fmt, num::NonZeroU32, task::Context, task::Poll};
 
-// TODO: Still needed?
-type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-type THandlerOutEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
-type THandlerError<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
-
-// TODO: THandlerErr needed?
 /// A connection `Pool` manages a set of connections for each peer.
 pub struct Pool<THandler: IntoConnectionHandler, TTransErr> {
     local_id: PeerId,

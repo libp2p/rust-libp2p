@@ -44,7 +44,12 @@ use super::{
     ConnectionHandler,
     IntoConnectionHandler,
     PendingConnectionError,
-    Substream
+    Substream,
+    handler::{
+        THandlerInEvent,
+        THandlerOutEvent,
+        THandlerError,
+    },
 };
 use task::{Task, TaskId};
 
@@ -71,11 +76,6 @@ mod task;
 
 /// The result of a pending connection attempt.
 type ConnectResult<M, TE> = Result<(Connected, M), PendingConnectionError<TE>>;
-
-// TODO: Still needed?
-type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-type THandlerOutEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
-type THandlerError<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
