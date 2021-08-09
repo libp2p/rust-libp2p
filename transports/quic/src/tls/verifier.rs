@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p::identity::PublicKey;
-use libp2p::PeerId;
+use libp2p_core::identity::PublicKey;
+use libp2p_core::PeerId;
 use ring::io::der;
 use rustls::{
     internal::msgs::handshake::DigitallySignedStruct, Certificate, ClientCertVerified,
@@ -198,7 +198,7 @@ fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<PeerId, TLS
         .map_err(TLSError::WebPKIError)?;
     verify_libp2p_signature(&extension, certificate.subject_public_key_info().spki())
         .map_err(TLSError::WebPKIError)?;
-    Ok(PeerId::from_public_key(extension.peer_key))
+    Ok(PeerId::from_public_key(&extension.peer_key))
 }
 
 struct Libp2pExtension<'a> {
@@ -240,5 +240,5 @@ fn parse_libp2p_extension(extension: Input<'_>) -> Result<Libp2pExtension<'_>, E
 pub fn extract_peerid_or_panic(certificate: &[u8]) -> PeerId {
     let r = parse_certificate(certificate)
         .expect("we already checked that the certificate was valid during the handshake; qed");
-    PeerId::from_public_key(r.1.peer_key)
+    PeerId::from_public_key(&r.1.peer_key)
 }

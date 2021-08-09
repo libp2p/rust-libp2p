@@ -23,7 +23,7 @@
 //! This module handles generation, signing, and verification of certificates.
 
 use super::LIBP2P_SIGNING_PREFIX_LENGTH;
-use libp2p::identity::Keypair;
+use libp2p_core::identity::Keypair;
 
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1]; // Based on libp2p TLS 1.3 specs
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 91;
@@ -54,7 +54,7 @@ pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::
     // Generate the libp2p-specific extension.
     let libp2p_extension: rcgen::CustomExtension = {
         let extension_content = {
-            let serialized_pubkey = keypair.public().into_protobuf_encoding();
+            let serialized_pubkey = keypair.public().to_protobuf_encoding();
             yasna::encode_der(&(serialized_pubkey, libp2p_ext_signature))
         };
 

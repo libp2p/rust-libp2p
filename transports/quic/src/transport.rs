@@ -6,10 +6,10 @@ use ed25519_dalek::PublicKey;
 use futures::channel::oneshot;
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
-use libp2p::core::muxing::{StreamMuxer, StreamMuxerBox};
-use libp2p::core::transport::{Boxed, ListenerEvent, Transport, TransportError};
-use libp2p::multiaddr::{Multiaddr, Protocol};
-use libp2p::PeerId;
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+use libp2p_core::transport::{Boxed, ListenerEvent, Transport, TransportError};
+use libp2p_core::PeerId;
 use parking_lot::Mutex;
 use quinn_proto::crypto::Session;
 use std::net::{IpAddr, SocketAddr};
@@ -252,8 +252,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<(SocketAddr, Option<Publi
             return Err(());
         }
         let public_key =
-            libp2p::core::PublicKey::from_protobuf_encoding(peer_id.digest()).map_err(|_| ())?;
-        let public_key = if let libp2p::core::PublicKey::Ed25519(public_key) = public_key {
+            libp2p_core::PublicKey::from_protobuf_encoding(peer_id.digest()).map_err(|_| ())?;
+        let public_key = if let libp2p_core::PublicKey::Ed25519(public_key) = public_key {
             public_key.encode()
         } else {
             return Err(());

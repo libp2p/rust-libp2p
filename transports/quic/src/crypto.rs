@@ -1,5 +1,5 @@
 use ed25519_dalek::{Keypair, PublicKey};
-use libp2p::PeerId;
+use libp2p_core::PeerId;
 use quinn_proto::crypto::Session;
 use quinn_proto::TransportConfig;
 use std::sync::Arc;

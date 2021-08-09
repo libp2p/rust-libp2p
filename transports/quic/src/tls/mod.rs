@@ -23,7 +23,7 @@
 mod certificate;
 mod verifier;
 
-use libp2p::PeerId;
+use libp2p_core::PeerId;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -42,14 +42,14 @@ pub enum ConfigError {
     TLSError(#[from] rustls::TLSError),
     /// Signing failed
     #[error("Signing failed: {0}")]
-    SigningError(#[from] libp2p::identity::error::SigningError),
+    SigningError(#[from] libp2p_core::identity::error::SigningError),
     /// Certificate generation error
     #[error("Certificate generation error: {0}")]
     RcgenError(#[from] rcgen::RcgenError),
 }
 
 pub fn make_client_config(
-    keypair: &libp2p::identity::Keypair,
+    keypair: &libp2p_core::identity::Keypair,
     remote_peer_id: PeerId,
 ) -> Result<rustls::ClientConfig, ConfigError> {
     let cert = certificate::make_cert(&keypair)?;
@@ -70,7 +70,7 @@ pub fn make_client_config(
 }
 
 pub fn make_server_config(
-    keypair: &libp2p::identity::Keypair,
+    keypair: &libp2p_core::identity::Keypair,
 ) -> Result<rustls::ServerConfig, ConfigError> {
     let cert = certificate::make_cert(keypair)?;
     let private_key = cert.serialize_private_key_der();
