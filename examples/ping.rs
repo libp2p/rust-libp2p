@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(future::poll_fn(move |cx| loop {
         match swarm.poll_next_unpin(cx) {
             Poll::Ready(Some(event)) => match event {
-                SwarmEvent::NewListenAddr{ address, .. } => println!("Listening on {:?}", address),
+                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
                 SwarmEvent::Behaviour(event) => println!("{:?}", event),
                 _ => {}
             },
