@@ -40,23 +40,14 @@
 mod dummy;
 mod map_in;
 mod map_out;
+pub mod multi;
 mod node_handler;
 mod one_shot;
 mod select;
-pub mod multi;
 
-pub use crate::upgrade::{
-    InboundUpgradeSend,
-    OutboundUpgradeSend,
-    UpgradeInfoSend,
-};
+pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 
-use libp2p_core::{
-    ConnectedPoint,
-    Multiaddr,
-    PeerId,
-    upgrade::UpgradeError,
-};
+use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
@@ -128,7 +119,7 @@ pub trait ProtocolsHandler: Send + 'static {
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        info: Self::InboundOpenInfo
+        info: Self::InboundOpenInfo,
     );
 
     /// Injects the output of a successful upgrade on a new outbound substream.
@@ -138,7 +129,7 @@ pub trait ProtocolsHandler: Send + 'static {
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     );
 
     /// Injects an event coming from the outside in the handler.
@@ -151,17 +142,16 @@ pub trait ProtocolsHandler: Send + 'static {
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgradeSend>::Error
-        >
+        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     );
 
     /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
-    ) {}
+        _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+    ) {
+    }
 
     /// Returns until when the connection should be kept alive.
     ///
@@ -186,8 +176,16 @@ pub trait ProtocolsHandler: Send + 'static {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
     >;
 
     /// Adds a closure that turns the input event into something else.
@@ -315,7 +313,7 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, T
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
         /// The protocol(s) to apply on the substream.
-        protocol: SubstreamProtocol<TConnectionUpgrade, TOutboundOpenInfo>
+        protocol: SubstreamProtocol<TConnectionUpgrade, TOutboundOpenInfo>,
     },
 
     /// Close the connection for the given reason.
@@ -341,7 +339,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
         match self {
             ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: protocol.map_info(map)
+                    protocol: protocol.map_info(map),
                 }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
@@ -361,7 +359,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
         match self {
             ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: protocol.map_upgrade(map)
+                    protocol: protocol.map_upgrade(map),
                 }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
@@ -419,12 +417,12 @@ impl<TUpgrErr> ProtocolsHandlerUpgrErr<TUpgrErr> {
     /// Map the inner [`UpgradeError`] type.
     pub fn map_upgrade_err<F, E>(self, f: F) -> ProtocolsHandlerUpgrErr<E>
     where
-        F: FnOnce(UpgradeError<TUpgrErr>) -> UpgradeError<E>
+        F: FnOnce(UpgradeError<TUpgrErr>) -> UpgradeError<E>,
     {
         match self {
             ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
             ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
-            ProtocolsHandlerUpgrErr::Upgrade(e) => ProtocolsHandlerUpgrErr::Upgrade(f(e))
+            ProtocolsHandlerUpgrErr::Upgrade(e) => ProtocolsHandlerUpgrErr::Upgrade(f(e)),
         }
     }
 }
@@ -437,10 +435,10 @@ where
         match self {
             ProtocolsHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
-            },
+            }
             ProtocolsHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
-            },
+            }
             ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
         }
     }
@@ -448,7 +446,7 @@ where
 
 impl<TUpgrErr> error::Error for ProtocolsHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: error::Error + 'static
+    TUpgrErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -467,7 +465,11 @@ pub trait IntoProtocolsHandler: Send + 'static {
     /// Builds the protocols handler.
     ///
     /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler;
+    fn into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::Handler;
 
     /// Return the handler's inbound protocol.
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol;
@@ -492,7 +494,8 @@ pub trait IntoProtocolsHandler: Send + 'static {
 }
 
 impl<T> IntoProtocolsHandler for T
-where T: ProtocolsHandler
+where
+    T: ProtocolsHandler,
 {
     type Handler = Self;
 
@@ -537,9 +540,9 @@ impl Ord for KeepAlive {
         use self::KeepAlive::*;
 
         match (self, other) {
-            (No, No) | (Yes, Yes)  => Ordering::Equal,
-            (No,  _) | (_,   Yes)  => Ordering::Less,
-            (_,  No) | (Yes,   _)  => Ordering::Greater,
+            (No, No) | (Yes, Yes) => Ordering::Equal,
+            (No, _) | (_, Yes) => Ordering::Less,
+            (_, No) | (Yes, _) => Ordering::Greater,
             (Until(t1), Until(t2)) => t1.cmp(t2),
         }
     }
