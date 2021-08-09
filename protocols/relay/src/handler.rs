@@ -198,7 +198,50 @@ pub enum RelayHandlerEvent {
 
 impl fmt::Debug for RelayHandlerEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        match self {
+            RelayHandlerEvent::IncomingRelayReq {
+                request_id,
+                src_addr,
+                req: _,
+            } => f
+                .debug_struct("RelayHandlerEvent::IncomingRelayReq")
+                .field("request_id", request_id)
+                .field("src_addr", src_addr)
+                .finish(),
+            RelayHandlerEvent::IncomingDstReq(_) => {
+                f.debug_tuple("RelayHandlerEvent::IncomingDstReq").finish()
+            }
+            RelayHandlerEvent::OutgoingRelayReqSuccess(peer_id, request_id, connection) => f
+                .debug_tuple("RelayHandlerEvent::OutgoingRelayReqSuccess")
+                .field(peer_id)
+                .field(request_id)
+                .field(connection)
+                .finish(),
+            RelayHandlerEvent::IncomingDstReqSuccess {
+                stream,
+                src_peer_id,
+                relay_peer_id,
+                relay_addr,
+            } => f
+                .debug_struct("RelayHandlerEvent::IncomingDstReqSuccess")
+                .field("stream", stream)
+                .field("src_peer_id", src_peer_id)
+                .field("relay_peer_id", relay_peer_id)
+                .field("relay_addr", relay_addr)
+                .finish(),
+            RelayHandlerEvent::OutgoingRelayReqError(peer_id, request_id) => f
+                .debug_tuple("RelayHandlerEvent::OutgoingRelayReqError")
+                .field(peer_id)
+                .field(request_id)
+                .finish(),
+            RelayHandlerEvent::OutgoingDstReqError {
+                src_connection_id,
+                incoming_relay_req_deny_fut: _,
+            } => f
+                .debug_struct("RelayHandlerEvent::OutgoingDstReqError")
+                .field("src_connection_id", src_connection_id)
+                .finish(),
+        }
     }
 }
 
@@ -242,7 +285,43 @@ pub enum RelayHandlerIn {
 
 impl fmt::Debug for RelayHandlerIn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        match self {
+            RelayHandlerIn::UsedForListening(_) => {
+                f.debug_tuple("RelayHandlerIn::UsedForListening").finish()
+            }
+            RelayHandlerIn::DenyIncomingRelayReq(_) => f
+                .debug_tuple("RelayHandlerIn::DenyIncomingRelayReq")
+                .finish(),
+            RelayHandlerIn::AcceptDstReq(_) => {
+                f.debug_tuple("RelayHandlerIn::AcceptDstReq").finish()
+            }
+            RelayHandlerIn::DenyDstReq(_) => f.debug_tuple("RelayHandlerIn::DenyDstReq").finish(),
+            RelayHandlerIn::OutgoingRelayReq {
+                src_peer_id,
+                dst_peer_id,
+                request_id,
+                dst_addr,
+            } => f
+                .debug_struct("RelayHandlerIn::OutgoingRelayReq")
+                .field("src_peer_id", src_peer_id)
+                .field("dst_peer_id", dst_peer_id)
+                .field("request_id", request_id)
+                .field("dst_addr", dst_addr)
+                .finish(),
+            RelayHandlerIn::OutgoingDstReq {
+                src_peer_id,
+                src_addr,
+                src_connection_id,
+                request_id,
+                incoming_relay_req: _,
+            } => f
+                .debug_struct("RelayHandlerIn::OutgoingDstReq")
+                .field("src_peer_id", src_peer_id)
+                .field("src_addr", src_addr)
+                .field("src_connection_id", src_connection_id)
+                .field("request_id", request_id)
+                .finish(),
+        }
     }
 }
 
