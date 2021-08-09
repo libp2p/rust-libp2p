@@ -103,14 +103,12 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
 
         async move {
             substream.send(std::io::Cursor::new(encoded)).await?;
-            let msg =
-                substream
-                    .next()
-                    .await
-                    .ok_or_else(|| OutgoingRelayReqError::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+            let msg = substream.next().await.ok_or_else(|| {
+                OutgoingRelayReqError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "",
+                ))
+            })??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {
