@@ -3198,9 +3198,13 @@ where
                 NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                     NetworkBehaviourAction::ReportObservedAddr { address, score }
                 }
-                NetworkBehaviourAction::CloseConnection { peer_id, connection } => {
-                    NetworkBehaviourAction::CloseConnection { peer_id, connection }
-                }
+                NetworkBehaviourAction::CloseConnection {
+                    peer_id,
+                    connection,
+                } => NetworkBehaviourAction::CloseConnection {
+                    peer_id,
+                    connection,
+                },
             });
         }
 

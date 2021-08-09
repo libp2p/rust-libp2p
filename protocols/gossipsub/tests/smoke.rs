@@ -51,11 +51,13 @@ impl Future for Graph {
         for (addr, node) in &mut self.nodes {
             loop {
                 match node.poll_next_unpin(cx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => return Poll::Ready((addr.clone(), event)),
+                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => {
+                        return Poll::Ready((addr.clone(), event))
+                    }
                     Poll::Ready(Some(_)) => {}
                     Poll::Ready(None) => panic!("unexpected None when polling nodes"),
                     Poll::Pending => break,
-                }   
+                }
             }
         }
 
@@ -226,7 +228,11 @@ fn multi_hop_propagation() {
         graph = graph.drain_poll();
 
         // Publish a single message.
-        graph.nodes[0].1.behaviour_mut().publish(topic, vec![1, 2, 3]).unwrap();
+        graph.nodes[0]
+            .1
+            .behaviour_mut()
+            .publish(topic, vec![1, 2, 3])
+            .unwrap();
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
