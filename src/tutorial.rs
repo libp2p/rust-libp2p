@@ -209,7 +209,14 @@
 //! [`Multiaddr`] can be found on https://docs.libp2p.io/concepts/addressing/
 //! and its specification repository https://github.com/multiformats/multiaddr.
 //!
-//! Let's make our local node listen on all interfaces as well as a random port.
+//! Let's make our local node listen on a new socket.
+//! This socket is listening on multiple network interfaces at the same time. For
+//! each network interface, a new listening address is created, these may change
+//! over time as interfaces become available or unavailable.
+//! For example in case of our TCP transport, it may (among others) listen on the
+//! loopback interface (localhost) `/ip4/127.0.0.1/tcp/24915` as well as the local
+//! network `/ip4/192.168.178.25tcp/24915`.
+//!
 //! In addition, if provided on the CLI, let's instruct our local node to dial a
 //! remote peer.
 //!
@@ -325,8 +332,14 @@
 //! cargo run --example ping
 //! ```
 //!
-//! It will print the PeerId and the listening address, e.g. `Listening on
-//! "/ip4/127.0.0.1/tcp/24915"`
+//! It will print the PeerId and the new listening addresses, e.g.
+//! ```sh
+//! Local peer id: PeerId("12D3KooWT1As4mwh3KYBnNTw9bSrRbYQGJTm9SSte82JSumqgCQG")
+//! Listening on "/ip4/127.0.0.1/tcp/24915"
+//! Listening on "/ip4/192.168.178.25/tcp/24915"
+//! Listening on "/ip4/172.17.0.1/tcp/24915"
+//! Listening on "/ip6/::1/tcp/24915"
+//! ```
 //!
 //! In the second terminal window, start a new instance of the example with:
 //!
@@ -334,8 +347,11 @@
 //! cargo run --example ping -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
-//! Note: The [`Multiaddr`] at the end being the [`Multiaddr`] printed earlier
-//! in terminal window one.
+//! Note: The [`Multiaddr`] at the end being one of the [`Multiaddr`] printed
+//! earlier in terminal window one.
+//! Both peers have to be in the same network with which the address is associated. 
+//! In our case any printed addresses can be used, as both peers run on the same 
+//! device.
 //!
 //! The two nodes will establish a connection and send each other ping and pong
 //! messages every 15 seconds.
