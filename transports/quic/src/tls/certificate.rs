@@ -23,10 +23,10 @@
 //! This module handles generation, signing, and verification of certificates.
 
 use super::LIBP2P_SIGNING_PREFIX_LENGTH;
-use libp2p_core::identity::Keypair;
+use libp2p::identity::Keypair;
 
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1]; // Based on libp2p TLS 1.3 specs
-const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
+const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 91;
 static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
@@ -38,7 +38,7 @@ pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::
     // The libp2p-specific extension to the certificate contains a signature of the public key
     // of the certificate using the libp2p private key.
     let libp2p_ext_signature = {
-        let certif_pubkey = certif_keypair.public_key_raw();
+        let certif_pubkey = certif_keypair.public_key_der();
         assert_eq!(
             certif_pubkey.len(),
             LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH,
@@ -47,28 +47,19 @@ pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::
         let mut buf =
             [0u8; LIBP2P_SIGNING_PREFIX_LENGTH + LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH];
         buf[..LIBP2P_SIGNING_PREFIX_LENGTH].copy_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
-        buf[LIBP2P_SIGNING_PREFIX_LENGTH..].copy_from_slice(certif_pubkey);
+        buf[LIBP2P_SIGNING_PREFIX_LENGTH..].copy_from_slice(&certif_pubkey);
         keypair.sign(&buf)?
     };
 
     // Generate the libp2p-specific extension.
     let libp2p_extension: rcgen::CustomExtension = {
         let extension_content = {
-            let serialized_pubkey = keypair.public().to_protobuf_encoding();
-            yasna::construct_der(|writer| {
-                writer.write_sequence(|writer| {
-                    writer
-                        .next()
-                        .write_bitvec_bytes(&serialized_pubkey, serialized_pubkey.len() * 8);
-                    writer
-                        .next()
-                        .write_bitvec_bytes(&libp2p_ext_signature, libp2p_ext_signature.len() * 8);
-                })
-            })
+            let serialized_pubkey = keypair.public().into_protobuf_encoding();
+            yasna::encode_der(&(serialized_pubkey, libp2p_ext_signature))
         };
 
         let mut ext = rcgen::CustomExtension::from_oid_content(LIBP2P_OID, extension_content);
-        ext.set_criticality(true);
+        ext.set_criticality(false);
         ext
     };
 

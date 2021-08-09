@@ -23,6 +23,7 @@
 mod certificate;
 mod verifier;
 
+use libp2p::PeerId;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -41,49 +42,45 @@ pub enum ConfigError {
     TLSError(#[from] rustls::TLSError),
     /// Signing failed
     #[error("Signing failed: {0}")]
-    SigningError(#[from] libp2p_core::identity::error::SigningError),
+    SigningError(#[from] libp2p::identity::error::SigningError),
     /// Certificate generation error
     #[error("Certificate generation error: {0}")]
     RcgenError(#[from] rcgen::RcgenError),
 }
 
-fn make_client_config(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
-    verifier: Arc<verifier::Libp2pCertificateVerifier>,
-) -> Result<rustls::ClientConfig, rustls::TLSError> {
+pub fn make_client_config(
+    keypair: &libp2p::identity::Keypair,
+    remote_peer_id: PeerId,
+) -> Result<rustls::ClientConfig, ConfigError> {
+    let cert = certificate::make_cert(&keypair)?;
+    let private_key = cert.serialize_private_key_der();
+    let cert = rustls::Certificate(cert.serialize_der()?);
+    let key = rustls::PrivateKey(private_key);
+    let verifier = verifier::Libp2pServerCertificateVerifier(remote_peer_id);
+
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.alpn_protocols = vec![b"libp2p".to_vec()];
     crypto.enable_early_data = false;
-    crypto.set_single_client_cert(vec![certificate], key)?;
-    crypto.dangerous().set_certificate_verifier(verifier);
+    crypto.set_single_client_cert(vec![cert], key)?;
+    crypto
+        .dangerous()
+        .set_certificate_verifier(Arc::new(verifier));
     Ok(crypto)
 }
 
-fn make_server_config(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
-    verifier: Arc<verifier::Libp2pCertificateVerifier>,
-) -> Result<rustls::ServerConfig, rustls::TLSError> {
-    let mut crypto = rustls::ServerConfig::new(verifier);
-    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
-    crypto.alpn_protocols = vec![b"libp2p".to_vec()];
-    crypto.set_single_cert(vec![certificate], key)?;
-    Ok(crypto)
-}
-
-/// Create TLS client and server configurations for libp2p.
-pub fn make_tls_config(
-    keypair: &libp2p_core::identity::Keypair,
-) -> Result<(rustls::ClientConfig, rustls::ServerConfig), ConfigError> {
-    let cert = certificate::make_cert(&keypair)?;
+pub fn make_server_config(
+    keypair: &libp2p::identity::Keypair,
+) -> Result<rustls::ServerConfig, ConfigError> {
+    let cert = certificate::make_cert(keypair)?;
     let private_key = cert.serialize_private_key_der();
-    let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
     let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);
-    Ok((
-        make_client_config(cert.clone(), key.clone(), verifier.clone())?,
-        make_server_config(cert, key, verifier)?,
-    ))
+    let verifier = verifier::Libp2pClientCertificateVerifier;
+
+    let mut crypto = rustls::ServerConfig::new(Arc::new(verifier));
+    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
+    crypto.alpn_protocols = vec![b"libp2p".to_vec()];
+    crypto.set_single_cert(vec![cert], key)?;
+    Ok(crypto)
 }

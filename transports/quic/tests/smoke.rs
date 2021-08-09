@@ -261,3 +261,102 @@ impl RequestResponseCodec for PingCodec {
         Ok(())
     }
 }
+
+#[cfg(feature = "noise")]
+#[async_std::test]
+async fn dial_failure_noise() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init()
+        .ok();
+    log_panics::init();
+
+    let mut a = create_swarm::<libp2p_quic::NoiseCrypto>(true).await?;
+    let mut b = create_swarm::<libp2p_quic::NoiseCrypto>(false).await?;
+
+    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
+
+    let keypair = Keypair::generate(&mut rand_core::OsRng {});
+    let fake_peer_id = keypair.to_peer_id();
+
+    let mut addr = match a.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
+    addr.push(Protocol::P2p(fake_peer_id.into()));
+
+    b.behaviour_mut().add_address(&fake_peer_id, addr);
+    b.behaviour_mut()
+        .send_request(&fake_peer_id, Ping(b"hello world".to_vec()));
+
+    match b.next().await {
+        Some(SwarmEvent::Dialing(_)) => {}
+        e => panic!("{:?}", e),
+    }
+
+    match b.next().await {
+        Some(SwarmEvent::ConnectionEstablished { .. }) => {}
+        e => panic!("{:?}", e),
+    };
+
+    match b.next().await {
+        Some(SwarmEvent::ConnectionClosed { .. }) => {}
+        e => panic!("{:?}", e),
+    };
+
+    assert!(a.next().now_or_never().is_none());
+
+    Ok(())
+}
+
+#[cfg(feature = "tls")]
+#[async_std::test]
+async fn dial_failure_tls() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init()
+        .ok();
+    log_panics::init();
+
+    let mut a = create_swarm::<libp2p_quic::TlsCrypto>(true).await?;
+    let mut b = create_swarm::<libp2p_quic::TlsCrypto>(false).await?;
+
+    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
+
+    let keypair = Keypair::generate(&mut rand_core::OsRng {});
+    let fake_peer_id = keypair.to_peer_id();
+
+    let mut addr = match a.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
+    addr.push(Protocol::P2p(fake_peer_id.into()));
+
+    b.behaviour_mut().add_address(&fake_peer_id, addr);
+    b.behaviour_mut()
+        .send_request(&fake_peer_id, Ping(b"hello world".to_vec()));
+
+    match b.next().await {
+        Some(SwarmEvent::Dialing(_)) => {}
+        e => panic!("{:?}", e),
+    }
+
+    match a.next().await {
+        Some(SwarmEvent::IncomingConnection { .. }) => {}
+        e => panic!("{:?}", e),
+    }
+
+    match b.next().await {
+        Some(SwarmEvent::UnreachableAddr { .. }) => {}
+        e => panic!("{:?}", e),
+    };
+
+    match b.next().await {
+        Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {}
+        e => panic!("{:?}", e),
+    };
+
+    assert!(a.next().now_or_never().is_none());
+
+    Ok(())
+}

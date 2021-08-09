@@ -1,5 +1,5 @@
 use ed25519_dalek::{Keypair, PublicKey};
-use libp2p_core::PeerId;
+use libp2p::PeerId;
 use quinn_proto::crypto::Session;
 use quinn_proto::TransportConfig;
 use std::sync::Arc;
@@ -104,8 +104,8 @@ impl Crypto for TlsCrypto {
     ) -> <Self::Session as Session>::ServerConfig {
         assert!(config.psk.is_none(), "invalid config");
         use crate::ToLibp2p;
-        let (_, mut server) =
-            crate::tls::make_tls_config(&config.keypair.to_keypair()).expect("invalid config");
+        let mut server =
+            crate::tls::make_server_config(&config.keypair.to_keypair()).expect("invalid config");
         if let Some(key_log) = config.keylogger.clone() {
             server.key_log = key_log;
         }
@@ -114,12 +114,15 @@ impl Crypto for TlsCrypto {
 
     fn new_client_config(
         config: &Arc<CryptoConfig<Self::Keylogger>>,
-        _remote_public: PublicKey,
+        remote_public: PublicKey,
     ) -> <Self::Session as Session>::ClientConfig {
         assert!(config.psk.is_none(), "invalid config");
         use crate::ToLibp2p;
-        let (mut client, _) =
-            crate::tls::make_tls_config(&config.keypair.to_keypair()).expect("invalid config");
+        let mut client = crate::tls::make_client_config(
+            &config.keypair.to_keypair(),
+            remote_public.to_peer_id(),
+        )
+        .expect("invalid config");
         if let Some(key_log) = config.keylogger.clone() {
             client.key_log = key_log;
         }

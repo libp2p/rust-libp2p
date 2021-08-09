@@ -3,8 +3,8 @@ use crate::endpoint::ConnectionChannel;
 use async_io::Timer;
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p::core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p::{Multiaddr, PeerId};
 use parking_lot::Mutex;
 use quinn_proto::generic::Connection;
 use quinn_proto::{

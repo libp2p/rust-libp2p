@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::identity::PublicKey;
-use libp2p_core::PeerId;
+use libp2p::identity::PublicKey;
+use libp2p::PeerId;
 use ring::io::der;
 use rustls::{
     internal::msgs::handshake::DigitallySignedStruct, Certificate, ClientCertVerified,
@@ -31,7 +31,7 @@ use webpki::Error;
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
 /// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub(crate) struct Libp2pCertificateVerifier;
+pub(crate) struct Libp2pServerCertificateVerifier(pub(crate) PeerId);
 
 /// libp2p requires the following of X.509 server certificate chains:
 ///
@@ -39,10 +39,7 @@ pub(crate) struct Libp2pCertificateVerifier;
 /// - The certificate must be self-signed.
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
-///
-/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
-/// the caller.
-impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
+impl rustls::ServerCertVerifier for Libp2pServerCertificateVerifier {
     fn verify_server_cert(
         &self,
         _roots: &rustls::RootCertStore,
@@ -50,7 +47,13 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         _dns_name: webpki::DNSNameRef<'_>,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs).map(|()| ServerCertVerified::assertion())
+        let peer_id = verify_presented_certs(presented_certs)?;
+        if peer_id != self.0 {
+            return Err(TLSError::PeerIncompatibleError(
+                "Unexpected peer id".to_string(),
+            ));
+        }
+        Ok(ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -74,6 +77,11 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     }
 }
 
+/// Implementation of the `rustls` certificate verification traits for libp2p.
+///
+/// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
+pub(crate) struct Libp2pClientCertificateVerifier;
+
 /// libp2p requires the following of X.509 client certificate chains:
 ///
 /// - Exactly one certificate must be presented. In particular, client
@@ -81,12 +89,7 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
 /// - The certificate must be self-signed.
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
-///
-/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
-/// the caller.
-///
-/// [`PeerId`]: libp2p_core::PeerId
-impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
+impl rustls::ClientCertVerifier for Libp2pClientCertificateVerifier {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -103,7 +106,7 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         presented_certs: &[Certificate],
         _dns_name: Option<&webpki::DNSName>,
     ) -> Result<ClientCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs).map(|()| ClientCertVerified::assertion())
+        verify_presented_certs(presented_certs).map(|_| ClientCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -183,7 +186,7 @@ fn parse_certificate(
     Ok((parsed, libp2p_extension))
 }
 
-fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSError> {
+fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<PeerId, TLSError> {
     if presented_certs.len() != 1 {
         return Err(TLSError::NoCertificatesPresented);
     }
@@ -193,8 +196,9 @@ fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSErro
     certificate
         .check_self_issued()
         .map_err(TLSError::WebPKIError)?;
-    verify_libp2p_signature(&extension, certificate.subject_public_key_info().key())
-        .map_err(TLSError::WebPKIError)
+    verify_libp2p_signature(&extension, certificate.subject_public_key_info().spki())
+        .map_err(TLSError::WebPKIError)?;
+    Ok(PeerId::from_public_key(extension.peer_key))
 }
 
 struct Libp2pExtension<'a> {
@@ -204,7 +208,9 @@ struct Libp2pExtension<'a> {
 
 fn parse_libp2p_extension(extension: Input<'_>) -> Result<Libp2pExtension<'_>, Error> {
     fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Error> {
-        der::bit_string_with_no_unused_bits(input).map_err(|_| e)
+        // The specification states that this is a BIT STRING, but the Go implementation
+        // uses an OCTET STRING.  OCTET STRING is superior in this context, so use it.
+        der::expect_tag_and_get_value(input, der::Tag::OctetString).map_err(|_| e)
     }
 
     let e = Error::ExtensionValueInvalid;
@@ -234,5 +240,5 @@ fn parse_libp2p_extension(extension: Input<'_>) -> Result<Libp2pExtension<'_>, E
 pub fn extract_peerid_or_panic(certificate: &[u8]) -> PeerId {
     let r = parse_certificate(certificate)
         .expect("we already checked that the certificate was valid during the handshake; qed");
-    PeerId::from_public_key(&r.1.peer_key)
+    PeerId::from_public_key(r.1.peer_key)
 }
