@@ -24,7 +24,10 @@
 //! underlying `Transport`.
 // TODO: add example
 
-use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
+use crate::{
+    transport::{ListenerEvent, TransportError},
+    Multiaddr, Transport,
+};
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
@@ -82,7 +85,9 @@ where
     type Dial = Timeout<InnerTrans::Dial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self.inner.listen_on(addr)
+        let listener = self
+            .inner
+            .listen_on(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
 
         let listener = TimeoutListener {
@@ -94,7 +99,9 @@ where
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dial = self.inner.dial(addr)
+        let dial = self
+            .inner
+            .dial(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,
@@ -120,13 +127,16 @@ impl<InnerStream, O, E> Stream for TimeoutListener<InnerStream>
 where
     InnerStream: TryStream<Ok = ListenerEvent<O, E>, Error = E>,
 {
-    type Item = Result<ListenerEvent<Timeout<O>, TransportTimeoutError<E>>, TransportTimeoutError<E>>;
+    type Item =
+        Result<ListenerEvent<Timeout<O>, TransportTimeoutError<E>>, TransportTimeoutError<E>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         let poll_out = match TryStream::try_poll_next(this.inner, cx) {
-            Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(TransportTimeoutError::Other(err)))),
+            Poll::Ready(Some(Err(err))) => {
+                return Poll::Ready(Some(Err(TransportTimeoutError::Other(err))))
+            }
             Poll::Ready(Some(Ok(v))) => v,
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Pending => return Poll::Pending,
@@ -134,11 +144,9 @@ where
 
         let timeout = *this.timeout;
         let event = poll_out
-            .map(move |inner_fut| {
-                Timeout {
-                    inner: inner_fut,
-                    timer: Delay::new(timeout),
-                }
+            .map(move |inner_fut| Timeout {
+                inner: inner_fut,
+                timer: Delay::new(timeout),
             })
             .map_err(TransportTimeoutError::Other);
 
@@ -173,14 +181,14 @@ where
         let mut this = self.project();
 
         match TryFuture::try_poll(this.inner, cx) {
-            Poll::Pending => {},
+            Poll::Pending => {}
             Poll::Ready(Ok(v)) => return Poll::Ready(Ok(v)),
             Poll::Ready(Err(err)) => return Poll::Ready(Err(TransportTimeoutError::Other(err))),
         }
 
         match Pin::new(&mut this.timer).poll(cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(()) => Poll::Ready(Err(TransportTimeoutError::Timeout))
+            Poll::Ready(()) => Poll::Ready(Err(TransportTimeoutError::Timeout)),
         }
     }
 }
@@ -197,7 +205,8 @@ pub enum TransportTimeoutError<TErr> {
 }
 
 impl<TErr> fmt::Display for TransportTimeoutError<TErr>
-where TErr: fmt::Display,
+where
+    TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -209,7 +218,8 @@ where TErr: fmt::Display,
 }
 
 impl<TErr> error::Error for TransportTimeoutError<TErr>
-where TErr: error::Error + 'static,
+where
+    TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
