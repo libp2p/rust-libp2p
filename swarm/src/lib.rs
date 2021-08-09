@@ -94,13 +94,7 @@ use futures::{
     executor::ThreadPoolBuilder,
     stream::FusedStream,
 };
-use libp2p_core::{
-    Executor,
-    Transport,
-    Multiaddr,
-    Negotiated,
-    PeerId,
-    connection::{
+use libp2p_core::{Executor, Multiaddr, Negotiated, PeerId, Transport, connection::{
         ConnectionError,
         ConnectionId,
         ConnectionLimit,
@@ -110,10 +104,7 @@ use libp2p_core::{
         ListenerId,
         PendingConnectionError,
         Substream
-    },
-    transport::{self, TransportError},
-    muxing::StreamMuxerBox,
-    network::{
+    }, muxing::StreamMuxerBox, network::{
         self,
         ConnectionLimits,
         Network,
@@ -121,9 +112,7 @@ use libp2p_core::{
         NetworkEvent,
         NetworkConfig,
         peer::ConnectedPeer,
-    },
-    upgrade::{ProtocolName},
-};
+    }, transport::{self, TransportError}, upgrade::{ProtocolName}};
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, pin::Pin, task::{Context, Poll}};
@@ -605,7 +594,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                     this.behaviour.inject_new_listen_addr(listener_id, &listen_addr);
                     return Poll::Ready(SwarmEvent::NewListenAddr {
-                        listener_id, 
+                        listener_id,
                         address: listen_addr
                     });
                 }
@@ -1144,8 +1133,29 @@ impl error::Error for DialError {
 }
 
 /// Dummy implementation of [`NetworkBehaviour`] that doesn't do anything.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct DummyBehaviour {
+    keep_alive: KeepAlive
+}
+
+impl DummyBehaviour {
+    pub fn with_keep_alive(keep_alive: KeepAlive) -> Self {
+        Self {
+            keep_alive
+        }
+    }
+
+    pub fn keep_alive_mut(&mut self) -> &mut KeepAlive {
+        &mut self.keep_alive
+    }
+}
+
+impl Default for DummyBehaviour {
+    fn default() -> Self {
+        Self {
+            keep_alive: KeepAlive::No
+        }
+    }
 }
 
 impl NetworkBehaviour for DummyBehaviour {
@@ -1153,23 +1163,19 @@ impl NetworkBehaviour for DummyBehaviour {
     type OutEvent = void::Void;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        protocols_handler::DummyProtocolsHandler::default()
+        protocols_handler::DummyProtocolsHandler {
+            keep_alive: self.keep_alive
+        }
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
+    ) {
+        void::unreachable(event)
     }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_event(&mut self, _: PeerId, _: ConnectionId,
-        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
     fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) ->
         Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as

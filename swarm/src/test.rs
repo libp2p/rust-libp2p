@@ -82,12 +82,6 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
-    fn inject_connected(&mut self, _: &PeerId) {
-    }
-
-    fn inject_disconnected(&mut self, _: &PeerId) {
-    }
-
     fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {
     }
 
