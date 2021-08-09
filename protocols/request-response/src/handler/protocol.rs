@@ -137,9 +137,14 @@ where
     pub(crate) request: TCodec::Request,
 }
 
-impl<TCodec: RequestResponseCodec> fmt::Debug for RequestProtocol<TCodec> {
+impl<TCodec> fmt::Debug for RequestProtocol<TCodec>
+where
+    TCodec: RequestResponseCodec,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        f.debug_struct("RequestProtocol")
+            .field("request_id", &self.request_id)
+            .finish()
     }
 }
 

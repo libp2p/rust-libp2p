@@ -2,6 +2,10 @@
 
 - Update dependencies.
 
+- Implement `Debug` for `RequestResponseCodec` and `RequestProtocol`. See [PR 2183].
+
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+
 # 0.12.0 [2021-07-12]
 
 - Update dependencies.
