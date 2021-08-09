@@ -34,6 +34,7 @@ use crate::{
         IntoConnectionHandler,
         PendingConnection,
         Substream,
+        handler::THandlerInEvent,
         pool::Pool,
     },
     PeerId
@@ -617,8 +618,6 @@ impl<'a, TInEvent>
         }
     }
 }
-
-type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
 
 /// An iterator over the ongoing dialing attempts to a peer.
 pub struct DialingAttemptIter<'a, THandler: IntoConnectionHandler, TTransErr> {

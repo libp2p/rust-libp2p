@@ -17,6 +17,9 @@
   superflucious. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).
 
+- Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
+  (see [PR 2183]).
+
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
 [PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
