@@ -333,7 +333,7 @@
 //! ```
 //!
 //! It will print the PeerId and the new listening addresses, e.g.
-//! ```
+//! ```sh
 //! Local peer id: PeerId("12D3KooWT1As4mwh3KYBnNTw9bSrRbYQGJTm9SSte82JSumqgCQG")
 //! Listening on "/ip4/127.0.0.1/tcp/24915"
 //! Listening on "/ip4/192.168.178.25/tcp/24915"
