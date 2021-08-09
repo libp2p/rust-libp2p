@@ -36,22 +36,20 @@
 
 mod codec;
 
-use codec::{Codec, Message, ProtocolWrapper, Type};
+use super::{
+    ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseConfig,
+    RequestResponseEvent, RequestResponseMessage,
+};
 use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
+use codec::{Codec, Message, ProtocolWrapper, Type};
 use futures::ready;
-use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use lru::LruCache;
-use std::{collections::{HashMap, HashSet, VecDeque}, task::{Context, Poll}};
 use std::{cmp::max, num::NonZeroU16};
-use super::{
-    ProtocolSupport,
-    RequestId,
-    RequestResponse,
-    RequestResponseCodec,
-    RequestResponseConfig,
-    RequestResponseEvent,
-    RequestResponseMessage,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    task::{Context, Poll},
 };
 
 pub type ResponseChannel<R> = super::ResponseChannel<Message<R>>;
@@ -60,7 +58,7 @@ pub type ResponseChannel<R> = super::ResponseChannel<Message<R>>;
 pub struct Throttled<C>
 where
     C: RequestResponseCodec + Send,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     /// A random id used for logging.
     id: u32,
@@ -77,7 +75,7 @@ where
     /// Pending events to report in `Throttled::poll`.
     events: VecDeque<Event<C::Request, C::Response, Message<C::Response>>>,
     /// The current credit ID.
-    next_grant_id: u64
+    next_grant_id: u64,
 }
 
 /// Information about a credit grant that is sent to remote peers.
@@ -89,7 +87,7 @@ struct Grant {
     request: RequestId,
     /// The credit given in this grant, i.e. the number of additional
     /// requests the remote is allowed to send.
-    credit: u16
+    credit: u16,
 }
 
 /// Max. number of inbound requests that can be received.
@@ -99,7 +97,7 @@ struct Limit {
     max_recv: NonZeroU16,
     /// The next receive limit which becomes active after
     /// the current limit has been reached.
-    next_max: NonZeroU16
+    next_max: NonZeroU16,
 }
 
 impl Limit {
@@ -111,7 +109,7 @@ impl Limit {
         // sender so we must not use `max` right away.
         Limit {
             max_recv: NonZeroU16::new(1).expect("1 > 0"),
-            next_max: max
+            next_max: max,
         }
     }
 
@@ -191,7 +189,7 @@ impl PeerInfo {
                 limit: recv_limit,
                 remaining: 1,
                 sent: HashSet::new(),
-            }
+            },
         }
     }
 
@@ -210,16 +208,18 @@ impl PeerInfo {
 impl<C> Throttled<C>
 where
     C: RequestResponseCodec + Send + Clone,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     /// Create a new throttled request-response behaviour.
     pub fn new<I>(c: C, protos: I, cfg: RequestResponseConfig) -> Self
     where
         I: IntoIterator<Item = (C::Protocol, ProtocolSupport)>,
         C: Send,
-        C::Protocol: Sync
+        C::Protocol: Sync,
     {
-        let protos = protos.into_iter().map(|(p, ps)| (ProtocolWrapper::new(b"/t/1", p), ps));
+        let protos = protos
+            .into_iter()
+            .map(|(p, ps)| (ProtocolWrapper::new(b"/t/1", p), ps));
         Throttled::from(RequestResponse::new(Codec::new(c, 8192), protos, cfg))
     }
 
@@ -233,7 +233,7 @@ where
             default_limit: Limit::new(NonZeroU16::new(1).expect("1 > 0")),
             limit_overrides: HashMap::new(),
             events: VecDeque::new(),
-            next_grant_id: 0
+            next_grant_id: 0,
         }
     }
 
@@ -262,7 +262,10 @@ where
 
     /// Has the limit of outbound requests been reached for the given peer?
     pub fn can_send(&mut self, p: &PeerId) -> bool {
-        self.peer_info.get(p).map(|i| i.send_budget.remaining > 0).unwrap_or(true)
+        self.peer_info
+            .get(p)
+            .map(|i| i.send_budget.remaining > 0)
+            .unwrap_or(true)
     }
 
     /// Send a request to a peer.
@@ -273,22 +276,30 @@ where
     pub fn send_request(&mut self, p: &PeerId, req: C::Request) -> Result<RequestId, C::Request> {
         let connected = &mut self.peer_info;
         let disconnected = &mut self.offline_peer_info;
-        let remaining =
-            if let Some(info) = connected.get_mut(p).or_else(|| disconnected.get_mut(p)) {
-                if info.send_budget.remaining == 0 {
-                    log::trace!("{:08x}: no more budget to send another request to {}", self.id, p);
-                    return Err(req)
-                }
-                info.send_budget.remaining -= 1;
-                info.send_budget.remaining
-            } else {
-                let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
-                let mut info = PeerInfo::new(limit);
-                info.send_budget.remaining -= 1;
-                let remaining = info.send_budget.remaining;
-                self.offline_peer_info.put(*p, info);
-                remaining
-            };
+        let remaining = if let Some(info) = connected.get_mut(p).or_else(|| disconnected.get_mut(p))
+        {
+            if info.send_budget.remaining == 0 {
+                log::trace!(
+                    "{:08x}: no more budget to send another request to {}",
+                    self.id,
+                    p
+                );
+                return Err(req);
+            }
+            info.send_budget.remaining -= 1;
+            info.send_budget.remaining
+        } else {
+            let limit = self
+                .limit_overrides
+                .get(p)
+                .copied()
+                .unwrap_or(self.default_limit);
+            let mut info = PeerInfo::new(limit);
+            info.send_budget.remaining -= 1;
+            let remaining = info.send_budget.remaining;
+            self.offline_peer_info.put(*p, info);
+            remaining
+        };
 
         let rid = self.behaviour.send_request(p, Message::request(req));
 
@@ -305,12 +316,20 @@ where
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<C::Response>, res: C::Response)
-        -> Result<(), C::Response>
-    {
-        log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
+    pub fn send_response(
+        &mut self,
+        ch: ResponseChannel<C::Response>,
+        res: C::Response,
+    ) -> Result<(), C::Response> {
+        log::trace!(
+            "{:08x}: sending response {} to peer {}",
+            self.id,
+            ch.request_id(),
+            &ch.peer
+        );
         if let Some(info) = self.peer_info.get_mut(&ch.peer) {
-            if info.recv_budget.remaining == 0 { // need to send more credit to the remote peer
+            if info.recv_budget.remaining == 0 {
+                // need to send more credit to the remote peer
                 let crd = info.recv_budget.limit.switch();
                 info.recv_budget.remaining = info.recv_budget.limit.max_recv.get();
                 self.send_credit(&ch.peer, crd);
@@ -350,7 +369,6 @@ where
         self.behaviour.is_pending_outbound(p, r)
     }
 
-
     /// Is the remote waiting for the local node to respond to the given
     /// request?
     ///
@@ -365,8 +383,18 @@ where
             let cid = self.next_grant_id;
             self.next_grant_id += 1;
             let rid = self.behaviour.send_request(p, Message::credit(credit, cid));
-            log::trace!("{:08x}: sending {} credit as grant {} to {}", self.id, credit, cid, p);
-            let grant = Grant { id: cid, request: rid, credit };
+            log::trace!(
+                "{:08x}: sending {} credit as grant {} to {}",
+                self.id,
+                credit,
+                cid,
+                p
+            );
+            let grant = Grant {
+                id: cid,
+                request: rid,
+                credit,
+            };
             info.recv_budget.grant = Some(grant);
             info.recv_budget.sent.insert(rid);
         }
@@ -383,13 +411,13 @@ pub enum Event<Req, Res, CRes = Res> {
     /// When previously reaching the send limit of a peer,
     /// this event is eventually emitted when sending is
     /// allowed to resume.
-    ResumeSending(PeerId)
+    ResumeSending(PeerId),
 }
 
 impl<C> NetworkBehaviour for Throttled<C>
 where
     C: RequestResponseCodec + Send + Clone + 'static,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     type ProtocolsHandler = RequestResponseHandler<Codec<C>>;
     type OutEvent = Event<C::Request, C::Response, Message<C::Response>>;
@@ -402,7 +430,12 @@ where
         self.behaviour.addresses_of_peer(p)
     }
 
-    fn inject_connection_established(&mut self, p: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
+    fn inject_connection_established(
+        &mut self,
+        p: &PeerId,
+        id: &ConnectionId,
+        end: &ConnectedPoint,
+    ) {
         self.behaviour.inject_connection_established(p, id, end)
     }
 
@@ -433,7 +466,11 @@ where
                     self.send_credit(p, recv_budget - 1);
                 }
             } else {
-                let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
+                let limit = self
+                    .limit_overrides
+                    .get(p)
+                    .copied()
+                    .unwrap_or(self.default_limit);
                 self.peer_info.insert(*p, PeerInfo::new(limit));
             }
         }
@@ -451,142 +488,183 @@ where
         self.behaviour.inject_dial_failure(p)
     }
 
-    fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<Codec<C>>) {
+    fn inject_event(
+        &mut self,
+        p: PeerId,
+        i: ConnectionId,
+        e: RequestResponseHandlerEvent<Codec<C>>,
+    ) {
         self.behaviour.inject_event(p, i, e)
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<RequestProtocol<Codec<C>>, Self::OutEvent>>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<RequestProtocol<Codec<C>>, Self::OutEvent>> {
         loop {
             if let Some(ev) = self.events.pop_front() {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev))
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
             } else if self.events.capacity() > super::EMPTY_QUEUE_SHRINK_THRESHOLD {
                 self.events.shrink_to_fit()
             }
 
             let event = match ready!(self.behaviour.poll(cx, params)) {
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::Message { peer, message }) => {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::Message {
+                    peer,
+                    message,
+                }) => {
                     let message = match message {
-                        | RequestResponseMessage::Response { request_id, response } =>
-                            match &response.header().typ {
-                                | Some(Type::Ack) => {
-                                    if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        if let Some(id) = info.recv_budget.grant.as_ref().map(|c| c.id) {
-                                            if Some(id) == response.header().ident {
-                                                log::trace!("{:08x}: received ack {} from {}", self.id, id, peer);
-                                                info.recv_budget.grant = None;
-                                            }
+                        RequestResponseMessage::Response {
+                            request_id,
+                            response,
+                        } => match &response.header().typ {
+                            Some(Type::Ack) => {
+                                if let Some(info) = self.peer_info.get_mut(&peer) {
+                                    if let Some(id) = info.recv_budget.grant.as_ref().map(|c| c.id)
+                                    {
+                                        if Some(id) == response.header().ident {
+                                            log::trace!(
+                                                "{:08x}: received ack {} from {}",
+                                                self.id,
+                                                id,
+                                                peer
+                                            );
+                                            info.recv_budget.grant = None;
                                         }
-                                        info.recv_budget.sent.remove(&request_id);
                                     }
-                                    continue
+                                    info.recv_budget.sent.remove(&request_id);
                                 }
-                                | Some(Type::Response) => {
-                                    log::trace!("{:08x}: received response {} from {}", self.id, request_id, peer);
-                                    if let Some(rs) = response.into_parts().1 {
-                                        RequestResponseMessage::Response { request_id, response: rs }
-                                    } else {
-                                        log::error! { "{:08x}: missing data for response {} from peer {}",
-                                            self.id,
-                                            request_id,
-                                            peer
-                                        }
-                                        continue
+                                continue;
+                            }
+                            Some(Type::Response) => {
+                                log::trace!(
+                                    "{:08x}: received response {} from {}",
+                                    self.id,
+                                    request_id,
+                                    peer
+                                );
+                                if let Some(rs) = response.into_parts().1 {
+                                    RequestResponseMessage::Response {
+                                        request_id,
+                                        response: rs,
                                     }
-                                }
-                                | ty => {
-                                    log::trace! {
-                                        "{:08x}: unknown message type: {:?} from {}; expected response or credit",
+                                } else {
+                                    log::error! { "{:08x}: missing data for response {} from peer {}",
                                         self.id,
-                                        ty,
+                                        request_id,
                                         peer
-                                    };
-                                    continue
+                                    }
+                                    continue;
                                 }
                             }
-                        | RequestResponseMessage::Request { request_id, request, channel } =>
-                            match &request.header().typ {
-                                | Some(Type::Credit) => {
-                                    if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        let id = if let Some(n) = request.header().ident {
-                                            n
-                                        } else {
-                                            log::warn! { "{:08x}: missing credit id in message from {}",
+                            ty => {
+                                log::trace! {
+                                    "{:08x}: unknown message type: {:?} from {}; expected response or credit",
+                                    self.id,
+                                    ty,
+                                    peer
+                                };
+                                continue;
+                            }
+                        },
+                        RequestResponseMessage::Request {
+                            request_id,
+                            request,
+                            channel,
+                        } => match &request.header().typ {
+                            Some(Type::Credit) => {
+                                if let Some(info) = self.peer_info.get_mut(&peer) {
+                                    let id = if let Some(n) = request.header().ident {
+                                        n
+                                    } else {
+                                        log::warn! { "{:08x}: missing credit id in message from {}",
+                                            self.id,
+                                            peer
+                                        }
+                                        continue;
+                                    };
+                                    let credit = request.header().credit.unwrap_or(0);
+                                    log::trace! { "{:08x}: received {} additional credit {} from {}",
+                                        self.id,
+                                        credit,
+                                        id,
+                                        peer
+                                    };
+                                    if info.send_budget.grant < Some(id) {
+                                        if info.send_budget.remaining == 0 && credit > 0 {
+                                            log::trace!(
+                                                "{:08x}: sending to peer {} can resume",
                                                 self.id,
                                                 peer
-                                            }
-                                            continue
-                                        };
-                                        let credit = request.header().credit.unwrap_or(0);
-                                        log::trace! { "{:08x}: received {} additional credit {} from {}",
-                                            self.id,
-                                            credit,
-                                            id,
-                                            peer
-                                        };
-                                        if info.send_budget.grant < Some(id) {
-                                            if info.send_budget.remaining == 0 && credit > 0 {
-                                                log::trace!("{:08x}: sending to peer {} can resume", self.id, peer);
-                                                self.events.push_back(Event::ResumeSending(peer))
-                                            }
-                                            info.send_budget.remaining += credit;
-                                            info.send_budget.grant = Some(id);
+                                            );
+                                            self.events.push_back(Event::ResumeSending(peer))
                                         }
-                                        // Note: Failing to send a response to a credit grant is
-                                        // handled along with other inbound failures further below.
-                                        let _ = self.behaviour.send_response(channel, Message::ack(id));
-                                        info.send_budget.received.insert(request_id);
+                                        info.send_budget.remaining += credit;
+                                        info.send_budget.grant = Some(id);
                                     }
-                                    continue
+                                    // Note: Failing to send a response to a credit grant is
+                                    // handled along with other inbound failures further below.
+                                    let _ = self.behaviour.send_response(channel, Message::ack(id));
+                                    info.send_budget.received.insert(request_id);
                                 }
-                                | Some(Type::Request) => {
-                                    if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        log::trace! { "{:08x}: received request {} (recv. budget = {})",
-                                            self.id,
-                                            request_id,
-                                            info.recv_budget.remaining
-                                        };
-                                        if info.recv_budget.remaining == 0 {
-                                            log::debug!("{:08x}: peer {} exceeds its budget", self.id, peer);
-                                            self.events.push_back(Event::TooManyInboundRequests(peer));
-                                            continue
-                                        }
-                                        info.recv_budget.remaining -= 1;
-                                        // We consider a request as proof that our credit grant has
-                                        // reached the peer. Usually, an ACK has already been
-                                        // received.
-                                        info.recv_budget.grant = None;
-                                    }
-                                    if let Some(rq) = request.into_parts().1 {
-                                        RequestResponseMessage::Request { request_id, request: rq, channel }
-                                    } else {
-                                        log::error! { "{:08x}: missing data for request {} from peer {}",
-                                            self.id,
-                                            request_id,
-                                            peer
-                                        }
-                                        continue
-                                    }
-                                }
-                                | ty => {
-                                    log::trace! {
-                                        "{:08x}: unknown message type: {:?} from {}; expected request or ack",
+                                continue;
+                            }
+                            Some(Type::Request) => {
+                                if let Some(info) = self.peer_info.get_mut(&peer) {
+                                    log::trace! { "{:08x}: received request {} (recv. budget = {})",
                                         self.id,
-                                        ty,
-                                        peer
+                                        request_id,
+                                        info.recv_budget.remaining
                                     };
-                                    continue
+                                    if info.recv_budget.remaining == 0 {
+                                        log::debug!(
+                                            "{:08x}: peer {} exceeds its budget",
+                                            self.id,
+                                            peer
+                                        );
+                                        self.events.push_back(Event::TooManyInboundRequests(peer));
+                                        continue;
+                                    }
+                                    info.recv_budget.remaining -= 1;
+                                    // We consider a request as proof that our credit grant has
+                                    // reached the peer. Usually, an ACK has already been
+                                    // received.
+                                    info.recv_budget.grant = None;
+                                }
+                                if let Some(rq) = request.into_parts().1 {
+                                    RequestResponseMessage::Request {
+                                        request_id,
+                                        request: rq,
+                                        channel,
+                                    }
+                                } else {
+                                    log::error! { "{:08x}: missing data for request {} from peer {}",
+                                        self.id,
+                                        request_id,
+                                        peer
+                                    }
+                                    continue;
                                 }
                             }
+                            ty => {
+                                log::trace! {
+                                    "{:08x}: unknown message type: {:?} from {}; expected request or ack",
+                                    self.id,
+                                    ty,
+                                    peer
+                                };
+                                continue;
+                            }
+                        },
                     };
                     let event = RequestResponseEvent::Message { peer, message };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::OutboundFailure {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::OutboundFailure {
                     peer,
                     request_id,
-                    error
+                    error,
                 }) => {
                     if let Some(info) = self.peer_info.get_mut(&peer) {
                         if let Some(grant) = info.recv_budget.grant.as_mut() {
@@ -606,16 +684,20 @@ where
                         // If the outbound failure was for a credit message, don't report it on
                         // the public API and retry the sending.
                         if info.recv_budget.sent.remove(&request_id) {
-                            continue
+                            continue;
                         }
                     }
-                    let event = RequestResponseEvent::OutboundFailure { peer, request_id, error };
+                    let event = RequestResponseEvent::OutboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFailure {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFailure {
                     peer,
                     request_id,
-                    error
+                    error,
                 }) => {
                     // If the inbound failure occurred in the context of responding to a
                     // credit grant, don't report it on the public API.
@@ -625,15 +707,19 @@ where
                                 "{:08}: failed to acknowledge credit grant from {}: {:?}",
                                 self.id, peer, error
                             };
-                            continue
+                            continue;
                         }
                     }
-                    let event = RequestResponseEvent::InboundFailure { peer, request_id, error };
+                    let event = RequestResponseEvent::InboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::ResponseSent {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::ResponseSent {
                     peer,
-                    request_id
+                    request_id,
                 }) => {
                     // If this event is for an ACK response that was sent for
                     // the last received credit grant, skip it.
@@ -644,25 +730,41 @@ where
                                 self.id,
                                 info.send_budget.grant,
                             }
-                            continue
+                            continue;
                         }
                     }
                     NetworkBehaviourAction::GenerateEvent(Event::Event(
-                        RequestResponseEvent::ResponseSent { peer, request_id }))
+                        RequestResponseEvent::ResponseSent { peer, request_id },
+                    ))
                 }
-                | NetworkBehaviourAction::DialAddress { address } =>
-                    NetworkBehaviourAction::DialAddress { address },
-                | NetworkBehaviourAction::DialPeer { peer_id, condition } =>
-                    NetworkBehaviourAction::DialPeer { peer_id, condition },
-                | NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
-                    NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
-                | NetworkBehaviourAction::ReportObservedAddr { address, score } =>
-                    NetworkBehaviourAction::ReportObservedAddr { address, score },
-                | NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
-                    NetworkBehaviourAction::CloseConnection { peer_id, connection }
+                NetworkBehaviourAction::DialAddress { address } => {
+                    NetworkBehaviourAction::DialAddress { address }
+                }
+                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
+                    NetworkBehaviourAction::DialPeer { peer_id, condition }
+                }
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event,
+                } => NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event,
+                },
+                NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+                    NetworkBehaviourAction::ReportObservedAddr { address, score }
+                }
+                NetworkBehaviourAction::CloseConnection {
+                    peer_id,
+                    connection,
+                } => NetworkBehaviourAction::CloseConnection {
+                    peer_id,
+                    connection,
+                },
             };
 
-            return Poll::Ready(event)
+            return Poll::Ready(event);
         }
     }
 }
