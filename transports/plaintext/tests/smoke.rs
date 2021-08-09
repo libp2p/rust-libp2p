@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::io::{AsyncWriteExt, AsyncReadExt};
+use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::stream::TryStreamExt;
 use libp2p_core::{
     identity,
     multiaddr::Multiaddr,
-    transport::{Transport, ListenerEvent},
+    transport::{ListenerEvent, Transport},
     upgrade,
 };
 use libp2p_plaintext::PlainText2Config;
@@ -45,38 +45,40 @@ fn variable_msg_length() {
         let client_id_public = client_id.public();
 
         futures::executor::block_on(async {
-            let server_transport = libp2p_core::transport::MemoryTransport{}.and_then(
-                move |output, endpoint| {
+            let server_transport =
+                libp2p_core::transport::MemoryTransport {}.and_then(move |output, endpoint| {
                     upgrade::apply(
                         output,
-                        PlainText2Config{local_public_key: server_id_public},
+                        PlainText2Config {
+                            local_public_key: server_id_public,
+                        },
                         endpoint,
                         libp2p_core::upgrade::Version::V1,
                     )
-                }
-            );
+                });
 
-            let client_transport = libp2p_core::transport::MemoryTransport{}.and_then(
-                move |output, endpoint| {
+            let client_transport =
+                libp2p_core::transport::MemoryTransport {}.and_then(move |output, endpoint| {
                     upgrade::apply(
                         output,
-                        PlainText2Config{local_public_key: client_id_public},
+                        PlainText2Config {
+                            local_public_key: client_id_public,
+                        },
                         endpoint,
                         libp2p_core::upgrade::Version::V1,
                     )
-                }
-            );
+                });
 
-
-            let server_address: Multiaddr = format!(
-                "/memory/{}",
-                std::cmp::Ord::max(1, rand::random::<u64>())
-            ).parse().unwrap();
+            let server_address: Multiaddr =
+                format!("/memory/{}", std::cmp::Ord::max(1, rand::random::<u64>()))
+                    .parse()
+                    .unwrap();
 
             let mut server = server_transport.listen_on(server_address.clone()).unwrap();
 
             // Ignore server listen address event.
-            let _ = server.try_next()
+            let _ = server
+                .try_next()
                 .await
                 .expect("some event")
                 .expect("no error")
@@ -85,17 +87,25 @@ fn variable_msg_length() {
 
             let client_fut = async {
                 debug!("dialing {:?}", server_address);
-                let (received_server_id, mut client_channel) = client_transport.dial(server_address).unwrap().await.unwrap();
+                let (received_server_id, mut client_channel) = client_transport
+                    .dial(server_address)
+                    .unwrap()
+                    .await
+                    .unwrap();
                 assert_eq!(received_server_id, server_id.public().to_peer_id());
 
                 debug!("Client: writing message.");
-                client_channel.write_all(&mut msg_to_send).await.expect("no error");
+                client_channel
+                    .write_all(&mut msg_to_send)
+                    .await
+                    .expect("no error");
                 debug!("Client: flushing channel.");
                 client_channel.flush().await.expect("no error");
             };
 
             let server_fut = async {
-                let mut server_channel = server.try_next()
+                let mut server_channel = server
+                    .try_next()
                     .await
                     .expect("some event")
                     .map(ListenerEvent::into_upgrade)
@@ -108,7 +118,10 @@ fn variable_msg_length() {
 
                 let mut server_buffer = vec![0; msg_to_receive.len()];
                 debug!("Server: reading message.");
-                server_channel.read_exact(&mut server_buffer).await.expect("reading client message");
+                server_channel
+                    .read_exact(&mut server_buffer)
+                    .await
+                    .expect("reading client message");
 
                 assert_eq!(server_buffer, msg_to_receive);
             };
@@ -117,5 +130,7 @@ fn variable_msg_length() {
         })
     }
 
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>))
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>))
 }
