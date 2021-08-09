@@ -30,15 +30,15 @@
 //!
 //! # If they don't automatically connect
 //!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
+//! If the nodes don't automatically connect, take note of the listening addresses of the first
+//! instance and start the second with one of the addresses as the first argument. In the first 
+//! terminal window, run:
 //!
 //! ```sh
 //! cargo run --example chat
 //! ```
 //!
-//! It will print the PeerId and the listening address, e.g. `Listening on
+//! It will print the PeerId and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
