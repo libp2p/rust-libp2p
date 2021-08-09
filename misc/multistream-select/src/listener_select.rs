@@ -21,12 +21,18 @@
 //! Protocol negotiation strategies for the peer acting as the listener
 //! in a multistream-select protocol negotiation.
 
+use crate::protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError};
 use crate::{Negotiated, NegotiationError};
-use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, HeaderLine};
 
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{convert::TryFrom as _, iter::FromIterator, mem, pin::Pin, task::{Context, Poll}};
+use std::{
+    convert::TryFrom as _,
+    iter::FromIterator,
+    mem,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
 /// for a peer acting as the _listener_ (or _responder_).
@@ -35,28 +41,29 @@ use std::{convert::TryFrom as _, iter::FromIterator, mem, pin::Pin, task::{Conte
 /// computation that performs the protocol negotiation with the remote. The
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
-pub fn listener_select_proto<R, I>(
-    inner: R,
-    protocols: I,
-) -> ListenerSelectFuture<R, I::Item>
+pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFuture<R, I::Item>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
-    let protocols = protocols.into_iter().filter_map(|n|
-        match Protocol::try_from(n.as_ref()) {
+    let protocols = protocols
+        .into_iter()
+        .filter_map(|n| match Protocol::try_from(n.as_ref()) {
             Ok(p) => Some((n, p)),
             Err(e) => {
-                log::warn!("Listener: Ignoring invalid protocol: {} due to {}",
-                      String::from_utf8_lossy(n.as_ref()), e);
+                log::warn!(
+                    "Listener: Ignoring invalid protocol: {} due to {}",
+                    String::from_utf8_lossy(n.as_ref()),
+                    e
+                );
                 None
             }
         });
     ListenerSelectFuture {
         protocols: SmallVec::from_iter(protocols),
         state: State::RecvHeader {
-            io: MessageIO::new(inner)
+            io: MessageIO::new(inner),
         },
         last_sent_na: false,
     }
@@ -80,19 +87,25 @@ pub struct ListenerSelectFuture<R, N> {
 }
 
 enum State<R, N> {
-    RecvHeader { io: MessageIO<R> },
-    SendHeader { io: MessageIO<R> },
-    RecvMessage { io: MessageIO<R> },
+    RecvHeader {
+        io: MessageIO<R>,
+    },
+    SendHeader {
+        io: MessageIO<R>,
+    },
+    RecvMessage {
+        io: MessageIO<R>,
+    },
     SendMessage {
         io: MessageIO<R>,
         message: Message,
-        protocol: Option<N>
+        protocol: Option<N>,
     },
     Flush {
         io: MessageIO<R>,
-        protocol: Option<N>
+        protocol: Option<N>,
     },
-    Done
+    Done,
 }
 
 impl<R, N> Future for ListenerSelectFuture<R, N>
@@ -100,7 +113,7 @@ where
     // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
-    N: AsRef<[u8]> + Clone
+    N: AsRef<[u8]> + Clone,
 {
     type Output = Result<(N, Negotiated<R>), NegotiationError>;
 
@@ -111,14 +124,12 @@ where
             match mem::replace(this.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(Message::Header(h)))) => {
-                            match h {
-                                HeaderLine::V1 => *this.state = State::SendHeader { io }
-                            }
-                        }
+                        Poll::Ready(Some(Ok(Message::Header(h)))) => match h {
+                            HeaderLine::V1 => *this.state = State::SendHeader { io },
+                        },
                         Poll::Ready(Some(Ok(_))) => {
                             return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
-                        },
+                        }
                         Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
                         // Treat EOF error as [`NegotiationError::Failed`], not as
                         // [`NegotiationError::ProtocolError`], allowing dropping or closing an I/O
@@ -126,7 +137,7 @@ where
                         Poll::Ready(None) => return Poll::Ready(Err(NegotiationError::Failed)),
                         Poll::Pending => {
                             *this.state = State::RecvHeader { io };
-                            return Poll::Pending
+                            return Poll::Pending;
                         }
                     }
                 }
@@ -135,9 +146,9 @@ where
                     match Pin::new(&mut io).poll_ready(cx) {
                         Poll::Pending => {
                             *this.state = State::SendHeader { io };
-                            return Poll::Pending
-                        },
-                        Poll::Ready(Ok(())) => {},
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Ok(())) => {}
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
@@ -175,28 +186,37 @@ where
                                 // the dialer also raises `NegotiationError::Failed` when finally
                                 // reading the `N/A` response.
                                 if let ProtocolError::InvalidMessage = &err {
-                                    log::trace!("Listener: Negotiation failed with invalid \
-                                        message after protocol rejection.");
-                                    return Poll::Ready(Err(NegotiationError::Failed))
+                                    log::trace!(
+                                        "Listener: Negotiation failed with invalid \
+                                        message after protocol rejection."
+                                    );
+                                    return Poll::Ready(Err(NegotiationError::Failed));
                                 }
                                 if let ProtocolError::IoError(e) = &err {
                                     if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                                        log::trace!("Listener: Negotiation failed with EOF \
-                                            after protocol rejection.");
-                                        return Poll::Ready(Err(NegotiationError::Failed))
+                                        log::trace!(
+                                            "Listener: Negotiation failed with EOF \
+                                            after protocol rejection."
+                                        );
+                                        return Poll::Ready(Err(NegotiationError::Failed));
                                     }
                                 }
                             }
 
-                            return Poll::Ready(Err(From::from(err)))
+                            return Poll::Ready(Err(From::from(err)));
                         }
                     };
 
                     match msg {
                         Message::ListProtocols => {
-                            let supported = this.protocols.iter().map(|(_,p)| p).cloned().collect();
+                            let supported =
+                                this.protocols.iter().map(|(_, p)| p).cloned().collect();
                             let message = Message::Protocols(supported);
-                            *this.state = State::SendMessage { io, message, protocol: None }
+                            *this.state = State::SendMessage {
+                                io,
+                                message,
+                                protocol: None,
+                            }
                         }
                         Message::Protocol(p) => {
                             let protocol = this.protocols.iter().find_map(|(name, proto)| {
@@ -211,28 +231,42 @@ where
                                 log::debug!("Listener: confirming protocol: {}", p);
                                 Message::Protocol(p.clone())
                             } else {
-                                log::debug!("Listener: rejecting protocol: {}",
-                                    String::from_utf8_lossy(p.as_ref()));
+                                log::debug!(
+                                    "Listener: rejecting protocol: {}",
+                                    String::from_utf8_lossy(p.as_ref())
+                                );
                                 Message::NotAvailable
                             };
 
-                            *this.state = State::SendMessage { io, message, protocol };
+                            *this.state = State::SendMessage {
+                                io,
+                                message,
+                                protocol,
+                            };
                         }
-                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
+                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into())),
                     }
                 }
 
-                State::SendMessage { mut io, message, protocol } => {
+                State::SendMessage {
+                    mut io,
+                    message,
+                    protocol,
+                } => {
                     match Pin::new(&mut io).poll_ready(cx) {
                         Poll::Pending => {
-                            *this.state = State::SendMessage { io, message, protocol };
-                            return Poll::Pending
-                        },
-                        Poll::Ready(Ok(())) => {},
+                            *this.state = State::SendMessage {
+                                io,
+                                message,
+                                protocol,
+                            };
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Ok(())) => {}
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
-                    if let Message::NotAvailable = &message  {
+                    if let Message::NotAvailable = &message {
                         *this.last_sent_na = true;
                     } else {
                         *this.last_sent_na = false;
@@ -249,26 +283,28 @@ where
                     match Pin::new(&mut io).poll_flush(cx) {
                         Poll::Pending => {
                             *this.state = State::Flush { io, protocol };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                         Poll::Ready(Ok(())) => {
                             // If a protocol has been selected, finish negotiation.
                             // Otherwise expect to receive another message.
                             match protocol {
                                 Some(protocol) => {
-                                    log::debug!("Listener: sent confirmed protocol: {}",
-                                        String::from_utf8_lossy(protocol.as_ref()));
+                                    log::debug!(
+                                        "Listener: sent confirmed protocol: {}",
+                                        String::from_utf8_lossy(protocol.as_ref())
+                                    );
                                     let io = Negotiated::completed(io.into_inner());
-                                    return Poll::Ready(Ok((protocol, io)))
+                                    return Poll::Ready(Ok((protocol, io)));
                                 }
-                                None => *this.state = State::RecvMessage { io }
+                                None => *this.state = State::RecvMessage { io },
                             }
                         }
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
                 }
 
-                State::Done => panic!("State::poll called after completion")
+                State::Done => panic!("State::poll called after completion"),
             }
         }
     }

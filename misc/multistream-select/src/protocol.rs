@@ -25,12 +25,18 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
-use crate::Version;
 use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
+use crate::Version;
 
-use bytes::{Bytes, BytesMut, BufMut};
-use futures::{prelude::*, io::IoSlice, ready};
-use std::{convert::TryFrom, io, fmt, error::Error, pin::Pin, task::{Context, Poll}};
+use bytes::{BufMut, Bytes, BytesMut};
+use futures::{io::IoSlice, prelude::*, ready};
+use std::{
+    convert::TryFrom,
+    error::Error,
+    fmt, io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use unsigned_varint as uvi;
 
 /// The maximum number of supported protocols that can be processed.
@@ -75,7 +81,7 @@ impl TryFrom<Bytes> for Protocol {
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         if !value.as_ref().starts_with(b"/") {
-            return Err(ProtocolError::InvalidProtocol)
+            return Err(ProtocolError::InvalidProtocol);
         }
         Ok(Protocol(value))
     }
@@ -160,7 +166,7 @@ impl Message {
     /// Decodes a `Message` from its byte representation.
     pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
         if msg == MSG_MULTISTREAM_1_0 {
-            return Ok(Message::Header(HeaderLine::V1))
+            return Ok(Message::Header(HeaderLine::V1));
         }
 
         if msg == MSG_PROTOCOL_NA {
@@ -168,13 +174,14 @@ impl Message {
         }
 
         if msg == MSG_LS {
-            return Ok(Message::ListProtocols)
+            return Ok(Message::ListProtocols);
         }
 
         // If it starts with a `/`, ends with a line feed without any
         // other line feeds in-between, it must be a protocol name.
-        if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') &&
-            !msg[.. msg.len() - 1].contains(&b'\n')
+        if msg.get(0) == Some(&b'/')
+            && msg.last() == Some(&b'\n')
+            && !msg[..msg.len() - 1].contains(&b'\n')
         {
             let p = Protocol::try_from(msg.split_to(msg.len() - 1))?;
             return Ok(Message::Protocol(p));
@@ -187,24 +194,24 @@ impl Message {
         loop {
             // A well-formed message must be terminated with a newline.
             if remaining == [b'\n'] {
-                break
+                break;
             } else if protocols.len() == MAX_PROTOCOLS {
-                return Err(ProtocolError::TooManyProtocols)
+                return Err(ProtocolError::TooManyProtocols);
             }
 
             // Decode the length of the next protocol name and check that
             // it ends with a line feed.
             let (len, tail) = uvi::decode::usize(remaining)?;
             if len == 0 || len > tail.len() || tail[len - 1] != b'\n' {
-                return Err(ProtocolError::InvalidMessage)
+                return Err(ProtocolError::InvalidMessage);
             }
 
             // Parse the protocol name.
-            let p = Protocol::try_from(Bytes::copy_from_slice(&tail[.. len - 1]))?;
+            let p = Protocol::try_from(Bytes::copy_from_slice(&tail[..len - 1]))?;
             protocols.push(p);
 
             // Skip ahead to the next protocol.
-            remaining = &tail[len ..];
+            remaining = &tail[len..];
         }
 
         Ok(Message::Protocols(protocols))
@@ -222,9 +229,11 @@ impl<R> MessageIO<R> {
     /// Constructs a new `MessageIO` resource wrapping the given I/O stream.
     pub fn new(inner: R) -> MessageIO<R>
     where
-        R: AsyncRead + AsyncWrite
+        R: AsyncRead + AsyncWrite,
     {
-        Self { inner: LengthDelimited::new(inner) }
+        Self {
+            inner: LengthDelimited::new(inner),
+        }
     }
 
     /// Converts the [`MessageIO`] into a [`MessageReader`], dropping the
@@ -235,7 +244,9 @@ impl<R> MessageIO<R> {
     /// received but no more messages are written, allowing the writing of
     /// follow-up protocol data to commence.
     pub fn into_reader(self) -> MessageReader<R> {
-        MessageReader { inner: self.inner.into_reader() }
+        MessageReader {
+            inner: self.inner.into_reader(),
+        }
     }
 
     /// Drops the [`MessageIO`] resource, yielding the underlying I/O stream.
@@ -265,7 +276,10 @@ where
     fn start_send(self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
         let mut buf = BytesMut::new();
         item.encode(&mut buf)?;
-        self.project().inner.start_send(buf.freeze()).map_err(From::from)
+        self.project()
+            .inner
+            .start_send(buf.freeze())
+            .map_err(From::from)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -279,7 +293,7 @@ where
 
 impl<R> Stream for MessageIO<R>
 where
-    R: AsyncRead
+    R: AsyncRead,
 {
     type Item = Result<Message, ProtocolError>;
 
@@ -299,7 +313,7 @@ where
 #[derive(Debug)]
 pub struct MessageReader<R> {
     #[pin]
-    inner: LengthDelimitedReader<R>
+    inner: LengthDelimitedReader<R>,
 }
 
 impl<R> MessageReader<R> {
@@ -321,7 +335,7 @@ impl<R> MessageReader<R> {
 
 impl<R> Stream for MessageReader<R>
 where
-    R: AsyncRead
+    R: AsyncRead,
 {
     type Item = Result<Message, ProtocolError>;
 
@@ -332,9 +346,13 @@ where
 
 impl<TInner> AsyncWrite for MessageReader<TInner>
 where
-    TInner: AsyncWrite
+    TInner: AsyncWrite,
 {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         self.project().inner.poll_write(cx, buf)
     }
 
@@ -346,12 +364,19 @@ where
         self.project().inner.poll_close(cx)
     }
 
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
         self.project().inner.poll_write_vectored(cx, bufs)
     }
 }
 
-fn poll_stream<S>(stream: Pin<&mut S>, cx: &mut Context<'_>) -> Poll<Option<Result<Message, ProtocolError>>>
+fn poll_stream<S>(
+    stream: Pin<&mut S>,
+    cx: &mut Context<'_>,
+) -> Poll<Option<Result<Message, ProtocolError>>>
 where
     S: Stream<Item = Result<Bytes, io::Error>>,
 {
@@ -361,7 +386,7 @@ where
             Err(err) => return Poll::Ready(Some(Err(err))),
         }
     } else {
-        return Poll::Ready(None)
+        return Poll::Ready(None);
     };
 
     log::trace!("Received message: {:?}", msg);
@@ -394,7 +419,7 @@ impl From<io::Error> for ProtocolError {
 impl From<ProtocolError> for io::Error {
     fn from(err: ProtocolError) -> Self {
         if let ProtocolError::IoError(e) = err {
-            return e
+            return e;
         }
         io::ErrorKind::InvalidData.into()
     }
@@ -418,14 +443,10 @@ impl Error for ProtocolError {
 impl fmt::Display for ProtocolError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            ProtocolError::IoError(e) =>
-                write!(fmt, "I/O error: {}", e),
-            ProtocolError::InvalidMessage =>
-                write!(fmt, "Received an invalid message."),
-            ProtocolError::InvalidProtocol =>
-                write!(fmt, "A protocol (name) is invalid."),
-            ProtocolError::TooManyProtocols =>
-                write!(fmt, "Too many protocols received.")
+            ProtocolError::IoError(e) => write!(fmt, "I/O error: {}", e),
+            ProtocolError::InvalidMessage => write!(fmt, "Received an invalid message."),
+            ProtocolError::InvalidProtocol => write!(fmt, "A protocol (name) is invalid."),
+            ProtocolError::TooManyProtocols => write!(fmt, "Too many protocols received."),
         }
     }
 }
@@ -434,8 +455,8 @@ impl fmt::Display for ProtocolError {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use rand::Rng;
     use rand::distributions::Alphanumeric;
+    use rand::Rng;
     use std::iter;
 
     impl Arbitrary for Protocol {
@@ -457,7 +478,7 @@ mod tests {
                 2 => Message::ListProtocols,
                 3 => Message::Protocol(Protocol::arbitrary(g)),
                 4 => Message::Protocols(Vec::arbitrary(g)),
-                _ => panic!()
+                _ => panic!(),
             }
         }
     }
@@ -466,10 +487,11 @@ mod tests {
     fn encode_decode_message() {
         fn prop(msg: Message) {
             let mut buf = BytesMut::new();
-            msg.encode(&mut buf).expect(&format!("Encoding message failed: {:?}", msg));
+            msg.encode(&mut buf)
+                .expect(&format!("Encoding message failed: {:?}", msg));
             match Message::decode(buf.freeze()) {
                 Ok(m) => assert_eq!(m, msg),
-                Err(e) => panic!("Decoding failed: {:?}", e)
+                Err(e) => panic!("Decoding failed: {:?}", e),
             }
         }
         quickcheck(prop as fn(_))
