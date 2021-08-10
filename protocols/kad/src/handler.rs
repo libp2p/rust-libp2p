@@ -130,7 +130,7 @@ pub struct KademliaHandlerConfig {
     /// Time after which we close an idle connection.
     pub idle_timeout: Duration,
 
-    // If true, node will act in `client` mode in the Kademlia network.
+    // If Mode::Client, node will act in `client` mode in the Kademlia network.
     pub client: Mode,
 }
 
@@ -485,6 +485,8 @@ where
                     SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
                 }
             },
+            // If we are in client mode, I don't want to advertise Kademlia so that other peers will
+            // not send me Kademlia requests.
             Mode::Client => SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ()),
         }
     }
@@ -519,12 +521,16 @@ where
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.substreams.push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
-            // Upon the first successfully negotiated substream, we know that the
-            // remote is configured with the same protocol name and we want
-            // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
-        }
+        // TODO: 
+        // Just because another peer is sending us Kademlia requests, doesn't necessarily 
+        // mean that it will answer the Kademlia requests that we send to it.
+        // Thus, Commenting this code out for now.
+        // if let ProtocolStatus::Unconfirmed = self.protocol_status {
+        //     // Upon the first successfully negotiated substream, we know that the
+        //     // remote is configured with the same protocol name and we want
+        //     // the behaviour to add this peer to the routing table, if possible.
+        //     self.protocol_status = ProtocolStatus::Confirmed;
+        // }
     }
 
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
