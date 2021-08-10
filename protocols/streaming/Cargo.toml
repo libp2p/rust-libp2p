@@ -1,0 +1,31 @@
+[package]
+name = "libp2p-streaming"
+edition = "2018"
+description = "Generic Streaming Protocol"
+version = "0.1.0"
+authors = ["Oliver Wangler <oliver@wngr.de>", "Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+futures = "0.3.1"
+libp2p-core = { version = "0.30.0", path = "../../core" }
+libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
+serde = { version = "1.0.127", features = ["derive"] }
+smallvec = "1.6.1"
+thiserror = "1.0.25"
+tracing = "0.1.26"
+
+[dev-dependencies]
+anyhow = "1.0.42"
+async-std = { version = "1.9.0", features = ["attributes"] }
+asynchronous-codec = { version ="0.6.0", features = ["cbor"] }
+libp2p = { path = "../../" }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-swarm-derive = { path = "../../swarm-derive" }
+libp2p-tcp = { path = "../../transports/tcp" }
+libp2p-yamux = { path = "../../muxers/yamux" }
+tracing-log = "0.1.2"
+tracing-subscriber = "0.2.19"
