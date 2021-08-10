@@ -46,6 +46,18 @@ pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
 /// The default maximum size for a varint length-delimited packet.
 pub const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 
+#[derive(Debug, Clone)]
+pub enum Mode {
+    Client,
+    Server,
+}
+
+impl Default for Mode {
+    fn default() -> Self {
+        Mode::Server
+    }
+}
+
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum KadConnectionType {

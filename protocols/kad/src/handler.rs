@@ -20,7 +20,7 @@
 
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
-    KademliaProtocolConfig,
+    KademliaProtocolConfig, Mode
 };
 use crate::record::{self, Record};
 use futures::prelude::*;
@@ -63,10 +63,15 @@ impl<T: Clone + Send + 'static> IntoProtocolsHandler for KademliaHandlerProto<T>
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        if self.config.allow_listening || !self.config.client {
-            upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
-        } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+        match self.config.client {
+            Mode::Client => upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade),
+            Mode::Server => {
+                if self.config.allow_listening {
+                    upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
+                } else {
+                    upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+                }
+            }
         }
     }
 }
@@ -126,7 +131,7 @@ pub struct KademliaHandlerConfig {
     pub idle_timeout: Duration,
 
     // If true, node will act in `client` mode in the Kademlia network.
-    pub client: bool,
+    pub client: Mode,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -472,10 +477,15 @@ where
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.config.allow_listening || !self.config.client {
-            SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(upgrade::EitherUpgrade::A)
-        } else {
-            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
+        match self.config.client {
+            Mode::Server => {
+                if self.config.allow_listening {
+                    SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(upgrade::EitherUpgrade::A)
+                } else {
+                    SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
+                }
+            },
+            Mode::Client => SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ()),
         }
     }
 
@@ -745,7 +755,7 @@ impl Default for KademliaHandlerConfig {
             protocol_config: Default::default(),
             allow_listening: true,
             idle_timeout: Duration::from_secs(10),
-            client: false,
+            client: Mode::default(),
         }
     }
 }
