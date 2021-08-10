@@ -20,7 +20,7 @@
 
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
-    KademliaProtocolConfig,
+    KademliaProtocolConfig, Mode
 };
 use crate::record::{self, Record};
 use futures::prelude::*;
@@ -63,10 +63,15 @@ impl<T: Clone + Send + 'static> IntoProtocolsHandler for KademliaHandlerProto<T>
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        if self.config.allow_listening || !self.config.client {
-            upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
-        } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+        match self.config.client {
+            Mode::Client => upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade),
+            Mode::Server => {
+                if self.config.allow_listening {
+                    upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
+                } else {
+                    upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+                }
+            }
         }
     }
 }
@@ -125,8 +130,8 @@ pub struct KademliaHandlerConfig {
     /// Time after which we close an idle connection.
     pub idle_timeout: Duration,
 
-    // If true, node will act in `client` mode in the Kademlia network.
-    pub client: bool,
+    // If Mode::Client, node will act in `client` mode in the Kademlia network.
+    pub client: Mode,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -472,10 +477,17 @@ where
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.config.allow_listening || !self.config.client {
-            SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(upgrade::EitherUpgrade::A)
-        } else {
-            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
+        match self.config.client {
+            Mode::Server => {
+                if self.config.allow_listening {
+                    SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(upgrade::EitherUpgrade::A)
+                } else {
+                    SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
+                }
+            },
+            // If we are in client mode, I don't want to advertise Kademlia so that other peers will
+            // not send me Kademlia requests.
+            Mode::Client => SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ()),
         }
     }
 
@@ -509,12 +521,16 @@ where
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.substreams.push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
-            // Upon the first successfully negotiated substream, we know that the
-            // remote is configured with the same protocol name and we want
-            // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
-        }
+        // TODO: 
+        // Just because another peer is sending us Kademlia requests, doesn't necessarily 
+        // mean that it will answer the Kademlia requests that we send to it.
+        // Thus, Commenting this code out for now.
+        // if let ProtocolStatus::Unconfirmed = self.protocol_status {
+        //     // Upon the first successfully negotiated substream, we know that the
+        //     // remote is configured with the same protocol name and we want
+        //     // the behaviour to add this peer to the routing table, if possible.
+        //     self.protocol_status = ProtocolStatus::Confirmed;
+        // }
     }
 
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
@@ -745,7 +761,7 @@ impl Default for KademliaHandlerConfig {
             protocol_config: Default::default(),
             allow_listening: true,
             idle_timeout: Duration::from_secs(10),
-            client: false,
+            client: Mode::default(),
         }
     }
 }

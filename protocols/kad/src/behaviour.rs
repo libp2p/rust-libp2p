@@ -33,7 +33,7 @@ use crate::handler::{
 };
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
+use crate::protocol::{Mode, KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -148,7 +148,7 @@ pub struct KademliaConfig {
     kbucket_inserts: KademliaBucketInserts,
     caching: KademliaCaching,
     // Set the peer mode.
-    client: bool,
+    client: Mode,
 }
 
 /// The configuration for Kademlia "write-back" caching after successful
@@ -183,7 +183,7 @@ impl Default for KademliaConfig {
             kbucket_inserts: KademliaBucketInserts::OnConnected,
             caching: KademliaCaching::Enabled { max_peers: 1 },
             // By default, a peer will not be in client mode.
-            client: false,
+            client: Mode::default(),
         }
     }
 }
@@ -361,12 +361,12 @@ impl KademliaConfig {
     ///
     /// Client mode is disabled by default.
     ///
-    /// In `client` mode, the peer would not be added to any other peer's 
+    /// In `client` mode, the peer would not be added to any other peers 
     /// routing table. The client peer can send queries over the Kademlia
-    /// network, but will not receive any queries from the other peer's in
+    /// network, but will not receive any queries from the other peers in
     /// the network.
-    pub fn set_client_mode(&mut self, t: bool) -> &mut Self {
-        self.client = t;
+    pub fn set_mode(&mut self, mode: Mode) -> &mut Self {
+        self.client = mode;
         self
     }
 }
@@ -1574,7 +1574,7 @@ where
             protocol_config: self.protocol_config.clone(),
             allow_listening: true,
             idle_timeout: self.connection_idle_timeout,
-            client: false,
+            client: Mode::default(),
         })
     }
 
