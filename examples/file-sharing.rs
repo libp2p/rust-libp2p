@@ -378,9 +378,9 @@ mod network {
                             ..
                         },
                     )) => {
-                        if let Some(sender) = outstanding_get_providers.remove(&id) {
-                            sender.send(providers).unwrap();
-                        }
+                        outstanding_get_providers.remove(&id)
+                            .expect("Completed query to be previously pending.")
+                            .send(providers).unwrap();
                     }
                     SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                     SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
