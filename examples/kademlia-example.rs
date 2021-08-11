@@ -7,22 +7,20 @@
 // https://github.com/zupzup/rust-peer-to-peer-example/blob/main/src/main.rs
 
 use libp2p::{
-    core::upgrade,
+    core::{either::EitherError, upgrade},
     identity,
-    kad::{record::store::MemoryStore, Kademlia, KademliaEvent, QueryResult},
+    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent, QueryResult},
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
     swarm::{NetworkBehaviourEventProcess, SwarmEvent},
-    // Ignore the unresolved import error here.
     tcp::TokioTcpConfig,
-    NetworkBehaviour,
-    PeerId,
-    Swarm,
-    Transport,
+    NetworkBehaviour, PeerId, Swarm, Transport,
 };
 
-use futures::StreamExt;
+use async_std::io;
+use futures::{FutureExt, StreamExt};
+use std::env;
 
 #[derive(NetworkBehaviour)]
 struct MyBehaviour {
@@ -57,7 +55,16 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
 }
 
 #[tokio::main]
-async fn main() -> ! {
+async fn main() {
+    let client_mode = if let Some(kad_mode) = env::args().nth(1) {
+        true
+    } else {
+        false
+    };
+    create_peer(client_mode)
+}
+
+async fn create_peer(client_mode: bool) {
     let key = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from_public_key(&key.public());
 
@@ -71,8 +78,18 @@ async fn main() -> ! {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 
+    let kad_config = if client_mode {
+        KademliaConfig::default()
+    } else {
+        KademliaConfig::default()
+    };
+
     let behaviour = MyBehaviour {
-        kademlia: Kademlia::new(peer_id.clone(), MemoryStore::new(peer_id.clone())),
+        kademlia: Kademlia::with_config(
+            peer_id.clone(),
+            MemoryStore::new(peer_id.clone()),
+            kad_config,
+        ),
         mdns: Mdns::new(MdnsConfig::default()).await.unwrap(),
     };
 
@@ -82,38 +99,35 @@ async fn main() -> ! {
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
 
-    // loop {
-    //     let mut buffer = String::new();
-    //     println!("reading");
-    //     std::io::stdin().read_line(&mut buffer).unwrap();
-
-    //     if buffer.starts_with("lp") {
-    //         let event =
-    //         println!("printing peers");
-    //         for peer in swarm.behaviour_mut().mdns.discovered_nodes() {
-    //             println!("{}", peer);
-    //         }
-    //     }
-    // }
+    let mut stdin = io::stdin();
+    let mut buffer = String::new();
 
     loop {
         futures::select! {
-            event = swarm.next() => {
-                match event.unwrap() {
-                    SwarmEvent::NewListenAddr{ address, ..} => println!("Listening on: {}", address),
-                    SwarmEvent::ListenerClosed { listener_id, addresses, reason } => println!("Listening closed on: {:?}", addresses),
-                    SwarmEvent::ConnectionEstablished{ peer_id, endpoint, ..} => println!("Connected to {} on {}",peer_id,endpoint.get_remote_address()),
-                    SwarmEvent::ConnectionClosed { peer_id, endpoint, .. } => println!("Dis-connected to {} on {}",peer_id,endpoint.get_remote_address()),
-                    SwarmEvent::Behaviour(_) => todo!(),
-                    SwarmEvent::IncomingConnection { local_addr, send_back_addr } => todo!(),
-                    SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error } => todo!(),
-                    SwarmEvent::BannedPeer { peer_id, endpoint } => todo!(),
-                    SwarmEvent::UnreachableAddr { peer_id, address, error, attempts_remaining } => todo!(),
-                    SwarmEvent::UnknownPeerUnreachableAddr { address, error } => todo!(),
-                    SwarmEvent::ExpiredListenAddr { listener_id, address } => todo!(),
-                    SwarmEvent::ListenerError { listener_id, error } => todo!(),
-                    SwarmEvent::Dialing(_) => todo!(),
-                }
+            line = stdin.read_line(&mut buffer).fuse() => handle_command(buffer),
+            event = swarm.next() => handle_event(event.unwrap()),
+        }
+    }
+}
+
+fn handle_command(command: String, swarm: &Swarm<MyBehaviour>) {
+    if command.contains("list peer") {
+        list_peers(&swarm);
+    }
+}
+
+fn handle_event(event: SwarmEvent<(), EitherError>) {
+    match event {
+        SwarmEvent::NewListenAddr { address, .. } => println!("Listening on: {}", address),
+        _ => {}
+    }
+}
+
+fn list_peers(swarm: &Swarm<MyBehaviour>) {
+    for bucket in swarm.behaviour_mut().kademlia.kbuckets() {
+        if bucket.num_entries() > 0 {
+            for item in bucket.iter() {
+                println!("Peer ID: {:?}", item.node.key);
             }
         }
     }
