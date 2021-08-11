@@ -402,7 +402,7 @@ impl<T: Transport> Stream for RelayListener<T> {
                         stream,
                         src_peer_id,
                         relay_addr,
-                        relay_peer_id: _
+                        relay_peer_id: _,
                     })) => {
                         return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                             upgrade: RelayedListenerUpgrade::Relayed(Some(stream)),

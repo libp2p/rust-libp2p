@@ -21,13 +21,17 @@
 //! This module provides a `Sink` and `Stream` for length-delimited
 //! Noise protocol messages in form of [`NoiseFramed`].
 
-use bytes::{Bytes, BytesMut};
-use crate::{NoiseError, Protocol, PublicKey};
 use crate::io::NoiseOutput;
-use futures::ready;
+use crate::{NoiseError, Protocol, PublicKey};
+use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
+use futures::ready;
 use log::{debug, trace};
-use std::{fmt, io, pin::Pin, task::{Context, Poll}};
+use std::{
+    fmt, io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -88,14 +92,14 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// present, cannot be parsed.
     pub fn into_transport<C>(self) -> Result<(Option<PublicKey<C>>, NoiseOutput<T>), NoiseError>
     where
-        C: Protocol<C> + AsRef<[u8]>
+        C: Protocol<C> + AsRef<[u8]>,
     {
         let dh_remote_pubkey = match self.session.get_remote_static() {
             None => None,
             Some(k) => match C::public_from_bytes(k) {
                 Err(e) => return Err(e),
-                Ok(dh_pk) => Some(dh_pk)
-            }
+                Ok(dh_pk) => Some(dh_pk),
+            },
         };
         match self.session.into_transport_mode() {
             Err(e) => Err(e.into()),
@@ -129,7 +133,7 @@ enum ReadState {
     /// The associated result signals if the EOF was unexpected or not.
     Eof(Result<(), ()>),
     /// A decryption error occurred (terminal state).
-    DecErr
+    DecErr,
 }
 
 /// The states for writing Noise protocol frames.
@@ -138,19 +142,23 @@ enum WriteState {
     /// Ready to write another frame.
     Ready,
     /// Writing the frame length.
-    WriteLen { len: usize, buf: [u8; 2], off: usize },
+    WriteLen {
+        len: usize,
+        buf: [u8; 2],
+        off: usize,
+    },
     /// Writing the frame data.
     WriteData { len: usize, off: usize },
     /// EOF has been reached unexpectedly (terminal state).
     Eof,
     /// An encryption error occurred (terminal state).
-    EncErr
+    EncErr,
 }
 
 impl WriteState {
     fn is_ready(&self) -> bool {
         if let WriteState::Ready = self {
-            return true
+            return true;
         }
         false
     }
@@ -159,7 +167,7 @@ impl WriteState {
 impl<T, S> futures::stream::Stream for NoiseFramed<T, S>
 where
     T: AsyncRead + Unpin,
-    S: SessionState + Unpin
+    S: SessionState + Unpin,
 {
     type Item = io::Result<Bytes>;
 
@@ -169,7 +177,10 @@ where
             trace!("read state: {:?}", this.read_state);
             match this.read_state {
                 ReadState::Ready => {
-                    this.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
+                    this.read_state = ReadState::ReadLen {
+                        buf: [0, 0],
+                        off: 0,
+                    };
                 }
                 ReadState::ReadLen { mut buf, mut off } => {
                     let n = match read_frame_len(&mut this.io, cx, &mut buf, &mut off) {
@@ -177,11 +188,9 @@ where
                         Poll::Ready(Ok(None)) => {
                             trace!("read: eof");
                             this.read_state = ReadState::Eof(Ok(()));
-                            return Poll::Ready(None)
+                            return Poll::Ready(None);
                         }
-                        Poll::Ready(Err(e)) => {
-                            return Poll::Ready(Some(Err(e)))
-                        }
+                        Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
                         Poll::Pending => {
                             this.read_state = ReadState::ReadLen { buf, off };
                             return Poll::Pending;
@@ -191,14 +200,18 @@ where
                     if n == 0 {
                         trace!("read: empty frame");
                         this.read_state = ReadState::Ready;
-                        continue
+                        continue;
                     }
                     this.read_buffer.resize(usize::from(n), 0u8);
-                    this.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
+                    this.read_state = ReadState::ReadData {
+                        len: usize::from(n),
+                        off: 0,
+                    }
                 }
                 ReadState::ReadData { len, ref mut off } => {
                     let n = {
-                        let f = Pin::new(&mut this.io).poll_read(cx, &mut this.read_buffer[*off .. len]);
+                        let f =
+                            Pin::new(&mut this.io).poll_read(cx, &mut this.read_buffer[*off..len]);
                         match ready!(f) {
                             Ok(n) => n,
                             Err(e) => return Poll::Ready(Some(Err(e))),
@@ -208,13 +221,16 @@ where
                     if n == 0 {
                         trace!("read: eof");
                         this.read_state = ReadState::Eof(Err(()));
-                        return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())))
+                        return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                     }
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
                         this.decrypt_buffer.resize(len, 0);
-                        if let Ok(n) = this.session.read_message(&this.read_buffer, &mut this.decrypt_buffer) {
+                        if let Ok(n) = this
+                            .session
+                            .read_message(&this.read_buffer, &mut this.decrypt_buffer)
+                        {
                             this.decrypt_buffer.truncate(n);
                             trace!("read: payload len = {} bytes", n);
                             this.read_state = ReadState::Ready;
@@ -223,23 +239,25 @@ where
                             // read, the `BytesMut` will reuse the same buffer
                             // for the next frame.
                             let view = this.decrypt_buffer.split().freeze();
-                            return Poll::Ready(Some(Ok(view)))
+                            return Poll::Ready(Some(Ok(view)));
                         } else {
                             debug!("read: decryption error");
                             this.read_state = ReadState::DecErr;
-                            return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())))
+                            return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())));
                         }
                     }
                 }
                 ReadState::Eof(Ok(())) => {
                     trace!("read: eof");
-                    return Poll::Ready(None)
+                    return Poll::Ready(None);
                 }
                 ReadState::Eof(Err(())) => {
                     trace!("read: eof (unexpected)");
-                    return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())))
+                    return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                 }
-                ReadState::DecErr => return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())))
+                ReadState::DecErr => {
+                    return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())))
+                }
             }
         }
     }
@@ -248,7 +266,7 @@ where
 impl<T, S> futures::sink::Sink<&Vec<u8>> for NoiseFramed<T, S>
 where
     T: AsyncWrite + Unpin,
-    S: SessionState + Unpin
+    S: SessionState + Unpin,
 {
     type Error = io::Error;
 
@@ -267,21 +285,20 @@ where
                         Poll::Ready(Ok(false)) => {
                             trace!("write: eof");
                             this.write_state = WriteState::Eof;
-                            return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
+                            return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                         }
-                        Poll::Ready(Err(e)) => {
-                            return Poll::Ready(Err(e))
-                        }
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                         Poll::Pending => {
                             this.write_state = WriteState::WriteLen { len, buf, off };
-                            return Poll::Pending
+                            return Poll::Pending;
                         }
                     }
                     this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
                     let n = {
-                        let f = Pin::new(&mut this.io).poll_write(cx, &this.write_buffer[*off .. len]);
+                        let f =
+                            Pin::new(&mut this.io).poll_write(cx, &this.write_buffer[*off..len]);
                         match ready!(f) {
                             Ok(n) => n,
                             Err(e) => return Poll::Ready(Err(e)),
@@ -290,7 +307,7 @@ where
                     if n == 0 {
                         trace!("write: eof");
                         this.write_state = WriteState::Eof;
-                        return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
+                        return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                     }
                     *off += n;
                     trace!("write: {}/{} bytes written", *off, len);
@@ -301,9 +318,9 @@ where
                 }
                 WriteState::Eof => {
                     trace!("write: eof");
-                    return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
+                    return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                 }
-                WriteState::EncErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                WriteState::EncErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into())),
             }
         }
     }
@@ -313,15 +330,19 @@ where
         let mut this = Pin::into_inner(self);
         assert!(this.write_state.is_ready());
 
-        this.write_buffer.resize(frame.len() + EXTRA_ENCRYPT_SPACE, 0u8);
-        match this.session.write_message(frame, &mut this.write_buffer[..]) {
+        this.write_buffer
+            .resize(frame.len() + EXTRA_ENCRYPT_SPACE, 0u8);
+        match this
+            .session
+            .write_message(frame, &mut this.write_buffer[..])
+        {
             Ok(n) => {
                 trace!("write: cipher text len = {} bytes", n);
                 this.write_buffer.truncate(n);
                 this.write_state = WriteState::WriteLen {
                     len: n,
                     buf: u16::to_be_bytes(n as u16),
-                    off: 0
+                    off: 0,
                 };
                 Ok(())
             }
@@ -386,7 +407,7 @@ fn read_frame_len<R: AsyncRead + Unpin>(
     off: &mut usize,
 ) -> Poll<io::Result<Option<u16>>> {
     loop {
-        match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off ..])) {
+        match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off..])) {
             Ok(n) => {
                 if n == 0 {
                     return Poll::Ready(Ok(None));
@@ -395,10 +416,10 @@ fn read_frame_len<R: AsyncRead + Unpin>(
                 if *off == 2 {
                     return Poll::Ready(Ok(Some(u16::from_be_bytes(*buf))));
                 }
-            },
+            }
             Err(e) => {
                 return Poll::Ready(Err(e));
-            },
+            }
         }
     }
 }
@@ -419,14 +440,14 @@ fn write_frame_len<W: AsyncWrite + Unpin>(
     off: &mut usize,
 ) -> Poll<io::Result<bool>> {
     loop {
-        match ready!(Pin::new(&mut io).poll_write(cx, &buf[*off ..])) {
+        match ready!(Pin::new(&mut io).poll_write(cx, &buf[*off..])) {
             Ok(n) => {
                 if n == 0 {
-                    return Poll::Ready(Ok(false))
+                    return Poll::Ready(Ok(false));
                 }
                 *off += n;
                 if *off == 2 {
-                    return Poll::Ready(Ok(true))
+                    return Poll::Ready(Ok(true));
                 }
             }
             Err(e) => {
@@ -435,4 +456,3 @@ fn write_frame_len<W: AsyncWrite + Unpin>(
         }
     }
 }
-

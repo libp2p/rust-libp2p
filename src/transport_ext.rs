@@ -33,7 +33,7 @@ pub trait TransportExt: Transport {
     /// of bytes transferred through the sockets.
     fn with_bandwidth_logging(self) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
     where
-        Self: Sized
+        Self: Sized,
     {
         BandwidthLogging::new(self)
     }

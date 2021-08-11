@@ -233,13 +233,13 @@ impl GossipsubRpc {
     }
 }
 
-impl Into<rpc_proto::Rpc> for GossipsubRpc {
+impl From<GossipsubRpc> for rpc_proto::Rpc {
     /// Converts the RPC into protobuf format.
-    fn into(self) -> rpc_proto::Rpc {
+    fn from(rpc: GossipsubRpc) -> Self {
         // Messages
         let mut publish = Vec::new();
 
-        for message in self.messages.into_iter() {
+        for message in rpc.messages.into_iter() {
             let message = rpc_proto::Message {
                 from: message.source.map(|m| m.to_bytes()),
                 data: Some(message.data),
@@ -253,7 +253,7 @@ impl Into<rpc_proto::Rpc> for GossipsubRpc {
         }
 
         // subscriptions
-        let subscriptions = self
+        let subscriptions = rpc
             .subscriptions
             .into_iter()
             .map(|sub| rpc_proto::rpc::SubOpts {
@@ -270,9 +270,9 @@ impl Into<rpc_proto::Rpc> for GossipsubRpc {
             prune: Vec::new(),
         };
 
-        let empty_control_msg = self.control_msgs.is_empty();
+        let empty_control_msg = rpc.control_msgs.is_empty();
 
-        for action in self.control_msgs {
+        for action in rpc.control_msgs {
             match action {
                 // collect all ihave messages
                 GossipsubControlAction::IHave {
