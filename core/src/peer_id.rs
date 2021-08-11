@@ -38,7 +38,9 @@ pub struct PeerId {
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PeerId").field(&self.to_base58()).finish()
+        f.debug_tuple("PeerId")
+            .field(&self.to_base58())
+            .finish()
     }
 }
 
@@ -78,10 +80,9 @@ impl PeerId {
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
         match Code::try_from(multihash.code()) {
             Ok(Code::Sha2_256) => Ok(PeerId { multihash }),
-            Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH => {
-                Ok(PeerId { multihash })
-            }
-            _ => Err(multihash),
+            Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH
+                => Ok(PeerId { multihash }),
+            _ => Err(multihash)
         }
     }
 
@@ -92,7 +93,7 @@ impl PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
             multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
-                .expect("The digest size is never too large"),
+                .expect("The digest size is never too large")
         }
     }
 
@@ -184,7 +185,7 @@ impl FromStr for PeerId {
 
 #[cfg(test)]
 mod tests {
-    use crate::{identity, PeerId};
+    use crate::{PeerId, identity};
 
     #[test]
     fn peer_id_is_public_key() {
@@ -209,7 +210,7 @@ mod tests {
 
     #[test]
     fn random_peer_id_is_valid() {
-        for _ in 0..5000 {
+        for _ in 0 .. 5000 {
             let peer_id = PeerId::random();
             assert_eq!(peer_id, PeerId::from_bytes(&peer_id.to_bytes()).unwrap());
         }

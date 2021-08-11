@@ -35,7 +35,9 @@ fn from_bytes(c: &mut Criterion) {
 }
 
 fn clone(c: &mut Criterion) {
-    let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+    let peer_id = identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
 
     c.bench_function("clone", |b| {
         b.iter(|| {
@@ -46,7 +48,11 @@ fn clone(c: &mut Criterion) {
 
 fn sort_vec(c: &mut Criterion) {
     let peer_ids: Vec<_> = (0..100)
-        .map(|_| identity::Keypair::generate_ed25519().public().to_peer_id())
+        .map(|_| {
+            identity::Keypair::generate_ed25519()
+                .public()
+                .to_peer_id()
+        })
         .collect();
 
     c.bench_function("sort_vec", |b| {

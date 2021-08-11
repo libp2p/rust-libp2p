@@ -69,21 +69,21 @@ mod transfer;
 
 use futures::future::Future;
 
-#[allow(deprecated)]
-pub use self::transfer::ReadOneError;
+pub use crate::Negotiated;
+pub use multistream_select::{Version, NegotiatedComplete, NegotiationError, ProtocolError};
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     either::EitherUpgrade,
     error::UpgradeError,
     from_fn::{from_fn, FromFnUpgrade},
-    map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
+    map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
     select::SelectUpgrade,
-    transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
+    transfer::{write_length_prefixed, write_varint, read_length_prefixed, read_varint},
 };
-pub use crate::Negotiated;
-pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+#[allow(deprecated)]
+pub use self::transfer::ReadOneError;
 
 /// Types serving as protocol names.
 ///
@@ -167,7 +167,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound<F, T>(self, f: F) -> MapInboundUpgrade<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T,
+        F: FnOnce(Self::Output) -> T
     {
         MapInboundUpgrade::new(self, f)
     }
@@ -176,7 +176,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound_err<F, T>(self, f: F) -> MapInboundUpgradeErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T,
+        F: FnOnce(Self::Error) -> T
     {
         MapInboundUpgradeErr::new(self, f)
     }
@@ -207,7 +207,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound<F, T>(self, f: F) -> MapOutboundUpgrade<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T,
+        F: FnOnce(Self::Output) -> T
     {
         MapOutboundUpgrade::new(self, f)
     }
@@ -216,10 +216,11 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound_err<F, T>(self, f: F) -> MapOutboundUpgradeErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T,
+        F: FnOnce(Self::Error) -> T
     {
         MapOutboundUpgradeErr::new(self, f)
     }
 }
 
 impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
+
