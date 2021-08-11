@@ -101,12 +101,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // In case a listen address was provided use it, otherwise listen on any
     // address.
     match opt.listen_address {
-        Some(addr) => network_client.start_listening(addr).await.unwrap(),
-        None => {
-            network_client
-                .start_listening("/ip4/0.0.0.0/tcp/0".parse()?)
-                .await.unwrap()
-        }
+        Some(addr) => network_client
+            .start_listening(addr)
+            .await
+            .expect("Listening not to fail."),
+        None => network_client
+            .start_listening("/ip4/0.0.0.0/tcp/0".parse()?)
+            .await
+            .expect("Listening not to fail."),
     };
 
     // In case the user provided an address of a peer on the CLI, dial it.
@@ -287,7 +289,7 @@ mod network {
             self.sender
                 .send(Command::StartListening { addr, sender })
                 .await
-                .unwrap();
+                .expect("Command receiver not to be dropped.");
             receiver.await.expect("Sender not to be dropped.")
         }
 
@@ -305,8 +307,8 @@ mod network {
                     sender,
                 })
                 .await
-                .unwrap();
-            receiver.await.unwrap()
+                .expect("Command receiver not to be dropped.");
+            receiver.await.expect("Sender not to be dropped.")
         }
 
         /// Advertise the local node as the provider of the given file on the DHT.
@@ -315,8 +317,8 @@ mod network {
             self.sender
                 .send(Command::StartProviding { file_name, sender })
                 .await
-                .unwrap();
-            receiver.await.unwrap();
+                .expect("Command receiver not to be dropped.");
+            receiver.await.expect("Sender not to be dropped.");
         }
 
         /// Find the providers for the given file on the DHT.
@@ -325,8 +327,8 @@ mod network {
             self.sender
                 .send(Command::GetProviders { file_name, sender })
                 .await
-                .unwrap();
-            receiver.await.unwrap()
+                .expect("Command receiver not to be dropped.");
+            receiver.await.expect("Sender not to be dropped.")
         }
 
         /// Request the content of the given file from the given peer.
@@ -343,7 +345,7 @@ mod network {
                     sender,
                 })
                 .await
-                .unwrap();
+                .expect("Command receiver not to be dropped.");
             receiver.await.expect("Sender not be dropped.")
         }
 
@@ -352,7 +354,7 @@ mod network {
             self.sender
                 .send(Command::RespondFile { file, channel })
                 .await
-                .unwrap();
+                .expect("Command receiver not to be dropped.");
         }
     }
 
@@ -384,7 +386,7 @@ mod network {
                         let sender: oneshot::Sender<()> = pending_start_providing
                             .remove(&id)
                             .expect("Completed query to be previously pending.");
-                        sender.send(()).unwrap();
+                        let _ = sender.send(());
                     }
                     SwarmEvent::Behaviour(ComposedEvent::Kademlia(
                         KademliaEvent::OutboundQueryCompleted {
@@ -397,9 +399,9 @@ mod network {
                             ..
                         },
                     )) => {
-                        pending_get_providers.remove(&id)
+                        let _ = pending_get_providers.remove(&id)
                             .expect("Completed query to be previously pending.")
-                            .send(providers).unwrap();
+                            .send(providers);
                     }
                     SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                     SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
@@ -414,26 +416,24 @@ mod network {
                                     channel,
                                 })
                                 .await
-                                .unwrap();
+                                .expect("Event receiver not to be dropped.");
                         }
                         RequestResponseMessage::Response {
                             request_id,
                             response,
                         } => {
-                            pending_request_file
+                            let _ = pending_request_file
                                 .remove(&request_id)
                                 .expect("Request to still be pending.")
-                                .send(Ok(response.0))
-                                .unwrap();
+                                .send(Ok(response.0));
                         }
                     },
                     SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
                         RequestResponseEvent::OutboundFailure { request_id, error, ..}
                     )) => {
-                        pending_request_file.remove(&request_id)
+                        let _ = pending_request_file.remove(&request_id)
                             .expect("Request to still be pending.")
-                            .send(Err(Box::new(error)))
-                            .unwrap();
+                            .send(Err(Box::new(error)));
                     }
                     SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
                         RequestResponseEvent::ResponseSent { .. },
@@ -451,7 +451,7 @@ mod network {
                     } => {
                         if endpoint.is_dialer() {
                             if let Some(sender) = pending_dial.remove(&peer_id) {
-                                sender.send(Ok(())).unwrap();
+                                let _ = sender.send(Ok(()));
                             }
                         }
                     }
@@ -459,7 +459,7 @@ mod network {
                     SwarmEvent::UnreachableAddr { peer_id, attempts_remaining, error, .. } => {
                         if attempts_remaining == 0 {
                             if let Some(sender) = pending_dial.remove(&peer_id) {
-                                sender.send(Err(Box::new(error))).unwrap();
+                                let _ = sender.send(Err(Box::new(error)));
                             }
                         }
                     }
@@ -467,10 +467,10 @@ mod network {
                 },
                 command = command_receiver.next() => match command {
                     Some(Command::StartListening { addr, sender }) => {
-                        match swarm.listen_on(addr) {
-                            Ok(_) => sender.send(Ok(())).unwrap(),
-                            Err(e) => sender.send(Err(Box::new(e))).unwrap(),
-                        }
+                        let _ = match swarm.listen_on(addr) {
+                            Ok(_) => sender.send(Ok(())),
+                            Err(e) => sender.send(Err(Box::new(e))),
+                        };
                     }
                     Some(Command::Dial {
                         peer_id,
@@ -484,10 +484,10 @@ mod network {
                                 .behaviour_mut()
                                 .kademlia
                                 .add_address(&peer_id, peer_addr.clone());
-                            swarm
-                                .dial_addr(peer_addr.with(Protocol::P2p(peer_id.into())))
-                                .unwrap();
-                            pending_dial.insert(peer_id, sender);
+                            match swarm.dial_addr(peer_addr.with(Protocol::P2p(peer_id.into()))) {
+                                Ok(()) => { pending_dial.insert(peer_id, sender); },
+                                Err(e) => { let _ = sender.send(Err(Box::new(e))); },
+                            }
                         }
                     }
                     Some(Command::StartProviding { file_name, sender }) => {
@@ -495,7 +495,7 @@ mod network {
                             .behaviour_mut()
                             .kademlia
                             .start_providing(file_name.into_bytes().into())
-                            .unwrap();
+                            .expect("No store error.");
                         pending_start_providing.insert(query_id, sender);
                     }
                     Some(Command::GetProviders { file_name, sender }) => {
@@ -521,7 +521,7 @@ mod network {
                             .behaviour_mut()
                             .request_response
                             .send_response(channel, FileResponse(file))
-                            .unwrap();
+                            .expect("Connection to peer to be still open.");
                     }
                     None => {
                         // Command channel closed, thus shutting down the network.
