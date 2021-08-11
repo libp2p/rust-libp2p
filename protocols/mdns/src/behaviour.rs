@@ -18,16 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::IPV4_MDNS_MULTICAST_ADDRESS;
 use crate::dns::{build_query, build_query_response, build_service_discovery_response};
 use crate::query::MdnsPacket;
+use crate::IPV4_MDNS_MULTICAST_ADDRESS;
 use async_io::{Async, Timer};
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::connection::ListenerId;
-use libp2p_core::{
-    address_translation, multiaddr::Protocol, Multiaddr, PeerId,
-};
+use libp2p_core::{address_translation, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_swarm::{
     protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters, ProtocolsHandler,

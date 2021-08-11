@@ -20,11 +20,11 @@
 
 use super::*;
 
-use crate::{K_VALUE, ALPHA_VALUE};
-use crate::kbucket::{Key, KeyBytes, Distance};
+use crate::kbucket::{Distance, Key, KeyBytes};
+use crate::{ALPHA_VALUE, K_VALUE};
 use libp2p_core::PeerId;
-use std::{time::Duration, iter::FromIterator, num::NonZeroUsize};
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
 use wasm_timer::Instant;
 
 pub mod disjoint;
@@ -88,16 +88,24 @@ impl ClosestPeersIter {
     /// Creates a new iterator with a default configuration.
     pub fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
     where
-        I: IntoIterator<Item = Key<PeerId>>
+        I: IntoIterator<Item = Key<PeerId>>,
     {
-        Self::with_config(ClosestPeersIterConfig::default(), target, known_closest_peers)
+        Self::with_config(
+            ClosestPeersIterConfig::default(),
+            target,
+            known_closest_peers,
+        )
     }
 
     /// Creates a new iterator with the given configuration.
-    pub fn with_config<I, T>(config: ClosestPeersIterConfig, target: T, known_closest_peers: I) -> Self
+    pub fn with_config<I, T>(
+        config: ClosestPeersIterConfig,
+        target: T,
+        known_closest_peers: I,
+    ) -> Self
     where
         I: IntoIterator<Item = Key<PeerId>>,
-        T: Into<KeyBytes>
+        T: Into<KeyBytes>,
     {
         let target = target.into();
 
@@ -110,17 +118,18 @@ impl ClosestPeersIter {
                     let state = PeerState::NotContacted;
                     (distance, Peer { key, state })
                 })
-                .take(K_VALUE.into()));
+                .take(K_VALUE.into()),
+        );
 
         // The iterator initially makes progress by iterating towards the target.
-        let state = State::Iterating { no_progress : 0 };
+        let state = State::Iterating { no_progress: 0 };
 
         ClosestPeersIter {
             config,
             target,
             state,
             closest_peers,
-            num_waiting: 0
+            num_waiting: 0,
         }
     }
 
@@ -142,10 +151,10 @@ impl ClosestPeersIter {
     /// calling this function has no effect and `false` is returned.
     pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = PeerId>,
     {
         if let State::Finished = self.state {
-            return false
+            return false;
         }
 
         let key = Key::from(*peer);
@@ -163,10 +172,8 @@ impl ClosestPeersIter {
                 PeerState::Unresponsive => {
                     e.get_mut().state = PeerState::Succeeded;
                 }
-                PeerState::NotContacted
-                    | PeerState::Failed
-                    | PeerState::Succeeded => return false
-            }
+                PeerState::NotContacted | PeerState::Failed | PeerState::Succeeded => return false,
+            },
         }
 
         let num_closest = self.closest_peers.len();
@@ -176,7 +183,10 @@ impl ClosestPeersIter {
         for peer in closer_peers {
             let key = peer.into();
             let distance = self.target.distance(&key);
-            let peer = Peer { key, state: PeerState::NotContacted };
+            let peer = Peer {
+                key,
+                state: PeerState::NotContacted,
+            };
             self.closest_peers.entry(distance).or_insert(peer);
             // The iterator makes progress if the new peer is either closer to the target
             // than any peer seen so far (i.e. is the first entry), or the iterator did
@@ -195,13 +205,14 @@ impl ClosestPeersIter {
                     State::Iterating { no_progress }
                 }
             }
-            State::Stalled =>
+            State::Stalled => {
                 if progress {
                     State::Iterating { no_progress: 0 }
                 } else {
                     State::Stalled
                 }
-            State::Finished => State::Finished
+            }
+            State::Finished => State::Finished,
         };
 
         true
@@ -219,7 +230,7 @@ impl ClosestPeersIter {
     /// calling this function has no effect and `false` is returned.
     pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Finished = self.state {
-            return false
+            return false;
         }
 
         let key = Key::from(*peer);
@@ -233,13 +244,9 @@ impl ClosestPeersIter {
                     self.num_waiting -= 1;
                     e.get_mut().state = PeerState::Failed
                 }
-                PeerState::Unresponsive => {
-                    e.get_mut().state = PeerState::Failed
-                }
-                PeerState::NotContacted
-                    | PeerState::Failed
-                    | PeerState::Succeeded => return false
-            }
+                PeerState::Unresponsive => e.get_mut().state = PeerState::Failed,
+                PeerState::NotContacted | PeerState::Failed | PeerState::Succeeded => return false,
+            },
         }
 
         true
@@ -248,10 +255,11 @@ impl ClosestPeersIter {
     /// Returns the list of peers for which the iterator is currently waiting
     /// for results.
     pub fn waiting(&self) -> impl Iterator<Item = &PeerId> {
-        self.closest_peers.values().filter_map(|peer|
-            match peer.state {
+        self.closest_peers
+            .values()
+            .filter_map(|peer| match peer.state {
                 PeerState::Waiting(..) => Some(peer.key.preimage()),
-                _ => None
+                _ => None,
             })
     }
 
@@ -269,7 +277,7 @@ impl ClosestPeersIter {
     /// Advances the state of the iterator, potentially getting a new peer to contact.
     pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
         if let State::Finished = self.state {
-            return PeersIterState::Finished
+            return PeersIterState::Finished;
         }
 
         // Count the number of peers that returned a result. If there is a
@@ -292,13 +300,11 @@ impl ClosestPeersIter {
                         debug_assert!(self.num_waiting > 0);
                         self.num_waiting -= 1;
                         peer.state = PeerState::Unresponsive
-                    }
-                    else if at_capacity {
+                    } else if at_capacity {
                         // The iterator is still waiting for a result from a peer and is
                         // at capacity w.r.t. the maximum number of peers being waited on.
-                        return PeersIterState::WaitingAtCapacity
-                    }
-                    else {
+                        return PeersIterState::WaitingAtCapacity;
+                    } else {
                         // The iterator is still waiting for a result from a peer and the
                         // `result_counter` did not yet reach `num_results`. Therefore
                         // the iterator is not yet done, regardless of already successful
@@ -307,26 +313,28 @@ impl ClosestPeersIter {
                     }
                 }
 
-                PeerState::Succeeded =>
+                PeerState::Succeeded => {
                     if let Some(ref mut cnt) = result_counter {
                         *cnt += 1;
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
                         if *cnt >= self.config.num_results.get() {
                             self.state = State::Finished;
-                            return PeersIterState::Finished
+                            return PeersIterState::Finished;
                         }
                     }
+                }
 
-                PeerState::NotContacted =>
+                PeerState::NotContacted => {
                     if !at_capacity {
                         let timeout = now + self.config.peer_timeout;
                         peer.state = PeerState::Waiting(timeout);
                         self.num_waiting += 1;
-                        return PeersIterState::Waiting(Some(Cow::Borrowed(peer.key.preimage())))
+                        return PeersIterState::Waiting(Some(Cow::Borrowed(peer.key.preimage())));
                     } else {
-                        return PeersIterState::WaitingAtCapacity
+                        return PeersIterState::WaitingAtCapacity;
                     }
+                }
 
                 PeerState::Unresponsive | PeerState::Failed => {
                     // Skip over unresponsive or failed peers.
@@ -379,11 +387,12 @@ impl ClosestPeersIter {
     /// k closest nodes it has not already queried".
     fn at_capacity(&self) -> bool {
         match self.state {
-            State::Stalled => self.num_waiting >= usize::max(
-                self.config.num_results.get(), self.config.parallelism.get()
-            ),
+            State::Stalled => {
+                self.num_waiting
+                    >= usize::max(self.config.num_results.get(), self.config.parallelism.get())
+            }
             State::Iterating { .. } => self.num_waiting >= self.config.parallelism.get(),
-            State::Finished => true
+            State::Finished => true,
         }
     }
 }
@@ -425,14 +434,14 @@ enum State {
     /// from the closest peers (not counting those that failed or are unresponsive)
     /// or because the iterator ran out of peers that have not yet delivered
     /// results (or failed).
-    Finished
+    Finished,
 }
 
 /// Representation of a peer in the context of a iterator.
 #[derive(Debug, Clone)]
 struct Peer {
     key: Key<PeerId>,
-    state: PeerState
+    state: PeerState,
 }
 
 /// The state of a single `Peer`.
@@ -466,19 +475,29 @@ enum PeerState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::{PeerId, multihash::{Code, Multihash}};
+    use libp2p_core::{
+        multihash::{Code, Multihash},
+        PeerId,
+    };
     use quickcheck::*;
-    use rand::{Rng, rngs::StdRng, SeedableRng};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
     use std::{iter, time::Duration};
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
-        (0 .. n).map(|_| PeerId::from_multihash(
-            Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap()
-        ).unwrap()).collect()
+        (0..n)
+            .map(|_| {
+                PeerId::from_multihash(
+                    Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap(),
+                )
+                .unwrap()
+            })
+            .collect()
     }
 
     fn sorted<T: AsRef<KeyBytes>>(target: &T, peers: &Vec<Key<PeerId>>) -> bool {
-        peers.windows(2).all(|w| w[0].distance(&target) < w[1].distance(&target))
+        peers
+            .windows(2)
+            .all(|w| w[0].distance(&target) < w[1].distance(&target))
     }
 
     impl Arbitrary for ClosestPeersIter {
@@ -510,26 +529,32 @@ mod tests {
         fn prop(iter: ClosestPeersIter) {
             let target = iter.target.clone();
 
-            let (keys, states): (Vec<_>, Vec<_>) = iter.closest_peers
+            let (keys, states): (Vec<_>, Vec<_>) = iter
+                .closest_peers
                 .values()
                 .map(|e| (e.key.clone(), &e.state))
                 .unzip();
 
-            let none_contacted = states
-                .iter()
-                .all(|s| match s {
-                    PeerState::NotContacted => true,
-                    _ => false
-                });
+            let none_contacted = states.iter().all(|s| match s {
+                PeerState::NotContacted => true,
+                _ => false,
+            });
 
-            assert!(none_contacted,
-                    "Unexpected peer state in new iterator.");
-            assert!(sorted(&target, &keys),
-                    "Closest peers in new iterator not sorted by distance to target.");
-            assert_eq!(iter.num_waiting(), 0,
-                       "Unexpected peers in progress in new iterator.");
-            assert_eq!(iter.into_result().count(), 0,
-                       "Unexpected closest peers in new iterator");
+            assert!(none_contacted, "Unexpected peer state in new iterator.");
+            assert!(
+                sorted(&target, &keys),
+                "Closest peers in new iterator not sorted by distance to target."
+            );
+            assert_eq!(
+                iter.num_waiting(),
+                0,
+                "Unexpected peers in progress in new iterator."
+            );
+            assert_eq!(
+                iter.into_result().count(),
+                0,
+                "Unexpected closest peers in new iterator"
+            );
         }
 
         QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
@@ -541,7 +566,8 @@ mod tests {
             let now = Instant::now();
             let mut rng = StdRng::from_seed(seed.0);
 
-            let mut expected = iter.closest_peers
+            let mut expected = iter
+                .closest_peers
                 .values()
                 .map(|e| e.key.clone())
                 .collect::<Vec<_>>();
@@ -559,8 +585,7 @@ mod tests {
                 // Split off the next up to `parallelism` expected peers.
                 else if expected.len() < max_parallelism {
                     remaining = Vec::new();
-                }
-                else {
+                } else {
                     remaining = expected.split_off(max_parallelism);
                 }
 
@@ -570,7 +595,9 @@ mod tests {
                         PeersIterState::Finished => break 'finished,
                         PeersIterState::Waiting(Some(p)) => assert_eq!(&*p, k.preimage()),
                         PeersIterState::Waiting(None) => panic!("Expected another peer."),
-                        PeersIterState::WaitingAtCapacity => panic!("Unexpectedly reached capacity.")
+                        PeersIterState::WaitingAtCapacity => {
+                            panic!("Unexpectedly reached capacity.")
+                        }
                     }
                 }
                 let num_waiting = iter.num_waiting();
@@ -611,7 +638,7 @@ mod tests {
             // of results.
             let all_contacted = iter.closest_peers.values().all(|e| match e.state {
                 PeerState::NotContacted | PeerState::Waiting { .. } => false,
-                _ => true
+                _ => true,
             });
 
             let target = iter.target.clone();
@@ -634,7 +661,9 @@ mod tests {
             }
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
@@ -648,7 +677,7 @@ mod tests {
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
                 PeersIterState::Waiting(Some(p)) => p.into_owned(),
-                _ => panic!("No peer.")
+                _ => panic!("No peer."),
             };
             iter.on_success(&peer1, closer.clone());
             // Duplicate result from te same peer.
@@ -665,25 +694,38 @@ mod tests {
             };
 
             // The "closer" peer must only be in the iterator once.
-            let n = iter.closest_peers.values().filter(|e| e.key.preimage() == &closer[0]).count();
+            let n = iter
+                .closest_peers
+                .values()
+                .filter(|e| e.key.preimage() == &closer[0])
+                .count();
             assert_eq!(n, 1);
 
             true
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
     fn timeout() {
         fn prop(mut iter: ClosestPeersIter) -> bool {
             let mut now = Instant::now();
-            let peer = iter.closest_peers.values().next().unwrap().key.clone().into_preimage();
+            let peer = iter
+                .closest_peers
+                .values()
+                .next()
+                .unwrap()
+                .key
+                .clone()
+                .into_preimage();
 
             // Poll the iterator for the first peer to be in progress.
             match iter.next(now) {
                 PeersIterState::Waiting(Some(id)) => assert_eq!(&*id, &peer),
-                _ => panic!()
+                _ => panic!(),
             }
 
             // Artificially advance the clock.
@@ -692,10 +734,13 @@ mod tests {
             // Advancing the iterator again should mark the first peer as unresponsive.
             let _ = iter.next(now);
             match &iter.closest_peers.values().next().unwrap() {
-                Peer { key, state: PeerState::Unresponsive } => {
+                Peer {
+                    key,
+                    state: PeerState::Unresponsive,
+                } => {
                     assert_eq!(key.preimage(), &peer);
-                },
-                Peer { state, .. } => panic!("Unexpected peer state: {:?}", state)
+                }
+                Peer { state, .. } => panic!("Unexpected peer state: {:?}", state),
             }
 
             let finished = iter.is_finished();
@@ -727,7 +772,7 @@ mod tests {
                     PeersIterState::Waiting(Some(p)) => {
                         let peer = p.clone().into_owned();
                         iter.on_failure(&peer);
-                    },
+                    }
                     _ => panic!("Expected iterator to yield another peer to query."),
                 }
             }
@@ -751,10 +796,8 @@ mod tests {
                 )
             }
 
-            iter.num_waiting = usize::max(
-                iter.config.parallelism.get(),
-                iter.config.num_results.get(),
-            );
+            iter.num_waiting =
+                usize::max(iter.config.parallelism.get(), iter.config.num_results.get());
             assert!(
                 iter.at_capacity(),
                 "Iterator should be at capacity if `max(parallelism, num_results)` requests are \

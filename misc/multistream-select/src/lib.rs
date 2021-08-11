@@ -94,10 +94,10 @@ mod negotiated;
 mod protocol;
 mod tests;
 
-pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
-pub use self::protocol::ProtocolError;
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
+pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
+pub use self::protocol::ProtocolError;
 
 /// Supported multistream-select versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
