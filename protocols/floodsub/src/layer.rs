@@ -441,6 +441,7 @@ impl NetworkBehaviour for Floodsub {
 }
 
 /// Transmission between the `OneShotHandler` and the `FloodsubHandler`.
+#[derive(Debug)]
 pub enum InnerMessage {
     /// We received an RPC from a remote.
     Rx(FloodsubRpc),

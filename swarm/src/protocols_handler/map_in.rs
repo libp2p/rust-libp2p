@@ -27,7 +27,7 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr
 };
 use libp2p_core::Multiaddr;
-use std::{marker::PhantomData, task::Context, task::Poll};
+use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
@@ -51,7 +51,7 @@ impl<TProtoHandler, TMap, TNewIn> ProtocolsHandler for MapInEvent<TProtoHandler,
 where
     TProtoHandler: ProtocolsHandler,
     TMap: Fn(TNewIn) -> Option<TProtoHandler::InEvent>,
-    TNewIn: Send + 'static,
+    TNewIn: Debug + Send + 'static,
     TMap: Send + 'static,
 {
     type InEvent = TNewIn;

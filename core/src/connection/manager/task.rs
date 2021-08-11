@@ -31,6 +31,11 @@ use crate::{
         IntoConnectionHandler,
         PendingConnectionError,
         Substream,
+        handler::{
+            THandlerInEvent,
+            THandlerOutEvent,
+            THandlerError,
+        },
     },
 };
 use futures::{prelude::*, channel::mpsc, stream};
@@ -53,7 +58,7 @@ pub enum Command<T> {
 
 /// Events that a task can emit to its manager.
 #[derive(Debug)]
-pub enum Event<T, H, TE, HE> {
+pub enum Event<H: IntoConnectionHandler, TE> {
     /// A connection to a node has succeeded.
     Established { id: TaskId, info: Connected },
     /// A pending connection failed.
@@ -61,15 +66,15 @@ pub enum Event<T, H, TE, HE> {
     /// A node we are connected to has changed its address.
     AddressChange { id: TaskId, new_address: Multiaddr },
     /// Notify the manager of an event from the connection.
-    Notify { id: TaskId, event: T },
+    Notify { id: TaskId, event: THandlerOutEvent<H> },
     /// A connection closed, possibly due to an error.
     ///
     /// If `error` is `None`, the connection has completed
     /// an active orderly close.
-    Closed { id: TaskId, error: Option<ConnectionError<HE>> }
+    Closed { id: TaskId, error: Option<ConnectionError<THandlerError<H>>> }
 }
 
-impl<T, H, TE, HE> Event<T, H, TE, HE> {
+impl<H: IntoConnectionHandler, TE> Event<H, TE> {
     pub fn id(&self) -> &TaskId {
         match self {
             Event::Established { id, .. } => id,
@@ -82,7 +87,7 @@ impl<T, H, TE, HE> Event<T, H, TE, HE> {
 }
 
 /// A `Task` is a [`Future`] that handles a single connection.
-pub struct Task<F, M, H, I, O, E>
+pub struct Task<F, M, H, E>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler,
@@ -92,16 +97,16 @@ where
     id: TaskId,
 
     /// Sender to emit events to the manager of this task.
-    events: mpsc::Sender<Event<O, H, E, <H::Handler as ConnectionHandler>::Error>>,
+    events: mpsc::Sender<Event<H, E>>,
 
     /// Receiver for commands sent by the manager of this task.
-    commands: stream::Fuse<mpsc::Receiver<Command<I>>>,
+    commands: stream::Fuse<mpsc::Receiver<Command<THandlerInEvent<H>>>>,
 
     /// Inner state of this `Task`.
-    state: State<F, M, H, O, E>,
+    state: State<F, M, H, E>,
 }
 
-impl<F, M, H, I, O, E> Task<F, M, H, I, O, E>
+impl<F, M, H, E> Task<F, M, H, E>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler,
@@ -110,8 +115,8 @@ where
     /// Create a new task to connect and handle some node.
     pub fn pending(
         id: TaskId,
-        events: mpsc::Sender<Event<O, H, E, <H::Handler as ConnectionHandler>::Error>>,
-        commands: mpsc::Receiver<Command<I>>,
+        events: mpsc::Sender<Event<H, E>>,
+        commands: mpsc::Receiver<Command<THandlerInEvent<H>>>,
         future: F,
         handler: H
     ) -> Self {
@@ -129,8 +134,8 @@ where
     /// Create a task for an existing node we are already connected to.
     pub fn established(
         id: TaskId,
-        events: mpsc::Sender<Event<O, H, E, <H::Handler as ConnectionHandler>::Error>>,
-        commands: mpsc::Receiver<Command<I>>,
+        events: mpsc::Sender<Event<H, E>>,
+        commands: mpsc::Receiver<Command<THandlerInEvent<H>>>,
         connection: Connection<M, H::Handler>
     ) -> Self {
         Task {
@@ -143,7 +148,7 @@ where
 }
 
 /// The state associated with the `Task` of a connection.
-enum State<F, M, H, O, E>
+enum State<F, M, H, E>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler,
@@ -165,20 +170,20 @@ where
         /// is polled for new events in this state, otherwise the event
         /// must be sent to the `Manager` before the connection can be
         /// polled again.
-        event: Option<Event<O, H, E, <H::Handler as ConnectionHandler>::Error>>
+        event: Option<Event<H, E>>,
     },
 
     /// The connection is closing (active close).
     Closing(Close<M>),
 
     /// The task is terminating with a final event for the `Manager`.
-    Terminating(Event<O, H, E, <H::Handler as ConnectionHandler>::Error>),
+    Terminating(Event<H, E>),
 
     /// The task has finished.
     Done
 }
 
-impl<F, M, H, I, O, E> Unpin for Task<F, M, H, I, O, E>
+impl<F, M, H, E> Unpin for Task<F, M, H, E>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler,
@@ -186,12 +191,14 @@ where
 {
 }
 
-impl<F, M, H, I, O, E> Future for Task<F, M, H, I, O, E>
+impl<F, M, H, E> Future for Task<F, M, H, E>
 where
     M: StreamMuxer,
     F: Future<Output = ConnectResult<M, E>>,
     H: IntoConnectionHandler,
-    H::Handler: ConnectionHandler<Substream = Substream<M>, InEvent = I, OutEvent = O>
+    H::Handler: ConnectionHandler<
+        Substream = Substream<M>,
+    > + Send + 'static,
 {
     type Output = ();
 

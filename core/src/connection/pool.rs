@@ -34,6 +34,11 @@ use crate::{
         OutgoingInfo,
         Substream,
         PendingConnectionError,
+        handler::{
+            THandlerInEvent,
+            THandlerOutEvent,
+            THandlerError,
+        },
         manager::{self, Manager, ManagerConfig},
     },
     muxing::StreamMuxer,
@@ -45,7 +50,7 @@ use smallvec::SmallVec;
 use std::{convert::TryFrom as _, error, fmt, num::NonZeroU32, task::Context, task::Poll};
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
+pub struct Pool<THandler: IntoConnectionHandler, TTransErr> {
     local_id: PeerId,
 
     /// The connection counter(s).
@@ -55,7 +60,7 @@ pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
     /// established and pending connections.
     ///
     /// For every established connection there is a corresponding entry in `established`.
-    manager: Manager<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>,
+    manager: Manager<THandler, TTransErr>,
 
     /// The managed connections of each peer that are currently considered
     /// established, as witnessed by the associated `ConnectedPoint`.
@@ -71,8 +76,8 @@ pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
     disconnected: Vec<Disconnected>,
 }
 
-impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> fmt::Debug
-for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+impl<THandler: IntoConnectionHandler, TTransErr> fmt::Debug
+for Pool<THandler, TTransErr>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
@@ -81,14 +86,14 @@ for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     }
 }
 
-impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> Unpin
-for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {}
+impl<THandler: IntoConnectionHandler, TTransErr> Unpin
+for Pool<THandler, TTransErr> {}
 
 /// Event that can happen on the `Pool`.
-pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
+pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTransErr> {
     /// A new connection has been established.
     ConnectionEstablished {
-        connection: EstablishedConnection<'a, TInEvent>,
+        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
         num_established: NonZeroU32,
     },
 
@@ -109,9 +114,9 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<THandlerErr>>,
+        error: Option<ConnectionError<THandlerError<THandler>>>,
         /// A reference to the pool that used to manage the connection.
-        pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>,
+        pool: &'a mut Pool<THandler, TTransErr>,
         /// The remaining number of established connections to the same peer.
         num_established: u32,
     },
@@ -130,21 +135,21 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
         /// A reference to the pool that managed the connection.
-        pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>,
+        pool: &'a mut Pool<THandler, TTransErr>,
     },
 
     /// A node has produced an event.
     ConnectionEvent {
         /// The connection that has generated the event.
-        connection: EstablishedConnection<'a, TInEvent>,
+        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
         /// The produced event.
-        event: TOutEvent,
+        event: THandlerOutEvent<THandler>,
     },
 
     /// The connection to a node has changed its address.
     AddressChange {
         /// The connection that has changed address.
-        connection: EstablishedConnection<'a, TInEvent>,
+        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
         /// The new endpoint.
         new_endpoint: ConnectedPoint,
         /// The old endpoint.
@@ -152,13 +157,9 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
     },
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> fmt::Debug
-for PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+impl<'a, THandler: IntoConnectionHandler, TTransErr> fmt::Debug for PoolEvent<'a, THandler, TTransErr>
 where
-    TOutEvent: fmt::Debug,
     TTransErr: fmt::Debug,
-    THandlerErr: fmt::Debug,
-    TInEvent: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
@@ -197,8 +198,8 @@ where
     }
 }
 
-impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
-    Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+impl<THandler: IntoConnectionHandler, TTransErr>
+    Pool<THandler, TTransErr>
 {
     /// Creates a new empty `Pool`.
     pub fn new(
@@ -239,15 +240,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
             Substream = Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
         > + Send + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
-        THandlerErr: error::Error + Send + 'static,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
@@ -274,15 +269,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
             Substream = Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
         > + Send + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
-        THandlerErr: error::Error + Send + 'static,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
@@ -307,15 +296,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
             Substream = Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
         > + Send + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
-        THandlerErr: error::Error + Send + 'static,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
@@ -360,15 +343,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<
             Substream = connection::Substream<TMuxer>,
-            InEvent = TInEvent,
-            OutEvent = TOutEvent,
-            Error = THandlerErr
         > + Send + 'static,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TTransErr: error::Error + Send + 'static,
-        THandlerErr: error::Error + Send + 'static,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
@@ -384,7 +361,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     ///
     /// Returns `None` if the pool has no connection with the given ID.
     pub fn get(&mut self, id: ConnectionId)
-        -> Option<PoolConnection<'_, TInEvent>>
+        -> Option<PoolConnection<'_, THandlerInEvent<THandler>>>
     {
         match self.manager.entry(id) {
             Some(manager::Entry::Established(entry)) =>
@@ -403,7 +380,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 
     /// Gets an established connection from the pool by ID.
     pub fn get_established(&mut self, id: ConnectionId)
-        -> Option<EstablishedConnection<'_, TInEvent>>
+        -> Option<EstablishedConnection<'_, THandlerInEvent<THandler>>>
     {
         match self.get(id) {
             Some(PoolConnection::Established(c)) => Some(c),
@@ -413,7 +390,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 
     /// Gets a pending outgoing connection by ID.
     pub fn get_outgoing(&mut self, id: ConnectionId)
-        -> Option<PendingConnection<'_, TInEvent>>
+        -> Option<PendingConnection<'_, THandlerInEvent<THandler>>>
     {
         match self.pending.get(&id) {
             Some((ConnectedPoint::Dialer { .. }, _peer)) =>
@@ -494,11 +471,9 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     pub fn iter_peer_established<'a>(&'a mut self, peer: &PeerId)
         -> EstablishedConnectionIter<'a,
             impl Iterator<Item = ConnectionId>,
-            TInEvent,
-            TOutEvent,
             THandler,
             TTransErr,
-            THandlerErr>
+            >
     {
         let ids = self.iter_peer_established_info(peer)
             .map(|(id, _endpoint)| *id)
@@ -563,7 +538,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
     pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<
-        PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+        PoolEvent<'a, THandler, TTransErr>
     >     {
         // Drain events resulting from forced disconnections.
         //
@@ -828,22 +803,21 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
 }
 
 /// An iterator over established connections in a pool.
-pub struct EstablishedConnectionIter<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr> {
-    pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>,
-    ids: I
+pub struct EstablishedConnectionIter<'a, I, THandler: IntoConnectionHandler, TTransErr> {
+    pool: &'a mut Pool<THandler, TTransErr>,
+    ids: I,
 }
 
 // Note: Ideally this would be an implementation of `Iterator`, but that
 // requires GATs (cf. https://github.com/rust-lang/rust/issues/44265) and
 // a different definition of `Iterator`.
-impl<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
-    EstablishedConnectionIter<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
+impl<'a, I, THandler: IntoConnectionHandler, TTransErr> EstablishedConnectionIter<'a, I, THandler, TTransErr>
 where
     I: Iterator<Item = ConnectionId>
 {
     /// Obtains the next connection, if any.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>>
+    pub fn next(&mut self) -> Option<EstablishedConnection<'_, THandlerInEvent<THandler>>>
     {
         while let Some(id) = self.ids.next() {
             if self.pool.manager.is_established(&id) { // (*)
@@ -865,7 +839,7 @@ where
 
     /// Returns the first connection, if any, consuming the iterator.
     pub fn into_first<'b>(mut self)
-        -> Option<EstablishedConnection<'b, TInEvent>>
+        -> Option<EstablishedConnection<'b, THandlerInEvent<THandler>>>
     where 'a: 'b
     {
         while let Some(id) = self.ids.next() {

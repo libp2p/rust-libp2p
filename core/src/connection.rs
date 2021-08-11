@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod error;
-mod handler;
+pub(crate) mod handler;
 mod listeners;
 mod substream;
 

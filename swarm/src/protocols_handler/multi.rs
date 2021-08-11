@@ -43,7 +43,7 @@ use std::{
     cmp,
     collections::{HashMap, HashSet},
     error,
-    fmt,
+    fmt::{self, Debug},
     hash::Hash,
     iter::{self, FromIterator},
     task::{Context, Poll},
@@ -88,7 +88,7 @@ where
 
 impl<K, H> ProtocolsHandler for MultiHandler<K, H>
 where
-    K: Clone + Hash + Eq + Send + 'static,
+    K: Clone + Debug + Hash + Eq + Send + 'static,
     H: ProtocolsHandler,
     H::InboundProtocol: InboundUpgradeSend,
     H::OutboundProtocol: OutboundUpgradeSend
@@ -312,7 +312,7 @@ where
 
 impl<K, H> IntoProtocolsHandler for IntoMultiHandler<K, H>
 where
-    K: Clone + Eq + Hash + Send + 'static,
+    K: Debug + Clone + Eq + Hash + Send + 'static,
     H: IntoProtocolsHandler
 {
     type Handler = MultiHandler<K, H::Handler>;

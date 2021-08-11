@@ -101,11 +101,11 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// continue reading data until the remote closes its side of the connection.
 pub trait ProtocolsHandler: Send + 'static {
     /// Custom event that can be received from the outside.
-    type InEvent: Send + 'static;
+    type InEvent: fmt::Debug + Send + 'static;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
-    type OutEvent: Send + 'static;
+    type OutEvent: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ProtocolsHandler::poll`].
-    type Error: error::Error + Send + 'static;
+    type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.
