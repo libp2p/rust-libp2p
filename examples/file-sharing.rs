@@ -165,7 +165,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "libp2p relay")]
+#[structopt(name = "libp2p file sharing example")]
 struct Opt {
     /// Fixed value to generate deterministic peer ID.
     #[structopt(long)]
