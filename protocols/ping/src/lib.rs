@@ -40,8 +40,8 @@
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
-pub mod handler;
-pub mod protocol;
+mod handler;
+mod protocol;
 
 use handler::PingHandler;
 pub use handler::{PingConfig, PingFailure, PingResult, PingSuccess};

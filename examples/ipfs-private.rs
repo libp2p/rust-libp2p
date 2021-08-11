@@ -199,7 +199,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
         // Called when `ping` produces an event.
         fn inject_event(&mut self, event: PingEvent) {
-            use ping::handler::{PingFailure, PingSuccess};
+            use ping::{PingFailure, PingSuccess};
             match event {
                 PingEvent {
                     peer,
