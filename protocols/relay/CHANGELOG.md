@@ -2,7 +2,7 @@
 
 - Update dependencies.
 
-- Implement `Debug` for `RelayHandlerEvent` and `RealyHandlerIn`. See [PR 2183].
+- Implement `Debug` for `RelayHandlerEvent` and `RelayHandlerIn`. See [PR 2183].
 
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 
