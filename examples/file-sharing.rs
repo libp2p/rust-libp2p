@@ -92,14 +92,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let opt = Opt::from_args();
 
-    // Creates the network components, namely:
-    //
-    // - The network client to interact with the network layer from anywhere
-    //   within your application.
-    //
-    // - The network event stream, e.g. for incoming requests.
-    //
-    // - The network task driving the network itself.
     let (mut network_client, mut network_events, network_task) =
         network::new(opt.secret_key_seed).await?;
 
