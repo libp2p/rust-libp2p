@@ -36,8 +36,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
-    fmt,
-    io,
+    fmt, io,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -150,28 +149,43 @@ where
 impl<TCodec: RequestResponseCodec> fmt::Debug for RequestResponseHandlerEvent<TCodec> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RequestResponseHandlerEvent::Request { request_id, request: _, sender: _ } => f.debug_struct("RequestResponseHandlerEvent::Request")
+            RequestResponseHandlerEvent::Request {
+                request_id,
+                request: _,
+                sender: _,
+            } => f
+                .debug_struct("RequestResponseHandlerEvent::Request")
                 .field("request_id", request_id)
                 .finish(),
-            RequestResponseHandlerEvent::Response { request_id, response: _ } => f.debug_struct("RequestResponseHandlerEvent::Response")
+            RequestResponseHandlerEvent::Response {
+                request_id,
+                response: _,
+            } => f
+                .debug_struct("RequestResponseHandlerEvent::Response")
                 .field("request_id", request_id)
                 .finish(),
-            RequestResponseHandlerEvent::ResponseSent(request_id) => f.debug_tuple("RequestResponseHandlerEvent::ResponseSent")
+            RequestResponseHandlerEvent::ResponseSent(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::ResponseSent")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::ResponseOmission(request_id) => f.debug_tuple("RequestResponseHandlerEvent::ResponseOmission")
+            RequestResponseHandlerEvent::ResponseOmission(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::ResponseOmission")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::OutboundTimeout(request_id) => f.debug_tuple("RequestResponseHandlerEvent::OutboundTimeout")
+            RequestResponseHandlerEvent::OutboundTimeout(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::OutboundTimeout")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => f.debug_tuple("RequestResponseHandlerEvent::OutboundUnsupportedProtocols")
+            RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::OutboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::InboundTimeout(request_id) => f.debug_tuple("RequestResponseHandlerEvent::InboundTimeout")
+            RequestResponseHandlerEvent::InboundTimeout(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::InboundTimeout")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => f.debug_tuple("RequestResponseHandlerEvent::InboundUnsupportedProtocols")
+            RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::InboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
         }
