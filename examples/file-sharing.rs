@@ -101,10 +101,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //
     // - The network task driving the network itself.
     let (mut network_client, mut network_events, network_task) =
-        network::new(opt.listen_address, opt.secret_key_seed).await?;
+        network::new(opt.secret_key_seed).await?;
 
     // Spawn the network task for it to run in the background.
     spawn(network_task);
+
+    // In case a listen address was provided use it, otherwise listen on any
+    // address.
+    match opt.listen_address {
+        Some(addr) => network_client.start_listening(addr).await.unwrap(),
+        None => {
+            network_client
+                .start_listening("/ip4/0.0.0.0/tcp/0".parse()?)
+                .await.unwrap()
+        }
+    };
 
     // In case the user provided an address of a peer on the CLI, dial it.
     if let Some(addr) = opt.peer {
@@ -225,7 +236,6 @@ mod network {
     ///
     /// - The network task driving the network itself.
     pub async fn new(
-        listen_address: Option<Multiaddr>,
         secret_key_seed: Option<u8>,
     ) -> Result<(Client, impl Stream<Item = Event>, impl Future<Output = ()>), Box<dyn Error>> {
         // Create a public/private key pair, either random or based on a seed.
@@ -244,7 +254,7 @@ mod network {
 
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
-        let mut swarm = SwarmBuilder::new(
+        let swarm = SwarmBuilder::new(
             libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
@@ -257,13 +267,6 @@ mod network {
             peer_id,
         )
         .build();
-
-        // In case a listen address was provided use it, otherwise listen on any
-        // address.
-        match listen_address {
-            Some(addr) => swarm.listen_on(addr)?,
-            None => swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?,
-        };
 
         let (command_sender, command_receiver) = mpsc::channel(0);
         let (event_sender, event_receiver) = mpsc::channel(0);
@@ -283,6 +286,19 @@ mod network {
     }
 
     impl Client {
+        /// Listen for incoming connections on the given address.
+        pub async fn start_listening(
+            &mut self,
+            addr: Multiaddr,
+        ) -> Result<(), Box<dyn Error + Send>> {
+            let (sender, receiver) = oneshot::channel();
+            self.sender
+                .send(Command::StartListening { addr, sender })
+                .await
+                .unwrap();
+            receiver.await.expect("Sender not to be dropped.")
+        }
+
         /// Dial the given peer at the given address.
         pub async fn dial(
             &mut self,
@@ -458,6 +474,12 @@ mod network {
                     e => panic!("{:?}", e),
                 },
                 command = command_receiver.next() => match command {
+                    Some(Command::StartListening { addr, sender }) => {
+                        match swarm.listen_on(addr) {
+                            Ok(_) => sender.send(Ok(())).unwrap(),
+                            Err(e) => sender.send(Err(Box::new(e))).unwrap(),
+                        }
+                    }
                     Some(Command::Dial {
                         peer_id,
                         peer_addr,
@@ -545,6 +567,10 @@ mod network {
 
     #[derive(Debug)]
     enum Command {
+        StartListening {
+            addr: Multiaddr,
+            sender: oneshot::Sender<Result<(), Box<dyn Error + Send>>>,
+        },
         Dial {
             peer_id: PeerId,
             peer_addr: Multiaddr,
