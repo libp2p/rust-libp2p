@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //
     // - The network task driving the network itself.
     let (mut network_client, mut network_events, network_task) =
-        network::new(opt.listen_address, opt.secret_key_seed)?;
+        network::new(opt.listen_address, opt.secret_key_seed).await?;
 
     // Spawn the network task for it to run in the background.
     spawn(network_task);
@@ -222,7 +222,7 @@ mod network {
     /// - The network event stream, e.g. for incoming requests.
     ///
     /// - The network task driving the network itself.
-    pub fn new(
+    pub async fn new(
         listen_address: Option<Multiaddr>,
         secret_key_seed: Option<u8>,
     ) -> Result<(Client, BoxStream<'static, Event>, BoxFuture<'static, ()>), Box<dyn Error>> {
@@ -243,7 +243,7 @@ mod network {
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
         let mut swarm = SwarmBuilder::new(
-            futures::executor::block_on(libp2p::development_transport(id_keys))?,
+            libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
                 request_response: RequestResponse::new(
