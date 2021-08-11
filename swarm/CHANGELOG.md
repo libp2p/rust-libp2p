@@ -10,8 +10,12 @@
   trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
   through associated types on `TBehaviour`. See [PR 2182].
 
+- Require `ProtocolsHandler::{InEvent,OutEvent,Error}` to implement `Debug` (see
+  [PR 2183]).
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150/
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 
 # 0.30.0 [2021-07-12]
 

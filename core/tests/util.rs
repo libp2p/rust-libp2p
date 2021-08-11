@@ -23,7 +23,7 @@ use libp2p_noise as noise;
 use libp2p_tcp as tcp;
 use std::{io, pin::Pin, task::Context, task::Poll};
 
-type TestNetwork = Network<TestTransport, (), (), TestHandler>;
+type TestNetwork = Network<TestTransport, TestHandler>;
 type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
 
 /// Creates a new `TestNetwork` with a TCP transport.

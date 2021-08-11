@@ -38,7 +38,7 @@ use rand::random;
 use std::{io, task::{Context, Poll}};
 
 type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
-type TestNetwork = Network<TestTransport, (), (), TestHandler>;
+type TestNetwork = Network<TestTransport, TestHandler>;
 
 fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
     let keys = identity::Keypair::generate_ed25519();

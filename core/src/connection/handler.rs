@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::Multiaddr;
-use std::{task::Context, task::Poll};
+use std::{fmt::Debug, task::Context, task::Poll};
 use super::{Connected, SubstreamEndpoint};
 
 /// The interface of a connection handler.
@@ -30,14 +30,14 @@ pub trait ConnectionHandler {
     ///
     /// See also [`EstablishedConnection::notify_handler`](super::EstablishedConnection::notify_handler)
     /// and [`ConnectionHandler::inject_event`].
-    type InEvent;
+    type InEvent: Debug + Send + 'static;
     /// The outbound type of events that the handler emits to the `Network`
     /// through [`ConnectionHandler::poll`].
     ///
     /// See also [`NetworkEvent::ConnectionEvent`](crate::network::NetworkEvent::ConnectionEvent).
-    type OutEvent;
+    type OutEvent: Debug + Send + 'static;
     /// The type of errors that the handler can produce when polled by the `Network`.
-    type Error;
+    type Error: Debug + Send + 'static;
     /// The type of the substream containing the data.
     type Substream;
     /// Information about a substream. Can be sent to the handler through a `SubstreamEndpoint`,
@@ -91,6 +91,10 @@ where
     }
 }
 
+pub(crate) type THandlerInEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
+pub(crate) type THandlerOutEvent<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
+pub(crate) type THandlerError<THandler> = <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
+
 /// Event produced by a handler.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
@@ -127,4 +131,3 @@ impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCust
         }
     }
 }
-
