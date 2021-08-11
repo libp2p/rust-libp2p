@@ -31,7 +31,7 @@
 //! # If they don't automatically connect
 //!
 //! If the nodes don't automatically connect, take note of the listening addresses of the first
-//! instance and start the second with one of the addresses as the first argument. In the first 
+//! instance and start the second with one of the addresses as the first argument. In the first
 //! terminal window, run:
 //!
 //! ```sh
