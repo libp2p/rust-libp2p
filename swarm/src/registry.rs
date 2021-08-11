@@ -20,8 +20,8 @@
 
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
+use std::{collections::VecDeque, cmp::Ordering, num::NonZeroUsize};
 use std::ops::{Add, Sub};
-use std::{cmp::Ordering, collections::VecDeque, num::NonZeroUsize};
 
 /// A ranked collection of [`Multiaddr`] values.
 ///
@@ -77,7 +77,9 @@ struct Report {
 
 impl AddressRecord {
     fn new(addr: Multiaddr, score: AddressScore) -> Self {
-        AddressRecord { addr, score }
+        AddressRecord {
+            addr, score,
+        }
     }
 }
 
@@ -115,10 +117,14 @@ impl Ord for AddressScore {
     fn cmp(&self, other: &AddressScore) -> Ordering {
         // Semantics of cardinal numbers with a single infinite cardinal.
         match (self, other) {
-            (AddressScore::Infinite, AddressScore::Infinite) => Ordering::Equal,
-            (AddressScore::Infinite, AddressScore::Finite(_)) => Ordering::Greater,
-            (AddressScore::Finite(_), AddressScore::Infinite) => Ordering::Less,
-            (AddressScore::Finite(a), AddressScore::Finite(b)) => a.cmp(b),
+            (AddressScore::Infinite, AddressScore::Infinite) =>
+                Ordering::Equal,
+            (AddressScore::Infinite, AddressScore::Finite(_)) =>
+                Ordering::Greater,
+            (AddressScore::Finite(_), AddressScore::Infinite) =>
+                Ordering::Less,
+            (AddressScore::Finite(a), AddressScore::Finite(b)) =>
+                a.cmp(b),
         }
     }
 }
@@ -129,12 +135,14 @@ impl Add for AddressScore {
     fn add(self, rhs: AddressScore) -> Self::Output {
         // Semantics of cardinal numbers with a single infinite cardinal.
         match (self, rhs) {
-            (AddressScore::Infinite, AddressScore::Infinite) => AddressScore::Infinite,
-            (AddressScore::Infinite, AddressScore::Finite(_)) => AddressScore::Infinite,
-            (AddressScore::Finite(_), AddressScore::Infinite) => AddressScore::Infinite,
-            (AddressScore::Finite(a), AddressScore::Finite(b)) => {
+            (AddressScore::Infinite, AddressScore::Infinite) =>
+                AddressScore::Infinite,
+            (AddressScore::Infinite, AddressScore::Finite(_)) =>
+                AddressScore::Infinite,
+            (AddressScore::Finite(_), AddressScore::Infinite) =>
+                AddressScore::Infinite,
+            (AddressScore::Finite(a), AddressScore::Finite(b)) =>
                 AddressScore::Finite(a.saturating_add(b))
-            }
         }
     }
 }
@@ -146,7 +154,7 @@ impl Sub<u32> for AddressScore {
         // Semantics of cardinal numbers with a single infinite cardinal.
         match self {
             AddressScore::Infinite => AddressScore::Infinite,
-            AddressScore::Finite(score) => AddressScore::Finite(score.saturating_sub(rhs)),
+            AddressScore::Finite(score) => AddressScore::Finite(score.saturating_sub(rhs))
         }
     }
 }
@@ -160,12 +168,8 @@ impl Default for Addresses {
 /// The result of adding an address to an ordered list of
 /// addresses with associated scores.
 pub enum AddAddressResult {
-    Inserted {
-        expired: SmallVec<[AddressRecord; 8]>,
-    },
-    Updated {
-        expired: SmallVec<[AddressRecord; 8]>,
-    },
+    Inserted { expired: SmallVec<[AddressRecord; 8]> },
+    Updated { expired: SmallVec<[AddressRecord; 8]> },
 }
 
 impl Addresses {
@@ -203,12 +207,7 @@ impl Addresses {
 
         // Remove addresses that have a score of 0.
         let mut expired = SmallVec::new();
-        while self
-            .registry
-            .last()
-            .map(|e| e.score.is_zero())
-            .unwrap_or(false)
-        {
+        while self.registry.last().map(|e| e.score.is_zero()).unwrap_or(false) {
             if let Some(addr) = self.registry.pop() {
                 expired.push(addr);
             }
@@ -216,10 +215,7 @@ impl Addresses {
 
         // If the address score is finite, remember this report.
         if let AddressScore::Finite(score) = score {
-            self.reports.push_back(Report {
-                addr: addr.clone(),
-                score,
-            });
+            self.reports.push_back(Report { addr: addr.clone(), score });
         }
 
         // If the address is already in the collection, increase its score.
@@ -227,7 +223,7 @@ impl Addresses {
             if r.addr == addr {
                 r.score = r.score + score;
                 isort(&mut self.registry);
-                return AddAddressResult::Updated { expired };
+                return AddAddressResult::Updated { expired }
             }
         }
 
@@ -253,19 +249,14 @@ impl Addresses {
     ///
     /// The iteration is ordered by descending score.
     pub fn iter(&self) -> AddressIter<'_> {
-        AddressIter {
-            items: &self.registry,
-            offset: 0,
-        }
+        AddressIter { items: &self.registry, offset: 0 }
     }
 
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
     pub fn into_iter(self) -> AddressIntoIter {
-        AddressIntoIter {
-            items: self.registry,
-        }
+        AddressIntoIter { items: self.registry }
     }
 }
 
@@ -273,7 +264,7 @@ impl Addresses {
 #[derive(Clone)]
 pub struct AddressIter<'a> {
     items: &'a [AddressRecord],
-    offset: usize,
+    offset: usize
 }
 
 impl<'a> Iterator for AddressIter<'a> {
@@ -281,7 +272,7 @@ impl<'a> Iterator for AddressIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset == self.items.len() {
-            return None;
+            return None
         }
         let item = &self.items[self.offset];
         self.offset += 1;
@@ -323,10 +314,10 @@ impl ExactSizeIterator for AddressIntoIter {}
 
 // Reverse insertion sort.
 fn isort(xs: &mut [AddressRecord]) {
-    for i in 1..xs.len() {
-        for j in (1..=i).rev() {
+    for i in 1 .. xs.len() {
+        for j in (1 ..= i).rev() {
             if xs[j].score <= xs[j - 1].score {
-                break;
+                break
             }
             xs.swap(j, j - 1)
         }
@@ -335,16 +326,15 @@ fn isort(xs: &mut [AddressRecord]) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_core::multiaddr::{Multiaddr, Protocol};
     use quickcheck::*;
     use rand::Rng;
-    use std::num::{NonZeroU8, NonZeroUsize};
+    use std::num::{NonZeroUsize, NonZeroU8};
+    use super::*;
 
     impl Arbitrary for AddressScore {
         fn arbitrary<G: Gen>(g: &mut G) -> AddressScore {
-            if g.gen_range(0, 10) == 0 {
-                // ~10% "Infinitely" scored addresses
+            if g.gen_range(0, 10) == 0 { // ~10% "Infinitely" scored addresses
                 AddressScore::Infinite
             } else {
                 AddressScore::Finite(g.gen())
@@ -363,14 +353,13 @@ mod tests {
     #[test]
     fn isort_sorts() {
         fn property(xs: Vec<AddressScore>) {
-            let mut xs = xs
-                .into_iter()
+            let mut xs = xs.into_iter()
                 .map(|score| AddressRecord::new(Multiaddr::empty(), score))
                 .collect::<Vec<_>>();
 
             isort(&mut xs);
 
-            for i in 1..xs.len() {
+            for i in 1 .. xs.len() {
                 assert!(xs[i - 1].score >= xs[i].score)
             }
         }
@@ -382,7 +371,7 @@ mod tests {
     fn score_retention() {
         fn prop(first: AddressRecord, other: AddressRecord) -> TestResult {
             if first.addr == other.addr {
-                return TestResult::discard();
+                return TestResult::discard()
             }
 
             let mut addresses = Addresses::default();
@@ -394,7 +383,7 @@ mod tests {
             // Add another address so often that the initial report of
             // the first address may be purged and, since it was the
             // only report, the address removed.
-            for _ in 0..addresses.limit.get() + 1 {
+            for _ in 0 .. addresses.limit.get() + 1 {
                 addresses.add(other.addr.clone(), other.score);
             }
 
@@ -409,7 +398,7 @@ mod tests {
             TestResult::passed()
         }
 
-        quickcheck(prop as fn(_, _) -> _);
+        quickcheck(prop as fn(_,_) -> _);
     }
 
     #[test]
@@ -423,22 +412,16 @@ mod tests {
             }
 
             // Count the finitely scored addresses.
-            let num_finite = addresses
-                .iter()
-                .filter(|r| match r {
-                    AddressRecord {
-                        score: AddressScore::Finite(_),
-                        ..
-                    } => true,
-                    _ => false,
-                })
-                .count();
+            let num_finite = addresses.iter().filter(|r| match r {
+                AddressRecord { score: AddressScore::Finite(_), .. } => true,
+                _ => false,
+            }).count();
 
             // Check against the limit.
             assert!(num_finite <= limit.get() as usize);
         }
 
-        quickcheck(prop as fn(_, _));
+        quickcheck(prop as fn(_,_));
     }
 
     #[test]
@@ -455,16 +438,16 @@ mod tests {
 
             // Check that each address in the registry has the expected score.
             for r in &addresses.registry {
-                let expected_score = records.iter().fold(None::<AddressScore>, |sum, rec| {
-                    if &rec.addr == &r.addr {
-                        sum.map_or(Some(rec.score), |s| Some(s + rec.score))
-                    } else {
-                        sum
-                    }
-                });
+                let expected_score = records.iter().fold(
+                    None::<AddressScore>, |sum, rec|
+                        if &rec.addr == &r.addr {
+                            sum.map_or(Some(rec.score), |s| Some(s + rec.score))
+                        } else {
+                            sum
+                        });
 
                 if Some(r.score) != expected_score {
-                    return false;
+                    return false
                 }
             }
 

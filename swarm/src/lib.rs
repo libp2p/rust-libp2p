@@ -63,41 +63,61 @@ pub mod protocols_handler;
 pub mod toggle;
 
 pub use behaviour::{
-    CloseConnection, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction,
-    NetworkBehaviourEventProcess, NotifyHandler, PollParameters,
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    NetworkBehaviourEventProcess,
+    PollParameters,
+    NotifyHandler,
+    DialPeerCondition,
+    CloseConnection
 };
 pub use protocols_handler::{
-    IntoProtocolsHandler, IntoProtocolsHandlerSelect, KeepAlive, OneShotHandler,
-    OneShotHandlerConfig, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerSelect,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    IntoProtocolsHandler,
+    IntoProtocolsHandlerSelect,
+    KeepAlive,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerSelect,
+    ProtocolsHandlerUpgrErr,
+    OneShotHandler,
+    OneShotHandlerConfig,
+    SubstreamProtocol
 };
-pub use registry::{AddAddressResult, AddressRecord, AddressScore};
+pub use registry::{AddressScore, AddressRecord, AddAddressResult};
 
-use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::{
-    connection::{
-        ConnectedPoint, ConnectionError, ConnectionId, ConnectionLimit, EstablishedConnection,
-        IntoConnectionHandler, ListenerId, PendingConnectionError, Substream,
-    },
-    muxing::StreamMuxerBox,
-    network::{
-        self, peer::ConnectedPeer, ConnectionLimits, Network, NetworkConfig, NetworkEvent,
-        NetworkInfo,
-    },
-    transport::{self, TransportError},
-    upgrade::ProtocolName,
-    Executor, Multiaddr, Negotiated, PeerId, Transport,
+use protocols_handler::{
+    NodeHandlerWrapperBuilder,
+    NodeHandlerWrapperError,
 };
-use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
-use registry::{AddressIntoIter, Addresses};
+use futures::{
+    prelude::*,
+    executor::ThreadPoolBuilder,
+    stream::FusedStream,
+};
+use libp2p_core::{Executor, Multiaddr, Negotiated, PeerId, Transport, connection::{
+        ConnectionError,
+        ConnectionId,
+        ConnectionLimit,
+        ConnectedPoint,
+        EstablishedConnection,
+        IntoConnectionHandler,
+        ListenerId,
+        PendingConnectionError,
+        Substream
+    }, muxing::StreamMuxerBox, network::{
+        self,
+        ConnectionLimits,
+        Network,
+        NetworkInfo,
+        NetworkEvent,
+        NetworkConfig,
+        peer::ConnectedPeer,
+    }, transport::{self, TransportError}, upgrade::{ProtocolName}};
+use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
+use std::{error, fmt, io, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
 use std::num::{NonZeroU32, NonZeroUsize};
-use std::{
-    error, fmt, io,
-    pin::Pin,
-    task::{Context, Poll},
-};
 use upgrade::UpgradeInfoSend as _;
 
 /// Contains the state of the network, plus the way it should behave.
@@ -198,18 +218,18 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
         error: PendingConnectionError<io::Error>,
     },
     /// One of our listeners has reported a new local listening address.
-    NewListenAddr {
+    NewListenAddr{
         /// The listener that is listening on the new address.
         listener_id: ListenerId,
         /// The new address that is being listened on.
-        address: Multiaddr,
+        address: Multiaddr
     },
     /// One of our listeners has reported the expiration of a listening address.
-    ExpiredListenAddr {
+    ExpiredListenAddr{
         /// The listener that is no longer listening on the address.
         listener_id: ListenerId,
         /// The expired address.
-        address: Multiaddr,
+        address: Multiaddr
     },
     /// One of the listeners gracefully closed.
     ListenerClosed {
@@ -280,8 +300,8 @@ where
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
-impl<TBehaviour, TInEvent, TOutEvent, THandler> Unpin
-    for ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
+impl<TBehaviour, TInEvent, TOutEvent, THandler> Unpin for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
 where
     THandler: IntoProtocolsHandler,
 {
@@ -289,20 +309,18 @@ where
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr>
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where
-    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    THandler: IntoProtocolsHandler + Send + 'static,
-    THandler::Handler:
-        ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
-    THandleErr: error::Error + Send + 'static,
+where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      THandler: IntoProtocolsHandler + Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
+      THandleErr: error::Error + Send + 'static,
 {
     /// Builds a new `Swarm`.
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
-        local_peer_id: PeerId,
+        local_peer_id: PeerId
     ) -> Self {
         SwarmBuilder::new(transport, behaviour, local_peer_id).build()
     }
@@ -332,9 +350,7 @@ where
 
     /// Initiates a new dialing attempt to the given address.
     pub fn dial_addr(&mut self, addr: Multiaddr) -> Result<(), DialError> {
-        let handler = self
-            .behaviour
-            .new_handler()
+        let handler = self.behaviour.new_handler()
             .into_node_handler_builder()
             .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
         Ok(self.network.dial(&addr, handler).map(|_id| ())?)
@@ -344,37 +360,31 @@ where
     pub fn dial(&mut self, peer_id: &PeerId) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
             self.behaviour.inject_dial_failure(peer_id);
-            return Err(DialError::Banned);
+            return Err(DialError::Banned)
         }
 
         let self_listening = &self.listened_addrs;
-        let mut addrs = self
-            .behaviour
-            .addresses_of_peer(peer_id)
+        let mut addrs = self.behaviour.addresses_of_peer(peer_id)
             .into_iter()
             .filter(|a| !self_listening.contains(a));
 
-        let result = if let Some(first) = addrs.next() {
-            let handler = self
-                .behaviour
-                .new_handler()
-                .into_node_handler_builder()
-                .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-            self.network
-                .peer(*peer_id)
-                .dial(first, addrs, handler)
-                .map(|_| ())
-                .map_err(DialError::from)
-        } else {
-            Err(DialError::NoAddresses)
-        };
+        let result =
+            if let Some(first) = addrs.next() {
+                let handler = self.behaviour.new_handler()
+                    .into_node_handler_builder()
+                    .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
+                self.network.peer(*peer_id)
+                    .dial(first, addrs, handler)
+                    .map(|_| ())
+                    .map_err(DialError::from)
+            } else {
+                Err(DialError::NoAddresses)
+            };
 
         if let Err(error) = &result {
             log::debug!(
                 "New dialing attempt to peer {:?} failed: {:?}.",
-                peer_id,
-                error
-            );
+                peer_id, error);
             self.behaviour.inject_dial_failure(&peer_id);
         }
 
@@ -496,10 +506,9 @@ where
     /// Internal function used by everything event-related.
     ///
     /// Polls the `Swarm` for the next event.
-    fn poll_next_event(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<SwarmEvent<TBehaviour::OutEvent, THandleErr>> {
+    fn poll_next_event(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<SwarmEvent<TBehaviour::OutEvent, THandleErr>>
+    {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
         // across a `Deref`.
         let this = &mut *self;
@@ -514,62 +523,38 @@ where
                     let peer = connection.peer_id();
                     let connection = connection.id();
                     this.behaviour.inject_event(peer, connection, event);
-                }
-                Poll::Ready(NetworkEvent::AddressChange {
-                    connection,
-                    new_endpoint,
-                    old_endpoint,
-                }) => {
+                },
+                Poll::Ready(NetworkEvent::AddressChange { connection, new_endpoint, old_endpoint }) => {
                     let peer = connection.peer_id();
                     let connection = connection.id();
-                    this.behaviour.inject_address_change(
-                        &peer,
-                        &connection,
-                        &old_endpoint,
-                        &new_endpoint,
-                    );
-                }
-                Poll::Ready(NetworkEvent::ConnectionEstablished {
-                    connection,
-                    num_established,
-                }) => {
+                    this.behaviour.inject_address_change(&peer, &connection, &old_endpoint, &new_endpoint);
+                },
+                Poll::Ready(NetworkEvent::ConnectionEstablished { connection, num_established }) => {
                     let peer_id = connection.peer_id();
                     let endpoint = connection.endpoint().clone();
                     if this.banned_peers.contains(&peer_id) {
-                        this.network
-                            .peer(peer_id)
+                        this.network.peer(peer_id)
                             .into_connected()
                             .expect("the Network just notified us that we were connected; QED")
                             .disconnect();
-                        return Poll::Ready(SwarmEvent::BannedPeer { peer_id, endpoint });
+                        return Poll::Ready(SwarmEvent::BannedPeer {
+                            peer_id,
+                            endpoint,
+                        });
                     } else {
-                        log::debug!(
-                            "Connection established: {:?}; Total (peer): {}.",
-                            connection.connected(),
-                            num_established
-                        );
+                        log::debug!("Connection established: {:?}; Total (peer): {}.",
+                            connection.connected(), num_established);
                         let endpoint = connection.endpoint().clone();
-                        this.behaviour.inject_connection_established(
-                            &peer_id,
-                            &connection.id(),
-                            &endpoint,
-                        );
+                        this.behaviour.inject_connection_established(&peer_id, &connection.id(), &endpoint);
                         if num_established.get() == 1 {
                             this.behaviour.inject_connected(&peer_id);
                         }
                         return Poll::Ready(SwarmEvent::ConnectionEstablished {
-                            peer_id,
-                            num_established,
-                            endpoint,
+                            peer_id, num_established, endpoint
                         });
                     }
-                }
-                Poll::Ready(NetworkEvent::ConnectionClosed {
-                    id,
-                    connected,
-                    error,
-                    num_established,
-                }) => {
+                },
+                Poll::Ready(NetworkEvent::ConnectionClosed { id, connected, error, num_established }) => {
                     if let Some(error) = error.as_ref() {
                         log::debug!("Connection {:?} closed: {:?}", connected, error);
                     } else {
@@ -577,8 +562,7 @@ where
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
-                    this.behaviour
-                        .inject_connection_closed(&peer_id, &id, &endpoint);
+                    this.behaviour.inject_connection_closed(&peer_id, &id, &endpoint);
                     if num_established == 0 {
                         this.behaviour.inject_disconnected(&peer_id);
                     }
@@ -588,15 +572,11 @@ where
                         cause: error,
                         num_established,
                     });
-                }
+                },
                 Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
-                    let handler = this
-                        .behaviour
-                        .new_handler()
+                    let handler = this.behaviour.new_handler()
                         .into_node_handler_builder()
-                        .with_substream_upgrade_protocol_override(
-                            this.substream_upgrade_protocol_override,
-                        );
+                        .with_substream_upgrade_protocol_override(this.substream_upgrade_protocol_override);
                     let local_addr = connection.local_addr.clone();
                     let send_back_addr = connection.send_back_addr.clone();
                     if let Err(e) = this.network.accept(connection, handler) {
@@ -606,55 +586,36 @@ where
                         local_addr,
                         send_back_addr,
                     });
-                }
-                Poll::Ready(NetworkEvent::NewListenerAddress {
-                    listener_id,
-                    listen_addr,
-                }) => {
+                },
+                Poll::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr }) => {
                     log::debug!("Listener {:?}; New address: {:?}", listener_id, listen_addr);
                     if !this.listened_addrs.contains(&listen_addr) {
                         this.listened_addrs.push(listen_addr.clone())
                     }
-                    this.behaviour
-                        .inject_new_listen_addr(listener_id, &listen_addr);
+                    this.behaviour.inject_new_listen_addr(listener_id, &listen_addr);
                     return Poll::Ready(SwarmEvent::NewListenAddr {
                         listener_id,
-                        address: listen_addr,
+                        address: listen_addr
                     });
                 }
-                Poll::Ready(NetworkEvent::ExpiredListenerAddress {
-                    listener_id,
-                    listen_addr,
-                }) => {
-                    log::debug!(
-                        "Listener {:?}; Expired address {:?}.",
-                        listener_id,
-                        listen_addr
-                    );
+                Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr }) => {
+                    log::debug!("Listener {:?}; Expired address {:?}.", listener_id, listen_addr);
                     this.listened_addrs.retain(|a| a != &listen_addr);
-                    this.behaviour
-                        .inject_expired_listen_addr(listener_id, &listen_addr);
-                    return Poll::Ready(SwarmEvent::ExpiredListenAddr {
+                    this.behaviour.inject_expired_listen_addr(listener_id, &listen_addr);
+                    return Poll::Ready(SwarmEvent::ExpiredListenAddr{
                         listener_id,
-                        address: listen_addr,
+                        address: listen_addr
                     });
                 }
-                Poll::Ready(NetworkEvent::ListenerClosed {
-                    listener_id,
-                    addresses,
-                    reason,
-                }) => {
+                Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason }) => {
                     log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
                     for addr in addresses.iter() {
                         this.behaviour.inject_expired_listen_addr(listener_id, addr);
                     }
-                    this.behaviour.inject_listener_closed(
-                        listener_id,
-                        match &reason {
-                            Ok(()) => Ok(()),
-                            Err(err) => Err(err),
-                        },
-                    );
+                    this.behaviour.inject_listener_closed(listener_id, match &reason {
+                        Ok(()) => Ok(()),
+                        Err(err) => Err(err),
+                    });
                     return Poll::Ready(SwarmEvent::ListenerClosed {
                         listener_id,
                         addresses,
@@ -663,31 +624,24 @@ where
                 }
                 Poll::Ready(NetworkEvent::ListenerError { listener_id, error }) => {
                     this.behaviour.inject_listener_error(listener_id, &error);
-                    return Poll::Ready(SwarmEvent::ListenerError { listener_id, error });
-                }
-                Poll::Ready(NetworkEvent::IncomingConnectionError {
-                    local_addr,
-                    send_back_addr,
-                    error,
-                }) => {
+                    return Poll::Ready(SwarmEvent::ListenerError {
+                        listener_id,
+                        error,
+                    });
+                },
+                Poll::Ready(NetworkEvent::IncomingConnectionError { local_addr, send_back_addr, error }) => {
                     log::debug!("Incoming connection failed: {:?}", error);
                     return Poll::Ready(SwarmEvent::IncomingConnectionError {
                         local_addr,
                         send_back_addr,
                         error,
                     });
-                }
-                Poll::Ready(NetworkEvent::DialError {
-                    peer_id,
-                    multiaddr,
-                    error,
-                    attempts_remaining,
-                }) => {
+                },
+                Poll::Ready(NetworkEvent::DialError { peer_id, multiaddr, error, attempts_remaining }) => {
                     log::debug!(
                         "Connection attempt to {:?} via {:?} failed with {:?}. Attempts remaining: {}.",
                         peer_id, multiaddr, error, attempts_remaining);
-                    this.behaviour
-                        .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
+                    this.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
                     if attempts_remaining == 0 {
                         this.behaviour.inject_dial_failure(&peer_id);
                     }
@@ -697,22 +651,16 @@ where
                         error,
                         attempts_remaining,
                     });
-                }
-                Poll::Ready(NetworkEvent::UnknownPeerDialError {
-                    multiaddr, error, ..
-                }) => {
-                    log::debug!(
-                        "Connection attempt to address {:?} of unknown peer failed with {:?}",
-                        multiaddr,
-                        error
-                    );
-                    this.behaviour
-                        .inject_addr_reach_failure(None, &multiaddr, &error);
+                },
+                Poll::Ready(NetworkEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
+                    log::debug!("Connection attempt to address {:?} of unknown peer failed with {:?}",
+                        multiaddr, error);
+                    this.behaviour.inject_addr_reach_failure(None, &multiaddr, &error);
                     return Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr {
                         address: multiaddr,
                         error,
                     });
-                }
+                },
             }
 
             // After the network had a chance to make progress, try to deliver
@@ -723,19 +671,18 @@ where
             if let Some((peer_id, handler, event)) = this.pending_event.take() {
                 if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
                     match handler {
-                        PendingNotifyHandler::One(conn_id) => {
+                        PendingNotifyHandler::One(conn_id) =>
                             if let Some(mut conn) = peer.connection(conn_id) {
                                 if let Some(event) = notify_one(&mut conn, event, cx) {
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending;
+                                    return Poll::Pending
                                 }
-                            }
-                        }
+                            },
                         PendingNotifyHandler::Any(ids) => {
                             if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::Any(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                return Poll::Pending;
+                                return Poll::Pending
                             }
                         }
                     }
@@ -749,7 +696,7 @@ where
                     local_peer_id: &mut this.network.local_peer_id(),
                     supported_protocols: &this.supported_protocols,
                     listened_addrs: &this.listened_addrs,
-                    external_addrs: &this.external_addrs,
+                    external_addrs: &this.external_addrs
                 };
                 this.behaviour.poll(cx, &mut parameters)
             };
@@ -759,34 +706,29 @@ where
                 Poll::Pending => (),
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     return Poll::Ready(SwarmEvent::Behaviour(event))
-                }
+                },
                 Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
                     let _ = ExpandedSwarm::dial_addr(&mut *this, address);
-                }
+                },
                 Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition }) => {
                     if this.banned_peers.contains(&peer_id) {
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
                         let condition_matched = match condition {
-                            DialPeerCondition::Disconnected => {
-                                this.network.is_disconnected(&peer_id)
-                            }
+                            DialPeerCondition::Disconnected => this.network.is_disconnected(&peer_id),
                             DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
                             DialPeerCondition::Always => true,
                         };
                         if condition_matched {
                             if ExpandedSwarm::dial(this, &peer_id).is_ok() {
-                                return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                                return Poll::Ready(SwarmEvent::Dialing(peer_id))
                             }
                         } else {
                             // Even if the condition for a _new_ dialing attempt is not met,
                             // we always add any potentially new addresses of the peer to an
                             // ongoing dialing attempt, if there is one.
-                            log::trace!(
-                                "Condition for new dialing attempt to {:?} not met: {:?}",
-                                peer_id,
-                                condition
-                            );
+                            log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
+                                peer_id, condition);
                             let self_listening = &this.listened_addrs;
                             if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
                                 let addrs = this.behaviour.addresses_of_peer(peer.id());
@@ -799,12 +741,8 @@ where
                             }
                         }
                     }
-                }
-                Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    handler,
-                    event,
-                }) => {
+                },
+                Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event }) => {
                     if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
                         match handler {
                             NotifyHandler::One(connection) => {
@@ -812,7 +750,7 @@ where
                                     if let Some(event) = notify_one(&mut conn, event, cx) {
                                         let handler = PendingNotifyHandler::One(connection);
                                         this.pending_event = Some((peer_id, handler, event));
-                                        return Poll::Pending;
+                                        return Poll::Pending
                                     }
                                 }
                             }
@@ -821,21 +759,18 @@ where
                                 if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                     let handler = PendingNotifyHandler::Any(ids);
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending;
+                                    return Poll::Pending
                                 }
                             }
                         }
                     }
-                }
+                },
                 Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address, score }) => {
                     for addr in this.network.address_translation(&address) {
                         this.add_external_address(addr, score);
                     }
-                }
-                Poll::Ready(NetworkBehaviourAction::CloseConnection {
-                    peer_id,
-                    connection,
-                }) => {
+                },
+                Poll::Ready(NetworkBehaviourAction::CloseConnection { peer_id, connection }) => {
                     if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
                         match connection {
                             CloseConnection::One(connection_id) => {
@@ -848,7 +783,7 @@ where
                             }
                         }
                     }
-                }
+                },
             }
         }
     }
@@ -877,7 +812,8 @@ fn notify_one<'a, TInEvent>(
     conn: &mut EstablishedConnection<'a, TInEvent>,
     event: TInEvent,
     cx: &mut Context<'_>,
-) -> Option<TInEvent> {
+) -> Option<TInEvent>
+{
     match conn.poll_ready_notify_handler(cx) {
         Poll::Pending => Some(event),
         Poll::Ready(Err(())) => None, // connection is closing
@@ -921,20 +857,19 @@ where
                     if let Err(e) = conn.notify_handler(e) {
                         event = Some(e) // (2)
                     } else {
-                        break;
+                        break
                     }
                 }
             }
         }
     }
 
-    event.and_then(|e| {
+    event.and_then(|e|
         if !pending.is_empty() {
             Some((e, pending))
         } else {
             None
-        }
-    })
+        })
 }
 
 /// Stream of events returned by [`ExpandedSwarm`].
@@ -944,33 +879,33 @@ where
 ///
 /// Note: This stream is infinite and it is guaranteed that
 /// [`Stream::poll_next`] will never return `Poll::Ready(None)`.
-impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream
-    for ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where
-    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-    THandler: IntoProtocolsHandler + Send + 'static,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    THandler::Handler:
+impl<TBehaviour, TInEvent, TOutEvent, THandler, THandleErr> Stream for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
+where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+      THandler: IntoProtocolsHandler + Send + 'static,
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      THandler::Handler:
         ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandleErr>,
-    THandleErr: error::Error + Send + 'static,
+      THandleErr: error::Error + Send + 'static,
 {
     type Item = SwarmEvent<TBehaviour::OutEvent, THandleErr>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.as_mut().poll_next_event(cx).map(Some)
+        self.as_mut()
+            .poll_next_event(cx)
+            .map(Some)
     }
 }
 
 /// The stream of swarm events never terminates, so we can implement fused for it.
-impl<TBehaviour, TInEvent, TOutEvent, THandler> FusedStream
-    for ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
-where
-    TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-    THandler: IntoProtocolsHandler + Send + 'static,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+impl<TBehaviour, TInEvent, TOutEvent, THandler> FusedStream for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler>
+where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+      THandler: IntoProtocolsHandler + Send + 'static,
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     fn is_terminated(&self) -> bool {
         false
@@ -1019,8 +954,7 @@ pub struct SwarmBuilder<TBehaviour> {
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
-where
-    TBehaviour: NetworkBehaviour,
+where TBehaviour: NetworkBehaviour,
 {
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
@@ -1028,7 +962,7 @@ where
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
-        local_peer_id: PeerId,
+        local_peer_id: PeerId
     ) -> Self {
         SwarmBuilder {
             local_peer_id,
@@ -1113,8 +1047,7 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     pub fn build(mut self) -> Swarm<TBehaviour> {
-        let supported_protocols = self
-            .behaviour
+        let supported_protocols = self.behaviour
             .new_handler()
             .inbound_protocol()
             .protocol_info()
@@ -1123,19 +1056,20 @@ where
             .collect();
 
         // If no executor has been explicitly configured, try to set up a thread pool.
-        let network_cfg =
-            self.network_config.or_else_with_executor(|| {
-                match ThreadPoolBuilder::new()
-                    .name_prefix("libp2p-swarm-task-")
-                    .create()
-                {
-                    Ok(tp) => Some(Box::new(move |f| tp.spawn_ok(f))),
-                    Err(err) => {
-                        log::warn!("Failed to create executor thread pool: {:?}", err);
-                        None
-                    }
+        let network_cfg = self.network_config.or_else_with_executor(|| {
+            match ThreadPoolBuilder::new()
+                .name_prefix("libp2p-swarm-task-")
+                .create()
+            {
+                Ok(tp) => {
+                    Some(Box::new(move |f| tp.spawn_ok(f)))
+                },
+                Err(err) => {
+                    log::warn!("Failed to create executor thread pool: {:?}", err);
+                    None
                 }
-            });
+            }
+        });
 
         let network = Network::new(self.transport, self.local_peer_id, network_cfg);
 
@@ -1164,7 +1098,7 @@ pub enum DialError {
     InvalidAddress(Multiaddr),
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
-    NoAddresses,
+    NoAddresses
 }
 
 impl From<network::DialError> for DialError {
@@ -1182,7 +1116,7 @@ impl fmt::Display for DialError {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
-            DialError::Banned => write!(f, "Dial error: peer is banned."),
+            DialError::Banned => write!(f, "Dial error: peer is banned.")
         }
     }
 }
@@ -1193,7 +1127,7 @@ impl error::Error for DialError {
             DialError::ConnectionLimit(err) => Some(err),
             DialError::InvalidAddress(_) => None,
             DialError::NoAddresses => None,
-            DialError::Banned => None,
+            DialError::Banned => None
         }
     }
 }
@@ -1201,12 +1135,14 @@ impl error::Error for DialError {
 /// Dummy implementation of [`NetworkBehaviour`] that doesn't do anything.
 #[derive(Clone)]
 pub struct DummyBehaviour {
-    keep_alive: KeepAlive,
+    keep_alive: KeepAlive
 }
 
 impl DummyBehaviour {
     pub fn with_keep_alive(keep_alive: KeepAlive) -> Self {
-        Self { keep_alive }
+        Self {
+            keep_alive
+        }
     }
 
     pub fn keep_alive_mut(&mut self) -> &mut KeepAlive {
@@ -1217,7 +1153,7 @@ impl DummyBehaviour {
 impl Default for DummyBehaviour {
     fn default() -> Self {
         Self {
-            keep_alive: KeepAlive::No,
+            keep_alive: KeepAlive::No
         }
     }
 }
@@ -1228,7 +1164,7 @@ impl NetworkBehaviour for DummyBehaviour {
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         protocols_handler::DummyProtocolsHandler {
-            keep_alive: self.keep_alive,
+            keep_alive: self.keep_alive
         }
     }
 
@@ -1236,33 +1172,32 @@ impl NetworkBehaviour for DummyBehaviour {
         &mut self,
         _: PeerId,
         _: ConnectionId,
-        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
     ) {
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) ->
+        Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as
+        ProtocolsHandler>::InEvent, Self::OutEvent>>
+    {
         Poll::Pending
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::protocols_handler::DummyProtocolsHandler;
-    use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use futures::{executor, future};
-    use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use crate::test::{MockBehaviour, CallTraceBehaviour};
+    use futures::{future, executor};
+    use libp2p_core::{
+        identity,
+        upgrade,
+        multiaddr,
+        transport
+    };
     use libp2p_noise as noise;
+    use super::*;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -1275,13 +1210,11 @@ mod tests {
     where
         T: ProtocolsHandler + Clone,
         T::OutEvent: Clone,
-        O: Send + 'static,
+        O: Send + 'static
     {
         let id_keys = identity::Keypair::generate_ed25519();
         let pubkey = id_keys.public();
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&id_keys)
-            .unwrap();
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
@@ -1347,9 +1280,7 @@ mod tests {
     fn test_connect_disconnect_ban() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyProtocolsHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
@@ -1380,7 +1311,7 @@ mod tests {
                     State::Connecting => {
                         if swarms_connected(&swarm1, &swarm2, num_connections) {
                             if banned {
-                                return Poll::Ready(());
+                                return Poll::Ready(())
                             }
                             swarm2.ban_peer_id(swarm1_id.clone());
                             swarm1.behaviour.reset();
@@ -1392,7 +1323,7 @@ mod tests {
                     State::Disconnecting => {
                         if swarms_disconnected(&swarm1, &swarm2, num_connections) {
                             if unbanned {
-                                return Poll::Ready(());
+                                return Poll::Ready(())
                             }
                             // Unban the first peer and reconnect.
                             swarm2.unban_peer_id(swarm1_id.clone());
@@ -1408,7 +1339,7 @@ mod tests {
                 }
 
                 if poll1.is_pending() && poll2.is_pending() {
-                    return Poll::Pending;
+                    return Poll::Pending
                 }
             }
         }))
@@ -1424,9 +1355,7 @@ mod tests {
     fn test_swarm_disconnect() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyProtocolsHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
@@ -1447,41 +1376,41 @@ mod tests {
         }
         let mut state = State::Connecting;
 
-        executor::block_on(future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
+        executor::block_on(future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            swarm2.disconnect_peer_id(swarm1_id.clone()).expect("Error disconnecting");
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            state = State::Disconnecting;
                         }
-                        swarm2
-                            .disconnect_peer_id(swarm1_id.clone())
-                            .expect("Error disconnecting");
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
-                        state = State::Disconnecting;
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            reconnected = true;
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            for _ in 0..num_connections {
+                                swarm2.dial_addr(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
-                        }
-                        reconnected = true;
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
-                        for _ in 0..num_connections {
-                            swarm2.dial_addr(addr1.clone()).unwrap();
-                        }
-                        state = State::Connecting;
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending
+                }
             }
         }))
     }
@@ -1497,9 +1426,7 @@ mod tests {
     fn test_behaviour_disconnect_all() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyProtocolsHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
@@ -1520,44 +1447,48 @@ mod tests {
         }
         let mut state = State::Connecting;
 
-        executor::block_on(future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
+        executor::block_on(future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            swarm2
+                                .behaviour
+                                .inner()
+                                .next_action
+                                .replace(NetworkBehaviourAction::CloseConnection {
+                                    peer_id: swarm1_id.clone(),
+                                    connection: CloseConnection::All,
+                                });
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            state = State::Disconnecting;
                         }
-                        swarm2.behaviour.inner().next_action.replace(
-                            NetworkBehaviourAction::CloseConnection {
-                                peer_id: swarm1_id.clone(),
-                                connection: CloseConnection::All,
-                            },
-                        );
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
-                        state = State::Disconnecting;
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(())
+                            }
+                            reconnected = true;
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            for _ in 0..num_connections {
+                                swarm2.dial_addr(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
-                        }
-                        reconnected = true;
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
-                        for _ in 0..num_connections {
-                            swarm2.dial_addr(addr1.clone()).unwrap();
-                        }
-                        state = State::Connecting;
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending
+                }
             }
         }))
     }
@@ -1573,9 +1504,7 @@ mod tests {
     fn test_behaviour_disconnect_one() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyProtocolsHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = DummyProtocolsHandler { keep_alive: KeepAlive::Yes };
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
@@ -1596,48 +1525,49 @@ mod tests {
         let mut state = State::Connecting;
         let mut disconnected_conn_id = None;
 
-        executor::block_on(future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        disconnected_conn_id = {
-                            let conn_id = swarm2.behaviour.inject_connection_established
-                                [num_connections / 2]
-                                .1;
-                            swarm2.behaviour.inner().next_action.replace(
-                                NetworkBehaviourAction::CloseConnection {
-                                    peer_id: swarm1_id.clone(),
-                                    connection: CloseConnection::One(conn_id),
-                                },
-                            );
-                            Some(conn_id)
-                        };
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
-                        state = State::Disconnecting;
+        executor::block_on(future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            disconnected_conn_id = {
+                                let conn_id = swarm2.behaviour.inject_connection_established[num_connections / 2].1;
+                                swarm2
+                                    .behaviour
+                                    .inner()
+                                    .next_action
+                                    .replace(NetworkBehaviourAction::CloseConnection {
+                                        peer_id: swarm1_id.clone(),
+                                        connection: CloseConnection::One(conn_id),
+                                    });
+                                Some(conn_id)
+                            };
+                            swarm1.behaviour.reset();
+                            swarm2.behaviour.reset();
+                            state = State::Disconnecting;
+                        }
+                    }
+                    State::Disconnecting => {
+                        for s in &[&swarm1, &swarm2] {
+                            assert_eq!(s.behaviour.inject_disconnected.len(), 0);
+                            assert_eq!(s.behaviour.inject_connection_established.len(), 0);
+                            assert_eq!(s.behaviour.inject_connected.len(), 0);
+                        }
+                        if [&swarm1, &swarm2].iter().all(|s| {
+                            s.behaviour.inject_connection_closed.len() == 1
+                        }) {
+                            let conn_id = swarm2.behaviour.inject_connection_closed[0].1;
+                            assert_eq!(Some(conn_id), disconnected_conn_id);
+                            return Poll::Ready(());
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    for s in &[&swarm1, &swarm2] {
-                        assert_eq!(s.behaviour.inject_disconnected.len(), 0);
-                        assert_eq!(s.behaviour.inject_connection_established.len(), 0);
-                        assert_eq!(s.behaviour.inject_connected.len(), 0);
-                    }
-                    if [&swarm1, &swarm2]
-                        .iter()
-                        .all(|s| s.behaviour.inject_connection_closed.len() == 1)
-                    {
-                        let conn_id = swarm2.behaviour.inject_connection_closed[0].1;
-                        assert_eq!(Some(conn_id), disconnected_conn_id);
-                        return Poll::Ready(());
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending
+                }
             }
         }))
     }
