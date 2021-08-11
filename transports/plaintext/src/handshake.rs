@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::PlainText2Config;
 use crate::error::PlainTextError;
 use crate::structs_proto::Exchange;
+use crate::PlainText2Config;
 
+use asynchronous_codec::{Framed, FramedParts};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use asynchronous_codec::{Framed, FramedParts};
-use libp2p_core::{PublicKey, PeerId};
+use libp2p_core::{PeerId, PublicKey};
 use log::{debug, trace};
 use prost::Message;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -33,7 +33,7 @@ use unsigned_varint::codec::UviBytes;
 
 struct HandshakeContext<T> {
     config: PlainText2Config,
-    state: T
+    state: T,
 }
 
 // HandshakeContext<()> --with_local-> HandshakeContext<Local>
@@ -54,28 +54,31 @@ impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.to_protobuf_encoding())
+            pubkey: Some(config.local_public_key.to_protobuf_encoding()),
         };
         let mut buf = Vec::with_capacity(exchange.encoded_len());
-        exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        exchange
+            .encode(&mut buf)
+            .expect("Vec<u8> provides capacity as needed");
 
         Self {
             config,
             state: Local {
-                exchange_bytes: buf
-            }
+                exchange_bytes: buf,
+            },
         }
     }
 
-    fn with_remote(self, exchange_bytes: BytesMut)
-        -> Result<HandshakeContext<Remote>, PlainTextError>
-    {
+    fn with_remote(
+        self,
+        exchange_bytes: BytesMut,
+    ) -> Result<HandshakeContext<Remote>, PlainTextError> {
         let prop = match Exchange::decode(exchange_bytes) {
             Ok(prop) => prop,
             Err(e) => {
                 debug!("failed to parse remote's exchange protobuf message");
                 return Err(PlainTextError::InvalidPayload(Some(e)));
-            },
+            }
         };
 
         let pb_pubkey = prop.pubkey.unwrap_or_default();
@@ -84,20 +87,20 @@ impl HandshakeContext<Local> {
             Err(_) => {
                 debug!("failed to parse remote's exchange's pubkey protobuf");
                 return Err(PlainTextError::InvalidPayload(None));
-            },
+            }
         };
         let peer_id = match PeerId::from_bytes(&prop.id.unwrap_or_default()) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's exchange's id protobuf");
                 return Err(PlainTextError::InvalidPayload(None));
-            },
+            }
         };
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.to_peer_id() {
             debug!("the remote's `PeerId` isn't consistent with the remote's public key");
-            return Err(PlainTextError::InvalidPeerId)
+            return Err(PlainTextError::InvalidPeerId);
         }
 
         Ok(HandshakeContext {
@@ -105,13 +108,15 @@ impl HandshakeContext<Local> {
             state: Remote {
                 peer_id,
                 public_key,
-            }
+            },
         })
     }
 }
 
-pub async fn handshake<S>(socket: S, config: PlainText2Config)
-    -> Result<(S, Remote, Bytes), PlainTextError>
+pub async fn handshake<S>(
+    socket: S,
+    config: PlainText2Config,
+) -> Result<(S, Remote, Bytes), PlainTextError>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {
@@ -122,7 +127,9 @@ where
     let context = HandshakeContext::new(config);
 
     trace!("sending exchange to remote");
-    framed_socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
+    framed_socket
+        .send(BytesMut::from(&context.state.exchange_bytes[..]))
+        .await?;
 
     trace!("receiving the remote's exchange");
     let context = match framed_socket.next().await {
@@ -134,9 +141,17 @@ where
         }
     };
 
-    trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
+    trace!(
+        "received exchange from remote; pubkey = {:?}",
+        context.state.public_key
+    );
 
-    let FramedParts { io, read_buffer, write_buffer, .. } = framed_socket.into_parts();
+    let FramedParts {
+        io,
+        read_buffer,
+        write_buffer,
+        ..
+    } = framed_socket.into_parts();
     assert!(write_buffer.is_empty());
     Ok((io, context.state, read_buffer.freeze()))
 }

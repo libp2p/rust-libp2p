@@ -26,14 +26,14 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-use bytes::BytesMut;
-use codec::UviBytes;
 use crate::dht_proto as proto;
 use crate::record::{self, Record};
-use futures::prelude::*;
 use asynchronous_codec::Framed;
-use libp2p_core::{Multiaddr, PeerId};
+use bytes::BytesMut;
+use codec::UviBytes;
+use futures::prelude::*;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
@@ -101,8 +101,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
     fn try_from(peer: proto::message::Peer) -> Result<KadPeer, Self::Error> {
         // TODO: this is in fact a CID; not sure if this should be handled in `from_bytes` or
         //       as a special case here
-        let node_id = PeerId::from_bytes(&peer.id)
-            .map_err(|_| invalid_data("invalid peer id"))?;
+        let node_id = PeerId::from_bytes(&peer.id).map_err(|_| invalid_data("invalid peer id"))?;
 
         let mut addrs = Vec::with_capacity(peer.addrs.len());
         for addr in peer.addrs.into_iter() {
@@ -118,7 +117,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
         Ok(KadPeer {
             node_id,
             multiaddrs: addrs,
-            connection_ty
+            connection_ty,
         })
     }
 }
@@ -131,7 +130,7 @@ impl From<KadPeer> for proto::message::Peer {
             connection: {
                 let ct: proto::message::ConnectionType = peer.connection_ty.into();
                 ct as i32
-            }
+            },
         }
     }
 }
@@ -202,13 +201,15 @@ where
                 .with::<_, _, fn(_) -> _, _>(|response| {
                     let proto_struct = resp_msg_to_proto(response);
                     let mut buf = Vec::with_capacity(proto_struct.encoded_len());
-                    proto_struct.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+                    proto_struct
+                        .encode(&mut buf)
+                        .expect("Vec<u8> provides capacity as needed");
                     future::ready(Ok(io::Cursor::new(buf)))
                 })
                 .and_then::<_, fn(_) -> _>(|bytes| {
                     let request = match proto::Message::decode(bytes) {
                         Ok(r) => r,
-                        Err(err) => return future::ready(Err(err.into()))
+                        Err(err) => return future::ready(Err(err.into())),
                     };
                     future::ready(proto_to_req_msg(request))
                 }),
@@ -234,13 +235,15 @@ where
                 .with::<_, _, fn(_) -> _, _>(|request| {
                     let proto_struct = req_msg_to_proto(request);
                     let mut buf = Vec::with_capacity(proto_struct.encoded_len());
-                    proto_struct.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+                    proto_struct
+                        .encode(&mut buf)
+                        .expect("Vec<u8> provides capacity as needed");
                     future::ready(Ok(io::Cursor::new(buf)))
                 })
                 .and_then::<_, fn(_) -> _>(|bytes| {
                     let response = match proto::Message::decode(bytes) {
                         Ok(r) => r,
-                        Err(err) => return future::ready(Err(err.into()))
+                        Err(err) => return future::ready(Err(err.into())),
                     };
                     future::ready(proto_to_resp_msg(response))
                 }),
@@ -301,9 +304,7 @@ pub enum KadRequestMsg {
     },
 
     /// Request to put a value into the dht records.
-    PutValue {
-        record: Record,
-    }
+    PutValue { record: Record },
 }
 
 /// Response that we can send to a peer or that we received from a peer.
@@ -348,38 +349,38 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
     match kad_msg {
         KadRequestMsg::Ping => proto::Message {
             r#type: proto::message::MessageType::Ping as i32,
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadRequestMsg::FindNode { key } => proto::Message {
             r#type: proto::message::MessageType::FindNode as i32,
             key,
             cluster_level_raw: 10,
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadRequestMsg::GetProviders { key } => proto::Message {
             r#type: proto::message::MessageType::GetProviders as i32,
             key: key.to_vec(),
             cluster_level_raw: 10,
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadRequestMsg::AddProvider { key, provider } => proto::Message {
             r#type: proto::message::MessageType::AddProvider as i32,
             cluster_level_raw: 10,
             key: key.to_vec(),
             provider_peers: vec![provider.into()],
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadRequestMsg::GetValue { key } => proto::Message {
             r#type: proto::message::MessageType::GetValue as i32,
             cluster_level_raw: 10,
             key: key.to_vec(),
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadRequestMsg::PutValue { record } => proto::Message {
             r#type: proto::message::MessageType::PutValue as i32,
             record: Some(record_to_proto(record)),
-            .. proto::Message::default()
-        }
+            ..proto::Message::default()
+        },
     }
 }
 
@@ -388,27 +389,33 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
     match kad_msg {
         KadResponseMsg::Pong => proto::Message {
             r#type: proto::message::MessageType::Ping as i32,
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadResponseMsg::FindNode { closer_peers } => proto::Message {
             r#type: proto::message::MessageType::FindNode as i32,
             cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
-        KadResponseMsg::GetProviders { closer_peers, provider_peers } => proto::Message {
+        KadResponseMsg::GetProviders {
+            closer_peers,
+            provider_peers,
+        } => proto::Message {
             r#type: proto::message::MessageType::GetProviders as i32,
             cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
             provider_peers: provider_peers.into_iter().map(KadPeer::into).collect(),
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
-        KadResponseMsg::GetValue { record, closer_peers } => proto::Message {
+        KadResponseMsg::GetValue {
+            record,
+            closer_peers,
+        } => proto::Message {
             r#type: proto::message::MessageType::GetValue as i32,
             cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
             record: record.map(record_to_proto),
-            .. proto::Message::default()
+            ..proto::Message::default()
         },
         KadResponseMsg::PutValue { key, value } => proto::Message {
             r#type: proto::message::MessageType::PutValue as i32,
@@ -416,10 +423,10 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             record: Some(proto::Record {
                 key: key.to_vec(),
                 value,
-                .. proto::Record::default()
+                ..proto::Record::default()
             }),
-            .. proto::Message::default()
-        }
+            ..proto::Message::default()
+        },
     }
 }
 
@@ -436,20 +443,19 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
             let record = record_from_proto(message.record.unwrap_or_default())?;
             Ok(KadRequestMsg::PutValue { record })
         }
-        proto::message::MessageType::GetValue => {
-            Ok(KadRequestMsg::GetValue { key: record::Key::from(message.key) })
-        }
-        proto::message::MessageType::FindNode => {
-            Ok(KadRequestMsg::FindNode { key: message.key })
-        }
-        proto::message::MessageType::GetProviders => {
-            Ok(KadRequestMsg::GetProviders { key: record::Key::from(message.key)})
-        }
+        proto::message::MessageType::GetValue => Ok(KadRequestMsg::GetValue {
+            key: record::Key::from(message.key),
+        }),
+        proto::message::MessageType::FindNode => Ok(KadRequestMsg::FindNode { key: message.key }),
+        proto::message::MessageType::GetProviders => Ok(KadRequestMsg::GetProviders {
+            key: record::Key::from(message.key),
+        }),
         proto::message::MessageType::AddProvider => {
             // TODO: for now we don't parse the peer properly, so it is possible that we get
             //       parsing errors for peers even when they are valid; we ignore these
             //       errors for now, but ultimately we should just error altogether
-            let provider = message.provider_peers
+            let provider = message
+                .provider_peers
                 .into_iter()
                 .find_map(|peer| KadPeer::try_from(peer).ok());
 
@@ -473,22 +479,28 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
     match msg_type {
         proto::message::MessageType::Ping => Ok(KadResponseMsg::Pong),
         proto::message::MessageType::GetValue => {
-            let record =
-                if let Some(r) = message.record {
-                    Some(record_from_proto(r)?)
-                } else {
-                    None
-                };
+            let record = if let Some(r) = message.record {
+                Some(record_from_proto(r)?)
+            } else {
+                None
+            };
 
-            let closer_peers = message.closer_peers.into_iter()
+            let closer_peers = message
+                .closer_peers
+                .into_iter()
                 .filter_map(|peer| KadPeer::try_from(peer).ok())
                 .collect();
 
-            Ok(KadResponseMsg::GetValue { record, closer_peers })
+            Ok(KadResponseMsg::GetValue {
+                record,
+                closer_peers,
+            })
         }
 
         proto::message::MessageType::FindNode => {
-            let closer_peers = message.closer_peers.into_iter()
+            let closer_peers = message
+                .closer_peers
+                .into_iter()
                 .filter_map(|peer| KadPeer::try_from(peer).ok())
                 .collect();
 
@@ -496,11 +508,15 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
         }
 
         proto::message::MessageType::GetProviders => {
-            let closer_peers = message.closer_peers.into_iter()
+            let closer_peers = message
+                .closer_peers
+                .into_iter()
                 .filter_map(|peer| KadPeer::try_from(peer).ok())
                 .collect();
 
-            let provider_peers = message.provider_peers.into_iter()
+            let provider_peers = message
+                .provider_peers
+                .into_iter()
                 .filter_map(|peer| KadPeer::try_from(peer).ok())
                 .collect();
 
@@ -512,18 +528,19 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 
         proto::message::MessageType::PutValue => {
             let key = record::Key::from(message.key);
-            let rec = message.record.ok_or_else(|| {
-                invalid_data("received PutValue message with no record")
-            })?;
+            let rec = message
+                .record
+                .ok_or_else(|| invalid_data("received PutValue message with no record"))?;
 
             Ok(KadResponseMsg::PutValue {
                 key,
-                value: rec.value
+                value: rec.value,
             })
         }
 
-        proto::message::MessageType::AddProvider =>
+        proto::message::MessageType::AddProvider => {
             Err(invalid_data("received an unexpected AddProvider message"))
+        }
     }
 }
 
@@ -531,23 +548,26 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     let key = record::Key::from(record.key);
     let value = record.value;
 
-    let publisher =
-        if !record.publisher.is_empty() {
-            PeerId::from_bytes(&record.publisher)
-                .map(Some)
-                .map_err(|_| invalid_data("Invalid publisher peer ID."))?
-        } else {
-            None
-        };
+    let publisher = if !record.publisher.is_empty() {
+        PeerId::from_bytes(&record.publisher)
+            .map(Some)
+            .map_err(|_| invalid_data("Invalid publisher peer ID."))?
+    } else {
+        None
+    };
 
-    let expires =
-        if record.ttl > 0 {
-            Some(Instant::now() + Duration::from_secs(record.ttl as u64))
-        } else {
-            None
-        };
+    let expires = if record.ttl > 0 {
+        Some(Instant::now() + Duration::from_secs(record.ttl as u64))
+    } else {
+        None
+    };
 
-    Ok(Record { key, value, publisher, expires })
+    Ok(Record {
+        key,
+        value,
+        publisher,
+        expires,
+    })
 }
 
 fn record_to_proto(record: Record) -> proto::Record {
@@ -555,7 +575,8 @@ fn record_to_proto(record: Record) -> proto::Record {
         key: record.key.to_vec(),
         value: record.value,
         publisher: record.publisher.map(|id| id.to_bytes()).unwrap_or_default(),
-        ttl: record.expires
+        ttl: record
+            .expires
             .map(|t| {
                 let now = Instant::now();
                 if t > now {
@@ -565,14 +586,14 @@ fn record_to_proto(record: Record) -> proto::Record {
                 }
             })
             .unwrap_or(0),
-        time_received: String::new()
+        time_received: String::new(),
     }
 }
 
 /// Creates an `io::Error` with `io::ErrorKind::InvalidData`.
 fn invalid_data<E>(e: E) -> io::Error
 where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     io::Error::new(io::ErrorKind::InvalidData, e)
 }

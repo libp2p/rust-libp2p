@@ -31,7 +31,7 @@
 //! # If they don't automatically connect
 //!
 //! If the nodes don't automatically connect, take note of the listening addresses of the first
-//! instance and start the second with one of the addresses as the first argument. In the first 
+//! instance and start the second with one of the addresses as the first argument. In the first
 //! terminal window, run:
 //!
 //! ```sh
@@ -52,16 +52,16 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    Multiaddr,
-    PeerId,
-    Swarm,
-    NetworkBehaviour,
-    identity,
     floodsub::{self, Floodsub, FloodsubEvent},
+    identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent}
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -97,7 +97,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+                println!(
+                    "Received: '{:?}' from {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    message.source
+                );
             }
         }
     }
@@ -106,16 +110,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) =>
+                MdnsEvent::Discovered(list) => {
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                MdnsEvent::Expired(list) =>
+                }
+                MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
+                }
             }
         }
     }
@@ -150,11 +156,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.behaviour_mut()
+                Poll::Ready(Some(line)) => swarm
+                    .behaviour_mut()
                     .floodsub
                     .publish(floodsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break
+                Poll::Pending => break,
             }
         }
         loop {

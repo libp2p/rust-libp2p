@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::Multiaddr;
 use crate::tls;
+use libp2p_core::Multiaddr;
 use std::{error, fmt};
 
 /// Error in WebSockets.
@@ -38,7 +38,7 @@ pub enum Error<E> {
     /// The location header URL was invalid.
     InvalidRedirectLocation,
     /// Websocket base framing error.
-    Base(Box<dyn error::Error + Send + Sync>)
+    Base(Box<dyn error::Error + Send + Sync>),
 }
 
 impl<E: fmt::Display> fmt::Display for Error<E> {
@@ -50,7 +50,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
             Error::InvalidMultiaddr(ma) => write!(f, "invalid multi-address: {}", ma),
             Error::TooManyRedirects => f.write_str("too many redirects"),
             Error::InvalidRedirectLocation => f.write_str("invalid redirect location"),
-            Error::Base(err) => write!(f, "{}", err)
+            Error::Base(err) => write!(f, "{}", err),
         }
     }
 }
@@ -64,7 +64,7 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
             Error::Base(err) => Some(&**err),
             Error::InvalidMultiaddr(_)
             | Error::TooManyRedirects
-            | Error::InvalidRedirectLocation => None
+            | Error::InvalidRedirectLocation => None,
         }
     }
 }

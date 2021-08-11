@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::muxing::{StreamMuxer, StreamMuxerEvent, SubstreamRef, substream_from_ref};
+use crate::muxing::{substream_from_ref, StreamMuxer, StreamMuxerEvent, SubstreamRef};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use smallvec::SmallVec;
@@ -135,7 +135,9 @@ where
     #[must_use]
     pub fn close(mut self) -> (Close<TMuxer>, Vec<TUserData>) {
         let substreams = self.cancel_outgoing();
-        let close = Close { muxer: self.inner.clone() };
+        let close = Close {
+            muxer: self.inner.clone(),
+        };
         (close, substreams)
     }
 
@@ -150,17 +152,19 @@ where
     }
 
     /// Provides an API similar to `Future`.
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
+    pub fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
         // Polling inbound substream.
         match self.inner.poll_event(cx) {
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
                 let substream = substream_from_ref(self.inner.clone(), substream);
-                return Poll::Ready(Ok(SubstreamEvent::InboundSubstream {
-                    substream,
-                }));
+                return Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream }));
             }
-            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) =>
-                return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr))),
+            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) => {
+                return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr)))
+            }
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
             Poll::Pending => {}
         }
@@ -238,8 +242,7 @@ where
     TMuxer: StreamMuxer,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("Close")
-            .finish()
+        f.debug_struct("Close").finish()
     }
 }
 
@@ -251,22 +254,22 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SubstreamEvent::InboundSubstream { substream } => {
-                f.debug_struct("SubstreamEvent::OutboundClosed")
-                    .field("substream", substream)
-                    .finish()
-            },
-            SubstreamEvent::OutboundSubstream { user_data, substream } => {
-                f.debug_struct("SubstreamEvent::OutboundSubstream")
-                    .field("user_data", user_data)
-                    .field("substream", substream)
-                    .finish()
-            },
-            SubstreamEvent::AddressChange(address) => {
-                f.debug_struct("SubstreamEvent::AddressChange")
-                    .field("address", address)
-                    .finish()
-            },
+            SubstreamEvent::InboundSubstream { substream } => f
+                .debug_struct("SubstreamEvent::OutboundClosed")
+                .field("substream", substream)
+                .finish(),
+            SubstreamEvent::OutboundSubstream {
+                user_data,
+                substream,
+            } => f
+                .debug_struct("SubstreamEvent::OutboundSubstream")
+                .field("user_data", user_data)
+                .field("substream", substream)
+                .finish(),
+            SubstreamEvent::AddressChange(address) => f
+                .debug_struct("SubstreamEvent::AddressChange")
+                .field("address", address)
+                .finish(),
         }
     }
 }

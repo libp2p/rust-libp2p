@@ -36,9 +36,9 @@
 pub use bytes;
 pub use futures;
 #[doc(inline)]
-pub use multiaddr;
-#[doc(inline)]
 pub use libp2p_core::multihash;
+#[doc(inline)]
+pub use multiaddr;
 
 #[doc(inline)]
 pub use libp2p_core as core;
@@ -48,18 +48,13 @@ pub use libp2p_core as core;
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
 #[cfg(any(feature = "dns-async-std", feature = "dns-tokio"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "dns-async-std", feature = "dns-tokio"))))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "dns-async-std", feature = "dns-tokio")))
+)]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
-#[cfg(feature = "identify")]
-#[cfg_attr(docsrs, doc(cfg(feature = "identify")))]
-#[doc(inline)]
-pub use libp2p_identify as identify;
-#[cfg(feature = "kad")]
-#[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
-#[doc(inline)]
-pub use libp2p_kad as kad;
 #[cfg(feature = "floodsub")]
 #[cfg_attr(docsrs, doc(cfg(feature = "floodsub")))]
 #[doc(inline)]
@@ -68,15 +63,23 @@ pub use libp2p_floodsub as floodsub;
 #[cfg_attr(docsrs, doc(cfg(feature = "gossipsub")))]
 #[doc(inline)]
 pub use libp2p_gossipsub as gossipsub;
-#[cfg(feature = "mplex")]
-#[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
+#[cfg(feature = "identify")]
+#[cfg_attr(docsrs, doc(cfg(feature = "identify")))]
 #[doc(inline)]
-pub use libp2p_mplex as mplex;
+pub use libp2p_identify as identify;
+#[cfg(feature = "kad")]
+#[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
+#[doc(inline)]
+pub use libp2p_kad as kad;
 #[cfg(feature = "mdns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(feature = "mplex")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
+#[doc(inline)]
+pub use libp2p_mplex as mplex;
 #[cfg(feature = "noise")]
 #[cfg_attr(docsrs, doc(cfg(feature = "noise")))]
 #[doc(inline)]
@@ -89,6 +92,18 @@ pub use libp2p_ping as ping;
 #[cfg_attr(docsrs, doc(cfg(feature = "plaintext")))]
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
+#[cfg(feature = "pnet")]
+#[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
+#[doc(inline)]
+pub use libp2p_pnet as pnet;
+#[cfg(feature = "relay")]
+#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
+#[doc(inline)]
+pub use libp2p_relay as relay;
+#[cfg(feature = "request-response")]
+#[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
+#[doc(inline)]
+pub use libp2p_request_response as request_response;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
 #[cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))]
@@ -113,18 +128,6 @@ pub use libp2p_websocket as websocket;
 #[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
-#[cfg(feature = "pnet")]
-#[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
-#[doc(inline)]
-pub use libp2p_pnet as pnet;
-#[cfg(feature = "relay")]
-#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
-#[doc(inline)]
-pub use libp2p_relay as relay;
-#[cfg(feature = "request-response")]
-#[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
-#[doc(inline)]
-pub use libp2p_request_response as request_response;
 
 mod transport_ext;
 
@@ -136,16 +139,15 @@ pub mod tutorial;
 
 pub use self::core::{
     identity,
-    PeerId,
-    Transport,
     transport::TransportError,
-    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
+    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
+    PeerId, Transport,
 };
-pub use libp2p_swarm_derive::NetworkBehaviour;
-pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
+pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
+pub use libp2p_swarm_derive::NetworkBehaviour;
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
@@ -158,11 +160,30 @@ pub use self::transport_ext::TransportExt;
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-io", feature = "dns-async-std", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-io", feature = "dns-async-std", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-pub async fn development_transport(keypair: identity::Keypair)
-    -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
-{
+#[cfg(all(
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
+    feature = "tcp-async-io",
+    feature = "dns-async-std",
+    feature = "websocket",
+    feature = "noise",
+    feature = "mplex",
+    feature = "yamux"
+))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
+        feature = "tcp-async-io",
+        feature = "dns-async-std",
+        feature = "websocket",
+        feature = "noise",
+        feature = "mplex",
+        feature = "yamux"
+    )))
+)]
+pub async fn development_transport(
+    keypair: identity::Keypair,
+) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
         let tcp = tcp::TcpConfig::new().nodelay(true);
         let dns_tcp = dns::DnsConfig::system(tcp).await?;
@@ -177,7 +198,10 @@ pub async fn development_transport(keypair: identity::Keypair)
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))
+        .multiplex(core::upgrade::SelectUpgrade::new(
+            yamux::YamuxConfig::default(),
+            mplex::MplexConfig::default(),
+        ))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
 }
@@ -193,11 +217,30 @@ pub async fn development_transport(keypair: identity::Keypair)
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-tokio", feature = "dns-tokio", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-tokio", feature = "dns-tokio", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-pub fn tokio_development_transport(keypair: identity::Keypair)
-    -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
-{
+#[cfg(all(
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
+    feature = "tcp-tokio",
+    feature = "dns-tokio",
+    feature = "websocket",
+    feature = "noise",
+    feature = "mplex",
+    feature = "yamux"
+))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
+        feature = "tcp-tokio",
+        feature = "dns-tokio",
+        feature = "websocket",
+        feature = "noise",
+        feature = "mplex",
+        feature = "yamux"
+    )))
+)]
+pub fn tokio_development_transport(
+    keypair: identity::Keypair,
+) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
         let tcp = tcp::TokioTcpConfig::new().nodelay(true);
         let dns_tcp = dns::TokioDnsConfig::system(tcp)?;
@@ -212,7 +255,10 @@ pub fn tokio_development_transport(keypair: identity::Keypair)
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))
+        .multiplex(core::upgrade::SelectUpgrade::new(
+            yamux::YamuxConfig::default(),
+            mplex::MplexConfig::default(),
+        ))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
 }

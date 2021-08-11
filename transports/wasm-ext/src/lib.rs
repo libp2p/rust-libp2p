@@ -32,11 +32,11 @@
 //! module.
 //!
 
-use futures::{prelude::*, future::Ready};
+use futures::{future::Ready, prelude::*};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
 use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
-use wasm_bindgen::{JsCast, prelude::*};
+use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::JsFuture;
 
 /// Contains the definition that one must match on the JavaScript side.
@@ -172,16 +172,13 @@ impl Transport for ExtTransport {
     type Dial = Dial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let iter = self
-            .inner
-            .listen_on(&addr.to_string())
-            .map_err(|err| {
-                if is_not_supported_error(&err) {
-                    TransportError::MultiaddrNotSupported(addr)
-                } else {
-                    TransportError::Other(JsErr::from(err))
-                }
-            })?;
+        let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
+            if is_not_supported_error(&err) {
+                TransportError::MultiaddrNotSupported(addr)
+            } else {
+                TransportError::Other(JsErr::from(err))
+            }
+        })?;
 
         Ok(Listen {
             iterator: SendWrapper::new(iter),
@@ -191,16 +188,13 @@ impl Transport for ExtTransport {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let promise = self
-            .inner
-            .dial(&addr.to_string())
-            .map_err(|err| {
-                if is_not_supported_error(&err) {
-                    TransportError::MultiaddrNotSupported(addr)
-                } else {
-                    TransportError::Other(JsErr::from(err))
-                }
-            })?;
+        let promise = self.inner.dial(&addr.to_string()).map_err(|err| {
+            if is_not_supported_error(&err) {
+                TransportError::MultiaddrNotSupported(addr)
+            } else {
+                TransportError::Other(JsErr::from(err))
+            }
+        })?;
 
         Ok(Dial {
             inner: SendWrapper::new(promise.into()),
@@ -315,7 +309,9 @@ impl Stream for Listen {
                 .flat_map(|e| e.to_vec().into_iter())
             {
                 match js_value_to_addr(&addr) {
-                    Ok(addr) => self.pending_events.push_back(ListenerEvent::NewAddress(addr)),
+                    Ok(addr) => self
+                        .pending_events
+                        .push_back(ListenerEvent::NewAddress(addr)),
                     Err(err) => self.pending_events.push_back(ListenerEvent::Error(err)),
                 }
             }
@@ -375,10 +371,16 @@ impl fmt::Debug for Connection {
 }
 
 impl AsyncRead for Connection {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         loop {
             match mem::replace(&mut self.read_state, ConnectionReadState::Finished) {
-                ConnectionReadState::Finished => break Poll::Ready(Err(io::ErrorKind::BrokenPipe.into())),
+                ConnectionReadState::Finished => {
+                    break Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+                }
 
                 ConnectionReadState::PendingData(ref data) if data.is_empty() => {
                     let iter_next = self.read_iterator.next().map_err(JsErr::from)?;
@@ -411,7 +413,9 @@ impl AsyncRead for Connection {
                     let data = match Future::poll(Pin::new(&mut *promise), cx) {
                         Poll::Ready(Ok(ref data)) if data.is_null() => break Poll::Ready(Ok(0)),
                         Poll::Ready(Ok(data)) => data,
-                        Poll::Ready(Err(err)) => break Poll::Ready(Err(io::Error::from(JsErr::from(err)))),
+                        Poll::Ready(Err(err)) => {
+                            break Poll::Ready(Err(io::Error::from(JsErr::from(err))))
+                        }
                         Poll::Pending => {
                             self.read_state = ConnectionReadState::Waiting(promise);
                             break Poll::Pending;
@@ -439,14 +443,20 @@ impl AsyncRead for Connection {
 }
 
 impl AsyncWrite for Connection {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         // Note: as explained in the doc-comments of `Connection`, each call to this function must
         // map to exactly one call to `self.inner.write()`.
 
         if let Some(mut promise) = self.previous_write_promise.take() {
             match Future::poll(Pin::new(&mut *promise), cx) {
                 Poll::Ready(Ok(_)) => (),
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(io::Error::from(JsErr::from(err)))),
+                Poll::Ready(Err(err)) => {
+                    return Poll::Ready(Err(io::Error::from(JsErr::from(err))))
+                }
                 Poll::Pending => {
                     self.previous_write_promise = Some(promise);
                     return Poll::Pending;

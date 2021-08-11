@@ -63,5 +63,5 @@ pub enum PeersIterState<'a> {
     WaitingAtCapacity,
 
     /// The iterator finished.
-    Finished
+    Finished,
 }
