@@ -111,7 +111,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some(Protocol::P2p(hash)) => PeerId::from_multihash(hash).expect("Valid hash."),
             _ => return Err("Expect peer multiaddr to contain peer ID.".into()),
         };
-        network_client.dial(peer_id, addr).await;
+        network_client
+            .dial(peer_id, addr)
+            .await
+            .expect("Dial to succeed");
     }
 
     match opt.argument {
@@ -282,7 +285,7 @@ mod network {
 
     impl Client {
         /// Dial the given peer at the given address.
-        pub async fn dial(&mut self, peer_id: PeerId, peer_addr: Multiaddr) {
+        pub async fn dial(&mut self, peer_id: PeerId, peer_addr: Multiaddr) -> Result<(), ()> {
             let (sender, receiver) = oneshot::channel();
             self.sender
                 .send(Command::Dial {
@@ -292,7 +295,7 @@ mod network {
                 })
                 .await
                 .unwrap();
-            receiver.await.unwrap();
+            receiver.await.unwrap()
         }
 
         /// Advertise the local node as the provider of the given file on the DHT.
@@ -343,7 +346,7 @@ mod network {
         mut command_receiver: mpsc::Receiver<Command>,
         mut event_sender: mpsc::Sender<Event>,
     ) {
-        let mut outstanding_dial: HashMap<_, oneshot::Sender<()>> = HashMap::new();
+        let mut outstanding_dial: HashMap<_, oneshot::Sender<Result<(), ()>>> = HashMap::new();
         let mut outstanding_start_providing = HashMap::new();
         let mut outstanding_get_providers: HashMap<_, oneshot::Sender<HashSet<PeerId>>> =
             HashMap::new();
@@ -421,12 +424,18 @@ mod network {
                     } => {
                         if endpoint.is_dialer() {
                             if let Some(sender) = outstanding_dial.remove(&peer_id) {
-                                sender.send(()).unwrap();
+                                sender.send(Ok(())).unwrap();
                             }
                         }
                     }
                     SwarmEvent::ConnectionClosed { .. } => {}
-                    SwarmEvent::UnreachableAddr { .. } => {}
+                    SwarmEvent::UnreachableAddr { peer_id, attempts_remaining, .. } => {
+                        if attempts_remaining == 0 {
+                            if let Some(sender) = outstanding_dial.remove(&peer_id) {
+                                sender.send(Ok(())).unwrap();
+                            }
+                        }
+                    }
                     e => panic!("{:?}", e),
                 },
                 command = command_receiver.next() => match command {
@@ -520,7 +529,7 @@ mod network {
         Dial {
             peer_id: PeerId,
             peer_addr: Multiaddr,
-            sender: oneshot::Sender<()>,
+            sender: oneshot::Sender<Result<(), ()>>,
         },
         StartProviding {
             file_name: String,
