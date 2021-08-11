@@ -200,8 +200,6 @@ mod network {
     use super::*;
     use async_trait::async_trait;
     use futures::channel::{mpsc, oneshot};
-    use futures::future::BoxFuture;
-    use futures::stream::BoxStream;
     use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName};
     use libp2p::identity;
     use libp2p::identity::ed25519;
@@ -228,7 +226,7 @@ mod network {
     pub async fn new(
         listen_address: Option<Multiaddr>,
         secret_key_seed: Option<u8>,
-    ) -> Result<(Client, BoxStream<'static, Event>, BoxFuture<'static, ()>), Box<dyn Error>> {
+    ) -> Result<(Client, impl Stream<Item = Event>, impl Future<Output = ()>), Box<dyn Error>> {
         // Create a public/private key pair, either random or based on a seed.
         let id_keys = match secret_key_seed {
             Some(seed) => {
@@ -273,8 +271,8 @@ mod network {
             Client {
                 sender: command_sender,
             },
-            event_receiver.boxed(),
-            event_loop(swarm, command_receiver, event_sender).boxed(),
+            event_receiver,
+            event_loop(swarm, command_receiver, event_sender),
         ))
     }
 
