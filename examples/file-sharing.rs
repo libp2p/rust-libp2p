@@ -29,16 +29,17 @@
 //!
 //! ## Sample plot
 //!
-//! Assuming there are 3 nodes, provider A and B and client C.
+//! Assuming there are 3 nodes, A, B and C. A and B each provide a file while C
+//! retrieves a file.
 //!
 //! Provider nodes A and B each provide a file, file FA and FB respectively.
 //! They do so by advertising themselves as a provider for their file on a DHT
 //! via [`libp2p-kad`]. The two, among other nodes of the network, are
 //! interconnected via the DHT.
 //!
-//! Client node C can locate the providers for file FA or FB on the DHT via
+//! Node C can locate the providers for file FA or FB on the DHT via
 //! [`libp2p-kad`] without being connected to the specific node providing the
-//! file, but any node of the DHT. Client C then connects to the corresponding
+//! file, but any node of the DHT. Node C then connects to the corresponding
 //! node and requests the file content of the file via
 //! [`libp2p-request-response`].
 //!
