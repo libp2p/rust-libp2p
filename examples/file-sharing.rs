@@ -114,9 +114,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         network_client.dial(peer_id, addr).await;
     }
 
-    match opt.command {
+    match opt.argument {
         // Providing a file.
-        Command::Provide { path, name } => {
+        CliArgument::Provide { path, name } => {
             // Advertise oneself as a provider of the file on the DHT.
             network_client.start_providing(name.clone()).await;
 
@@ -134,7 +134,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         // Locating and getting a file.
-        Command::Get { name } => {
+        CliArgument::Get { name } => {
             // Locate all nodes providing the file.
             let providers = network_client.get_providers(name.clone()).await;
             if providers.is_empty() {
@@ -175,11 +175,11 @@ struct Opt {
     listen_address: Option<Multiaddr>,
 
     #[structopt(subcommand)]
-    command: Command,
+    argument: CliArgument,
 }
 
 #[derive(Debug, StructOpt)]
-enum Command {
+enum CliArgument {
     Provide {
         #[structopt(long)]
         path: PathBuf,
@@ -370,7 +370,6 @@ mod network {
                             result:
                                 QueryResult::GetProviders(Ok(GetProvidersOk {
                                     providers,
-                                    closest_peers,
                                     ..
                                 })),
                             ..
@@ -382,7 +381,7 @@ mod network {
                     }
                     SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                     SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                        RequestResponseEvent::Message { peer, message },
+                        RequestResponseEvent::Message { message, .. },
                     )) => match message {
                         RequestResponseMessage::Request {
                             request, channel, ..
@@ -422,7 +421,7 @@ mod network {
                     } => {
                         if endpoint.is_dialer() {
                             if let Some(sender) = outstanding_dial.remove(&peer_id) {
-                                sender.send(());
+                                sender.send(()).unwrap();
                             }
                         }
                     }
