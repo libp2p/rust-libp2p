@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let requests = providers.into_iter().map(|p| {
                 let mut network_client = network_client.clone();
                 let name = name.clone();
-                async move { network_client.request_file(p, name).await.ok_or(()) }.boxed()
+                async move { network_client.request_file(p, name).await }.boxed()
             });
 
             // Await the requests, ignore the remaining once a single one succeeds.
@@ -283,7 +283,11 @@ mod network {
 
     impl Client {
         /// Dial the given peer at the given address.
-        pub async fn dial(&mut self, peer_id: PeerId, peer_addr: Multiaddr) -> Result<(), ()> {
+        pub async fn dial(
+            &mut self,
+            peer_id: PeerId,
+            peer_addr: Multiaddr,
+        ) -> Result<(), Box<dyn Error + Send>> {
             let (sender, receiver) = oneshot::channel();
             self.sender
                 .send(Command::Dial {
@@ -317,7 +321,11 @@ mod network {
         }
 
         /// Request the content of the given file from the given peer.
-        pub async fn request_file(&mut self, peer: PeerId, file_name: String) -> Option<String> {
+        pub async fn request_file(
+            &mut self,
+            peer: PeerId,
+            file_name: String,
+        ) -> Result<String, Box<dyn Error + Send>> {
             let (sender, receiver) = oneshot::channel();
             self.sender
                 .send(Command::RequestFile {
@@ -327,7 +335,7 @@ mod network {
                 })
                 .await
                 .unwrap();
-            receiver.await.ok()
+            receiver.await.expect("Sender not be dropped.")
         }
 
         /// Respond with the provided file content to the given request.
@@ -344,11 +352,15 @@ mod network {
         mut command_receiver: mpsc::Receiver<Command>,
         mut event_sender: mpsc::Sender<Event>,
     ) {
-        let mut pending_dial: HashMap<_, oneshot::Sender<Result<(), ()>>> = HashMap::new();
+        let mut pending_dial: HashMap<_, oneshot::Sender<Result<(), Box<dyn Error + Send>>>> =
+            HashMap::new();
         let mut pending_start_providing = HashMap::new();
         let mut pending_get_providers: HashMap<_, oneshot::Sender<HashSet<PeerId>>> =
             HashMap::new();
-        let mut pending_request_file: HashMap<_, oneshot::Sender<String>> = HashMap::new();
+        let mut pending_request_file: HashMap<
+            _,
+            oneshot::Sender<Result<String, Box<dyn Error + Send>>>,
+        > = HashMap::new();
 
         loop {
             futures::select! {
@@ -401,11 +413,19 @@ mod network {
                         } => {
                             pending_request_file
                                 .remove(&request_id)
-                                .expect("Request to still be oustanding.")
-                                .send(response.0)
+                                .expect("Request to still be pending.")
+                                .send(Ok(response.0))
                                 .unwrap();
                         }
                     },
+                    SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
+                        RequestResponseEvent::OutboundFailure { request_id, error, ..}
+                    )) => {
+                        pending_request_file.remove(&request_id)
+                            .expect("Request to still be pending.")
+                            .send(Err(Box::new(error)))
+                            .unwrap();
+                    }
                     SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
                         RequestResponseEvent::ResponseSent { .. },
                     )) => {}
@@ -427,10 +447,10 @@ mod network {
                         }
                     }
                     SwarmEvent::ConnectionClosed { .. } => {}
-                    SwarmEvent::UnreachableAddr { peer_id, attempts_remaining, .. } => {
+                    SwarmEvent::UnreachableAddr { peer_id, attempts_remaining, error, .. } => {
                         if attempts_remaining == 0 {
                             if let Some(sender) = pending_dial.remove(&peer_id) {
-                                sender.send(Ok(())).unwrap();
+                                sender.send(Err(Box::new(error))).unwrap();
                             }
                         }
                     }
@@ -527,7 +547,7 @@ mod network {
         Dial {
             peer_id: PeerId,
             peer_addr: Multiaddr,
-            sender: oneshot::Sender<Result<(), ()>>,
+            sender: oneshot::Sender<Result<(), Box<dyn Error + Send>>>,
         },
         StartProviding {
             file_name: String,
@@ -540,7 +560,7 @@ mod network {
         RequestFile {
             file_name: String,
             peer: PeerId,
-            sender: oneshot::Sender<String>,
+            sender: oneshot::Sender<Result<String, Box<dyn Error + Send>>>,
         },
         RespondFile {
             file: String,
