@@ -233,8 +233,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
-    /// Instructs the swarm to dial the given multiaddress, with no knowledge of the `PeerId` that
-    /// may be reached.
+    /// Instructs the swarm to dial the given multiaddress optionally including a [`PeerId`].
     DialAddress {
         /// The address to dial.
         address: Multiaddr,
@@ -242,7 +241,8 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
 
     /// Instructs the swarm to dial a known `PeerId`.
     ///
-    /// The `addresses_of_peer` method is called to determine which addresses to attempt to reach.
+    /// The [`NetworkBehaviour::addresses_of_peer`] method is called to determine which addresses to
+    /// attempt to reach.
     ///
     /// If we were already trying to dial this node, the addresses that are not yet in the queue of
     /// addresses to try are added back to this queue.
