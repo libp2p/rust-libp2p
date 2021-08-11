@@ -344,11 +344,11 @@ mod network {
         mut command_receiver: mpsc::Receiver<Command>,
         mut event_sender: mpsc::Sender<Event>,
     ) {
-        let mut outstanding_dial: HashMap<_, oneshot::Sender<Result<(), ()>>> = HashMap::new();
-        let mut outstanding_start_providing = HashMap::new();
-        let mut outstanding_get_providers: HashMap<_, oneshot::Sender<HashSet<PeerId>>> =
+        let mut pending_dial: HashMap<_, oneshot::Sender<Result<(), ()>>> = HashMap::new();
+        let mut pending_start_providing = HashMap::new();
+        let mut pending_get_providers: HashMap<_, oneshot::Sender<HashSet<PeerId>>> =
             HashMap::new();
-        let mut outstanding_request_file: HashMap<_, oneshot::Sender<String>> = HashMap::new();
+        let mut pending_request_file: HashMap<_, oneshot::Sender<String>> = HashMap::new();
 
         loop {
             futures::select! {
@@ -360,9 +360,9 @@ mod network {
                             ..
                         },
                     )) => {
-                        let sender: oneshot::Sender<()> = outstanding_start_providing
+                        let sender: oneshot::Sender<()> = pending_start_providing
                             .remove(&id)
-                            .expect("Completed query to be previously outstanding.");
+                            .expect("Completed query to be previously pending.");
                         sender.send(()).unwrap();
                     }
                     SwarmEvent::Behaviour(ComposedEvent::Kademlia(
@@ -376,7 +376,7 @@ mod network {
                             ..
                         },
                     )) => {
-                        outstanding_get_providers.remove(&id)
+                        pending_get_providers.remove(&id)
                             .expect("Completed query to be previously pending.")
                             .send(providers).unwrap();
                     }
@@ -399,7 +399,7 @@ mod network {
                             request_id,
                             response,
                         } => {
-                            outstanding_request_file
+                            pending_request_file
                                 .remove(&request_id)
                                 .expect("Request to still be oustanding.")
                                 .send(response.0)
@@ -421,7 +421,7 @@ mod network {
                         peer_id, endpoint, ..
                     } => {
                         if endpoint.is_dialer() {
-                            if let Some(sender) = outstanding_dial.remove(&peer_id) {
+                            if let Some(sender) = pending_dial.remove(&peer_id) {
                                 sender.send(Ok(())).unwrap();
                             }
                         }
@@ -429,7 +429,7 @@ mod network {
                     SwarmEvent::ConnectionClosed { .. } => {}
                     SwarmEvent::UnreachableAddr { peer_id, attempts_remaining, .. } => {
                         if attempts_remaining == 0 {
-                            if let Some(sender) = outstanding_dial.remove(&peer_id) {
+                            if let Some(sender) = pending_dial.remove(&peer_id) {
                                 sender.send(Ok(())).unwrap();
                             }
                         }
@@ -442,7 +442,7 @@ mod network {
                         peer_addr,
                         sender,
                     }) => {
-                        if outstanding_dial.contains_key(&peer_id) {
+                        if pending_dial.contains_key(&peer_id) {
                             todo!("Already dialing peer.");
                         } else {
                             swarm
@@ -452,7 +452,7 @@ mod network {
                             swarm
                                 .dial_addr(peer_addr.with(Protocol::P2p(peer_id.into())))
                                 .unwrap();
-                            outstanding_dial.insert(peer_id, sender);
+                            pending_dial.insert(peer_id, sender);
                         }
                     }
                     Some(Command::StartProviding { file_name, sender }) => {
@@ -461,14 +461,14 @@ mod network {
                             .kademlia
                             .start_providing(file_name.into_bytes().into())
                             .unwrap();
-                        outstanding_start_providing.insert(query_id, sender);
+                        pending_start_providing.insert(query_id, sender);
                     }
                     Some(Command::GetProviders { file_name, sender }) => {
                         let query_id = swarm
                             .behaviour_mut()
                             .kademlia
                             .get_providers(file_name.into_bytes().into());
-                        outstanding_get_providers.insert(query_id, sender);
+                        pending_get_providers.insert(query_id, sender);
                     }
                     Some(Command::RequestFile {
                         file_name,
@@ -479,7 +479,7 @@ mod network {
                             .behaviour_mut()
                             .request_response
                             .send_request(&peer, FileRequest(file_name));
-                        outstanding_request_file.insert(request_id, sender);
+                        pending_request_file.insert(request_id, sender);
                     }
                     Some(Command::RespondFile { file, channel }) => {
                         swarm
