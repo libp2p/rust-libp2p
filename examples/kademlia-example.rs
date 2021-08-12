@@ -7,13 +7,13 @@
 // https://github.com/zupzup/rust-peer-to-peer-example/blob/main/src/main.rs
 
 use libp2p::{
-    core::{either::EitherError, upgrade},
+    core::upgrade,
     identity,
     kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent, QueryResult},
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    swarm::SwarmEvent,
     tcp::TokioTcpConfig,
     NetworkBehaviour, PeerId, Swarm, Transport,
 };
@@ -23,34 +23,27 @@ use futures::{FutureExt, StreamExt};
 use std::env;
 
 #[derive(NetworkBehaviour)]
+#[behaviour(event_process = false, out_event = "MyOutEvent")]
 struct MyBehaviour {
     kademlia: Kademlia<MemoryStore>,
     // Using MDNS for peer discovery.
     mdns: Mdns,
 }
 
-impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
-    fn inject_event(&mut self, event: KademliaEvent) {
-        match event {
-            KademliaEvent::OutboundQueryCompleted { id, result, stats } => match result {
-                QueryResult::GetClosestPeers(Ok(ok)) => {}
-                _ => {}
-            },
-            _ => {}
-        }
+enum MyOutEvent {
+    Kademlia(KademliaEvent),
+    Mdns(MdnsEvent),
+}
+
+impl From<KademliaEvent> for MyOutEvent {
+    fn from(event: KademliaEvent) -> Self {
+        MyOutEvent::Kademlia(event)
     }
 }
 
-impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
-    fn inject_event(&mut self, event: MdnsEvent) {
-        match event {
-            MdnsEvent::Discovered(nodes) => {
-                for (peer_id, multiaddr) in nodes {
-                    self.kademlia.add_address(&peer_id, multiaddr);
-                }
-            }
-            _ => {}
-        }
+impl From<MdnsEvent> for MyOutEvent {
+    fn from(event: MdnsEvent) -> Self {
+        MyOutEvent::Mdns(event)
     }
 }
 
@@ -61,7 +54,7 @@ async fn main() {
     } else {
         false
     };
-    create_peer(client_mode)
+    create_peer(client_mode).await
 }
 
 async fn create_peer(client_mode: bool) {
@@ -104,26 +97,43 @@ async fn create_peer(client_mode: bool) {
 
     loop {
         futures::select! {
-            line = stdin.read_line(&mut buffer).fuse() => handle_command(buffer),
-            event = swarm.next() => handle_event(event.unwrap()),
+            line = stdin.read_line(&mut buffer).fuse() => handle_command(buffer.clone(), &mut swarm),
+            event = swarm.next() => match event.unwrap() {
+                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on: {}", address),
+                SwarmEvent::Behaviour(event) => handle_event(event, &mut swarm),
+                _ => {}
+            }
         }
     }
 }
 
-fn handle_command(command: String, swarm: &Swarm<MyBehaviour>) {
+fn handle_command(command: String, swarm: &mut Swarm<MyBehaviour>) {
     if command.contains("list peer") {
-        list_peers(&swarm);
+        list_peers(swarm);
     }
 }
 
-fn handle_event(event: SwarmEvent<(), EitherError>) {
+fn handle_event(event: MyOutEvent, swarm: &mut Swarm<MyBehaviour>) {
     match event {
-        SwarmEvent::NewListenAddr { address, .. } => println!("Listening on: {}", address),
-        _ => {}
+        MyOutEvent::Kademlia(kad_event) => match kad_event {
+            KademliaEvent::OutboundQueryCompleted { id, result, stats } => todo!(),
+            _ => {}
+        },
+        MyOutEvent::Mdns(mdns_event) => match mdns_event {
+            MdnsEvent::Discovered(nodes) => {
+                for (peer_id, multiaddr) in nodes {
+                    swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .add_address(&peer_id, multiaddr);
+                }
+            }
+            _ => {}
+        },
     }
 }
 
-fn list_peers(swarm: &Swarm<MyBehaviour>) {
+fn list_peers(swarm: &mut Swarm<MyBehaviour>) {
     for bucket in swarm.behaviour_mut().kademlia.kbuckets() {
         if bucket.num_entries() > 0 {
             for item in bucket.iter() {
