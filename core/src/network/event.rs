@@ -179,6 +179,15 @@ pub enum DialAttemptsRemaining<THandler> {
     None(THandler),
 }
 
+impl<THandler> From<&DialAttemptsRemaining<THandler>> for u32 {
+    fn from(attempts_remaining: &DialAttemptsRemaining<THandler>) -> Self {
+        match attempts_remaining {
+            DialAttemptsRemaining::Some(attempts) => *attempts,
+            DialAttemptsRemaining::None(_) => 0,
+        }
+    }
+}
+
 impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug
     for NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler>
 where

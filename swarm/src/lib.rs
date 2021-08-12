@@ -82,8 +82,8 @@ use libp2p_core::{
     },
     muxing::StreamMuxerBox,
     network::{
-        self, peer::ConnectedPeer, ConnectionLimits, Network, NetworkConfig, NetworkEvent,
-        NetworkInfo,
+        self, peer::ConnectedPeer, ConnectionLimits, DialAttemptsRemaining, Network, NetworkConfig,
+        NetworkEvent, NetworkInfo,
     },
     transport::{self, TransportError},
     upgrade::ProtocolName,
@@ -342,7 +342,8 @@ where
     /// Initiates a new dialing attempt to the given peer.
     pub fn dial(&mut self, peer_id: &PeerId) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
-            self.behaviour.inject_dial_failure(peer_id);
+            // TODO: Needed?
+            // self.behaviour.inject_dial_failure(peer_id);
             return Err(DialError::Banned);
         }
 
@@ -374,7 +375,8 @@ where
                 peer_id,
                 error
             );
-            self.behaviour.inject_dial_failure(&peer_id);
+            // TODO: Needed?
+            // self.behaviour.inject_dial_failure(&peer_id);
         }
 
         result
@@ -568,6 +570,7 @@ where
                     connected,
                     error,
                     num_established,
+                    handler,
                 }) => {
                     if let Some(error) = error.as_ref() {
                         log::debug!("Connection {:?} closed: {:?}", connected, error);
@@ -576,8 +579,12 @@ where
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
-                    this.behaviour
-                        .inject_connection_closed(&peer_id, &id, &endpoint);
+                    this.behaviour.inject_connection_closed(
+                        &peer_id,
+                        &id,
+                        &endpoint,
+                        handler.into_protocol_handler(),
+                    );
                     if num_established == 0 {
                         this.behaviour.inject_disconnected(&peer_id);
                     }
@@ -668,7 +675,9 @@ where
                     local_addr,
                     send_back_addr,
                     error,
+                    handler: _,
                 }) => {
+                    // TODO: Should handler not be injected into behaviour?
                     log::debug!("Incoming connection failed: {:?}", error);
                     return Poll::Ready(SwarmEvent::IncomingConnectionError {
                         local_addr,
@@ -684,17 +693,21 @@ where
                 }) => {
                     log::debug!(
                         "Connection attempt to {:?} via {:?} failed with {:?}. Attempts remaining: {}.",
-                        peer_id, multiaddr, error, attempts_remaining);
+                        // TODO: Can we do better on conversion?
+                        peer_id, multiaddr, error, Into::<u32>::into(&attempts_remaining));
                     this.behaviour
                         .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
-                    if attempts_remaining == 0 {
-                        this.behaviour.inject_dial_failure(&peer_id);
+                    let attempts_remaining_num = (&attempts_remaining).into();
+                    if let DialAttemptsRemaining::None(handler) = attempts_remaining {
+                        this.behaviour
+                            .inject_dial_failure(&peer_id, handler.into_protocol_handler());
                     }
                     return Poll::Ready(SwarmEvent::UnreachableAddr {
                         peer_id,
                         address: multiaddr,
                         error,
-                        attempts_remaining,
+                        // TODO: Can we do better?
+                        attempts_remaining: attempts_remaining_num,
                     });
                 }
                 Poll::Ready(NetworkEvent::UnknownPeerDialError {
@@ -766,7 +779,10 @@ where
                 }
                 Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition }) => {
                     if this.banned_peers.contains(&peer_id) {
-                        this.behaviour.inject_dial_failure(&peer_id);
+                        this.behaviour.inject_dial_failure(
+                            &peer_id,
+                            todo!("Have DialPeer contain handler which can then be returned."),
+                        );
                     } else {
                         let condition_matched = match condition {
                             DialPeerCondition::Disconnected => {

@@ -113,9 +113,11 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_closed(peer_id, connection, endpoint)
+            // TODO: Unwrap safe here?
+            inner.inject_connection_closed(peer_id, connection, endpoint, handler.inner.unwrap())
         }
     }
 
@@ -153,9 +155,10 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+    fn inject_dial_failure(&mut self, peer_id: &PeerId, handler: Self::ProtocolsHandler) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_dial_failure(peer_id)
+            // TODO: Unwrap safe here?
+            inner.inject_dial_failure(peer_id, handler.inner.unwrap())
         }
     }
 

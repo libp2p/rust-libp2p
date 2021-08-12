@@ -112,7 +112,7 @@ pub trait NetworkBehaviour: Send + 'static {
     /// A call to this method is always paired with an earlier call to
     /// `inject_connection_established` with the same peer ID, connection ID and
     /// endpoint.
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
+    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint, _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler) {}
 
     /// Informs the behaviour that the [`ConnectedPoint`] of an existing connection has changed.
     fn inject_address_change(
@@ -153,7 +153,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// The `peer_id` is guaranteed to be in a disconnected state. In other words,
     /// `inject_connected` has not been called, or `inject_disconnected` has been called since then.
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {}
+    fn inject_dial_failure(&mut self, _peer_id: &PeerId, _handler: Self::ProtocolsHandler) {}
 
     /// Indicates to the behaviour that a new listener was created.
     fn inject_new_listener(&mut self, _id: ListenerId) {}

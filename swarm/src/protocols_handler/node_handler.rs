@@ -65,6 +65,11 @@ where
         self.substream_upgrade_protocol_override = version;
         self
     }
+
+    // TODO: Rethink this method.
+    pub(crate) fn into_protocol_handler(self) -> TIntoProtoHandler {
+        self.handler
+    }
 }
 
 impl<TIntoProtoHandler, TProtoHandler> IntoConnectionHandler
@@ -128,6 +133,14 @@ where
     shutdown: Shutdown,
     /// The substream upgrade protocol override, if any.
     substream_upgrade_protocol_override: Option<upgrade::Version>,
+}
+
+impl<TProtoHandler: ProtocolsHandler> NodeHandlerWrapper<TProtoHandler> {
+    // TODO: Should this be a From impl?
+    // TODO: Find better name.
+    pub fn into_protocol_handler(self) -> TProtoHandler {
+        self.handler
+    }
 }
 
 struct SubstreamUpgrade<UserData, Upgrade> {
