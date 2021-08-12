@@ -331,9 +331,16 @@ where
 
     /// Initiates a new dialing attempt to the given address.
     pub fn dial_addr(&mut self, addr: Multiaddr) -> Result<(), DialError> {
-        let handler = self
-            .behaviour
-            .new_handler()
+        let handler = self.behaviour.new_handler();
+        self.dial_addr_with_handler(addr, handler)
+    }
+
+    fn dial_addr_with_handler(
+        &mut self,
+        addr: Multiaddr,
+        handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
+    ) -> Result<(), DialError> {
+        let handler = handler
             .into_node_handler_builder()
             .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
         Ok(self.network.dial(&addr, handler).map(|_id| ())?)
@@ -341,6 +348,15 @@ where
 
     /// Initiates a new dialing attempt to the given peer.
     pub fn dial(&mut self, peer_id: &PeerId) -> Result<(), DialError> {
+        let handler = self.behaviour.new_handler();
+        self.dial_with_handler(peer_id, handler)
+    }
+
+    fn dial_with_handler(
+        &mut self,
+        peer_id: &PeerId,
+        handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
+    ) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
             // TODO: Needed?
             // self.behaviour.inject_dial_failure(peer_id);
@@ -355,9 +371,7 @@ where
             .filter(|a| !self_listening.contains(a));
 
         let result = if let Some(first) = addrs.next() {
-            let handler = self
-                .behaviour
-                .new_handler()
+            let handler = handler
                 .into_node_handler_builder()
                 .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
             self.network
@@ -774,15 +788,16 @@ where
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     return Poll::Ready(SwarmEvent::Behaviour(event))
                 }
-                Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
-                    let _ = Swarm::dial_addr(&mut *this, address);
+                Poll::Ready(NetworkBehaviourAction::DialAddress { address, handler }) => {
+                    let _ = Swarm::dial_addr_with_handler(&mut *this, address, handler);
                 }
-                Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition }) => {
+                Poll::Ready(NetworkBehaviourAction::DialPeer {
+                    peer_id,
+                    condition,
+                    handler,
+                }) => {
                     if this.banned_peers.contains(&peer_id) {
-                        this.behaviour.inject_dial_failure(
-                            &peer_id,
-                            todo!("Have DialPeer contain handler which can then be returned."),
-                        );
+                        this.behaviour.inject_dial_failure(&peer_id, handler);
                     } else {
                         let condition_matched = match condition {
                             DialPeerCondition::Disconnected => {
@@ -792,7 +807,7 @@ where
                             DialPeerCondition::Always => true,
                         };
                         if condition_matched {
-                            if Swarm::dial(this, &peer_id).is_ok() {
+                            if Swarm::dial_with_handler(this, &peer_id, handler).is_ok() {
                                 return Poll::Ready(SwarmEvent::Dialing(peer_id));
                             }
                         } else {
@@ -814,6 +829,7 @@ where
                                     }
                                 }
                             }
+                            // TODO: Return the handler to the behaviour.
                         }
                     }
                 }
@@ -1261,6 +1277,7 @@ impl NetworkBehaviour for DummyBehaviour {
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
+            Self::ProtocolsHandler,
         >,
     > {
         Poll::Pending

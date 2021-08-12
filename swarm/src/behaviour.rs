@@ -183,7 +183,7 @@ pub trait NetworkBehaviour: Send + 'static {
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent, Self::ProtocolsHandler>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -229,7 +229,8 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 ///
 /// [`Swarm`]: super::Swarm
 #[derive(Debug)]
-pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
+// TODO: Derive TInEvent from THandler.
+pub enum NetworkBehaviourAction<TInEvent, TOutEvent, THandler> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
@@ -237,6 +238,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     DialAddress {
         /// The address to dial.
         address: Multiaddr,
+        handler: THandler,
     },
 
     /// Instructs the swarm to dial a known `PeerId`.
@@ -254,6 +256,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         peer_id: PeerId,
         /// The condition for initiating a new dialing attempt.
         condition: DialPeerCondition,
+        handler: THandler,
     },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
@@ -314,16 +317,16 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     },
 }
 
-impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
+impl<TInEvent, TOutEvent, THandler> NetworkBehaviourAction<TInEvent, TOutEvent, THandler> {
     /// Map the handler event.
-    pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent> {
+    pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent, THandler> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::DialAddress { address } => {
-                NetworkBehaviourAction::DialAddress { address }
+            NetworkBehaviourAction::DialAddress { address, handler } => {
+                NetworkBehaviourAction::DialAddress { address, handler }
             }
-            NetworkBehaviourAction::DialPeer { peer_id, condition } => {
-                NetworkBehaviourAction::DialPeer { peer_id, condition }
+            NetworkBehaviourAction::DialPeer { peer_id, condition, handler } => {
+                NetworkBehaviourAction::DialPeer { peer_id, condition, handler }
             }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
@@ -348,14 +351,14 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
     }
 
     /// Map the event the swarm will return.
-    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E> {
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E, THandler> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::DialAddress { address } => {
-                NetworkBehaviourAction::DialAddress { address }
+            NetworkBehaviourAction::DialAddress { address, handler } => {
+                NetworkBehaviourAction::DialAddress { address, handler }
             }
-            NetworkBehaviourAction::DialPeer { peer_id, condition } => {
-                NetworkBehaviourAction::DialPeer { peer_id, condition }
+            NetworkBehaviourAction::DialPeer { peer_id, condition, handler } => {
+                NetworkBehaviourAction::DialPeer { peer_id, condition, handler }
             }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
