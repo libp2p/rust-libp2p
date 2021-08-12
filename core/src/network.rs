@@ -22,7 +22,7 @@ mod event;
 pub mod peer;
 
 pub use crate::connection::{ConnectionCounters, ConnectionLimits};
-pub use event::{IncomingConnection, NetworkEvent};
+pub use event::{IncomingConnection, NetworkEvent, DialAttemptsRemaining};
 pub use peer::Peer;
 
 use crate::{
@@ -438,6 +438,7 @@ where
                         log::warn!("Dialing aborted: {:?}", e);
                     }
                 }
+                // TODO: Include handler in event.
                 event
             }
             Poll::Ready(PoolEvent::ConnectionClosed {
@@ -445,12 +446,14 @@ where
                 connected,
                 error,
                 num_established,
+                handler,
                 ..
             }) => NetworkEvent::ConnectionClosed {
                 id,
                 connected,
                 num_established,
                 error,
+                handler,
             },
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
                 NetworkEvent::ConnectionEvent { connection, event }
@@ -563,7 +566,7 @@ fn on_connection_failed<'a, TTrans, THandler>(
     id: ConnectionId,
     endpoint: ConnectedPoint,
     error: PendingConnectionError<TTrans::Error>,
-    handler: Option<THandler>,
+    handler: THandler,
 ) -> (
     Option<DialingOpts<PeerId, THandler>>,
     NetworkEvent<'a, TTrans, THandlerInEvent<THandler>, THandlerOutEvent<THandler>, THandler>,
@@ -592,27 +595,21 @@ where
         let failed_addr = attempt.current.1.clone();
 
         let (opts, attempts_remaining) = if num_remain > 0 {
-            if let Some(handler) = handler {
-                let next_attempt = attempt.remaining.remove(0);
-                let opts = DialingOpts {
-                    peer: peer_id,
-                    handler,
-                    address: next_attempt,
-                    remaining: attempt.remaining,
-                };
-                (Some(opts), num_remain)
-            } else {
-                // The error is "fatal" for the dialing attempt, since
-                // the handler was already consumed. All potential
-                // remaining connection attempts are thus void.
-                (None, 0)
-            }
+            let next_attempt = attempt.remaining.remove(0);
+            let opts = DialingOpts {
+                peer: peer_id,
+                handler,
+                address: next_attempt,
+                remaining: attempt.remaining,
+            };
+            (Some(opts), DialAttemptsRemaining::Some(num_remain))
         } else {
-            (None, 0)
+            (None, DialAttemptsRemaining::None(handler))
         };
 
         (
             opts,
+            // TODO: This is the place to return the handler.
             NetworkEvent::DialError {
                 attempts_remaining,
                 peer_id,
@@ -625,9 +622,11 @@ where
         match endpoint {
             ConnectedPoint::Dialer { address } => (
                 None,
+                // TODO: This is the place to return the handler.
                 NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
+                    handler,
                 },
             ),
             ConnectedPoint::Listener {
@@ -635,10 +634,12 @@ where
                 send_back_addr,
             } => (
                 None,
+                // TODO: This is the place to return the handler.
                 NetworkEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,
                     error,
+                    handler,
                 },
             ),
         }

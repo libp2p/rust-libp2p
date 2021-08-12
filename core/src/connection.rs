@@ -229,10 +229,12 @@ where
         self.handler.inject_event(event);
     }
 
+    // TODO: Update comment
+    //
     /// Begins an orderly shutdown of the connection, returning a
     /// `Future` that resolves when connection shutdown is complete.
-    pub fn close(self) -> Close<TMuxer> {
-        self.muxing.close().0
+    pub fn close(self) -> (THandler, Close<TMuxer>) {
+        (self.handler, self.muxing.close().0)
     }
 
     /// Polls the connection for events produced by the associated handler

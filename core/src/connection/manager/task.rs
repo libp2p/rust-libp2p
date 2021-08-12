@@ -71,6 +71,7 @@ pub enum Event<H: IntoConnectionHandler, TE> {
     Closed {
         id: TaskId,
         error: Option<ConnectionError<THandlerError<H>>>,
+        handler: H::Handler,
     },
 }
 
@@ -177,7 +178,7 @@ where
     },
 
     /// The connection is closing (active close).
-    Closing(Close<M>),
+    Closing { closing_muxer: Close<M>, handler: H::Handler },
 
     /// The task is terminating with a final event for the `Manager`.
     Terminating(Event<H, E>),
@@ -265,7 +266,11 @@ where
                                 // Don't accept any further commands.
                                 this.commands.get_mut().close();
                                 // Discard the event, if any, and start a graceful close.
-                                this.state = State::Closing(connection.close());
+                                let (handler, closing_muxer) = connection.close();
+                                this.state = State::Closing {
+                                    handler,
+                                    closing_muxer,
+                                };
                                 continue 'poll;
                             }
                             Poll::Ready(None) => {
@@ -324,10 +329,13 @@ where
                             Poll::Ready(Err(error)) => {
                                 // Don't accept any further commands.
                                 this.commands.get_mut().close();
+                                // TODO: Good idea if there is already an error?
+                                let (handler, _) = connection.close();
                                 // Terminate the task with the error, dropping the connection.
                                 let event = Event::Closed {
                                     id,
                                     error: Some(error),
+                                    handler,
                                 };
                                 this.state = State::Terminating(event);
                             }
@@ -335,13 +343,17 @@ where
                     }
                 }
 
-                State::Closing(mut closing) => {
+                State::Closing {
+                    handler,
+                    mut closing_muxer,
+                } => {
                     // Try to gracefully close the connection.
-                    match closing.poll_unpin(cx) {
+                    match closing_muxer.poll_unpin(cx) {
                         Poll::Ready(Ok(())) => {
                             let event = Event::Closed {
                                 id: this.id,
                                 error: None,
+                                handler,
                             };
                             this.state = State::Terminating(event);
                         }
@@ -349,11 +361,15 @@ where
                             let event = Event::Closed {
                                 id: this.id,
                                 error: Some(ConnectionError::IO(e)),
+                                handler,
                             };
                             this.state = State::Terminating(event);
                         }
                         Poll::Pending => {
-                            this.state = State::Closing(closing);
+                            this.state = State::Closing {
+                                handler,
+                                closing_muxer,
+                            };
                             return Poll::Pending;
                         }
                     }

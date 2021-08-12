@@ -102,6 +102,7 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTransErr> {
         pool: &'a mut Pool<THandler, TTransErr>,
         /// The remaining number of established connections to the same peer.
         num_established: u32,
+        handler: THandler::Handler,
     },
 
     /// A connection attempt failed.
@@ -114,7 +115,7 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTransErr> {
         error: PendingConnectionError<TTransErr>,
         /// The handler that was supposed to handle the connection,
         /// if the connection failed before the handler was consumed.
-        handler: Option<THandler>,
+        handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
         /// A reference to the pool that managed the connection.
@@ -554,6 +555,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                 num_established,
                 error: None,
                 pool: self,
+                handler: todo!(),
             });
         }
 
@@ -572,7 +574,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                             id,
                             endpoint,
                             error,
-                            handler: Some(handler),
+                            handler: handler,
                             peer,
                             pool: self,
                         });
@@ -582,6 +584,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                     id,
                     connected,
                     error,
+                    handler,
                 } => {
                     let num_established =
                         if let Some(conns) = self.established.get_mut(&connected.peer_id) {
@@ -601,6 +604,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                         error,
                         num_established,
                         pool: self,
+                        handler,
                     });
                 }
                 manager::Event::ConnectionEstablished { entry } => {
@@ -610,30 +614,38 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
 
                         // Check general established connection limit.
                         if let Err(e) = self.counters.check_max_established(&endpoint) {
-                            let connected = entry.remove();
-                            return Poll::Ready(PoolEvent::PendingConnectionError {
-                                id,
-                                endpoint: connected.endpoint,
-                                error: PendingConnectionError::ConnectionLimit(e),
-                                handler: None,
-                                peer,
-                                pool: self,
-                            });
+                            // TODO: Good idea? How should we let the user know that the close
+                            // happened due to a conneciton limit?
+                            entry.start_close();
+                            // let connected = entry.remove();
+                            // return Poll::Ready(PoolEvent::PendingConnectionError {
+                            //     id,
+                            //     endpoint: connected.endpoint,
+                            //     error: PendingConnectionError::ConnectionLimit(e),
+                            //     handler: None,
+                            //     peer,
+                            //     pool: self,
+                            // });
+                            continue;
                         }
 
                         // Check per-peer established connection limit.
                         let current =
                             num_peer_established(&self.established, &entry.connected().peer_id);
                         if let Err(e) = self.counters.check_max_established_per_peer(current) {
-                            let connected = entry.remove();
-                            return Poll::Ready(PoolEvent::PendingConnectionError {
-                                id,
-                                endpoint: connected.endpoint,
-                                error: PendingConnectionError::ConnectionLimit(e),
-                                handler: None,
-                                peer,
-                                pool: self,
-                            });
+                            // TODO: Good idea? How should we let the user know that the close
+                            // happened due to a conneciton limit?
+                            entry.start_close();
+                            // let connected = entry.remove();
+                            // return Poll::Ready(PoolEvent::PendingConnectionError {
+                            //     id,
+                            //     endpoint: connected.endpoint,
+                            //     error: PendingConnectionError::ConnectionLimit(e),
+                            //     handler: None,
+                            //     peer,
+                            //     pool: self,
+                            // });
+                            continue;
                         }
 
                         // Peer ID checks must already have happened. See `add_pending`.

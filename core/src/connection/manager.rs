@@ -192,6 +192,7 @@ pub enum Event<'a, H: IntoConnectionHandler, TE> {
         /// The error that occurred, if any. If `None`, the connection
         /// has been actively closed.
         error: Option<ConnectionError<THandlerError<H>>>,
+        handler: H::Handler,
     },
 
     /// A connection has been established.
@@ -384,7 +385,7 @@ impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
                         new_endpoint: new,
                     }
                 }
-                task::Event::Closed { id, error } => {
+                task::Event::Closed { id, error, handler } => {
                     let id = ConnectionId(id);
                     let task = task.remove();
                     match task.state {
@@ -392,6 +393,7 @@ impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
                             id,
                             connected,
                             error,
+                            handler,
                         },
                         TaskState::Pending => unreachable!(
                             "`Event::Closed` implies (2) occurred on that task and thus (3)."
