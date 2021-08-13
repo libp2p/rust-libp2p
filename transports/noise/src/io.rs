@@ -24,11 +24,16 @@ mod framed;
 pub mod handshake;
 
 use bytes::Bytes;
-use framed::{MAX_FRAME_LEN, NoiseFramed};
-use futures::ready;
+use framed::{NoiseFramed, MAX_FRAME_LEN};
 use futures::prelude::*;
+use futures::ready;
 use log::trace;
-use std::{cmp::min, fmt, io, pin::Pin, task::{Context, Poll}};
+use std::{
+    cmp::min,
+    fmt, io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// A noise session to a remote.
 ///
@@ -43,9 +48,7 @@ pub struct NoiseOutput<T> {
 
 impl<T> fmt::Debug for NoiseOutput<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NoiseOutput")
-            .field("io", &self.io)
-            .finish()
+        f.debug_struct("NoiseOutput").field("io", &self.io).finish()
     }
 }
 
@@ -62,13 +65,17 @@ impl<T> NoiseOutput<T> {
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
         loop {
             let len = self.recv_buffer.len();
             let off = self.recv_offset;
             if len > 0 {
                 let n = min(len - off, buf.len());
-                buf[.. n].copy_from_slice(&self.recv_buffer[off .. off + n]);
+                buf[..n].copy_from_slice(&self.recv_buffer[off..off + n]);
                 trace!("read: copied {}/{} bytes", off + n, len);
                 self.recv_offset += n;
                 if len == self.recv_offset {
@@ -77,7 +84,7 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
                     // the buffer when polling for the next frame below.
                     self.recv_buffer = Bytes::new();
                 }
-                return Poll::Ready(Ok(n))
+                return Poll::Ready(Ok(n));
             }
 
             match Pin::new(&mut self.io).poll_next(cx) {
@@ -94,7 +101,11 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
 }
 
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         let this = Pin::into_inner(self);
         let mut io = Pin::new(&mut this.io);
         let frame_buf = &mut this.send_buffer;
@@ -111,7 +122,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         let n = min(MAX_FRAME_LEN, off.saturating_add(buf.len()));
         this.send_buffer.resize(n, 0u8);
         let n = min(MAX_FRAME_LEN - off, buf.len());
-        this.send_buffer[off .. off + n].copy_from_slice(&buf[.. n]);
+        this.send_buffer[off..off + n].copy_from_slice(&buf[..n]);
         this.send_offset += n;
         trace!("write: buffered {} bytes", this.send_offset);
 
@@ -134,7 +145,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         io.as_mut().poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>>{
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         ready!(self.as_mut().poll_flush(cx))?;
         Pin::new(&mut self.io).poll_close(cx)
     }

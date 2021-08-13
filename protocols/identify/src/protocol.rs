@@ -21,9 +21,8 @@
 use crate::structs_proto;
 use futures::prelude::*;
 use libp2p_core::{
-    Multiaddr,
-    PublicKey,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    Multiaddr, PublicKey,
 };
 use log::{debug, trace};
 use prost::Message;
@@ -84,7 +83,7 @@ impl<T> fmt::Debug for ReplySubstream<T> {
 
 impl<T> ReplySubstream<T>
 where
-    T: AsyncWrite + Unpin
+    T: AsyncWrite + Unpin,
 {
     /// Sends back the requested information on the substream.
     ///
@@ -158,17 +157,18 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        send(socket, self.0.0).boxed()
+        send(socket, self.0 .0).boxed()
     }
 }
 
 async fn send<T>(mut io: T, info: IdentifyInfo) -> io::Result<()>
 where
-    T: AsyncWrite + Unpin
+    T: AsyncWrite + Unpin,
 {
     trace!("Sending: {:?}", info);
 
-    let listen_addrs = info.listen_addrs
+    let listen_addrs = info
+        .listen_addrs
         .into_iter()
         .map(|addr| addr.to_vec())
         .collect();
@@ -181,11 +181,13 @@ where
         public_key: Some(pubkey_bytes),
         listen_addrs,
         observed_addr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols
+        protocols: info.protocols,
     };
 
     let mut bytes = Vec::with_capacity(message.encoded_len());
-    message.encode(&mut bytes).expect("Vec<u8> provides capacity as needed");
+    message
+        .encode(&mut bytes)
+        .expect("Vec<u8> provides capacity as needed");
 
     upgrade::write_length_prefixed(&mut io, bytes).await?;
     io.close().await?;
@@ -195,7 +197,7 @@ where
 
 async fn recv<T>(mut socket: T) -> io::Result<IdentifyInfo>
 where
-    T: AsyncRead + AsyncWrite + Unpin
+    T: AsyncRead + AsyncWrite + Unpin,
 {
     socket.close().await?;
 
@@ -207,7 +209,7 @@ where
         Ok(v) => v,
         Err(err) => {
             debug!("Invalid message: {:?}", err);
-            return Err(err)
+            return Err(err);
         }
     };
 
@@ -255,14 +257,14 @@ fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<IdentifyInfo, io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use libp2p_tcp::TcpConfig;
-    use futures::{prelude::*, channel::oneshot};
+    use super::*;
+    use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         identity,
+        upgrade::{self, apply_inbound, apply_outbound},
         Transport,
-        upgrade::{self, apply_outbound, apply_inbound}
     };
-    use super::*;
+    use libp2p_tcp::TcpConfig;
 
     #[test]
     fn correct_transfer() {
@@ -280,7 +282,9 @@ mod tests {
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let addr = listener.next().await
+            let addr = listener
+                .next()
+                .await
                 .expect("some event")
                 .expect("no error")
                 .into_new_address()
@@ -288,14 +292,20 @@ mod tests {
             tx.send(addr).unwrap();
 
             let socket = listener
-                .next().await.unwrap().unwrap()
-                .into_upgrade().unwrap()
-                .0.await.unwrap();
+                .next()
+                .await
+                .unwrap()
+                .unwrap()
+                .into_upgrade()
+                .unwrap()
+                .0
+                .await
+                .unwrap();
 
             let sender = apply_inbound(socket, IdentifyProtocol).await.unwrap();
 
-            sender.send(
-                IdentifyInfo {
+            sender
+                .send(IdentifyInfo {
                     public_key: send_pubkey,
                     protocol_version: "proto_version".to_owned(),
                     agent_version: "agent_version".to_owned(),
@@ -305,27 +315,36 @@ mod tests {
                     ],
                     protocols: vec!["proto1".to_string(), "proto2".to_string()],
                     observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-                },
-            ).await.unwrap();
+                })
+                .await
+                .unwrap();
         });
 
         async_std::task::block_on(async move {
             let transport = TcpConfig::new();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let info = apply_outbound(
-                socket,
-                IdentifyProtocol,
-                upgrade::Version::V1
-            ).await.unwrap();
-            assert_eq!(info.observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
+            let info = apply_outbound(socket, IdentifyProtocol, upgrade::Version::V1)
+                .await
+                .unwrap();
+            assert_eq!(
+                info.observed_addr,
+                "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
+            );
             assert_eq!(info.public_key, recv_pubkey);
             assert_eq!(info.protocol_version, "proto_version");
             assert_eq!(info.agent_version, "agent_version");
-            assert_eq!(info.listen_addrs,
-                &["/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                "/ip6/::1/udp/1000".parse().unwrap()]);
-            assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
+            assert_eq!(
+                info.listen_addrs,
+                &[
+                    "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                    "/ip6/::1/udp/1000".parse().unwrap()
+                ]
+            );
+            assert_eq!(
+                info.protocols,
+                &["proto1".to_string(), "proto2".to_string()]
+            );
 
             bg_task.await;
         });

@@ -50,7 +50,7 @@ impl FloodsubConfig {
     pub fn new(local_peer_id: PeerId) -> Self {
         Self {
             local_peer_id,
-            subscribe_local_messages: false
+            subscribe_local_messages: false,
         }
     }
 }

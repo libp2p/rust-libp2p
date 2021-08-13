@@ -19,5 +19,5 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-	prost_build::compile_protos(&["src/io/handshake/payload.proto"], &["src"]).unwrap();
+    prost_build::compile_protos(&["src/io/handshake/payload.proto"], &["src"]).unwrap();
 }

@@ -97,14 +97,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
 
         async move {
             substream.send(std::io::Cursor::new(self.message)).await?;
-            let msg =
-                substream
-                    .next()
-                    .await
-                    .ok_or_else(|| OutgoingDstReqError::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+            let msg = substream.next().await.ok_or_else(|| {
+                OutgoingDstReqError::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))
+            })??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {

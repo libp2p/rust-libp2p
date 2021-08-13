@@ -40,13 +40,13 @@
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
-pub mod protocol;
 pub mod handler;
+pub mod protocol;
 
-pub use handler::{PingConfig, PingResult, PingSuccess, PingFailure};
 use handler::PingHandler;
+pub use handler::{PingConfig, PingFailure, PingResult, PingSuccess};
 
-use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use std::{collections::VecDeque, task::Context, task::Poll};
 use void::Void;
@@ -95,21 +95,15 @@ impl NetworkBehaviour for Ping {
         PingHandler::new(self.config.clone())
     }
 
-    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
     fn inject_event(&mut self, peer: PeerId, _: ConnectionId, result: PingResult) {
         self.events.push_front(PingEvent { peer, result })
     }
 
-    fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<Void, PingEvent>>
-    {
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Void, PingEvent>> {
         if let Some(e) = self.events.pop_back() {
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {

@@ -73,8 +73,10 @@ impl IncomingDstReq {
     /// stream then points to the source (as retreived with `src_id()` and `src_addrs()`).
     pub fn accept(
         self,
-    ) -> BoxFuture<'static, Result<(PeerId, Connection, oneshot::Receiver<()>), IncomingDstReqError>>
-    {
+    ) -> BoxFuture<
+        'static,
+        Result<(PeerId, Connection, oneshot::Receiver<()>), IncomingDstReqError>,
+    > {
         let IncomingDstReq { mut stream, src } = self;
         let msg = CircuitRelay {
             r#type: Some(circuit_relay::Type::Status.into()),

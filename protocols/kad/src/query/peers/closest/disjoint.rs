@@ -72,7 +72,10 @@ impl ClosestDisjointPeersIter {
         I: IntoIterator<Item = Key<PeerId>>,
         T: Into<KeyBytes> + Clone,
     {
-        let peers = known_closest_peers.into_iter().take(K_VALUE.get()).collect::<Vec<_>>();
+        let peers = known_closest_peers
+            .into_iter()
+            .take(K_VALUE.get())
+            .collect::<Vec<_>>();
         let iters = (0..config.parallelism.get())
             // NOTE: All [`ClosestPeersIter`] share the same set of peers at
             // initialization. The [`ClosestDisjointPeersIter.contacted_peers`]
@@ -88,7 +91,9 @@ impl ClosestDisjointPeersIter {
             config,
             target: target.into(),
             iters,
-            iter_order: (0..iters_len).map(IteratorIndex as fn(usize) -> IteratorIndex).cycle(),
+            iter_order: (0..iters_len)
+                .map(IteratorIndex as fn(usize) -> IteratorIndex)
+                .cycle(),
             contacted_peers: HashMap::new(),
         }
     }
@@ -106,7 +111,11 @@ impl ClosestDisjointPeersIter {
     pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         let mut updated = false;
 
-        if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
+        if let Some(PeerState {
+            initiated_by,
+            response,
+        }) = self.contacted_peers.get_mut(peer)
+        {
             updated = self.iters[*initiated_by].on_failure(peer);
 
             if updated {
@@ -148,7 +157,11 @@ impl ClosestDisjointPeersIter {
     {
         let mut updated = false;
 
-        if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
+        if let Some(PeerState {
+            initiated_by,
+            response,
+        }) = self.contacted_peers.get_mut(peer)
+        {
             // Pass the new `closer_peers` to the iterator that first yielded
             // the peer.
             updated = self.iters[*initiated_by].on_success(peer, closer_peers);
@@ -185,7 +198,7 @@ impl ClosestDisjointPeersIter {
         let mut state = None;
 
         // Ensure querying each iterator at most once.
-        for _ in 0 .. self.iters.len() {
+        for _ in 0..self.iters.len() {
             let i = self.iter_order.next().expect("Cycle never ends.");
             let iter = &mut self.iters[i];
 
@@ -198,7 +211,7 @@ impl ClosestDisjointPeersIter {
                                 // [`ClosestPeersIter`] yielded a peer. Thus this state is
                                 // unreachable.
                                 unreachable!();
-                            },
+                            }
                             Some(PeersIterState::Waiting(None)) => {}
                             Some(PeersIterState::WaitingAtCapacity) => {
                                 // At least one ClosestPeersIter is no longer at capacity, thus the
@@ -210,14 +223,13 @@ impl ClosestDisjointPeersIter {
                                 unreachable!();
                             }
                             None => state = Some(PeersIterState::Waiting(None)),
-
                         };
 
                         break;
                     }
                     PeersIterState::Waiting(Some(peer)) => {
                         match self.contacted_peers.get_mut(&*peer) {
-                            Some(PeerState{ response, .. }) => {
+                            Some(PeerState { response, .. }) => {
                                 // Another iterator already contacted this peer.
                                 let peer = peer.into_owned();
 
@@ -225,27 +237,27 @@ impl ClosestDisjointPeersIter {
                                     // The iterator will be notified later whether the given node
                                     // was successfully contacted or not. See
                                     // [`ClosestDisjointPeersIter::on_success`] for details.
-                                    ResponseState::Waiting => {},
+                                    ResponseState::Waiting => {}
                                     ResponseState::Succeeded => {
                                         // Given that iterator was not the first to contact the peer
                                         // it will not be made aware of the closer peers discovered
                                         // to uphold the S/Kademlia disjoint paths guarantee. See
                                         // [`ClosestDisjointPeersIter::on_success`] for details.
                                         iter.on_success(&peer, std::iter::empty());
-                                    },
+                                    }
                                     ResponseState::Failed => {
                                         iter.on_failure(&peer);
-                                    },
+                                    }
                                 }
-                            },
+                            }
                             None => {
                                 // The iterator is the first to contact this peer.
-                                self.contacted_peers.insert(
-                                    peer.clone().into_owned(),
-                                    PeerState::new(i),
-                                );
-                                return PeersIterState::Waiting(Some(Cow::Owned(peer.into_owned())));
-                            },
+                                self.contacted_peers
+                                    .insert(peer.clone().into_owned(), PeerState::new(i));
+                                return PeersIterState::Waiting(Some(Cow::Owned(
+                                    peer.into_owned(),
+                                )));
+                            }
                         }
                     }
                     PeersIterState::WaitingAtCapacity => {
@@ -255,13 +267,13 @@ impl ClosestDisjointPeersIter {
                                 // [`ClosestPeersIter`] yielded a peer. Thus this state is
                                 // unreachable.
                                 unreachable!();
-                            },
+                            }
                             Some(PeersIterState::Waiting(None)) => {}
                             Some(PeersIterState::WaitingAtCapacity) => {}
                             Some(PeersIterState::Finished) => {
                                 // `state` is never set to `Finished`.
                                 unreachable!();
-                            },
+                            }
                             None => state = Some(PeersIterState::WaitingAtCapacity),
                         };
 
@@ -280,10 +292,10 @@ impl ClosestDisjointPeersIter {
     /// See [`crate::query::Query::try_finish`] for details.
     pub fn finish_paths<'a, I>(&mut self, peers: I) -> bool
     where
-        I: IntoIterator<Item = &'a PeerId>
+        I: IntoIterator<Item = &'a PeerId>,
     {
         for peer in peers {
-            if let Some(PeerState{ initiated_by, .. }) = self.contacted_peers.get_mut(peer) {
+            if let Some(PeerState { initiated_by, .. }) = self.contacted_peers.get_mut(peer) {
                 self.iters[*initiated_by].finish();
             }
         }
@@ -312,7 +324,9 @@ impl ClosestDisjointPeersIter {
     ///       differentiate benign from faulty paths it as well returns faulty
     ///       peers and thus overall returns more than `num_results` peers.
     pub fn into_result(self) -> impl Iterator<Item = PeerId> {
-        let result_per_path= self.iters.into_iter()
+        let result_per_path = self
+            .iters
+            .into_iter()
             .map(|iter| iter.into_result().map(Key::from));
 
         ResultIter::new(self.target, result_per_path).map(Key::into_preimage)
@@ -370,7 +384,8 @@ enum ResponseState {
 //
 // Note: This operates under the assumption that `I` is ordered.
 #[derive(Clone, Debug)]
-struct ResultIter<I> where
+struct ResultIter<I>
+where
     I: Iterator<Item = Key<PeerId>>,
 {
     target: KeyBytes,
@@ -379,7 +394,7 @@ struct ResultIter<I> where
 
 impl<I: Iterator<Item = Key<PeerId>>> ResultIter<I> {
     fn new(target: KeyBytes, iters: impl Iterator<Item = I>) -> Self {
-        ResultIter{
+        ResultIter {
             target,
             iters: iters.map(Iterator::peekable).collect(),
         }
@@ -392,36 +407,34 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
     fn next(&mut self) -> Option<Self::Item> {
         let target = &self.target;
 
-        self.iters.iter_mut()
+        self.iters
+            .iter_mut()
             // Find the iterator with the next closest peer.
-            .fold(
-                Option::<&mut Peekable<_>>::None,
-                |iter_a, iter_b| {
-                    let iter_a = match iter_a {
-                        Some(iter_a) => iter_a,
-                        None => return Some(iter_b),
-                    };
+            .fold(Option::<&mut Peekable<_>>::None, |iter_a, iter_b| {
+                let iter_a = match iter_a {
+                    Some(iter_a) => iter_a,
+                    None => return Some(iter_b),
+                };
 
-                    match (iter_a.peek(), iter_b.peek()) {
-                        (Some(next_a), Some(next_b)) => {
-                            if next_a == next_b {
-                                // Remove from one for deduplication.
-                                iter_b.next();
-                                return Some(iter_a)
-                            }
+                match (iter_a.peek(), iter_b.peek()) {
+                    (Some(next_a), Some(next_b)) => {
+                        if next_a == next_b {
+                            // Remove from one for deduplication.
+                            iter_b.next();
+                            return Some(iter_a);
+                        }
 
-                            if target.distance(next_a) < target.distance(next_b) {
-                                Some(iter_a)
-                            } else {
-                                Some(iter_b)
-                            }
-                        },
-                        (Some(_), None) => Some(iter_a),
-                        (None, Some(_)) => Some(iter_b),
-                        (None, None) => None,
+                        if target.distance(next_a) < target.distance(next_b) {
+                            Some(iter_a)
+                        } else {
+                            Some(iter_b)
+                        }
                     }
-                },
-            )
+                    (Some(_), None) => Some(iter_a),
+                    (None, Some(_)) => Some(iter_b),
+                    (None, None) => None,
+                }
+            })
             // Pop off the next closest peer from that iterator.
             .and_then(Iterator::next)
     }
@@ -434,7 +447,7 @@ mod tests {
     use crate::K_VALUE;
     use libp2p_core::multihash::{Code, Multihash};
     use quickcheck::*;
-    use rand::{Rng, seq::SliceRandom};
+    use rand::{seq::SliceRandom, Rng};
     use std::collections::HashSet;
     use std::iter;
 
@@ -442,22 +455,18 @@ mod tests {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let target = Target::arbitrary(g).0;
             let num_closest_iters = g.gen_range(0, 20 + 1);
-            let peers = random_peers(
-                g.gen_range(0, 20 * num_closest_iters + 1),
-                g,
-            );
+            let peers = random_peers(g.gen_range(0, 20 * num_closest_iters + 1), g);
 
             let iters: Vec<_> = (0..num_closest_iters)
                 .map(|_| {
                     let num_peers = g.gen_range(0, 20 + 1);
-                    let mut peers = peers.choose_multiple(g, num_peers)
+                    let mut peers = peers
+                        .choose_multiple(g, num_peers)
                         .cloned()
                         .map(Key::from)
                         .collect::<Vec<_>>();
 
-                    peers.sort_unstable_by(|a, b| {
-                        target.distance(a).cmp(&target.distance(b))
-                    });
+                    peers.sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
 
                     peers.into_iter()
                 })
@@ -467,7 +476,8 @@ mod tests {
         }
 
         fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-            let peers = self.iters
+            let peers = self
+                .iters
                 .clone()
                 .into_iter()
                 .flatten()
@@ -475,7 +485,9 @@ mod tests {
                 .into_iter()
                 .collect::<Vec<_>>();
 
-            let iters = self.iters.clone()
+            let iters = self
+                .iters
+                .clone()
                 .into_iter()
                 .map(|iter| iter.collect::<Vec<_>>())
                 .collect();
@@ -503,14 +515,18 @@ mod tests {
             // The peer that should not be included.
             let peer = self.peers.pop()?;
 
-            let iters = self.iters.clone().into_iter()
+            let iters = self
+                .iters
+                .clone()
+                .into_iter()
                 .filter_map(|mut iter| {
                     iter.retain(|p| p != &peer);
                     if iter.is_empty() {
                         return None;
                     }
                     Some(iter.into_iter())
-                }).collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>();
 
             Some(ResultIter::new(self.target.clone(), iters.into_iter()))
         }
@@ -526,16 +542,22 @@ mod tests {
     }
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
-        (0 .. n).map(|_| PeerId::from_multihash(
-            Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap()
-        ).unwrap()).collect()
+        (0..n)
+            .map(|_| {
+                PeerId::from_multihash(
+                    Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap(),
+                )
+                .unwrap()
+            })
+            .collect()
     }
 
     #[test]
     fn result_iter_returns_deduplicated_ordered_peer_id_stream() {
         fn prop(result_iter: ResultIter<std::vec::IntoIter<Key<PeerId>>>) {
             let expected = {
-                let mut deduplicated = result_iter.clone()
+                let mut deduplicated = result_iter
+                    .clone()
                     .iters
                     .into_iter()
                     .flatten()
@@ -545,7 +567,10 @@ mod tests {
                     .collect::<Vec<_>>();
 
                 deduplicated.sort_unstable_by(|a, b| {
-                    result_iter.target.distance(a).cmp(&result_iter.target.distance(b))
+                    result_iter
+                        .target
+                        .distance(a)
+                        .cmp(&result_iter.target.distance(b))
                 });
 
                 deduplicated
@@ -560,7 +585,7 @@ mod tests {
     #[derive(Debug, Clone)]
     struct Parallelism(NonZeroUsize);
 
-    impl Arbitrary for Parallelism{
+    impl Arbitrary for Parallelism {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             Parallelism(NonZeroUsize::new(g.gen_range(1, 10)).unwrap())
         }
@@ -569,7 +594,7 @@ mod tests {
     #[derive(Debug, Clone)]
     struct NumResults(NonZeroUsize);
 
-    impl Arbitrary for NumResults{
+    impl Arbitrary for NumResults {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             NumResults(NonZeroUsize::new(g.gen_range(1, K_VALUE.get())).unwrap())
         }
@@ -604,13 +629,12 @@ mod tests {
         let now = Instant::now();
         let target: KeyBytes = Key::from(PeerId::random()).into();
 
-        let mut pool = [0; 12].iter()
+        let mut pool = [0; 12]
+            .iter()
             .map(|_| Key::from(PeerId::random()))
             .collect::<Vec<_>>();
 
-        pool.sort_unstable_by(|a, b| {
-            target.distance(a).cmp(&target.distance(b))
-        });
+        pool.sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
 
         let known_closest_peers = pool.split_off(pool.len() - 3);
 
@@ -637,10 +661,7 @@ mod tests {
             }
         }
 
-        assert_eq!(
-            PeersIterState::WaitingAtCapacity,
-            peers_iter.next(now),
-        );
+        assert_eq!(PeersIterState::WaitingAtCapacity, peers_iter.next(now),);
 
         let response_2 = pool.split_off(pool.len() - 3);
         let response_3 = pool.split_off(pool.len() - 3);
@@ -651,7 +672,10 @@ mod tests {
         // Response from malicious peer 1.
         peers_iter.on_success(
             known_closest_peers[0].preimage(),
-            malicious_response_1.clone().into_iter().map(|k| k.preimage().clone()),
+            malicious_response_1
+                .clone()
+                .into_iter()
+                .map(|k| k.preimage().clone()),
         );
 
         // Response from peer 2.
@@ -676,7 +700,7 @@ mod tests {
             } else {
                 panic!("Expected iterator to return peer to query.");
             }
-        };
+        }
 
         // Expect a peer from each disjoint path.
         assert!(next_to_query.contains(malicious_response_1[0].preimage()));
@@ -696,10 +720,7 @@ mod tests {
             }
         }
 
-        assert_eq!(
-            PeersIterState::Finished,
-            peers_iter.next(now),
-        );
+        assert_eq!(PeersIterState::Finished, peers_iter.next(now),);
 
         let final_peers: Vec<_> = peers_iter.into_result().collect();
 
@@ -715,7 +736,9 @@ mod tests {
 
     impl std::fmt::Debug for Graph {
         fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            fmt.debug_list().entries(self.0.iter().map(|(id, _)| id)).finish()
+            fmt.debug_list()
+                .entries(self.0.iter().map(|(id, _)| id))
+                .finish()
         }
     }
 
@@ -727,22 +750,24 @@ mod tests {
                 .collect::<Vec<_>>();
 
             // Make each peer aware of its direct neighborhood.
-            let mut peers = peer_ids.clone().into_iter()
+            let mut peers = peer_ids
+                .clone()
+                .into_iter()
                 .map(|(peer_id, key)| {
-                    peer_ids.sort_unstable_by(|(_, a), (_, b)| {
-                        key.distance(a).cmp(&key.distance(b))
-                    });
+                    peer_ids
+                        .sort_unstable_by(|(_, a), (_, b)| key.distance(a).cmp(&key.distance(b)));
 
                     assert_eq!(peer_id, peer_ids[0].0);
 
-                    let known_peers = peer_ids.iter()
+                    let known_peers = peer_ids
+                        .iter()
                         // Skip itself.
                         .skip(1)
                         .take(K_VALUE.get())
                         .cloned()
                         .collect::<Vec<_>>();
 
-                    (peer_id, Peer{ known_peers })
+                    (peer_id, Peer { known_peers })
                 })
                 .collect::<HashMap<_, _>>();
 
@@ -751,7 +776,8 @@ mod tests {
                 peer_ids.shuffle(g);
 
                 let num_peers = g.gen_range(K_VALUE.get(), peer_ids.len() + 1);
-                let mut random_peer_ids = peer_ids.choose_multiple(g, num_peers)
+                let mut random_peer_ids = peer_ids
+                    .choose_multiple(g, num_peers)
                     // Make sure not to include itself.
                     .filter(|(id, _)| peer_id != id)
                     .cloned()
@@ -760,7 +786,10 @@ mod tests {
                 peer.known_peers.append(&mut random_peer_ids);
                 peer.known_peers = std::mem::replace(&mut peer.known_peers, vec![])
                     // Deduplicate peer ids.
-                    .into_iter().collect::<HashSet<_>>().into_iter().collect();
+                    .into_iter()
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect();
             }
 
             Graph(peers)
@@ -769,21 +798,22 @@ mod tests {
 
     impl Graph {
         fn get_closest_peer(&self, target: &KeyBytes) -> PeerId {
-            self.0.iter()
+            self.0
+                .iter()
                 .map(|(peer_id, _)| (target.distance(&Key::from(*peer_id)), peer_id))
-                .fold(None, |acc, (distance_b, peer_id_b)| {
-                    match acc {
-                        None => Some((distance_b, peer_id_b)),
-                        Some((distance_a, peer_id_a)) => if distance_a < distance_b {
+                .fold(None, |acc, (distance_b, peer_id_b)| match acc {
+                    None => Some((distance_b, peer_id_b)),
+                    Some((distance_a, peer_id_a)) => {
+                        if distance_a < distance_b {
                             Some((distance_a, peer_id_a))
                         } else {
                             Some((distance_b, peer_id_b))
                         }
                     }
-
                 })
                 .expect("Graph to have at least one peer.")
-                .1.clone()
+                .1
+                .clone()
         }
     }
 
@@ -794,11 +824,15 @@ mod tests {
 
     impl Peer {
         fn get_closest_peers(&mut self, target: &KeyBytes) -> Vec<PeerId> {
-            self.known_peers.sort_unstable_by(|(_, a), (_, b)| {
-                target.distance(a).cmp(&target.distance(b))
-            });
+            self.known_peers
+                .sort_unstable_by(|(_, a), (_, b)| target.distance(a).cmp(&target.distance(b)));
 
-            self.known_peers.iter().take(K_VALUE.get()).map(|(id, _)| id).cloned().collect()
+            self.known_peers
+                .iter()
+                .take(K_VALUE.get())
+                .map(|(id, _)| id)
+                .cloned()
+                .collect()
         }
     }
 
@@ -846,15 +880,16 @@ mod tests {
             let target: KeyBytes = target.0;
             let closest_peer = graph.get_closest_peer(&target);
 
-            let mut known_closest_peers = graph.0.iter()
+            let mut known_closest_peers = graph
+                .0
+                .iter()
                 .take(K_VALUE.get())
                 .map(|(key, _peers)| Key::from(*key))
                 .collect::<Vec<_>>();
-            known_closest_peers.sort_unstable_by(|a, b| {
-                target.distance(a).cmp(&target.distance(b))
-            });
+            known_closest_peers
+                .sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
 
-            let cfg = ClosestPeersIterConfig{
+            let cfg = ClosestPeersIterConfig {
                 parallelism: parallelism.0,
                 num_results: num_results.0,
                 ..ClosestPeersIterConfig::default()
@@ -923,25 +958,32 @@ mod tests {
                 match iter.next(now) {
                     PeersIterState::Waiting(Some(peer_id)) => {
                         let peer_id = peer_id.clone().into_owned();
-                        let closest_peers = graph.0.get_mut(&peer_id)
+                        let closest_peers = graph
+                            .0
+                            .get_mut(&peer_id)
                             .unwrap()
                             .get_closest_peers(&target);
                         iter.on_success(&peer_id, closest_peers);
-                    } ,
-                    PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) =>
-                        panic!("There is never more than one request in flight."),
+                    }
+                    PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) => {
+                        panic!("There is never more than one request in flight.")
+                    }
                     PeersIterState::Finished => break,
                 }
             }
 
-            let mut result = iter.into_result().into_iter().map(Key::from).collect::<Vec<_>>();
-            result.sort_unstable_by(|a, b| {
-                target.distance(a).cmp(&target.distance(b))
-            });
+            let mut result = iter
+                .into_result()
+                .into_iter()
+                .map(Key::from)
+                .collect::<Vec<_>>();
+            result.sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
             result.into_iter().map(|k| k.into_preimage()).collect()
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _, _, _) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _, _, _) -> _)
     }
 
     #[test]
@@ -957,16 +999,22 @@ mod tests {
 
         // Expect peer to be marked as succeeded.
         assert!(iter.on_success(&peer, iter::empty()));
-        assert_eq!(iter.contacted_peers.get(&peer), Some(&PeerState {
-            initiated_by: IteratorIndex(0),
-            response: ResponseState::Succeeded,
-        }));
+        assert_eq!(
+            iter.contacted_peers.get(&peer),
+            Some(&PeerState {
+                initiated_by: IteratorIndex(0),
+                response: ResponseState::Succeeded,
+            })
+        );
 
         // Expect peer to stay marked as succeeded.
         assert!(!iter.on_failure(&peer));
-        assert_eq!(iter.contacted_peers.get(&peer), Some(&PeerState {
-            initiated_by: IteratorIndex(0),
-            response: ResponseState::Succeeded,
-        }));
+        assert_eq!(
+            iter.contacted_peers.get(&peer),
+            Some(&PeerState {
+                initiated_by: IteratorIndex(0),
+                response: ResponseState::Succeeded,
+            })
+        );
     }
 }
