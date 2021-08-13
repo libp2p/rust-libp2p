@@ -35,7 +35,10 @@ use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::KeepAlive;
-use libp2p_swarm::{DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent};
+use libp2p_swarm::{
+    DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
+    PollParameters, Swarm, SwarmEvent,
+};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use void::Void;
@@ -388,9 +391,9 @@ fn src_try_connect_to_offline_dst() {
 
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
+                SwarmEvent::UnreachableAddr {
+                    address, peer_id, ..
+                } if address == dst_addr_via_relay => {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
@@ -445,9 +448,9 @@ fn src_try_connect_to_unsupported_dst() {
 
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
+                SwarmEvent::UnreachableAddr {
+                    address, peer_id, ..
+                } if address == dst_addr_via_relay => {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
@@ -495,10 +498,11 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
 
         // Source Node fail to reach Destination Node due to failure reaching Relay.
         match src_swarm.select_next_some().await {
-            SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                if address == dst_addr_via_relay => {
-                    assert_eq!(peer_id, dst_peer_id);
-                }
+            SwarmEvent::UnreachableAddr {
+                address, peer_id, ..
+            } if address == dst_addr_via_relay => {
+                assert_eq!(peer_id, dst_peer_id);
+            }
             e => panic!("{:?}", e),
         }
     });
@@ -582,11 +586,13 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         let query_id = dst_swarm.behaviour_mut().kad.bootstrap().unwrap();
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::OutboundQueryCompleted {
-                    id,
-                    result: QueryResult::Bootstrap(Ok(_)),
-                    ..
-                })) if query_id == id => {
+                SwarmEvent::Behaviour(CombinedEvent::Kad(
+                    KademliaEvent::OutboundQueryCompleted {
+                        id,
+                        result: QueryResult::Bootstrap(Ok(_)),
+                        ..
+                    },
+                )) if query_id == id => {
                     if dst_swarm.behaviour_mut().kad.iter_queries().count() == 0 {
                         break;
                     }
@@ -660,11 +666,13 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     SwarmEvent::Dialing(peer_id)
                         if peer_id == relay_peer_id || peer_id == dst_peer_id => {}
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::OutboundQueryCompleted {
-                        id,
-                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
-                        ..
-                    })) if id == query_id => {
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(
+                        KademliaEvent::OutboundQueryCompleted {
+                            id,
+                            result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
+                            ..
+                        },
+                    )) if id == query_id => {
                         tries += 1;
                         if tries > 300 {
                             panic!("Too many retries.");
@@ -929,8 +937,12 @@ fn yield_incoming_connection_through_correct_listener() {
     relay_3_swarm.listen_on(relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    let dst_listener_via_relay_1 = dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
-    let dst_listener_via_relay_2 = dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
+    let dst_listener_via_relay_1 = dst_swarm
+        .listen_on(relay_1_addr_incl_circuit.clone())
+        .unwrap();
+    let dst_listener_via_relay_2 = dst_swarm
+        .listen_on(relay_2_addr_incl_circuit.clone())
+        .unwrap();
     // Listen on own address in order for relay 3 to be able to connect to destination node.
     let dst_listener = dst_swarm.listen_on(dst_addr.clone()).unwrap();
 
@@ -952,11 +964,15 @@ fn yield_incoming_connection_through_correct_listener() {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == dst_listener_via_relay_2 => assert_eq!(address, relay_2_addr_incl_circuit),
+                } if listener_id == dst_listener_via_relay_2 => {
+                    assert_eq!(address, relay_2_addr_incl_circuit)
+                }
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == dst_listener_via_relay_1 => assert_eq!(address, relay_1_addr_incl_circuit),
+                } if listener_id == dst_listener_via_relay_1 => {
+                    assert_eq!(address, relay_1_addr_incl_circuit)
+                }
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
@@ -1077,7 +1093,11 @@ fn yield_incoming_connection_through_correct_listener() {
     pool.run_until(async {
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } if address == Protocol::P2pCircuit.into() => break,
+                SwarmEvent::NewListenAddr { address, .. }
+                    if address == Protocol::P2pCircuit.into() =>
+                {
+                    break
+                }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -1325,7 +1345,11 @@ fn build_keep_alive_only_swarm() -> Swarm<DummyBehaviour> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::new(transport, DummyBehaviour::with_keep_alive(KeepAlive::Yes), local_peer_id)
+    Swarm::new(
+        transport,
+        DummyBehaviour::with_keep_alive(KeepAlive::Yes),
+        local_peer_id,
+    )
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, mut swarm: Swarm<B>) {

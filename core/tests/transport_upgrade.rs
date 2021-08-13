@@ -22,8 +22,8 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::identity;
-use libp2p_core::transport::{Transport, MemoryTransport};
-use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::transport::{MemoryTransport, Transport};
+use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
@@ -44,7 +44,7 @@ impl UpgradeInfo for HelloUpgrade {
 
 impl<C> InboundUpgrade<C> for HelloUpgrade
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = C;
     type Error = io::Error;
@@ -81,7 +81,9 @@ where
 fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
     let listener_id = listener_keys.public().to_peer_id();
-    let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&listener_keys).unwrap();
+    let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&listener_keys)
+        .unwrap();
     let listener_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(listener_noise_keys).into_authenticated())
@@ -97,7 +99,9 @@ fn upgrade_pipeline() {
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
-    let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&dialer_keys).unwrap();
+    let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&dialer_keys)
+        .unwrap();
     let dialer_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(dialer_noise_keys).into_authenticated())
@@ -121,7 +125,7 @@ fn upgrade_pipeline() {
             let (upgrade, _remote_addr) =
                 match listener.next().await.unwrap().unwrap().into_upgrade() {
                     Some(u) => u,
-                    None => continue
+                    None => continue,
                 };
             let (peer, _mplex) = upgrade.await.unwrap();
             assert_eq!(peer, dialer_id);
@@ -136,4 +140,3 @@ fn upgrade_pipeline() {
     async_std::task::spawn(server);
     async_std::task::block_on(client);
 }
-

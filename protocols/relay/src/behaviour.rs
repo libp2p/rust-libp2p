@@ -303,7 +303,7 @@ impl NetworkBehaviour for Relay {
 
     fn inject_dial_failure(&mut self, peer_id: &PeerId) {
         if let Entry::Occupied(o) = self.listeners.entry(*peer_id) {
-            if matches!(o.get(), RelayListener::Connecting{ .. }) {
+            if matches!(o.get(), RelayListener::Connecting { .. }) {
                 // By removing the entry, the channel to the listener is dropped and thus the
                 // listener is notified that dialing the relay failed.
                 o.remove_entry();

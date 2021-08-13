@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    transport::{ListenerEvent, Transport, TransportError},
     ConnectedPoint,
-    transport::{Transport, TransportError, ListenerEvent}
 };
 use futures::prelude::*;
 use multiaddr::Multiaddr;
@@ -28,7 +28,10 @@ use std::{pin::Pin, task::Context, task::Poll};
 
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
-pub struct Map<T, F> { transport: T, fun: F }
+pub struct Map<T, F> {
+    transport: T,
+    fun: F,
+}
 
 impl<T, F> Map<T, F> {
     pub(crate) fn new(transport: T, fun: F) -> Self {
@@ -39,7 +42,7 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport,
-    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
+    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone,
 {
     type Output = D;
     type Error = T::Error;
@@ -49,13 +52,19 @@ where
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let stream = self.transport.listen_on(addr)?;
-        Ok(MapStream { stream, fun: self.fun })
+        Ok(MapStream {
+            stream,
+            fun: self.fun,
+        })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial(addr.clone())?;
         let p = ConnectedPoint::Dialer { address: addr };
-        Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
+        Ok(MapFuture {
+            inner: future,
+            args: Some((self.fun, p)),
+        })
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -68,13 +77,17 @@ where
 /// Maps a function over every stream item.
 #[pin_project::pin_project]
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> { #[pin] stream: T, fun: F }
+pub struct MapStream<T, F> {
+    #[pin]
+    stream: T,
+    fun: F,
+}
 
 impl<T, F, A, B, X, E> Stream for MapStream<T, F>
 where
     T: TryStream<Ok = ListenerEvent<X, E>, Error = E>,
     X: TryFuture<Ok = A>,
-    F: FnOnce(A, ConnectedPoint) -> B + Clone
+    F: FnOnce(A, ConnectedPoint) -> B + Clone,
 {
     type Item = Result<ListenerEvent<MapFuture<X, F>, E>, E>;
 
@@ -83,18 +96,22 @@ where
         match TryStream::try_poll_next(this.stream, cx) {
             Poll::Ready(Some(Ok(event))) => {
                 let event = match event {
-                    ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
+                    ListenerEvent::Upgrade {
+                        upgrade,
+                        local_addr,
+                        remote_addr,
+                    } => {
                         let point = ConnectedPoint::Listener {
                             local_addr: local_addr.clone(),
-                            send_back_addr: remote_addr.clone()
+                            send_back_addr: remote_addr.clone(),
                         };
                         ListenerEvent::Upgrade {
                             upgrade: MapFuture {
                                 inner: upgrade,
-                                args: Some((this.fun.clone(), point))
+                                args: Some((this.fun.clone(), point)),
                             },
                             local_addr,
-                            remote_addr
+                            remote_addr,
                         }
                     }
                     ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
@@ -105,7 +122,7 @@ where
             }
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
             Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -118,13 +135,13 @@ where
 pub struct MapFuture<T, F> {
     #[pin]
     inner: T,
-    args: Option<(F, ConnectedPoint)>
+    args: Option<(F, ConnectedPoint)>,
 }
 
 impl<T, A, F, B> Future for MapFuture<T, F>
 where
     T: TryFuture<Ok = A>,
-    F: FnOnce(A, ConnectedPoint) -> B
+    F: FnOnce(A, ConnectedPoint) -> B,
 {
     type Output = Result<B, T::Error>;
 

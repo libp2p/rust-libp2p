@@ -20,7 +20,10 @@
 
 //! Manage listening on multiple multiaddresses at once.
 
-use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
+use crate::{
+    transport::{ListenerEvent, TransportError},
+    Multiaddr, Transport,
+};
 use futures::{prelude::*, task::Context, task::Poll};
 use log::debug;
 use smallvec::SmallVec;
@@ -86,7 +89,7 @@ where
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<Listener<TTrans>>>>,
     /// The next listener ID to assign.
-    next_id: ListenerId
+    next_id: ListenerId,
 }
 
 /// The ID of a single listener.
@@ -109,7 +112,7 @@ where
     #[pin]
     listener: TTrans::Listener,
     /// Addresses it is listening on.
-    addresses: SmallVec<[Multiaddr; 4]>
+    addresses: SmallVec<[Multiaddr; 4]>,
 }
 
 /// Event that can happen on the `ListenersStream`.
@@ -122,14 +125,14 @@ where
         /// The listener that is listening on the new address.
         listener_id: ListenerId,
         /// The new address that is being listened on.
-        listen_addr: Multiaddr
+        listen_addr: Multiaddr,
     },
     /// An address is no longer being listened on.
     AddressExpired {
         /// The listener that is no longer listening on the address.
         listener_id: ListenerId,
         /// The new address that is being listened on.
-        listen_addr: Multiaddr
+        listen_addr: Multiaddr,
     },
     /// A connection is incoming on one of the listeners.
     Incoming {
@@ -161,7 +164,7 @@ where
         listener_id: ListenerId,
         /// The error value.
         error: TTrans::Error,
-    }
+    },
 }
 
 impl<TTrans> ListenersStream<TTrans>
@@ -173,7 +176,7 @@ where
         ListenersStream {
             transport,
             listeners: VecDeque::new(),
-            next_id: ListenerId(1)
+            next_id: ListenerId(1),
         }
     }
 
@@ -183,14 +186,17 @@ where
         ListenersStream {
             transport,
             listeners: VecDeque::with_capacity(capacity),
-            next_id: ListenerId(1)
+            next_id: ListenerId(1),
         }
     }
 
     /// Start listening on a multiaddress.
     ///
     /// Returns an error if the transport doesn't support the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<TTrans::Error>>
+    pub fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<ListenerId, TransportError<TTrans::Error>>
     where
         TTrans: Clone,
     {
@@ -198,7 +204,7 @@ where
         self.listeners.push_back(Box::pin(Listener {
             id: self.next_id,
             listener,
-            addresses: SmallVec::new()
+            addresses: SmallVec::new(),
         }));
         let id = self.next_id;
         self.next_id = ListenerId(self.next_id.0 + 1);
@@ -237,17 +243,23 @@ where
                 Poll::Pending => {
                     self.listeners.push_front(listener);
                     remaining -= 1;
-                    if remaining == 0 { break }
+                    if remaining == 0 {
+                        break;
+                    }
                 }
-                Poll::Ready(Some(Ok(ListenerEvent::Upgrade { upgrade, local_addr, remote_addr }))) => {
+                Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                    upgrade,
+                    local_addr,
+                    remote_addr,
+                }))) => {
                     let id = *listener_project.id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(ListenersEvent::Incoming {
                         listener_id: id,
                         upgrade,
                         local_addr,
-                        send_back_addr: remote_addr
-                    })
+                        send_back_addr: remote_addr,
+                    });
                 }
                 Poll::Ready(Some(Ok(ListenerEvent::NewAddress(a)))) => {
                     if listener_project.addresses.contains(&a) {
@@ -260,8 +272,8 @@ where
                     self.listeners.push_front(listener);
                     return Poll::Ready(ListenersEvent::NewAddress {
                         listener_id: id,
-                        listen_addr: a
-                    })
+                        listen_addr: a,
+                    });
                 }
                 Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(a)))) => {
                     listener_project.addresses.retain(|x| x != &a);
@@ -269,8 +281,8 @@ where
                     self.listeners.push_front(listener);
                     return Poll::Ready(ListenersEvent::AddressExpired {
                         listener_id: id,
-                        listen_addr: a
-                    })
+                        listen_addr: a,
+                    });
                 }
                 Poll::Ready(Some(Ok(ListenerEvent::Error(error)))) => {
                     let id = *listener_project.id;
@@ -278,7 +290,7 @@ where
                     return Poll::Ready(ListenersEvent::Error {
                         listener_id: id,
                         error,
-                    })
+                    });
                 }
                 Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
@@ -313,11 +325,7 @@ where
     }
 }
 
-impl<TTrans> Unpin for ListenersStream<TTrans>
-where
-    TTrans: Transport,
-{
-}
+impl<TTrans> Unpin for ListenersStream<TTrans> where TTrans: Transport {}
 
 impl<TTrans> fmt::Debug for ListenersStream<TTrans>
 where
@@ -338,22 +346,36 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            ListenersEvent::NewAddress { listener_id, listen_addr } => f
+            ListenersEvent::NewAddress {
+                listener_id,
+                listen_addr,
+            } => f
                 .debug_struct("ListenersEvent::NewAddress")
                 .field("listener_id", listener_id)
                 .field("listen_addr", listen_addr)
                 .finish(),
-            ListenersEvent::AddressExpired { listener_id, listen_addr } => f
+            ListenersEvent::AddressExpired {
+                listener_id,
+                listen_addr,
+            } => f
                 .debug_struct("ListenersEvent::AddressExpired")
                 .field("listener_id", listener_id)
                 .field("listen_addr", listen_addr)
                 .finish(),
-            ListenersEvent::Incoming { listener_id, local_addr, .. } => f
+            ListenersEvent::Incoming {
+                listener_id,
+                local_addr,
+                ..
+            } => f
                 .debug_struct("ListenersEvent::Incoming")
                 .field("listener_id", listener_id)
                 .field("local_addr", local_addr)
                 .finish(),
-            ListenersEvent::Closed { listener_id, addresses, reason } => f
+            ListenersEvent::Closed {
+                listener_id,
+                addresses,
+                reason,
+            } => f
                 .debug_struct("ListenersEvent::Closed")
                 .field("listener_id", listener_id)
                 .field("addresses", addresses)
@@ -363,13 +385,15 @@ where
                 .debug_struct("ListenersEvent::Error")
                 .field("listener_id", listener_id)
                 .field("error", error)
-                .finish()
+                .finish(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use futures::{future::BoxFuture, stream::BoxStream};
+
     use super::*;
     use crate::transport;
 
@@ -396,11 +420,15 @@ mod tests {
             });
 
             match listeners.next().await.unwrap() {
-                ListenersEvent::Incoming { local_addr, send_back_addr, .. } => {
+                ListenersEvent::Incoming {
+                    local_addr,
+                    send_back_addr,
+                    ..
+                } => {
                     assert_eq!(local_addr, address);
                     assert!(send_back_addr != address);
-                },
-                _ => panic!()
+                }
+                _ => panic!(),
             }
         });
     }
@@ -415,21 +443,37 @@ mod tests {
         impl transport::Transport for DummyTrans {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>>>>;
-            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
-            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+            type Listener = BoxStream<
+                'static,
+                Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>,
+            >;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
+            fn listen_on(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
                 Ok(Box::pin(stream::unfold((), |()| async move {
-                    Some((Ok(ListenerEvent::Error(std::io::Error::from(std::io::ErrorKind::Other))), ()))
+                    Some((
+                        Ok(ListenerEvent::Error(std::io::Error::from(
+                            std::io::ErrorKind::Other,
+                        ))),
+                        (),
+                    ))
                 })))
             }
 
-            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
 
-            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> { None }
+            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
+                None
+            }
         }
 
         async_std::task::block_on(async move {
@@ -439,8 +483,8 @@ mod tests {
 
             for _ in 0..10 {
                 match listeners.next().await.unwrap() {
-                    ListenersEvent::Error { .. } => {},
-                    _ => panic!()
+                    ListenersEvent::Error { .. } => {}
+                    _ => panic!(),
                 }
             }
         });
@@ -455,21 +499,32 @@ mod tests {
         impl transport::Transport for DummyTrans {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>>>>;
-            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
-            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+            type Listener = BoxStream<
+                'static,
+                Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>,
+            >;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
+            fn listen_on(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
                 Ok(Box::pin(stream::unfold((), |()| async move {
                     Some((Err(std::io::Error::from(std::io::ErrorKind::Other)), ()))
                 })))
             }
 
-            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
 
-            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> { None }
+            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
+                None
+            }
         }
 
         async_std::task::block_on(async move {
@@ -478,8 +533,8 @@ mod tests {
             listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
 
             match listeners.next().await.unwrap() {
-                ListenersEvent::Closed { .. } => {},
-                _ => panic!()
+                ListenersEvent::Closed { .. } => {}
+                _ => panic!(),
             }
         });
     }

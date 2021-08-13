@@ -22,18 +22,18 @@ mod codec;
 mod config;
 mod io;
 
-pub use config::{MplexConfig, MaxBufferBehaviour};
+pub use config::{MaxBufferBehaviour, MplexConfig};
 
-use codec::LocalStreamId;
-use std::{cmp, iter, task::Context, task::Poll};
 use bytes::Bytes;
+use codec::LocalStreamId;
+use futures::{future, prelude::*, ready};
 use libp2p_core::{
-    StreamMuxer,
     muxing::StreamMuxerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    StreamMuxer,
 };
 use parking_lot::Mutex;
-use futures::{prelude::*, future, ready};
+use std::{cmp, iter, task::Context, task::Poll};
 
 impl UpgradeInfo for MplexConfig {
     type Info = &'static [u8];
@@ -69,7 +69,7 @@ where
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Multiplex {
-            io: Mutex::new(io::Multiplexed::new(socket, self))
+            io: Mutex::new(io::Multiplexed::new(socket, self)),
         }))
     }
 }
@@ -79,20 +79,21 @@ where
 /// This implementation isn't capable of detecting when the underlying socket changes its address,
 /// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Multiplex<C> {
-    io: Mutex<io::Multiplexed<C>>
+    io: Mutex<io::Multiplexed<C>>,
 }
 
 impl<C> StreamMuxer for Multiplex<C>
 where
-    C: AsyncRead + AsyncWrite + Unpin
+    C: AsyncRead + AsyncWrite + Unpin,
 {
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
-    fn poll_event(&self, cx: &mut Context<'_>)
-        -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>>
-    {
+    fn poll_event(
+        &self,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
         let stream_id = ready!(self.io.lock().poll_next_stream(cx))?;
         let stream = Substream::new(stream_id);
         Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
@@ -102,9 +103,11 @@ where
         OutboundSubstream {}
     }
 
-    fn poll_outbound(&self, cx: &mut Context<'_>, _: &mut Self::OutboundSubstream)
-        -> Poll<Result<Self::Substream, io::Error>>
-    {
+    fn poll_outbound(
+        &self,
+        cx: &mut Context<'_>,
+        _: &mut Self::OutboundSubstream,
+    ) -> Poll<Result<Self::Substream, io::Error>> {
         let stream_id = ready!(self.io.lock().poll_open_stream(cx))?;
         Poll::Ready(Ok(Substream::new(stream_id)))
     }
@@ -113,9 +116,12 @@ where
         // Nothing to do, since `open_outbound` creates no new local state.
     }
 
-    fn read_substream(&self, cx: &mut Context<'_>, substream: &mut Self::Substream, buf: &mut [u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn read_substream(
+        &self,
+        cx: &mut Context<'_>,
+        substream: &mut Self::Substream,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         loop {
             // Try to read from the current (i.e. last received) frame.
             if !substream.current_data.is_empty() {
@@ -126,27 +132,36 @@ where
 
             // Read the next data frame from the multiplexed stream.
             match ready!(self.io.lock().poll_read_stream(cx, substream.id))? {
-                Some(data) => { substream.current_data = data; }
-                None => { return Poll::Ready(Ok(0)) }
+                Some(data) => {
+                    substream.current_data = data;
+                }
+                None => return Poll::Ready(Ok(0)),
             }
         }
     }
 
-    fn write_substream(&self, cx: &mut Context<'_>, substream: &mut Self::Substream, buf: &[u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn write_substream(
+        &self,
+        cx: &mut Context<'_>,
+        substream: &mut Self::Substream,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         self.io.lock().poll_write_stream(cx, substream.id, buf)
     }
 
-    fn flush_substream(&self, cx: &mut Context<'_>, substream: &mut Self::Substream)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn flush_substream(
+        &self,
+        cx: &mut Context<'_>,
+        substream: &mut Self::Substream,
+    ) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_flush_stream(cx, substream.id)
     }
 
-    fn shutdown_substream(&self, cx: &mut Context<'_>, substream: &mut Self::Substream)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn shutdown_substream(
+        &self,
+        cx: &mut Context<'_>,
+        substream: &mut Self::Substream,
+    ) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close_stream(cx, substream.id)
     }
 
@@ -176,6 +191,9 @@ pub struct Substream {
 
 impl Substream {
     fn new(id: LocalStreamId) -> Self {
-        Self { id, current_data: Bytes::new() }
+        Self {
+            id,
+            current_data: Bytes::new(),
+        }
     }
 }
