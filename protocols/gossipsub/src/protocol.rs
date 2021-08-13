@@ -27,12 +27,12 @@ use crate::types::{
     GossipsubControlAction, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
     MessageId, PeerInfo, PeerKind, RawGossipsubMessage,
 };
+use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use asynchronous_codec::{Decoder, Encoder, Framed};
 use libp2p_core::{
     identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
 };

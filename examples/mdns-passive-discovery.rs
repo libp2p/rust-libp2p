@@ -20,10 +20,10 @@
 
 use futures::StreamExt;
 use libp2p::{
-    identity, 
-    mdns::{Mdns, MdnsConfig, MdnsEvent}, 
+    identity,
+    mdns::{Mdns, MdnsConfig, MdnsEvent},
     swarm::{Swarm, SwarmEvent},
-    PeerId
+    PeerId,
 };
 use std::error::Error;
 

@@ -74,7 +74,10 @@ impl PreSharedKey {
         cipher.apply_keystream(&mut enc);
         let mut hasher = Shake128::default();
         hasher.write_all(&enc).expect("shake128 failed");
-        hasher.finalize_xof().read_exact(&mut out).expect("shake128 failed");
+        hasher
+            .finalize_xof()
+            .read_exact(&mut out)
+            .expect("shake128 failed");
         Fingerprint(out)
     }
 }

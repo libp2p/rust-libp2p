@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use super::RequestResponseCodec;
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use libp2p_core::ProtocolName;
-use minicbor::{Encode, Decode};
+use minicbor::{Decode, Encode};
 use std::io;
-use super::RequestResponseCodec;
 use unsigned_varint::{aio, io::ReadError};
 
 /// A protocol header.
@@ -32,27 +32,34 @@ use unsigned_varint::{aio, io::ReadError};
 #[cbor(map)]
 pub struct Header {
     /// The type of message.
-    #[n(0)] pub typ: Option<Type>,
+    #[n(0)]
+    pub typ: Option<Type>,
     /// The number of additional requests the remote is willing to receive.
-    #[n(1)] pub credit: Option<u16>,
+    #[n(1)]
+    pub credit: Option<u16>,
     /// An identifier used for sending credit grants.
-    #[n(2)] pub ident: Option<u64>
+    #[n(2)]
+    pub ident: Option<u64>,
 }
 
 /// A protocol message type.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum Type {
-    #[n(0)] Request,
-    #[n(1)] Response,
-    #[n(2)] Credit,
-    #[n(3)] Ack
+    #[n(0)]
+    Request,
+    #[n(1)]
+    Response,
+    #[n(2)]
+    Credit,
+    #[n(3)]
+    Ack,
 }
 
 /// A protocol message consisting of header and data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message<T> {
     header: Header,
-    data: Option<T>
+    data: Option<T>,
 }
 
 impl<T> Message<T> {
@@ -63,26 +70,40 @@ impl<T> Message<T> {
 
     /// Create a request message.
     pub fn request(data: T) -> Self {
-        let mut m = Message::new(Header { typ: Some(Type::Request), .. Header::default() });
+        let mut m = Message::new(Header {
+            typ: Some(Type::Request),
+            ..Header::default()
+        });
         m.data = Some(data);
         m
     }
 
     /// Create a response message.
     pub fn response(data: T) -> Self {
-        let mut m = Message::new(Header { typ: Some(Type::Response), .. Header::default() });
+        let mut m = Message::new(Header {
+            typ: Some(Type::Response),
+            ..Header::default()
+        });
         m.data = Some(data);
         m
     }
 
     /// Create a credit grant.
     pub fn credit(credit: u16, ident: u64) -> Self {
-        Message::new(Header { typ: Some(Type::Credit), credit: Some(credit), ident: Some(ident) })
+        Message::new(Header {
+            typ: Some(Type::Credit),
+            credit: Some(credit),
+            ident: Some(ident),
+        })
     }
 
     /// Create an acknowledge message.
     pub fn ack(ident: u64) -> Self {
-        Message::new(Header { typ: Some(Type::Ack), credit: None, ident: Some(ident) })
+        Message::new(Header {
+            typ: Some(Type::Ack),
+            credit: None,
+            ident: Some(ident),
+        })
     }
 
     /// Access the message header.
@@ -130,28 +151,34 @@ pub struct Codec<C> {
     /// Encoding/decoding buffer.
     buffer: Vec<u8>,
     /// Max. header length.
-    max_header_len: u32
+    max_header_len: u32,
 }
 
 impl<C> Codec<C> {
     /// Create a codec by wrapping an existing one.
     pub fn new(c: C, max_header_len: u32) -> Self {
-        Codec { inner: c, buffer: Vec::new(), max_header_len }
+        Codec {
+            inner: c,
+            buffer: Vec::new(),
+            max_header_len,
+        }
     }
 
     /// Read and decode a request header.
     async fn read_header<T, H>(&mut self, io: &mut T) -> io::Result<H>
     where
         T: AsyncRead + Unpin + Send,
-        H: for<'a> minicbor::Decode<'a>
+        H: for<'a> minicbor::Decode<'a>,
     {
-        let header_len = aio::read_u32(&mut *io).await
-            .map_err(|e| match e {
-                ReadError::Io(e) => e,
-                other => io::Error::new(io::ErrorKind::Other, other)
-            })?;
+        let header_len = aio::read_u32(&mut *io).await.map_err(|e| match e {
+            ReadError::Io(e) => e,
+            other => io::Error::new(io::ErrorKind::Other, other),
+        })?;
         if header_len > self.max_header_len {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "header too large to read"))
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "header too large to read",
+            ));
         }
         self.buffer.resize(u32_to_usize(header_len), 0u8);
         io.read_exact(&mut self.buffer).await?;
@@ -162,12 +189,16 @@ impl<C> Codec<C> {
     async fn write_header<T, H>(&mut self, hdr: &H, io: &mut T) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
-        H: minicbor::Encode
+        H: minicbor::Encode,
     {
         self.buffer.clear();
-        minicbor::encode(hdr, &mut self.buffer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        minicbor::encode(hdr, &mut self.buffer)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         if self.buffer.len() > u32_to_usize(self.max_header_len) {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "header too large to write"))
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "header too large to write",
+            ));
         }
         let mut b = unsigned_varint::encode::u32_buffer();
         let header_len = unsigned_varint::encode::u32(self.buffer.len() as u32, &mut b);
@@ -180,7 +211,7 @@ impl<C> Codec<C> {
 impl<C> RequestResponseCodec for Codec<C>
 where
     C: RequestResponseCodec + Send,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     type Protocol = ProtocolWrapper<C::Protocol>;
     type Request = Message<C::Request>;
@@ -188,7 +219,7 @@ where
 
     async fn read_request<T>(&mut self, p: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
     where
-        T: AsyncRead + Unpin + Send
+        T: AsyncRead + Unpin + Send,
     {
         let mut msg = Message::new(self.read_header(io).await?);
         match msg.header.typ {
@@ -198,15 +229,22 @@ where
             }
             Some(Type::Credit) => Ok(msg),
             Some(Type::Response) | Some(Type::Ack) | None => {
-                log::debug!("unexpected {:?} when expecting request or credit grant", msg.header.typ);
+                log::debug!(
+                    "unexpected {:?} when expecting request or credit grant",
+                    msg.header.typ
+                );
                 Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
 
-    async fn read_response<T>(&mut self, p: &Self::Protocol, io: &mut T) -> io::Result<Self::Response>
+    async fn read_response<T>(
+        &mut self,
+        p: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
     where
-        T: AsyncRead + Unpin + Send
+        T: AsyncRead + Unpin + Send,
     {
         let mut msg = Message::new(self.read_header(io).await?);
         match msg.header.typ {
@@ -216,15 +254,23 @@ where
             }
             Some(Type::Ack) => Ok(msg),
             Some(Type::Request) | Some(Type::Credit) | None => {
-                log::debug!("unexpected {:?} when expecting response or ack", msg.header.typ);
+                log::debug!(
+                    "unexpected {:?} when expecting response or ack",
+                    msg.header.typ
+                );
                 Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
 
-    async fn write_request<T>(&mut self, p: &Self::Protocol, io: &mut T, r: Self::Request) -> io::Result<()>
+    async fn write_request<T>(
+        &mut self,
+        p: &Self::Protocol,
+        io: &mut T,
+        r: Self::Request,
+    ) -> io::Result<()>
     where
-        T: AsyncWrite + Unpin + Send
+        T: AsyncWrite + Unpin + Send,
     {
         self.write_header(&r.header, io).await?;
         if let Some(data) = r.data {
@@ -233,9 +279,14 @@ where
         Ok(())
     }
 
-    async fn write_response<T>(&mut self, p: &Self::Protocol, io: &mut T, r: Self::Response) -> io::Result<()>
+    async fn write_response<T>(
+        &mut self,
+        p: &Self::Protocol,
+        io: &mut T,
+        r: Self::Response,
+    ) -> io::Result<()>
     where
-        T: AsyncWrite + Unpin + Send
+        T: AsyncWrite + Unpin + Send,
     {
         self.write_header(&r.header, io).await?;
         if let Some(data) = r.data {

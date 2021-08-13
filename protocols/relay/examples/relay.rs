@@ -60,13 +60,13 @@
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::dns::DnsConfig;
+use libp2p::identity::{self, ed25519};
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::identity::{self, ed25519};
 use libp2p::{NetworkBehaviour, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};

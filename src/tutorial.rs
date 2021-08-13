@@ -349,8 +349,8 @@
 //!
 //! Note: The [`Multiaddr`] at the end being one of the [`Multiaddr`] printed
 //! earlier in terminal window one.
-//! Both peers have to be in the same network with which the address is associated. 
-//! In our case any printed addresses can be used, as both peers run on the same 
+//! Both peers have to be in the same network with which the address is associated.
+//! In our case any printed addresses can be used, as both peers run on the same
 //! device.
 //!
 //! The two nodes will establish a connection and send each other ping and pong

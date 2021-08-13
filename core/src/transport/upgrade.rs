@@ -20,39 +20,24 @@
 
 //! Configuration of transport protocol upgrades.
 
-
 use crate::{
-    ConnectedPoint,
-    Negotiated,
-    transport::{
-        Transport,
-        TransportError,
-        and_then::AndThen,
-        boxed::boxed,
-        timeout::TransportTimeout,
-    },
     muxing::{StreamMuxer, StreamMuxerBox},
-    upgrade::{
-        self,
-        Role,
-        Version,
-        AuthenticationVersion,
-        OutboundUpgrade,
-        InboundUpgrade,
-        UpgradeError,
-        OutboundUpgradeApply,
-        InboundUpgradeApply,
-        AuthenticationUpgradeApply,
+    transport::{
+        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, Transport, TransportError,
     },
-    PeerId
+    upgrade::{
+        self, AuthenticationUpgradeApply, AuthenticationVersion, InboundUpgrade,
+        InboundUpgradeApply, OutboundUpgrade, OutboundUpgradeApply, Role, UpgradeError, Version,
+    },
+    ConnectedPoint, Negotiated, PeerId,
 };
-use futures::{prelude::*, ready, future::Either};
+use futures::{future::Either, prelude::*, ready};
 use multiaddr::Multiaddr;
 use std::{
     error::Error,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration
+    time::Duration,
 };
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
@@ -103,9 +88,13 @@ where
     ///
     ///   * I/O upgrade: `C -> (PeerId, D)`.
     ///   * Transport output: `C -> (PeerId, D)`
-    pub fn authenticate<C, D, U, E>(self, upgrade: U) -> Authenticated<
-        AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>
-    > where
+    pub fn authenticate<C, D, U, E>(
+        self,
+        upgrade: U,
+    ) -> Authenticated<
+        AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>,
+    >
+    where
         T: Transport<Output = C>,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
@@ -118,9 +107,14 @@ where
 
     /// Same as [`Builder::authenticate`] with the option to choose the
     /// [`AuthenticationVersion`] used to upgrade the connection.
-    pub fn authenticate_with_version<C, D, U, E>(self, upgrade: U, version: AuthenticationVersion) -> Authenticated<
-        AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>
-    > where
+    pub fn authenticate_with_version<C, D, U, E>(
+        self,
+        upgrade: U,
+        version: AuthenticationVersion,
+    ) -> Authenticated<
+        AndThen<T, impl FnOnce(C, ConnectedPoint) -> AuthenticationUpgradeApply<C, U> + Clone>,
+    >
+    where
         T: Transport<Output = C>,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
@@ -129,7 +123,7 @@ where
         E: Error + 'static,
     {
         Authenticated(Builder::new(self.inner.and_then(move |conn, endpoint| {
-                upgrade::apply_authentication(conn, upgrade, endpoint, version)
+            upgrade::apply_authentication(conn, upgrade, endpoint, version)
         })))
     }
 }
@@ -141,7 +135,7 @@ pub struct Authenticated<T>(Builder<T>);
 impl<T> Authenticated<T>
 where
     T: Transport,
-    T::Error: 'static
+    T::Error: 'static,
 {
     /// Applies an arbitrary upgrade.
     ///
@@ -153,7 +147,19 @@ where
     ///
     ///   * I/O upgrade: `C -> D`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, D)`.
-    pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, Role)> + Clone>>
+    pub fn apply<C, D, U, E>(
+        self,
+        upgrade: U,
+    ) -> Authenticated<
+        AndThen<
+            T,
+            impl FnOnce(
+                    ((PeerId, Role), C),
+                    ConnectedPoint,
+                ) -> UpgradeAuthenticated<C, U, (PeerId, Role)>
+                + Clone,
+        >,
+    >
     where
         T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
@@ -167,7 +173,20 @@ where
 
     /// Same as [`Authenticated::apply`] with the option to choose the
     /// [`Version`] used to upgrade the connection.
-    pub fn apply_with_version<C, D, U, E>(self, upgrade: U, version: Version) -> Authenticated<AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, (PeerId, Role)> + Clone>>
+    pub fn apply_with_version<C, D, U, E>(
+        self,
+        upgrade: U,
+        version: Version,
+    ) -> Authenticated<
+        AndThen<
+            T,
+            impl FnOnce(
+                    ((PeerId, Role), C),
+                    ConnectedPoint,
+                ) -> UpgradeAuthenticated<C, U, (PeerId, Role)>
+                + Clone,
+        >,
+    >
     where
         T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
@@ -176,18 +195,18 @@ where
         U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
         E: Error + 'static,
     {
-        Authenticated(Builder::new(self.0.inner.and_then(move |((i, r), c), _endpoint| {
-            let upgrade = match r {
-                Role::Initiator => {
-                    Either::Left(upgrade::apply_outbound(c, upgrade, version))
-                },
-                Role::Responder => {
-                    Either::Right(upgrade::apply_inbound(c, upgrade))
-
+        Authenticated(Builder::new(self.0.inner.and_then(
+            move |((i, r), c), _endpoint| {
+                let upgrade = match r {
+                    Role::Initiator => Either::Left(upgrade::apply_outbound(c, upgrade, version)),
+                    Role::Responder => Either::Right(upgrade::apply_inbound(c, upgrade)),
+                };
+                UpgradeAuthenticated {
+                    user_data: Some((i, r)),
+                    upgrade,
                 }
-            };
-            UpgradeAuthenticated { user_data: Some((i, r)), upgrade }
-        })))
+            },
+        )))
     }
 
     /// Upgrades the transport with a (sub)stream multiplexer.
@@ -200,9 +219,17 @@ where
     ///
     ///   * I/O upgrade: `C -> M`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, M)`.
-    pub fn multiplex<C, M, U, E>(self, upgrade: U) -> Multiplexed<
-        AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
-    > where
+    pub fn multiplex<C, M, U, E>(
+        self,
+        upgrade: U,
+    ) -> Multiplexed<
+        AndThen<
+            T,
+            impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId>
+                + Clone,
+        >,
+    >
+    where
         T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
@@ -215,9 +242,18 @@ where
 
     /// Same as [`Authenticated::multiplex`] with the option to choose the
     /// [`Version`] used to upgrade the connection.
-    pub fn multiplex_with_version<C, M, U, E>(self, upgrade: U, version: Version) -> Multiplexed<
-        AndThen<T, impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId> + Clone>
-    > where
+    pub fn multiplex_with_version<C, M, U, E>(
+        self,
+        upgrade: U,
+        version: Version,
+    ) -> Multiplexed<
+        AndThen<
+            T,
+            impl FnOnce(((PeerId, Role), C), ConnectedPoint) -> UpgradeAuthenticated<C, U, PeerId>
+                + Clone,
+        >,
+    >
+    where
         T: Transport<Output = ((PeerId, Role), C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
@@ -227,15 +263,13 @@ where
     {
         Multiplexed(self.0.inner.and_then(move |((i, r), c), _endpoint| {
             let upgrade = match r {
-                Role::Initiator => {
-                    Either::Left(upgrade::apply_outbound(c, upgrade, version))
-                },
-                Role::Responder => {
-                    Either::Right(upgrade::apply_inbound(c, upgrade))
-
-                }
+                Role::Initiator => Either::Left(upgrade::apply_outbound(c, upgrade, version)),
+                Role::Responder => Either::Right(upgrade::apply_inbound(c, upgrade)),
             };
-            UpgradeAuthenticated { user_data: Some(i), upgrade }
+            UpgradeAuthenticated {
+                user_data: Some(i),
+                upgrade,
+            }
         }))
     }
 }
@@ -259,7 +293,7 @@ impl<C, U, M, E, D> Future for UpgradeAuthenticated<C, U, D>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
-    U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>
+    U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>,
 {
     type Output = Result<(D, M), UpgradeError<E>>;
 
@@ -269,7 +303,10 @@ where
             Ok(m) => m,
             Err(err) => return Poll::Ready(Err(err)),
         };
-        let user_data = this.user_data.take().expect("UpgradeAuthenticated future polled after completion.");
+        let user_data = this
+            .user_data
+            .take()
+            .expect("UpgradeAuthenticated future polled after completion.");
         Poll::Ready(Ok((user_data, m)))
     }
 }
@@ -291,7 +328,7 @@ impl<T> Multiplexed<T> {
         T::Error: Send + Sync,
         M: StreamMuxer + Send + Sync + 'static,
         M::Substream: Send + 'static,
-        M::OutboundSubstream: Send + 'static
+        M::OutboundSubstream: Send + 'static,
     {
         boxed(self.map(|(i, m), _| (i, StreamMuxerBox::new(m))))
     }

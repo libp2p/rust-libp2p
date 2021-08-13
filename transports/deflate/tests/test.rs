@@ -28,7 +28,7 @@ use quickcheck::{QuickCheck, RngCore, TestResult};
 fn deflate() {
     fn prop(message: Vec<u8>) -> TestResult {
         if message.is_empty() {
-            return TestResult::discard()
+            return TestResult::discard();
         }
         async_std::task::block_on(run(message));
         TestResult::passed()
@@ -44,16 +44,24 @@ fn lot_of_data() {
 }
 
 async fn run(message1: Vec<u8>) {
-    let transport = TcpConfig::new()
-        .and_then(|conn, endpoint| {
-            upgrade::apply(conn, DeflateConfig::default(), endpoint, upgrade::Version::V1)
-        });
+    let transport = TcpConfig::new().and_then(|conn, endpoint| {
+        upgrade::apply(
+            conn,
+            DeflateConfig::default(),
+            endpoint,
+            upgrade::Version::V1,
+        )
+    });
 
-    let mut listener = transport.clone()
+    let mut listener = transport
+        .clone()
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
 
-    let listen_addr = listener.by_ref().next().await
+    let listen_addr = listener
+        .by_ref()
+        .next()
+        .await
         .expect("some event")
         .expect("no error")
         .into_new_address()
@@ -82,7 +90,11 @@ async fn run(message1: Vec<u8>) {
         conn.close().await.expect("close")
     });
 
-    let mut conn = transport.dial(listen_addr).expect("dialer").await.expect("connection");
+    let mut conn = transport
+        .dial(listen_addr)
+        .expect("dialer")
+        .await
+        .expect("connection");
     conn.write_all(&message1).await.expect("write_all");
     conn.close().await.expect("close");
 
