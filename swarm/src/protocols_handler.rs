@@ -38,6 +38,7 @@
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
 mod dummy;
+pub mod either;
 mod map_in;
 mod map_out;
 mod node_handler;
@@ -49,6 +50,7 @@ pub use crate::upgrade::{
     InboundUpgradeSend,
     OutboundUpgradeSend,
     UpgradeInfoSend,
+    SendWrapper,
 };
 
 use libp2p_core::{
