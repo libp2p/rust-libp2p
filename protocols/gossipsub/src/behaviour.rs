@@ -1241,6 +1241,15 @@ where
 
         let mut do_px = self.config.do_px();
 
+        // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
+        // and they must be subscribed to the topic. Ensure we have recorded the mapping.
+        for topic in &topics {
+            self.peer_topics
+                .entry(*peer_id)
+                .or_default()
+                .insert(topic.clone());
+        }
+
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
             warn!("GRAFT: ignoring request from direct peer {}", peer_id);
@@ -1283,7 +1292,7 @@ where
                                     peer_score.add_penalty(peer_id, 1);
                                 }
                             }
-                            //no PX
+                            // no PX
                             do_px = false;
 
                             to_prune_topics.insert(topic_hash.clone());
@@ -2808,34 +2817,33 @@ where
         // Ignore connections from blacklisted peers.
         if self.blacklisted_peers.contains(peer_id) {
             debug!("Ignoring connection from blacklisted peer: {}", peer_id);
-            return;
-        }
+        } else {
+            debug!("New peer connected: {}", peer_id);
+            // We need to send our subscriptions to the newly-connected node.
+            let mut subscriptions = vec![];
+            for topic_hash in self.mesh.keys() {
+                subscriptions.push(GossipsubSubscription {
+                    topic_hash: topic_hash.clone(),
+                    action: GossipsubSubscriptionAction::Subscribe,
+                });
+            }
 
-        debug!("New peer connected: {}", peer_id);
-        // We need to send our subscriptions to the newly-connected node.
-        let mut subscriptions = vec![];
-        for topic_hash in self.mesh.keys() {
-            subscriptions.push(GossipsubSubscription {
-                topic_hash: topic_hash.clone(),
-                action: GossipsubSubscriptionAction::Subscribe,
-            });
-        }
-
-        if !subscriptions.is_empty() {
-            // send our subscriptions to the peer
-            if self
-                .send_message(
-                    *peer_id,
-                    GossipsubRpc {
-                        messages: Vec::new(),
-                        subscriptions,
-                        control_msgs: Vec::new(),
-                    }
-                    .into_protobuf(),
-                )
-                .is_err()
-            {
-                error!("Failed to send subscriptions, message too large");
+            if !subscriptions.is_empty() {
+                // send our subscriptions to the peer
+                if self
+                    .send_message(
+                        *peer_id,
+                        GossipsubRpc {
+                            messages: Vec::new(),
+                            subscriptions,
+                            control_msgs: Vec::new(),
+                        }
+                        .into_protobuf(),
+                    )
+                    .is_err()
+                {
+                    error!("Failed to send subscriptions, message too large");
+                }
             }
         }
 
@@ -2854,9 +2862,10 @@ where
             let topics = match self.peer_topics.get(peer_id) {
                 Some(topics) => (topics),
                 None => {
-                    if !self.blacklisted_peers.contains(peer_id) {
-                        debug!("Disconnected node, not in connected nodes");
-                    }
+                    debug_assert!(
+                        self.blacklisted_peers.contains(peer_id),
+                        "Disconnected node not in connected list"
+                    );
                     return;
                 }
             };
@@ -2890,11 +2899,11 @@ where
                     .get_mut(&topic)
                     .map(|peers| peers.remove(peer_id));
             }
-
-            //forget px and outbound status for this peer
-            self.px_peers.remove(peer_id);
-            self.outbound_peers.remove(peer_id);
         }
+
+        // Forget px and outbound status for this peer
+        self.px_peers.remove(peer_id);
+        self.outbound_peers.remove(peer_id);
 
         // Remove peer from peer_topics and connected_peers
         // NOTE: It is possible the peer has already been removed from all mappings if it does not
@@ -2913,11 +2922,6 @@ where
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
     ) {
-        // Ignore connections from blacklisted peers.
-        if self.blacklisted_peers.contains(peer_id) {
-            return;
-        }
-
         // Check if the peer is an outbound peer
         if let ConnectedPoint::Dialer { .. } = endpoint {
             // Diverging from the go implementation we only want to consider a peer as outbound peer
