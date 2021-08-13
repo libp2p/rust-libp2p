@@ -631,7 +631,7 @@ enum CircuitStatus {
     Accepted,
 }
 
-#[derive(Default, Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct CircuitId(u64);
 
 impl Add<u64> for CircuitId {

@@ -492,6 +492,7 @@ pub enum TransportToBehaviourMsg {
     },
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum ToListenerMsg {
     Reservation(Result<Reservation, ()>),
     IncomingRelayedConnection {

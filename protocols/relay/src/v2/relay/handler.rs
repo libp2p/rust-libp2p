@@ -37,6 +37,7 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use std::collections::VecDeque;
+use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use wasm_timer::Instant;
@@ -78,7 +79,63 @@ pub enum In {
     },
 }
 
+impl fmt::Debug for In {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            In::AcceptReservationReq {
+                inbound_reservation_req: _,
+                addrs,
+            } => f
+                .debug_struct("In::AcceptReservationReq")
+                .field("addrs", addrs)
+                .finish(),
+            In::DenyReservationReq {
+                inbound_reservation_req: _,
+                status,
+            } => f
+                .debug_struct("In::DenyReservationReq")
+                .field("status", status)
+                .finish(),
+            In::DenyCircuitReq {
+                circuit_id,
+                inbound_circuit_req: _,
+                status,
+            } => f
+                .debug_struct("In::DenyCircuitReq")
+                .field("circuit_id", circuit_id)
+                .field("status", status)
+                .finish(),
+            In::NegotiateOutboundConnect {
+                circuit_id,
+                inbound_circuit_req: _,
+                relay_peer_id,
+                src_peer_id,
+                src_connection_id,
+            } => f
+                .debug_struct("In::NegotiateOutboundConnect")
+                .field("circuit_id", circuit_id)
+                .field("relay_peer_id", relay_peer_id)
+                .field("src_peer_id", src_peer_id)
+                .field("src_connection_id", src_connection_id)
+                .finish(),
+            In::AcceptAndDriveCircuit {
+                circuit_id,
+                inbound_circuit_req: _,
+                dst_peer_id,
+                dst_handler_notifier: _,
+                dst_stream: _,
+                dst_pending_data: _,
+            } => f
+                .debug_struct("In::AcceptAndDriveCircuit")
+                .field("circuit_id", circuit_id)
+                .field("dst_peer_id", dst_peer_id)
+                .finish(),
+        }
+    }
+}
+
 /// The events produced by the [`Handler`].
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
@@ -150,6 +207,110 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: Option<std::io::Error>,
     },
+}
+
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::ReservationReqReceived {
+                inbound_reservation_req: _,
+                remote_addr,
+            } => f
+                .debug_struct("Event::ReservationReqReceived")
+                .field("remote_addr", remote_addr)
+                .finish(),
+            Event::ReservationReqAccepted { renewed } => f
+                .debug_struct("Event::ReservationReqAccepted")
+                .field("renewed", renewed)
+                .finish(),
+            Event::ReservationReqAcceptFailed { error } => f
+                .debug_struct("Event::ReservationReqAcceptFailed")
+                .field("error", error)
+                .finish(),
+            Event::ReservationReqDenied {} => {
+                f.debug_struct("Event::ReservationReqDenied").finish()
+            }
+            Event::ReservationReqDenyFailed { error } => f
+                .debug_struct("Event::ReservationReqDenyFailed")
+                .field("error", error)
+                .finish(),
+            Event::ReservationTimedOut {} => f.debug_struct("Event::ReservationTimedOut").finish(),
+            Event::CircuitReqReceived { remote_addr, inbound_circuit_req: _ } => f
+                .debug_struct("Event::CircuitReqReceived")
+                .field("remote_addr", remote_addr)
+                .finish(),
+            Event::CircuitReqDenied { circuit_id, dst_peer_id } => f
+                .debug_struct("Event::CircuitReqDenied")
+                .field("circuit_id", circuit_id)
+                .field("dst_peer_id", dst_peer_id)
+                .finish(),
+            Event::CircuitReqDenyFailed {
+                circuit_id,
+                dst_peer_id,
+                error,
+            } => f
+                .debug_struct("Event::CircuitReqDenyFailed")
+                .field("circuit_id", circuit_id)
+                .field("dst_peer_id", dst_peer_id)
+                .field("error", error)
+                .finish(),
+            Event::CircuitReqAccepted {
+                circuit_id,
+                dst_peer_id,
+            } => f
+                .debug_struct("Event::CircuitReqAccepted")
+                .field("circuit_id", circuit_id)
+                .field("dst_peer_id", dst_peer_id)
+                .finish(),
+            Event::CircuitReqAcceptFailed {
+                circuit_id,
+                dst_peer_id,
+                error,
+            } => f
+                .debug_struct("Event::CircuitReqAcceptFailed")
+                .field("circuit_id", circuit_id)
+                .field("dst_peer_id", dst_peer_id)
+                .field("error", error)
+                .finish(),
+            Event::OutboundConnectNegotiated {
+                circuit_id,
+                src_peer_id,
+                src_connection_id,
+                inbound_circuit_req: _,
+                dst_handler_notifier: _,
+                dst_stream: _,
+                dst_pending_data: _,
+            } => f
+                .debug_struct("Event::OutboundConnectNegotiated")
+                .field("circuit_id", circuit_id)
+                .field("src_peer_id", src_peer_id)
+                .field("src_connection_id", src_connection_id)
+                .finish(),
+            Event::OutboundConnectNegotiationFailed {
+                circuit_id,
+                src_peer_id,
+                src_connection_id,
+                inbound_circuit_req: _,
+                status,
+            } => f
+                .debug_struct("Event::OutboundConnectNegotiationFailed")
+                .field("circuit_id", circuit_id)
+                .field("src_peer_id", src_peer_id)
+                .field("src_connection_id", src_connection_id)
+                .field("status", status)
+                .finish(),
+            Event::CircuitClosed {
+                circuit_id,
+                dst_peer_id,
+                error,
+            } => f
+                .debug_struct("Event::CircuitClosed")
+                .field("circuit_id", circuit_id)
+                .field("dst_peer_id", dst_peer_id)
+                .field("error", error)
+                .finish(),
+        }
+    }
 }
 
 pub struct Prototype {

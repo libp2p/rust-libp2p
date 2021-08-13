@@ -37,6 +37,7 @@ use libp2p_swarm::{
 };
 use log::debug;
 use std::collections::VecDeque;
+use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use wasm_timer::Instant;
@@ -51,6 +52,22 @@ pub enum In {
     },
 }
 
+impl fmt::Debug for In {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            In::Reserve { to_listener: _ } => f.debug_struct("In::Reserve").finish(),
+            In::EstablishCircuit {
+                dst_peer_id,
+                send_back: _,
+            } => f
+                .debug_struct("In::EstablishCircuit")
+                .field("dst_peer_id", dst_peer_id)
+                .finish(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum Event {
     ReservationReqAccepted {
         /// Indicates whether the request replaces an existing reservation.
@@ -532,8 +549,7 @@ impl ProtocolsHandler for Handler {
         }
 
         // Deny incoming circuit requests.
-        if let Poll::Ready(Some((src_peer_id, result))) =
-            self.circuit_deny_futs.poll_next_unpin(cx)
+        if let Poll::Ready(Some((src_peer_id, result))) = self.circuit_deny_futs.poll_next_unpin(cx)
         {
             match result {
                 Ok(()) => {

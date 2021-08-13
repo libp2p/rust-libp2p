@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::Peer;
+use crate::v1::message_proto::{circuit_relay, CircuitRelay};
+use crate::v1::protocol::Peer;
+use crate::v1::Connection;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::BytesMut;
@@ -74,7 +75,7 @@ impl IncomingDstReq {
         self,
     ) -> BoxFuture<
         'static,
-        Result<(PeerId, super::Connection, oneshot::Receiver<()>), IncomingDstReqError>,
+        Result<(PeerId, Connection, oneshot::Receiver<()>), IncomingDstReqError>,
     > {
         let IncomingDstReq { mut stream, src } = self;
         let msg = CircuitRelay {
@@ -105,7 +106,7 @@ impl IncomingDstReq {
 
             Ok((
                 src.peer_id,
-                super::Connection::new(read_buffer.freeze(), io, tx),
+                Connection::new(read_buffer.freeze(), io, tx),
                 rx,
             ))
         }

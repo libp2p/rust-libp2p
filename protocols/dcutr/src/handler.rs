@@ -31,6 +31,7 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use std::collections::VecDeque;
+use std::fmt;
 use std::task::{Context, Poll};
 
 pub enum In {
@@ -43,6 +44,24 @@ pub enum In {
     },
 }
 
+impl fmt::Debug for In {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            In::Connect { obs_addrs } => f
+                .debug_struct("In::Connect")
+                .field("obs_addrs", obs_addrs)
+                .finish(),
+            In::AcceptInboundConnect {
+                obs_addrs,
+                inbound_connect: _,
+            } => f
+                .debug_struct("In::AcceptInboundConnect")
+                .field("obs_addrs", obs_addrs)
+                .finish(),
+        }
+    }
+}
+
 pub enum Event {
     InboundConnectReq {
         inbound_connect: protocol::InboundConnect,
@@ -51,6 +70,28 @@ pub enum Event {
     // TODO: Rename to InboundConnectNegotiated?
     InboundConnectNeg(Vec<Multiaddr>),
     OutboundConnectNeg(Vec<Multiaddr>),
+}
+
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::InboundConnectReq {
+                inbound_connect: _,
+                remote_addr,
+            } => f
+                .debug_struct("Event::InboundConnectReq")
+                .field("remote_addrs", remote_addr)
+                .finish(),
+            Event::InboundConnectNeg(addrs) => f
+                .debug_tuple("Event::InboundConnectNeg")
+                .field(addrs)
+                .finish(),
+            Event::OutboundConnectNeg(addrs) => f
+                .debug_tuple("Event::OutboundConnectNeg")
+                .field(addrs)
+                .finish(),
+        }
+    }
 }
 
 pub struct Prototype {}
