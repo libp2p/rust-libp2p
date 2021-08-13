@@ -225,6 +225,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 PingEvent {
                     peer,
+                    result: Result::Err(PingFailure::Unsupported),
+                } => {
+                    println!("ping: {} does not support ping protocol", peer.to_base58());
+                }
+                PingEvent {
+                    peer,
                     result: Result::Err(PingFailure::Other { error }),
                 } => {
                     println!("ping: failure with {}: {}", peer.to_base58(), error);

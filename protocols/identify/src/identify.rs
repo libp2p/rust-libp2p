@@ -201,13 +201,6 @@ impl NetworkBehaviour for Identify {
         IdentifyHandler::new(self.config.initial_delay, self.config.interval)
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {
-    }
-
     fn inject_connection_established(&mut self, peer_id: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address } => address.clone(),

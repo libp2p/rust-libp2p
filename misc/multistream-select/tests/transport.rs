@@ -38,7 +38,7 @@ use rand::random;
 use std::{io, task::{Context, Poll}};
 
 type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
-type TestNetwork = Network<TestTransport, (), (), TestHandler>;
+type TestNetwork = Network<TestTransport, TestHandler>;
 
 // TODO: Fix _up
 fn mk_transport(_up: upgrade::Version) -> (PeerId, TestTransport) {

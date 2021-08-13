@@ -30,7 +30,7 @@ use futures::{channel::oneshot, future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
-use std::io;
+use std::{fmt, io};
 
 /// The level of support for a particular protocol.
 #[derive(Debug, Clone)]
@@ -127,7 +127,6 @@ where
 /// Request substream upgrade protocol.
 ///
 /// Sends a request and receives a response.
-#[derive(Debug)]
 pub struct RequestProtocol<TCodec>
 where
     TCodec: RequestResponseCodec
@@ -136,6 +135,17 @@ where
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
     pub(crate) request_id: RequestId,
     pub(crate) request: TCodec::Request,
+}
+
+impl<TCodec> fmt::Debug for RequestProtocol<TCodec>
+where
+    TCodec: RequestResponseCodec,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RequestProtocol")
+            .field("request_id", &self.request_id)
+            .finish()
+    }
 }
 
 impl<TCodec> UpgradeInfo for RequestProtocol<TCodec>

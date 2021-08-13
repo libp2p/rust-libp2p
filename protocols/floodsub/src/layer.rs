@@ -23,7 +23,7 @@ use crate::topic::Topic;
 use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{PeerId, connection::ConnectionId};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -249,10 +249,6 @@ impl NetworkBehaviour for Floodsub {
         Default::default()
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
     fn inject_connected(&mut self, id: &PeerId) {
         // We need to send our subscriptions to the newly-connected node.
         if self.target_peers.contains(id) {
@@ -399,6 +395,7 @@ impl NetworkBehaviour for Floodsub {
 }
 
 /// Transmission between the `OneShotHandler` and the `FloodsubHandler`.
+#[derive(Debug)]
 pub enum InnerMessage {
     /// We received an RPC from a remote.
     Rx(FloodsubRpc),

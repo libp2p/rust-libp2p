@@ -64,6 +64,11 @@
     - `libp2p-websocket`
     - `libp2p-yamux`
 
+- Re-export the `wasm-bindgen` feature from `parking_lot`, so
+  `libp2p` users can opt-in to that crate's Wasm support. See [PR 2180].
+  
+[PR 2180]: https://github.com/libp2p/rust-libp2p/pull/2180/
+
 ## Version 0.39.1 [2021-07-12]
 
 - Update individual crates.

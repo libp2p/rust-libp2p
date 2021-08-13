@@ -29,11 +29,19 @@
 //! This crate provides the `Mdns` struct which implements the `NetworkBehaviour` trait. This
 //! struct will automatically discover other libp2p nodes on the local network.
 //!
+use lazy_static::lazy_static;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
 /// The meta query for looking up the `SERVICE_NAME`.
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
+
+lazy_static! {
+    pub static ref IPV4_MDNS_MULTICAST_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 251));
+    pub static ref IPV6_MDNS_MULTICAST_ADDRESS: IpAddr =
+        IpAddr::V6(Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB));
+}
 
 pub use crate::behaviour::{Mdns, MdnsConfig, MdnsEvent};
 
