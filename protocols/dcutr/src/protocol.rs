@@ -19,23 +19,25 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::message_proto::{hole_punch, HolePunch};
-use asynchronous_codec::{Framed};
-use bytes::{BytesMut};
+use asynchronous_codec::Framed;
+use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
+use futures_timer::Delay;
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 use std::error;
 use std::fmt;
 use std::io::Cursor;
 use std::iter;
+use std::time::Instant;
 use unsigned_varint::codec::UviBytes;
-use std::time::{Instant};
-use futures_timer::Delay;
 
 // TODO: Golang seems to use "/libp2p/holepunch/1.0.0"
 const PROTOCOL_NAME: &[u8; 15] = b"/libp2p/connect";
+
+const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
 // TODO: Should this be split up in two files? Inbound and outbound?
 
@@ -73,9 +75,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
         msg.encode(&mut encoded_msg)
             .expect("BytesMut to have sufficient capacity.");
 
-        let codec = UviBytes::default();
-        // TODO: Needed?
-        // codec.set_max_len(MAX_MESSAGE_SIZE);
+        let mut codec = UviBytes::default();
+        codec.set_max_len(MAX_MESSAGE_SIZE_BYTES);
         let mut substream = Framed::new(substream, codec);
 
         async move {
@@ -232,9 +233,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let codec = UviBytes::default();
-        // TODO: Needed?
-        // codec.set_max_len(MAX_MESSAGE_SIZE);
+        let mut codec = UviBytes::default();
+        codec.set_max_len(MAX_MESSAGE_SIZE_BYTES);
         let mut substream = Framed::new(substream, codec);
 
         async move {
