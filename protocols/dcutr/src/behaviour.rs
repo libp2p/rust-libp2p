@@ -21,10 +21,14 @@
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
 use crate::handler;
+use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
+use libp2p_swarm::{
+    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ProtocolsHandler,
+};
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
@@ -45,7 +49,7 @@ pub enum Event {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<handler::In, Event>>,
+    queued_actions: VecDeque<NetworkBehaviourAction<<<<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, <Self as NetworkBehaviour>::OutEvent>>,
 }
 
 impl Behaviour {
@@ -87,7 +91,7 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: *peer_id,
                         handler: NotifyHandler::One(*connection_id),
-                        event: handler::In::Connect { obs_addrs: vec![] },
+                        event: Either::Left(handler::In::Connect { obs_addrs: vec![] }),
                     });
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
@@ -104,6 +108,8 @@ impl NetworkBehaviour for Behaviour {
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
         // TODO: How to handle retry? Golang seems to simply wait 2 seconds between each failure?
         // Shouldn't we do the whole CONNECT SYNC again to make sure we are aligned?
+        //
+        // See https://github.com/libp2p/go-libp2p/pull/1057#issuecomment-897522382
     }
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {
@@ -123,8 +129,13 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        handler_event: handler::Event,
+        handler_event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     ) {
+        let handler_event = match handler_event {
+            Either::Left(event) => event,
+            Either::Right(event) => void::unreachable(event),
+        };
+
         match handler_event {
             handler::Event::InboundConnectReq {
                 inbound_connect,
@@ -134,10 +145,10 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
                         handler: NotifyHandler::One(connection),
-                        event: handler::In::AcceptInboundConnect {
+                        event: Either::Left(handler::In::AcceptInboundConnect {
                             inbound_connect,
                             obs_addrs: vec![],
-                        },
+                        }),
                     });
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
@@ -170,21 +181,21 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<handler::In, Self::OutEvent>> {
+    ) -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>{
         if let Some(mut event) = self.queued_actions.pop_front() {
             // Set obs addresses.
             if let NetworkBehaviourAction::NotifyHandler {
                 event:
-                    handler::In::Connect {
+                    Either::Left(handler::In::Connect {
                         ref mut obs_addrs, ..
-                    },
+                    }),
                 ..
             }
             | NetworkBehaviourAction::NotifyHandler {
                 event:
-                    handler::In::AcceptInboundConnect {
+                    Either::Left(handler::In::AcceptInboundConnect {
                         ref mut obs_addrs, ..
-                    },
+                    }),
                 ..
             } = &mut event
             {

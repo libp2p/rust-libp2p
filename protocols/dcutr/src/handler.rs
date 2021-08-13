@@ -21,8 +21,11 @@
 use crate::protocol;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
-use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::{upgrade, ConnectedPoint, PeerId};
+use libp2p_swarm::protocols_handler::either::EitherHandler;
+use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
+use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -59,20 +62,26 @@ impl Prototype {
 }
 
 impl IntoProtocolsHandler for Prototype {
-    type Handler = Handler;
+    type Handler = EitherHandler<Handler, DummyProtocolsHandler>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        // TODO: In case this is not a relayed connection, the handler should never do nor receive
-        // anything. Should this be enforced?
-        Handler {
-            remote_addr: endpoint.get_remote_address().clone(),
-            queued_events: Default::default(),
-            inbound_connects: Default::default(),
+        if endpoint
+            .get_remote_address()
+            .iter()
+            .any(|p| p == Protocol::P2pCircuit)
+        {
+            EitherHandler::A(Handler {
+                remote_addr: endpoint.get_remote_address().clone(),
+                queued_events: Default::default(),
+                inbound_connects: Default::default(),
+            })
+        } else {
+            EitherHandler::B(DummyProtocolsHandler::default())
         }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        protocol::InboundUpgrade {}
+        upgrade::EitherUpgrade::A(SendWrapper(protocol::InboundUpgrade {}))
     }
 }
 
