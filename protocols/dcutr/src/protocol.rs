@@ -71,8 +71,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
 
         let mut encoded_msg = BytesMut::new();
         msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("BytesMut to have sufficient capacity.");
 
         let codec = UviBytes::default();
         // TODO: Needed?
@@ -119,8 +118,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
 
             let mut encoded_msg = BytesMut::new();
             msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
-                .expect("all the mandatory fields are always filled; QED");
+                .expect("BytesMut to have sufficient capacity.");
 
             substream.send(encoded_msg.freeze()).await?;
 
@@ -297,8 +295,7 @@ impl InboundConnect {
 
         let mut encoded_msg = BytesMut::new();
         msg.encode(&mut encoded_msg)
-            // TODO: Double check. Safe to panic here?
-            .expect("all the mandatory fields are always filled; QED");
+            .expect("BytesMut to have sufficient capacity.");
 
         self.substream.send(encoded_msg.freeze()).await?;
         let msg: bytes::BytesMut = self
