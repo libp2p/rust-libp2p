@@ -38,6 +38,7 @@
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
 mod dummy;
+pub mod either;
 mod map_in;
 mod map_out;
 pub mod multi;
@@ -45,7 +46,7 @@ mod node_handler;
 mod one_shot;
 mod select;
 
-pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
+pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
