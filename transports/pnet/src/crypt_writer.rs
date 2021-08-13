@@ -100,7 +100,9 @@ fn poll_flush_buf<W: AsyncWrite>(
     if written > 0 {
         buf.drain(..written);
     }
-    if let Poll::Ready(Ok(())) = ret { debug_assert!(buf.is_empty()); }
+    if let Poll::Ready(Ok(())) = ret {
+        debug_assert!(buf.is_empty());
+    }
     ret
 }
 

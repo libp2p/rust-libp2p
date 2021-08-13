@@ -90,4 +90,3 @@ impl From<identity::error::SigningError> for NoiseError {
         NoiseError::SigningError(e)
     }
 }
-

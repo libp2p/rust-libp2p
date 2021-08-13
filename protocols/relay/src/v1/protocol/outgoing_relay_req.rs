@@ -88,7 +88,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
             }),
             dst_peer: Some(circuit_relay::Peer {
                 id: dst_id.to_bytes(),
-                addrs: vec![dst_address.unwrap_or(Multiaddr::empty()).to_vec()],
+                addrs: vec![dst_address.unwrap_or_else(Multiaddr::empty).to_vec()],
             }),
             code: None,
         };
@@ -104,14 +104,12 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
 
         async move {
             substream.send(std::io::Cursor::new(encoded)).await?;
-            let msg =
-                substream
-                    .next()
-                    .await
-                    .ok_or(OutgoingRelayReqError::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+            let msg = substream.next().await.ok_or_else(|| {
+                OutgoingRelayReqError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "",
+                ))
+            })??;
 
             let msg = std::io::Cursor::new(msg);
             let CircuitRelay {

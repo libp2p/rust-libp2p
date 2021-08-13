@@ -1,5 +1,9 @@
 # 0.30.0 [unreleased]
 
+- Add `ConnectionLimit::with_max_established` (see [PR 2137]).
+
+- Add `Keypair::to_protobuf_encoding` (see [PR 2142]).
+
 - Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
 
 - Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
@@ -8,7 +12,18 @@
 
 - Add `From<&PublicKey> for PeerId` (see [PR 2145]).
 
+- Remove `TInEvent` and `TOutEvent` trait paramters on most public types.
+  `TInEvent` and `TOutEvent` are implied through `THandler` and thus
+  superflucious. Both are removed in favor of a derivation through `THandler`
+  (see [PR 2183]).
+
+- Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
+  (see [PR 2183]).
+
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+[PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
+[PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 
 # 0.29.0 [2021-07-12]
 

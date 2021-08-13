@@ -24,25 +24,21 @@ use futures::stream::{Stream, StreamExt};
 use futures::task::Spawn;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::NetworkBehaviour;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::either::EitherTransport;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
-use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{identity, PeerId};
 use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::v1::{new_transport_and_behaviour, Relay, RelayConfig};
-use libp2p_swarm::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
-};
+use libp2p_relay::{Relay, RelayConfig};
+use libp2p_swarm::protocols_handler::KeepAlive;
 use libp2p_swarm::{
-    AddressRecord, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
+    DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
+    PollParameters, Swarm, SwarmEvent,
 };
-use std::iter;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use void::Void;
@@ -395,9 +391,9 @@ fn src_try_connect_to_offline_dst() {
 
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
+                SwarmEvent::UnreachableAddr {
+                    address, peer_id, ..
+                } if address == dst_addr_via_relay => {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
@@ -452,9 +448,9 @@ fn src_try_connect_to_unsupported_dst() {
 
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
+                SwarmEvent::UnreachableAddr {
+                    address, peer_id, ..
+                } if address == dst_addr_via_relay => {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
@@ -502,10 +498,11 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
 
         // Source Node fail to reach Destination Node due to failure reaching Relay.
         match src_swarm.select_next_some().await {
-            SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                if address == dst_addr_via_relay => {
-                    assert_eq!(peer_id, dst_peer_id);
-                }
+            SwarmEvent::UnreachableAddr {
+                address, peer_id, ..
+            } if address == dst_addr_via_relay => {
+                assert_eq!(peer_id, dst_peer_id);
+            }
             e => panic!("{:?}", e),
         }
     });
@@ -589,11 +586,13 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         let query_id = dst_swarm.behaviour_mut().kad.bootstrap().unwrap();
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::OutboundQueryCompleted {
-                    id,
-                    result: QueryResult::Bootstrap(Ok(_)),
-                    ..
-                })) if query_id == id => {
+                SwarmEvent::Behaviour(CombinedEvent::Kad(
+                    KademliaEvent::OutboundQueryCompleted {
+                        id,
+                        result: QueryResult::Bootstrap(Ok(_)),
+                        ..
+                    },
+                )) if query_id == id => {
                     if dst_swarm.behaviour_mut().kad.iter_queries().count() == 0 {
                         break;
                     }
@@ -667,11 +666,13 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     SwarmEvent::Dialing(peer_id)
                         if peer_id == relay_peer_id || peer_id == dst_peer_id => {}
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::OutboundQueryCompleted {
-                        id,
-                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
-                        ..
-                    })) if id == query_id => {
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(
+                        KademliaEvent::OutboundQueryCompleted {
+                            id,
+                            result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
+                            ..
+                        },
+                    )) if id == query_id => {
                         tries += 1;
                         if tries > 300 {
                             panic!("Too many retries.");
@@ -720,7 +721,7 @@ fn inactive_connection_timeout() {
     let mut relay_swarm = build_keep_alive_swarm();
 
     // Connections only kept alive by Source Node and Destination Node.
-    relay_swarm.behaviour_mut().keep_alive.keep_alive = KeepAlive::No;
+    *relay_swarm.behaviour_mut().keep_alive.keep_alive_mut() = KeepAlive::No;
 
     let relay_peer_id = *relay_swarm.local_peer_id();
     let dst_peer_id = *dst_swarm.local_peer_id();
@@ -936,8 +937,12 @@ fn yield_incoming_connection_through_correct_listener() {
     relay_3_swarm.listen_on(relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    let dst_listener_via_relay_1 = dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
-    let dst_listener_via_relay_2 = dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
+    let dst_listener_via_relay_1 = dst_swarm
+        .listen_on(relay_1_addr_incl_circuit.clone())
+        .unwrap();
+    let dst_listener_via_relay_2 = dst_swarm
+        .listen_on(relay_2_addr_incl_circuit.clone())
+        .unwrap();
     // Listen on own address in order for relay 3 to be able to connect to destination node.
     let dst_listener = dst_swarm.listen_on(dst_addr.clone()).unwrap();
 
@@ -959,11 +964,15 @@ fn yield_incoming_connection_through_correct_listener() {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == dst_listener_via_relay_2 => assert_eq!(address, relay_2_addr_incl_circuit),
+                } if listener_id == dst_listener_via_relay_2 => {
+                    assert_eq!(address, relay_2_addr_incl_circuit)
+                }
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == dst_listener_via_relay_1 => assert_eq!(address, relay_1_addr_incl_circuit),
+                } if listener_id == dst_listener_via_relay_1 => {
+                    assert_eq!(address, relay_1_addr_incl_circuit)
+                }
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
@@ -1084,7 +1093,11 @@ fn yield_incoming_connection_through_correct_listener() {
     pool.run_until(async {
         loop {
             match dst_swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } if address == Protocol::P2pCircuit.into() => break,
+                SwarmEvent::NewListenAddr { address, .. }
+                    if address == Protocol::P2pCircuit.into() =>
+                {
+                    break
+                }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -1183,7 +1196,7 @@ impl NetworkBehaviourEventProcess<()> for CombinedBehaviour {
 #[derive(NetworkBehaviour)]
 struct CombinedKeepAliveBehaviour {
     relay: Relay,
-    keep_alive: KeepAliveBehaviour,
+    keep_alive: DummyBehaviour,
 }
 
 impl NetworkBehaviourEventProcess<()> for CombinedKeepAliveBehaviour {
@@ -1258,7 +1271,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
         Reachability::Routable => EitherTransport::Right(transport),
     };
 
-    let (transport, relay_behaviour) = new_transport_and_behaviour(
+    let (transport, relay_behaviour) = libp2p_relay::new_transport_and_behaviour(
         RelayConfig {
             actively_connect_to_dst_nodes: relay_mode.into(),
             ..Default::default()
@@ -1300,7 +1313,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
     let transport = MemoryTransport::default();
 
     let (transport, relay_behaviour) =
-        new_transport_and_behaviour(RelayConfig::default(), transport);
+        libp2p_relay::new_transport_and_behaviour(RelayConfig::default(), transport);
 
     let transport = transport
         .upgrade()
@@ -1310,13 +1323,13 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
 
     let combined_behaviour = CombinedKeepAliveBehaviour {
         relay: relay_behaviour,
-        keep_alive: KeepAliveBehaviour::default(),
+        keep_alive: DummyBehaviour::with_keep_alive(KeepAlive::Yes),
     };
 
     Swarm::new(transport, combined_behaviour, local_peer_id)
 }
 
-fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
+fn build_keep_alive_only_swarm() -> Swarm<DummyBehaviour> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let plaintext = PlainText2Config {
@@ -1332,165 +1345,11 @@ fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::new(transport, KeepAliveBehaviour::default(), local_peer_id)
-}
-
-#[derive(Clone)]
-pub struct KeepAliveBehaviour {
-    keep_alive: KeepAlive,
-}
-
-impl Default for KeepAliveBehaviour {
-    fn default() -> Self {
-        Self {
-            keep_alive: KeepAlive::Yes,
-        }
-    }
-}
-
-impl libp2p_swarm::NetworkBehaviour for KeepAliveBehaviour {
-    type ProtocolsHandler = KeepAliveProtocolsHandler;
-    type OutEvent = void::Void;
-
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        KeepAliveProtocolsHandler {
-            keep_alive: self.keep_alive,
-        }
-    }
-
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-    ) {
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
-        Poll::Pending
-    }
-}
-
-/// Implementation of `ProtocolsHandler` that doesn't handle anything.
-#[derive(Clone, Debug)]
-pub struct KeepAliveProtocolsHandler {
-    pub keep_alive: KeepAlive,
-}
-
-impl ProtocolsHandler for KeepAliveProtocolsHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
-    type Error = Void;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
-    }
-
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<
-        ProtocolsHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
-        Poll::Pending
-    }
-}
-
-struct DummyPollParameters {}
-
-impl PollParameters for DummyPollParameters {
-    type SupportedProtocolsIter = iter::Empty<Vec<u8>>;
-    type ListenedAddressesIter = iter::Empty<Multiaddr>;
-    type ExternalAddressesIter = iter::Empty<AddressRecord>;
-
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
-        unimplemented!();
-    }
-
-    /// Returns the list of the addresses we're listening on.
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        unimplemented!();
-    }
-
-    /// Returns the list of the addresses nodes can use to reach us.
-    fn external_addresses(&self) -> Self::ExternalAddressesIter {
-        unimplemented!();
-    }
-
-    /// Returns the peer id of the local node.
-    fn local_peer_id(&self) -> &PeerId {
-        unimplemented!();
-    }
+    Swarm::new(
+        transport,
+        DummyBehaviour::with_keep_alive(KeepAlive::Yes),
+        local_peer_id,
+    )
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, mut swarm: Swarm<B>) {

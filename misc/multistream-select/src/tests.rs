@@ -22,9 +22,9 @@
 
 #![cfg(test)]
 
-use crate::{Version, NegotiationError};
 use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use crate::{dialer_select_proto, listener_select_proto};
+use crate::{NegotiationError, Version};
 
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
@@ -53,7 +53,8 @@ fn select_proto_basic() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, mut io, _) = dialer_select_proto(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
 
             io.write_all(b"ping").await.unwrap();
@@ -77,12 +78,14 @@ fn select_proto_basic() {
 fn negotiation_failed() {
     let _ = env_logger::try_init();
 
-    async fn run(Test {
-        version,
-        listen_protos,
-        dial_protos,
-        dial_payload
-    }: Test) {
+    async fn run(
+        Test {
+            version,
+            listen_protos,
+            dial_protos,
+            dial_payload,
+        }: Test,
+    ) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
@@ -91,10 +94,12 @@ fn negotiation_failed() {
             let io = match listener_select_proto(connec, listen_protos).await {
                 Ok((_, io)) => io,
                 Err(NegotiationError::Failed) => return,
-                Err(NegotiationError::ProtocolError(e)) => panic!("Unexpected protocol error {}", e),
+                Err(NegotiationError::ProtocolError(e)) => {
+                    panic!("Unexpected protocol error {}", e)
+                }
             };
             match io.complete().await {
-                Err(NegotiationError::Failed) => {},
+                Err(NegotiationError::Failed) => {}
                 _ => panic!(),
             }
         });
@@ -104,14 +109,14 @@ fn negotiation_failed() {
             let mut io = match dialer_select_proto(connec, dial_protos.into_iter(), version).await {
                 Err(NegotiationError::Failed) => return,
                 Ok((_, io, _)) => io,
-                Err(_) => panic!()
+                Err(_) => panic!(),
             };
             // The dialer may write a payload that is even sent before it
             // got confirmation of the last proposed protocol, when `V1Lazy`
             // is used.
             io.write_all(&dial_payload).await.unwrap();
             match io.complete().await {
-                Err(NegotiationError::Failed) => {},
+                Err(NegotiationError::Failed) => {}
                 _ => panic!(),
             }
         });
@@ -133,10 +138,10 @@ fn negotiation_failed() {
     //
     // The choices here cover the main distinction between a single
     // and multiple protocols.
-    let protos = vec!{
+    let protos = vec![
         (vec!["/proto1"], vec!["/proto2"]),
         (vec!["/proto1", "/proto2"], vec!["/proto3", "/proto4"]),
-    };
+    ];
 
     // The payloads that the dialer sends after "successful" negotiation,
     // which may be sent even before the dialer got protocol confirmation
@@ -145,7 +150,7 @@ fn negotiation_failed() {
     // The choices here cover the specific situations that can arise with
     // `V1Lazy` and which must nevertheless behave identically to `V1` w.r.t.
     // the outcome of the negotiation.
-    let payloads = vec!{
+    let payloads = vec![
         // No payload, in which case all versions should behave identically
         // in any case, i.e. the baseline test.
         vec![],
@@ -153,13 +158,13 @@ fn negotiation_failed() {
         // `1` as a message length and encounters an invalid message (the
         // second `1`). The listener is nevertheless expected to fail
         // negotiation normally, just like with `V1`.
-        vec![1,1],
+        vec![1, 1],
         // With this payload and `V1Lazy`, the listener interprets the first
         // `42` as a message length and encounters unexpected EOF trying to
         // read a message of that length. The listener is nevertheless expected
         // to fail negotiation normally, just like with `V1`
-        vec![42,1],
-    };
+        vec![42, 1],
+    ];
 
     for (listen_protos, dial_protos) in protos {
         for dial_payload in payloads.clone() {
@@ -193,7 +198,8 @@ fn select_proto_parallel() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, io, _) = dialer_select_proto_parallel(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         });
@@ -224,7 +230,8 @@ fn select_proto_serial() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, io, _) = dialer_select_proto_serial(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         });
@@ -247,7 +254,9 @@ fn simultaneous_open() {
         let server = async move {
             let connec = listener.accept().await.unwrap().0;
             let protos = vec![b"/proto1", b"/proto2"];
-            let (proto, io, _) = dialer_select_proto_serial(connec, protos, version).await.unwrap();
+            let (proto, io, _) = dialer_select_proto_serial(connec, protos, version)
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         };
@@ -256,7 +265,8 @@ fn simultaneous_open() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, io, _) = dialer_select_proto_serial(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         };

@@ -38,30 +38,43 @@ pub trait RequestResponseCodec {
 
     /// Reads a request from the given I/O stream according to the
     /// negotiated protocol.
-    async fn read_request<T>(&mut self, protocol: &Self::Protocol, io: &mut T)
-        -> io::Result<Self::Request>
+    async fn read_request<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send;
 
     /// Reads a response from the given I/O stream according to the
     /// negotiated protocol.
-    async fn read_response<T>(&mut self, protocol: &Self::Protocol, io: &mut T)
-        -> io::Result<Self::Response>
+    async fn read_response<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
     where
         T: AsyncRead + Unpin + Send;
 
     /// Writes a request to the given I/O stream according to the
     /// negotiated protocol.
-    async fn write_request<T>(&mut self, protocol: &Self::Protocol, io: &mut T, req: Self::Request)
-        -> io::Result<()>
+    async fn write_request<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
 
     /// Writes a response to the given I/O stream according to the
     /// negotiated protocol.
-    async fn write_response<T>(&mut self, protocol: &Self::Protocol, io: &mut T, res: Self::Response)
-        -> io::Result<()>
+    async fn write_response<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
+        res: Self::Response,
+    ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
 }
-

@@ -18,12 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v1::handler::{
-    RelayHandlerConfig, RelayHandlerEvent, RelayHandlerIn, RelayHandlerProto,
-};
-use crate::v1::message_proto::circuit_relay;
-use crate::v1::transport::{OutgoingRelayReqError, TransportToBehaviourMsg};
-use crate::v1::{protocol, Connection, RequestId};
+use crate::v1::handler::{RelayHandlerConfig, RelayHandlerEvent, RelayHandlerIn, RelayHandlerProto};
+use crate::message_proto::circuit_relay;
+use crate::protocol;
+use crate::transport::TransportToBehaviourMsg;
+use crate::RequestId;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId, ListenerId};
@@ -39,10 +38,10 @@ use std::time::Duration;
 /// Network behaviour allowing the local node to act as a source, a relay and a destination.
 pub struct Relay {
     config: RelayConfig,
-    /// Channel receiver from [`crate::v1::RelayTransport`].
+    /// Channel receiver from [`crate::RelayTransport`].
     from_transport: mpsc::Receiver<TransportToBehaviourMsg>,
 
-    /// Events that need to be send to a [`RelayListener`](crate::v1::RelayListener) via
+    /// Events that need to be send to a [`RelayListener`](crate::transport::RelayListener) via
     /// [`Self::listeners`] or [`Self::listener_any_relay`].
     outbox_to_listeners: VecDeque<(PeerId, BehaviourToListenerMsg)>,
     /// Events that need to be yielded to the outside when polling.
@@ -83,11 +82,11 @@ struct OutgoingDialingRelayReq {
     relay_addr: Multiaddr,
     dst_addr: Option<Multiaddr>,
     dst_peer_id: PeerId,
-    send_back: oneshot::Sender<Result<Connection, OutgoingRelayReqError>>,
+    send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
 }
 
 struct OutgoingUpgradingRelayReq {
-    send_back: oneshot::Sender<Result<Connection, OutgoingRelayReqError>>,
+    send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
 }
 
 enum IncomingRelayReq {
@@ -756,6 +755,18 @@ impl NetworkBehaviour for Relay {
     }
 }
 
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum BehaviourToListenerMsg {
+    ConnectionToRelayEstablished,
+    IncomingRelayedConnection {
+        stream: protocol::Connection,
+        src_peer_id: PeerId,
+        relay_peer_id: PeerId,
+        relay_addr: Multiaddr,
+    },
+}
+
 enum RelayListener {
     Connecting {
         relay_addr: Multiaddr,
@@ -769,7 +780,7 @@ enum RelayListener {
 
 impl RelayListener {
     /// Returns whether the channel to the
-    /// [`RelayListener`](crate::v1::RelayListener) is closed.
+    /// [`RelayListener`](crate::transport::RelayListener) is closed.
     fn is_closed(&self) -> bool {
         match self {
             RelayListener::Connecting { to_listener, .. }
@@ -778,13 +789,7 @@ impl RelayListener {
     }
 }
 
-#[derive(Debug)]
-pub enum BehaviourToListenerMsg {
-    ConnectionToRelayEstablished,
-    IncomingRelayedConnection {
-        stream: Connection,
-        src_peer_id: PeerId,
-        relay_peer_id: PeerId,
-        relay_addr: Multiaddr,
-    },
+#[derive(Debug, Eq, PartialEq)]
+pub enum OutgoingRelayReqError {
+    DialingRelay,
 }

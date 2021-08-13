@@ -45,7 +45,8 @@ pub struct Boxed<O> {
 }
 
 type Dial<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
-type Listener<O> = Pin<Box<dyn Stream<Item = io::Result<ListenerEvent<ListenerUpgrade<O>, io::Error>>> + Send>>;
+type Listener<O> =
+    Pin<Box<dyn Stream<Item = io::Result<ListenerEvent<ListenerUpgrade<O>, io::Error>>> + Send>>;
 type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 
 trait Abstract<O> {
@@ -64,12 +65,16 @@ where
 {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O>, TransportError<io::Error>> {
         let listener = Transport::listen_on(self.clone(), addr).map_err(|e| e.map(box_err))?;
-        let fut = listener.map_ok(|event|
-            event.map(|upgrade| {
-                let up = upgrade.map_err(box_err);
-                Box::pin(up) as ListenerUpgrade<O>
-            }).map_err(box_err)
-        ).map_err(box_err);
+        let fut = listener
+            .map_ok(|event| {
+                event
+                    .map(|upgrade| {
+                        let up = upgrade.map_err(box_err);
+                        Box::pin(up) as ListenerUpgrade<O>
+                    })
+                    .map_err(box_err)
+            })
+            .map_err(box_err);
         Ok(Box::pin(fut))
     }
 

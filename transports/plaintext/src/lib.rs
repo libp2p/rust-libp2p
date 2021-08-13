@@ -21,19 +21,16 @@
 use crate::error::PlainTextError;
 
 use bytes::Bytes;
+use futures::future::BoxFuture;
 use futures::future::{self, Ready};
 use futures::prelude::*;
-use futures::future::BoxFuture;
-use libp2p_core::{
-    identity,
-    InboundUpgrade,
-    OutboundUpgrade,
-    UpgradeInfo,
-    PeerId,
-    PublicKey,
-};
+use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, PublicKey, UpgradeInfo};
 use log::debug;
-use std::{io, iter, pin::Pin, task::{Context, Poll}};
+use std::{
+    io, iter,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use void::Void;
 
 mod error;
@@ -41,7 +38,6 @@ mod handshake;
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 }
-
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
 ///
@@ -119,7 +115,7 @@ impl UpgradeInfo for PlainText2Config {
 
 impl<C> InboundUpgrade<C> for PlainText2Config
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = (PeerId, PlainTextOutput<C>);
     type Error = PlainTextError;
@@ -132,7 +128,7 @@ where
 
 impl<C> OutboundUpgrade<C> for PlainText2Config
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = (PeerId, PlainTextOutput<C>);
     type Error = PlainTextError;
@@ -146,7 +142,7 @@ where
 impl PlainText2Config {
     async fn handshake<T>(self, socket: T) -> Result<(PeerId, PlainTextOutput<T>), PlainTextError>
     where
-        T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         debug!("Starting plaintext handshake.");
         let (socket, remote, read_buffer) = handshake::handshake(socket, self).await?;
@@ -158,7 +154,7 @@ impl PlainText2Config {
                 socket,
                 remote_key: remote.public_key,
                 read_buffer,
-            }
+            },
         ))
     }
 }
@@ -179,35 +175,35 @@ where
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PlainTextOutput<S> {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         if !self.read_buffer.is_empty() {
             let n = std::cmp::min(buf.len(), self.read_buffer.len());
             let b = self.read_buffer.split_to(n);
             buf[..n].copy_from_slice(&b[..]);
-            return Poll::Ready(Ok(n))
+            return Poll::Ready(Ok(n));
         }
         AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PlainTextOutput<S> {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         AsyncWrite::poll_close(Pin::new(&mut self.socket), cx)
     }
 }

@@ -22,7 +22,7 @@ use super::*;
 
 use fnv::FnvHashMap;
 use libp2p_core::PeerId;
-use std::{vec, collections::hash_map::Entry, num::NonZeroUsize};
+use std::{collections::hash_map::Entry, num::NonZeroUsize, vec};
 
 /// A peer iterator for a fixed set of peers.
 pub struct FixedPeersIter {
@@ -42,7 +42,7 @@ pub struct FixedPeersIter {
 #[derive(Debug, PartialEq, Eq)]
 enum State {
     Waiting { num_waiting: usize },
-    Finished
+    Finished,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -60,7 +60,7 @@ enum PeerState {
 impl FixedPeersIter {
     pub fn new<I>(peers: I, parallelism: NonZeroUsize) -> Self
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = PeerId>,
     {
         let peers = peers.into_iter().collect::<Vec<_>>();
 
@@ -87,7 +87,7 @@ impl FixedPeersIter {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Succeeded;
                 *num_waiting -= 1;
-                return true
+                return true;
             }
         }
         false
@@ -108,7 +108,7 @@ impl FixedPeersIter {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Failed;
                 *num_waiting -= 1;
-                return true
+                return true;
             }
         }
         false
@@ -134,24 +134,26 @@ impl FixedPeersIter {
             State::Finished => PeersIterState::Finished,
             State::Waiting { num_waiting } => {
                 if *num_waiting >= self.parallelism.get() {
-                    return PeersIterState::WaitingAtCapacity
+                    return PeersIterState::WaitingAtCapacity;
                 }
                 loop {
                     match self.iter.next() {
-                        None => if *num_waiting == 0 {
-                            self.state = State::Finished;
-                            return PeersIterState::Finished
-                        } else {
-                            return PeersIterState::Waiting(None)
+                        None => {
+                            if *num_waiting == 0 {
+                                self.state = State::Finished;
+                                return PeersIterState::Finished;
+                            } else {
+                                return PeersIterState::Waiting(None);
+                            }
                         }
                         Some(p) => match self.peers.entry(p) {
                             Entry::Occupied(_) => {} // skip duplicates
                             Entry::Vacant(e) => {
                                 *num_waiting += 1;
                                 e.insert(PeerState::Waiting);
-                                return PeersIterState::Waiting(Some(Cow::Owned(p)))
+                                return PeersIterState::Waiting(Some(Cow::Owned(p)));
                             }
-                        }
+                        },
                     }
                 }
             }
@@ -159,13 +161,13 @@ impl FixedPeersIter {
     }
 
     pub fn into_result(self) -> impl Iterator<Item = PeerId> {
-        self.peers.into_iter()
-            .filter_map(|(p, s)|
-                if let PeerState::Succeeded = s {
-                    Some(p)
-                } else {
-                    None
-                })
+        self.peers.into_iter().filter_map(|(p, s)| {
+            if let PeerState::Succeeded = s {
+                Some(p)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -184,12 +186,12 @@ mod test {
             PeersIterState::Waiting(Some(peer)) => {
                 let peer = peer.into_owned();
                 iter.on_failure(&peer);
-            },
+            }
             _ => panic!("Expected iterator to yield peer."),
         }
 
         match iter.next() {
-            PeersIterState::Waiting(Some(_)) => {},
+            PeersIterState::Waiting(Some(_)) => {}
             PeersIterState::WaitingAtCapacity => panic!(
                 "Expected iterator to return another peer given that the \
                  previous `on_failure` call should have allowed another peer \

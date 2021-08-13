@@ -34,9 +34,7 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    core::{
-        either::EitherTransport, muxing::StreamMuxerBox, transport,
-    },
+    core::{either::EitherTransport, muxing::StreamMuxerBox, transport},
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
@@ -222,6 +220,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     result: Result::Err(PingFailure::Timeout),
                 } => {
                     println!("ping: timeout to {}", peer.to_base58());
+                }
+                PingEvent {
+                    peer,
+                    result: Result::Err(PingFailure::Unsupported),
+                } => {
+                    println!("ping: {} does not support ping protocol", peer.to_base58());
                 }
                 PingEvent {
                     peer,
