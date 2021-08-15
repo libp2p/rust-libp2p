@@ -2,6 +2,8 @@
 
 // Use the following command to run:
 // cargo run --example kademlia-example --features="tcp-tokio mdns"
+// To run in client mode:
+// cargo run --example kademlia-example --features="tcp-tokio mdns" --client
 
 // Based on the following example code:
 // https://github.com/zupzup/rust-peer-to-peer-example/blob/main/src/main.rs
@@ -9,7 +11,10 @@
 use libp2p::{
     core::upgrade,
     identity,
-    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent, QueryResult},
+    kad::{
+        protocol::Mode, record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent,
+        QueryResult,
+    },
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
@@ -49,17 +54,21 @@ impl From<MdnsEvent> for MyOutEvent {
 
 #[tokio::main]
 async fn main() {
-    let client_mode = if let Some(kad_mode) = env::args().nth(1) {
-        true
+    let client_mode: bool = if let Some(kad_mode) = env::args().nth(1) {
+        kad_mode.starts_with("--client")
     } else {
         false
     };
+
     create_peer(client_mode).await
 }
 
 async fn create_peer(client_mode: bool) {
     let key = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from_public_key(&key.public());
+
+    // Print the current peer ID.
+    println!("{:?}", peer_id.clone());
 
     let auth_keys = Keypair::<X25519Spec>::new() // create new auth keys
         .into_authentic(&key) // sign the keys
@@ -71,10 +80,14 @@ async fn create_peer(client_mode: bool) {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 
+    let mut config = KademliaConfig::default();
+
     let kad_config = if client_mode {
-        KademliaConfig::default()
+        config.set_mode(Mode::Client);
+        println!("Setting to client mode.");
+        config
     } else {
-        KademliaConfig::default()
+        config
     };
 
     let behaviour = MyBehaviour {
@@ -92,7 +105,7 @@ async fn create_peer(client_mode: bool) {
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
 
-    let mut stdin = io::stdin();
+    let stdin = io::stdin();
     let mut buffer = String::new();
 
     loop {
@@ -137,7 +150,7 @@ fn list_peers(swarm: &mut Swarm<MyBehaviour>) {
     for bucket in swarm.behaviour_mut().kademlia.kbuckets() {
         if bucket.num_entries() > 0 {
             for item in bucket.iter() {
-                println!("Peer ID: {:?}", item.node.key);
+                println!("Peer ID: {:?}", item.node.key.preimage());
             }
         }
     }
