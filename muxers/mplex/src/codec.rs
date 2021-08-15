@@ -18,10 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{BufMut, Bytes, BytesMut};
 use asynchronous_codec::{Decoder, Encoder};
+use bytes::{BufMut, Bytes, BytesMut};
 use libp2p_core::Endpoint;
-use std::{fmt, hash::{Hash, Hasher}, io, mem};
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    io, mem,
+};
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.
@@ -82,18 +86,27 @@ pub struct RemoteStreamId {
 
 impl LocalStreamId {
     pub fn dialer(num: u64) -> Self {
-        Self { num, role: Endpoint::Dialer }
+        Self {
+            num,
+            role: Endpoint::Dialer,
+        }
     }
 
     #[cfg(test)]
     pub fn listener(num: u64) -> Self {
-        Self { num, role: Endpoint::Listener }
+        Self {
+            num,
+            role: Endpoint::Listener,
+        }
     }
 
     pub fn next(self) -> Self {
         Self {
-            num: self.num.checked_add(1).expect("Mplex substream ID overflowed"),
-            .. self
+            num: self
+                .num
+                .checked_add(1)
+                .expect("Mplex substream ID overflowed"),
+            ..self
         }
     }
 
@@ -108,11 +121,17 @@ impl LocalStreamId {
 
 impl RemoteStreamId {
     fn dialer(num: u64) -> Self {
-        Self { num, role: Endpoint::Dialer }
+        Self {
+            num,
+            role: Endpoint::Dialer,
+        }
     }
 
     fn listener(num: u64) -> Self {
-        Self { num, role: Endpoint::Listener }
+        Self {
+            num,
+            role: Endpoint::Listener,
+        }
     }
 
     /// Converts this `RemoteStreamId` into the corresponding `LocalStreamId`
@@ -174,31 +193,28 @@ impl Decoder for Codec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
             match mem::replace(&mut self.decoder_state, CodecDecodeState::Poisoned) {
-                CodecDecodeState::Begin => {
-                    match self.varint_decoder.decode(src)? {
-                        Some(header) => {
-                            self.decoder_state = CodecDecodeState::HasHeader(header);
-                        },
-                        None => {
-                            self.decoder_state = CodecDecodeState::Begin;
-                            return Ok(None);
-                        },
+                CodecDecodeState::Begin => match self.varint_decoder.decode(src)? {
+                    Some(header) => {
+                        self.decoder_state = CodecDecodeState::HasHeader(header);
+                    }
+                    None => {
+                        self.decoder_state = CodecDecodeState::Begin;
+                        return Ok(None);
                     }
                 },
-                CodecDecodeState::HasHeader(header) => {
-                    match self.varint_decoder.decode(src)? {
-                        Some(len) => {
-                            if len as usize > MAX_FRAME_SIZE {
-                                let msg = format!("Mplex frame length {} exceeds maximum", len);
-                                return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
-                            }
+                CodecDecodeState::HasHeader(header) => match self.varint_decoder.decode(src)? {
+                    Some(len) => {
+                        if len as usize > MAX_FRAME_SIZE {
+                            let msg = format!("Mplex frame length {} exceeds maximum", len);
+                            return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
+                        }
 
-                            self.decoder_state = CodecDecodeState::HasHeaderAndLen(header, len as usize);
-                        },
-                        None => {
-                            self.decoder_state = CodecDecodeState::HasHeader(header);
-                            return Ok(None);
-                        },
+                        self.decoder_state =
+                            CodecDecodeState::HasHeaderAndLen(header, len as usize);
+                    }
+                    None => {
+                        self.decoder_state = CodecDecodeState::HasHeader(header);
+                        return Ok(None);
                     }
                 },
                 CodecDecodeState::HasHeaderAndLen(header, len) => {
@@ -212,25 +228,44 @@ impl Decoder for Codec {
                     let buf = src.split_to(len);
                     let num = (header >> 3) as u64;
                     let out = match header & 7 {
-                        0 => Frame::Open { stream_id: RemoteStreamId::dialer(num) },
-                        1 => Frame::Data { stream_id: RemoteStreamId::listener(num), data: buf.freeze() },
-                        2 => Frame::Data { stream_id: RemoteStreamId::dialer(num), data: buf.freeze() },
-                        3 => Frame::Close { stream_id: RemoteStreamId::listener(num) },
-                        4 => Frame::Close { stream_id: RemoteStreamId::dialer(num) },
-                        5 => Frame::Reset { stream_id: RemoteStreamId::listener(num) },
-                        6 => Frame::Reset { stream_id: RemoteStreamId::dialer(num) },
+                        0 => Frame::Open {
+                            stream_id: RemoteStreamId::dialer(num),
+                        },
+                        1 => Frame::Data {
+                            stream_id: RemoteStreamId::listener(num),
+                            data: buf.freeze(),
+                        },
+                        2 => Frame::Data {
+                            stream_id: RemoteStreamId::dialer(num),
+                            data: buf.freeze(),
+                        },
+                        3 => Frame::Close {
+                            stream_id: RemoteStreamId::listener(num),
+                        },
+                        4 => Frame::Close {
+                            stream_id: RemoteStreamId::dialer(num),
+                        },
+                        5 => Frame::Reset {
+                            stream_id: RemoteStreamId::listener(num),
+                        },
+                        6 => Frame::Reset {
+                            stream_id: RemoteStreamId::dialer(num),
+                        },
                         _ => {
                             let msg = format!("Invalid mplex header value 0x{:x}", header);
                             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
-                        },
+                        }
                     };
 
                     self.decoder_state = CodecDecodeState::Begin;
                     return Ok(Some(out));
-                },
+                }
 
                 CodecDecodeState::Poisoned => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "Mplex codec poisoned"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Mplex codec poisoned",
+                    ));
                 }
             }
         }
@@ -243,27 +278,51 @@ impl Encoder for Codec {
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
-            Frame::Open { stream_id } => {
-                (stream_id.num << 3, Bytes::new())
-            },
-            Frame::Data { stream_id: LocalStreamId { num, role: Endpoint::Listener }, data } => {
-                (num << 3 | 1, data)
-            },
-            Frame::Data { stream_id: LocalStreamId { num, role: Endpoint::Dialer }, data } => {
-                (num << 3 | 2, data)
-            },
-            Frame::Close { stream_id: LocalStreamId { num, role: Endpoint::Listener } } => {
-                (num << 3 | 3, Bytes::new())
-            },
-            Frame::Close { stream_id: LocalStreamId { num, role: Endpoint::Dialer } } => {
-                (num << 3 | 4, Bytes::new())
-            },
-            Frame::Reset { stream_id: LocalStreamId { num, role: Endpoint::Listener } } => {
-                (num << 3 | 5, Bytes::new())
-            },
-            Frame::Reset { stream_id: LocalStreamId { num, role: Endpoint::Dialer } } => {
-                (num << 3 | 6, Bytes::new())
-            },
+            Frame::Open { stream_id } => (stream_id.num << 3, Bytes::new()),
+            Frame::Data {
+                stream_id:
+                    LocalStreamId {
+                        num,
+                        role: Endpoint::Listener,
+                    },
+                data,
+            } => (num << 3 | 1, data),
+            Frame::Data {
+                stream_id:
+                    LocalStreamId {
+                        num,
+                        role: Endpoint::Dialer,
+                    },
+                data,
+            } => (num << 3 | 2, data),
+            Frame::Close {
+                stream_id:
+                    LocalStreamId {
+                        num,
+                        role: Endpoint::Listener,
+                    },
+            } => (num << 3 | 3, Bytes::new()),
+            Frame::Close {
+                stream_id:
+                    LocalStreamId {
+                        num,
+                        role: Endpoint::Dialer,
+                    },
+            } => (num << 3 | 4, Bytes::new()),
+            Frame::Reset {
+                stream_id:
+                    LocalStreamId {
+                        num,
+                        role: Endpoint::Listener,
+                    },
+            } => (num << 3 | 5, Bytes::new()),
+            Frame::Reset {
+                stream_id:
+                    LocalStreamId {
+                        num,
+                        role: Endpoint::Dialer,
+                    },
+            } => (num << 3 | 6, Bytes::new()),
         };
 
         let mut header_buf = encode::u64_buffer();
@@ -274,7 +333,10 @@ impl Encoder for Codec {
         let data_len_bytes = encode::usize(data_len, &mut data_buf);
 
         if data_len > MAX_FRAME_SIZE {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "data size exceed maximum"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "data size exceed maximum",
+            ));
         }
 
         dst.reserve(header_bytes.len() + data_len_bytes.len() + data_len);
@@ -294,15 +356,21 @@ mod tests {
         let mut enc = Codec::new();
         let role = Endpoint::Dialer;
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE + 1][..]);
-        let bad_msg = Frame::Data { stream_id: LocalStreamId { num: 123, role }, data };
+        let bad_msg = Frame::Data {
+            stream_id: LocalStreamId { num: 123, role },
+            data,
+        };
         let mut out = BytesMut::new();
         match enc.encode(bad_msg, &mut out) {
             Err(e) => assert_eq!(e.to_string(), "data size exceed maximum"),
-            _ => panic!("Can't send a message bigger than MAX_FRAME_SIZE")
+            _ => panic!("Can't send a message bigger than MAX_FRAME_SIZE"),
         }
 
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE][..]);
-        let ok_msg = Frame::Data { stream_id: LocalStreamId { num: 123, role }, data };
+        let ok_msg = Frame::Data {
+            stream_id: LocalStreamId { num: 123, role },
+            data,
+        };
         assert!(enc.encode(ok_msg, &mut out).is_ok());
     }
 
@@ -311,19 +379,24 @@ mod tests {
         // Create new codec object for encoding and decoding our frame.
         let mut codec = Codec::new();
         // Create a u64 stream ID.
-        let id: u64 = u32::MAX as u64 + 1 ;
-        let stream_id = LocalStreamId { num: id, role: Endpoint::Dialer };
+        let id: u64 = u32::MAX as u64 + 1;
+        let stream_id = LocalStreamId {
+            num: id,
+            role: Endpoint::Dialer,
+        };
 
         // Open a new frame with that stream ID.
         let original_frame = Frame::Open { stream_id };
 
         // Encode that frame.
         let mut enc_frame = BytesMut::new();
-        codec.encode(original_frame, &mut enc_frame)
+        codec
+            .encode(original_frame, &mut enc_frame)
             .expect("Encoding to succeed.");
 
         // Decode encoded frame and extract stream ID.
-        let dec_string_id = codec.decode(&mut enc_frame)
+        let dec_string_id = codec
+            .decode(&mut enc_frame)
             .expect("Decoding to succeed.")
             .map(|f| f.remote_id())
             .unwrap();

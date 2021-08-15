@@ -54,27 +54,23 @@
 //!
 //![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
-use futures::{prelude::*, future::BoxFuture};
-use libp2p_core::{
-    Transport,
-    multiaddr::{Protocol, Multiaddr},
-    transport::{TransportError, ListenerEvent}
-};
-use smallvec::SmallVec;
-use std::{convert::TryFrom, error, fmt, iter, net::IpAddr, str};
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-use std::io;
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-use trust_dns_resolver::system_conf;
-use trust_dns_resolver::{
-    AsyncResolver,
-    ConnectionProvider,
-    proto::xfer::dns_handle::DnsHandle,
-};
-#[cfg(feature = "tokio")]
-use trust_dns_resolver::{TokioAsyncResolver, TokioConnection, TokioConnectionProvider};
 #[cfg(feature = "async-std")]
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
+use futures::{future::BoxFuture, prelude::*};
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{ListenerEvent, TransportError},
+    Transport,
+};
+use smallvec::SmallVec;
+#[cfg(any(feature = "async-std", feature = "tokio"))]
+use std::io;
+use std::{convert::TryFrom, error, fmt, iter, net::IpAddr, str};
+#[cfg(any(feature = "async-std", feature = "tokio"))]
+use trust_dns_resolver::system_conf;
+use trust_dns_resolver::{proto::xfer::dns_handle::DnsHandle, AsyncResolver, ConnectionProvider};
+#[cfg(feature = "tokio")]
+use trust_dns_resolver::{TokioAsyncResolver, TokioConnection, TokioConnectionProvider};
 
 pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
@@ -112,7 +108,7 @@ pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioConnection, TokioConnectionPro
 pub struct GenDnsConfig<T, C, P>
 where
     C: DnsHandle<Error = ResolveError>,
-    P: ConnectionProvider<Conn = C>
+    P: ConnectionProvider<Conn = C>,
 {
     /// The underlying transport.
     inner: T,
@@ -129,12 +125,14 @@ impl<T> DnsConfig<T> {
     }
 
     /// Creates a [`DnsConfig`] with a custom resolver configuration and options.
-    pub async fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts)
-        -> Result<DnsConfig<T>, io::Error>
-    {
+    pub async fn custom(
+        inner: T,
+        cfg: ResolverConfig,
+        opts: ResolverOpts,
+    ) -> Result<DnsConfig<T>, io::Error> {
         Ok(DnsConfig {
             inner,
-            resolver: async_std_resolver::resolver(cfg, opts).await?
+            resolver: async_std_resolver::resolver(cfg, opts).await?,
         })
     }
 }
@@ -149,12 +147,14 @@ impl<T> TokioDnsConfig<T> {
 
     /// Creates a [`TokioDnsConfig`] with a custom resolver configuration
     /// and options.
-    pub fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts)
-        -> Result<TokioDnsConfig<T>, io::Error>
-    {
+    pub fn custom(
+        inner: T,
+        cfg: ResolverConfig,
+        opts: ResolverOpts,
+    ) -> Result<TokioDnsConfig<T>, io::Error> {
         Ok(TokioDnsConfig {
             inner,
-            resolver: TokioAsyncResolver::tokio(cfg, opts)?
+            resolver: TokioAsyncResolver::tokio(cfg, opts)?,
         })
     }
 }
@@ -181,24 +181,29 @@ where
     type Output = T::Output;
     type Error = DnsErr<T::Error>;
     type Listener = stream::MapErr<
-        stream::MapOk<T::Listener,
-            fn(ListenerEvent<T::ListenerUpgrade, T::Error>)
-                -> ListenerEvent<Self::ListenerUpgrade, Self::Error>>,
-        fn(T::Error) -> Self::Error>;
+        stream::MapOk<
+            T::Listener,
+            fn(
+                ListenerEvent<T::ListenerUpgrade, T::Error>,
+            ) -> ListenerEvent<Self::ListenerUpgrade, Self::Error>,
+        >,
+        fn(T::Error) -> Self::Error,
+    >;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
         future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
-        BoxFuture<'static, Result<Self::Output, Self::Error>>
+        BoxFuture<'static, Result<Self::Output, Self::Error>>,
     >;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self.inner.listen_on(addr).map_err(|err| err.map(DnsErr::Transport))?;
+        let listener = self
+            .inner
+            .listen_on(addr)
+            .map_err(|err| err.map(DnsErr::Transport))?;
         let listener = listener
             .map_ok::<_, fn(_) -> _>(|event| {
                 event
-                    .map(|upgr| {
-                        upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport)
-                    })
+                    .map(|upgr| upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport))
                     .map_err(DnsErr::Transport)
             })
             .map_err::<_, fn(_) -> _>(DnsErr::Transport);
@@ -225,24 +230,24 @@ where
             // address.
             while let Some(addr) = unresolved.pop() {
                 if let Some((i, name)) = addr.iter().enumerate().find(|(_, p)| match p {
-                    Protocol::Dns(_) |
-                    Protocol::Dns4(_) |
-                    Protocol::Dns6(_) |
-                    Protocol::Dnsaddr(_) => true,
-                    _ => false
+                    Protocol::Dns(_)
+                    | Protocol::Dns4(_)
+                    | Protocol::Dns6(_)
+                    | Protocol::Dnsaddr(_) => true,
+                    _ => false,
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);
                         last_err = Some(DnsErr::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
-                        continue
+                        continue;
                     }
                     dns_lookups += 1;
                     match resolve(&name, &resolver).await {
                         Err(e) => {
                             if unresolved.is_empty() {
-                                return Err(e)
+                                return Err(e);
                             }
                             // If there are still unresolved addresses, there is
                             // a chance of success, but we track the last error.
@@ -256,7 +261,8 @@ where
                         Ok(Resolved::Many(ips)) => {
                             for ip in ips {
                                 log::trace!("Resolved {} -> {}", name, ip);
-                                let addr = addr.replace(i, |_| Some(ip)).expect("`i` is a valid index");
+                                let addr =
+                                    addr.replace(i, |_| Some(ip)).expect("`i` is a valid index");
                                 unresolved.push(addr);
                             }
                         }
@@ -269,10 +275,14 @@ where
                                     if n < MAX_TXT_RECORDS {
                                         n += 1;
                                         log::trace!("Resolved {} -> {}", name, a);
-                                        let addr = prefix.iter().chain(a.iter()).collect::<Multiaddr>();
+                                        let addr =
+                                            prefix.iter().chain(a.iter()).collect::<Multiaddr>();
                                         unresolved.push(addr);
                                     } else {
-                                        log::debug!("Too many TXT records. Dropping resolved {}.", a);
+                                        log::debug!(
+                                            "Too many TXT records. Dropping resolved {}.",
+                                            a
+                                        );
                                     }
                                 }
                             }
@@ -291,9 +301,10 @@ where
                             dial_attempts += 1;
                             out.await.map_err(DnsErr::Transport)
                         }
-                        Err(TransportError::MultiaddrNotSupported(a)) =>
-                            Err(DnsErr::MultiaddrNotSupported(a)),
-                        Err(TransportError::Other(err)) => Err(DnsErr::Transport(err))
+                        Err(TransportError::MultiaddrNotSupported(a)) => {
+                            Err(DnsErr::MultiaddrNotSupported(a))
+                        }
+                        Err(TransportError::Other(err)) => Err(DnsErr::Transport(err)),
                     };
 
                     match result {
@@ -301,11 +312,14 @@ where
                         Err(err) => {
                             log::debug!("Dial error: {:?}.", err);
                             if unresolved.is_empty() {
-                                return Err(err)
+                                return Err(err);
                             }
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
-                                log::debug!("Aborting dialing after {} attempts.", MAX_DIAL_ATTEMPTS);
-                                return Err(err)
+                                log::debug!(
+                                    "Aborting dialing after {} attempts.",
+                                    MAX_DIAL_ATTEMPTS
+                                );
+                                return Err(err);
                             }
                             last_err = Some(err);
                         }
@@ -317,10 +331,12 @@ where
             // attempt, return that error. Otherwise there were no valid DNS records
             // for the given address to begin with (i.e. DNS lookups succeeded but
             // produced no records relevant for the given `addr`).
-            Err(last_err.unwrap_or_else(||
-                DnsErr::ResolveError(
-                    ResolveErrorKind::Message("No matching records found.").into())))
-        }.boxed().right_future())
+            Err(last_err.unwrap_or_else(|| {
+                DnsErr::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
+            }))
+        }
+        .boxed()
+        .right_future())
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -348,7 +364,8 @@ pub enum DnsErr<TErr> {
 }
 
 impl<TErr> fmt::Display for DnsErr<TErr>
-where TErr: fmt::Display
+where
+    TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -361,7 +378,8 @@ where TErr: fmt::Display
 }
 
 impl<TErr> error::Error for DnsErr<TErr>
-where TErr: error::Error + 'static
+where
+    TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -393,96 +411,111 @@ enum Resolved<'a> {
 /// [`Resolved::One`].
 fn resolve<'a, E: 'a + Send, C, P>(
     proto: &Protocol<'a>,
-    resolver: &'a AsyncResolver<C,P>,
+    resolver: &'a AsyncResolver<C, P>,
 ) -> BoxFuture<'a, Result<Resolved<'a>, DnsErr<E>>>
 where
     C: DnsHandle<Error = ResolveError>,
     P: ConnectionProvider<Conn = C>,
 {
     match proto {
-        Protocol::Dns(ref name) => {
-            resolver.lookup_ip(name.clone().into_owned()).map(move |res| match res {
+        Protocol::Dns(ref name) => resolver
+            .lookup_ip(name.clone().into_owned())
+            .map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.into_iter();
-                    let one = ips.next()
+                    let one = ips
+                        .next()
                         .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
-                            iter::once(one).chain(iter::once(two))
+                            iter::once(one)
+                                .chain(iter::once(two))
                                 .chain(ips)
                                 .map(Protocol::from)
-                                .collect()))
+                                .collect(),
+                        ))
                     } else {
                         Ok(Resolved::One(Protocol::from(one)))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e))
-            }).boxed()
-        }
-        Protocol::Dns4(ref name) => {
-            resolver.ipv4_lookup(name.clone().into_owned()).map(move |res| match res {
+                Err(e) => Err(DnsErr::ResolveError(e)),
+            })
+            .boxed(),
+        Protocol::Dns4(ref name) => resolver
+            .ipv4_lookup(name.clone().into_owned())
+            .map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.into_iter();
-                    let one = ips.next()
+                    let one = ips
+                        .next()
                         .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
-                            iter::once(one).chain(iter::once(two))
+                            iter::once(one)
+                                .chain(iter::once(two))
                                 .chain(ips)
                                 .map(IpAddr::from)
                                 .map(Protocol::from)
-                                .collect()))
+                                .collect(),
+                        ))
                     } else {
                         Ok(Resolved::One(Protocol::from(IpAddr::from(one))))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e))
-            }).boxed()
-        }
-        Protocol::Dns6(ref name) => {
-            resolver.ipv6_lookup(name.clone().into_owned()).map(move |res| match res {
+                Err(e) => Err(DnsErr::ResolveError(e)),
+            })
+            .boxed(),
+        Protocol::Dns6(ref name) => resolver
+            .ipv6_lookup(name.clone().into_owned())
+            .map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.into_iter();
-                    let one = ips.next()
+                    let one = ips
+                        .next()
                         .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
-                            iter::once(one).chain(iter::once(two))
+                            iter::once(one)
+                                .chain(iter::once(two))
                                 .chain(ips)
                                 .map(IpAddr::from)
                                 .map(Protocol::from)
-                                .collect()))
+                                .collect(),
+                        ))
                     } else {
                         Ok(Resolved::One(Protocol::from(IpAddr::from(one))))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e))
-            }).boxed()
-        },
+                Err(e) => Err(DnsErr::ResolveError(e)),
+            })
+            .boxed(),
         Protocol::Dnsaddr(ref name) => {
             let name = [DNSADDR_PREFIX, name].concat();
-            resolver.txt_lookup(name).map(move |res| match res {
-                Ok(txts) => {
-                    let mut addrs = Vec::new();
-                    for txt in txts {
-                        if let Some(chars) = txt.txt_data().first() {
-                            match parse_dnsaddr_txt(chars) {
-                                Err(e) => {
-                                    // Skip over seemingly invalid entries.
-                                    log::debug!("Invalid TXT record: {:?}", e);
-                                }
-                                Ok(a) => {
-                                    addrs.push(a);
+            resolver
+                .txt_lookup(name)
+                .map(move |res| match res {
+                    Ok(txts) => {
+                        let mut addrs = Vec::new();
+                        for txt in txts {
+                            if let Some(chars) = txt.txt_data().first() {
+                                match parse_dnsaddr_txt(chars) {
+                                    Err(e) => {
+                                        // Skip over seemingly invalid entries.
+                                        log::debug!("Invalid TXT record: {:?}", e);
+                                    }
+                                    Ok(a) => {
+                                        addrs.push(a);
+                                    }
                                 }
                             }
                         }
+                        Ok(Resolved::Addrs(addrs))
                     }
-                    Ok(Resolved::Addrs(addrs))
-                }
-                Err(e) => Err(DnsErr::ResolveError(e))
-            }).boxed()
+                    Err(e) => Err(DnsErr::ResolveError(e)),
+                })
+                .boxed()
         }
-        proto => future::ready(Ok(Resolved::One(proto.clone()))).boxed()
+        proto => future::ready(Ok(Resolved::One(proto.clone()))).boxed(),
     }
 }
 
@@ -491,7 +524,7 @@ fn parse_dnsaddr_txt(txt: &[u8]) -> io::Result<Multiaddr> {
     let s = str::from_utf8(txt).map_err(invalid_data)?;
     match s.strip_prefix("dnsaddr=") {
         None => Err(invalid_data("Missing `dnsaddr=` prefix.")),
-        Some(a) => Ok(Multiaddr::try_from(a).map_err(invalid_data)?)
+        Some(a) => Ok(Multiaddr::try_from(a).map_err(invalid_data)?),
     }
 }
 
@@ -504,11 +537,10 @@ mod tests {
     use super::*;
     use futures::{future::BoxFuture, stream::BoxStream};
     use libp2p_core::{
-        Transport,
-        PeerId,
-        multiaddr::{Protocol, Multiaddr},
+        multiaddr::{Multiaddr, Protocol},
         transport::ListenerEvent,
         transport::TransportError,
+        PeerId, Transport,
     };
 
     #[test]
@@ -521,19 +553,27 @@ mod tests {
         impl Transport for CustomTransport {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
+            type Listener = BoxStream<
+                'static,
+                Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>,
+            >;
             type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+            fn listen_on(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
             }
 
             fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Check that all DNS components have been resolved, i.e. replaced.
                 assert!(!addr.iter().any(|p| match p {
-                    Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
-                        => true,
+                    Protocol::Dns(_)
+                    | Protocol::Dns4(_)
+                    | Protocol::Dns6(_)
+                    | Protocol::Dnsaddr(_) => true,
                     _ => false,
                 }));
                 Ok(Box::pin(future::ready(Ok(()))))
@@ -598,13 +638,17 @@ mod tests {
             // an entry with a random `p2p` suffix.
             match transport
                 .clone()
-                .dial(format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random()).parse().unwrap())
+                .dial(
+                    format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random())
+                        .parse()
+                        .unwrap(),
+                )
                 .unwrap()
                 .await
             {
-                Err(DnsErr::ResolveError(_)) => {},
+                Err(DnsErr::ResolveError(_)) => {}
                 Err(e) => panic!("Unexpected error: {:?}", e),
-                Ok(_) => panic!("Unexpected success.")
+                Ok(_) => panic!("Unexpected success."),
             }
 
             // Failure due to no records.
@@ -615,7 +659,7 @@ mod tests {
                 .await
             {
                 Err(DnsErr::ResolveError(e)) => match e.kind() {
-                    ResolveErrorKind::NoRecordsFound { .. } => {},
+                    ResolveErrorKind::NoRecordsFound { .. } => {}
                     _ => panic!("Unexpected DNS error: {:?}", e),
                 },
                 Err(e) => panic!("Unexpected error: {:?}", e),
@@ -630,7 +674,7 @@ mod tests {
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
             async_std_crate::task::block_on(
-                DnsConfig::custom(CustomTransport, config, opts).then(|dns| run(dns.unwrap()))
+                DnsConfig::custom(CustomTransport, config, opts).then(|dns| run(dns.unwrap())),
             );
         }
 
@@ -645,7 +689,9 @@ mod tests {
                 .enable_time()
                 .build()
                 .unwrap();
-            rt.block_on(run(TokioDnsConfig::custom(CustomTransport, config, opts).unwrap()));
+            rt.block_on(run(
+                TokioDnsConfig::custom(CustomTransport, config, opts).unwrap()
+            ));
         }
     }
 }

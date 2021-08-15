@@ -19,29 +19,32 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherOutput, EitherError, EitherFuture2, EitherName},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    either::{EitherError, EitherFuture2, EitherName, EitherOutput},
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
-pub enum EitherUpgrade<A, B> { A(A), B(B) }
+pub enum EitherUpgrade<A, B> {
+    A(A),
+    B(B),
+}
 
 impl<A, B> UpgradeInfo for EitherUpgrade<A, B>
 where
     A: UpgradeInfo,
-    B: UpgradeInfo
+    B: UpgradeInfo,
 {
     type Info = EitherName<A::Info, B::Info>;
     type InfoIter = EitherIter<
         <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter
+        <B::InfoIter as IntoIterator>::IntoIter,
     >;
 
     fn protocol_info(&self) -> Self::InfoIter {
         match self {
             EitherUpgrade::A(a) => EitherIter::A(a.protocol_info().into_iter()),
-            EitherUpgrade::B(b) => EitherIter::B(b.protocol_info().into_iter())
+            EitherUpgrade::B(b) => EitherIter::B(b.protocol_info().into_iter()),
         }
     }
 }
@@ -57,9 +60,13 @@ where
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
-            (EitherUpgrade::A(a), EitherName::A(info)) => EitherFuture2::A(a.upgrade_inbound(sock, info)),
-            (EitherUpgrade::B(b), EitherName::B(info)) => EitherFuture2::B(b.upgrade_inbound(sock, info)),
-            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound")
+            (EitherUpgrade::A(a), EitherName::A(info)) => {
+                EitherFuture2::A(a.upgrade_inbound(sock, info))
+            }
+            (EitherUpgrade::B(b), EitherName::B(info)) => {
+                EitherFuture2::B(b.upgrade_inbound(sock, info))
+            }
+            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound"),
         }
     }
 }
@@ -75,36 +82,42 @@ where
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
-            (EitherUpgrade::A(a), EitherName::A(info)) => EitherFuture2::A(a.upgrade_outbound(sock, info)),
-            (EitherUpgrade::B(b), EitherName::B(info)) => EitherFuture2::B(b.upgrade_outbound(sock, info)),
-            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound")
+            (EitherUpgrade::A(a), EitherName::A(info)) => {
+                EitherFuture2::A(a.upgrade_outbound(sock, info))
+            }
+            (EitherUpgrade::B(b), EitherName::B(info)) => {
+                EitherFuture2::B(b.upgrade_outbound(sock, info))
+            }
+            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound"),
         }
     }
 }
 
 /// A type to represent two possible `Iterator` types.
 #[derive(Debug, Clone)]
-pub enum EitherIter<A, B> { A(A), B(B) }
+pub enum EitherIter<A, B> {
+    A(A),
+    B(B),
+}
 
 impl<A, B> Iterator for EitherIter<A, B>
 where
     A: Iterator,
-    B: Iterator
+    B: Iterator,
 {
     type Item = EitherName<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             EitherIter::A(a) => a.next().map(EitherName::A),
-            EitherIter::B(b) => b.next().map(EitherName::B)
+            EitherIter::B(b) => b.next().map(EitherName::B),
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match self {
             EitherIter::A(a) => a.size_hint(),
-            EitherIter::B(b) => b.size_hint()
+            EitherIter::B(b) => b.size_hint(),
         }
     }
 }
-

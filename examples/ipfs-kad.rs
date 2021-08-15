@@ -25,28 +25,20 @@
 
 use async_std::task;
 use futures::StreamExt;
-use libp2p::{
-    Multiaddr,
-    swarm::{Swarm, SwarmEvent},
-    PeerId,
-    identity,
-    development_transport
-};
-use libp2p::kad::{
-    Kademlia,
-    KademliaConfig,
-    KademliaEvent,
-    GetClosestPeersError,
-    QueryResult,
-};
 use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
+use libp2p::{
+    development_transport, identity,
+    swarm::{Swarm, SwarmEvent},
+    Multiaddr, PeerId,
+};
 use std::{env, error::Error, str::FromStr, time::Duration};
 
 const BOOTNODES: [&'static str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt"
+    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
 #[async_std::main]
@@ -96,9 +88,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if let SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
                 result: QueryResult::GetClosestPeers(result),
                 ..
-            }) = event {
+            }) = event
+            {
                 match result {
-                    Ok(ok) =>
+                    Ok(ok) => {
                         if !ok.peers.is_empty() {
                             println!("Query finished with closest peers: {:#?}", ok.peers)
                         } else {
@@ -106,7 +99,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             // should always be at least 1 reachable peer.
                             println!("Query finished with no closest peers.")
                         }
-                    Err(GetClosestPeersError::Timeout { peers, .. }) =>
+                    }
+                    Err(GetClosestPeersError::Timeout { peers, .. }) => {
                         if !peers.is_empty() {
                             println!("Query timed out with closest peers: {:#?}", peers)
                         } else {
@@ -114,6 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             // should always be at least 1 reachable peer.
                             println!("Query timed out with no closest peers.");
                         }
+                    }
                 };
 
                 break;
