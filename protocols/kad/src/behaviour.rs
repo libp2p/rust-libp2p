@@ -1669,13 +1669,18 @@ where
                 expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
                 addresses: provider.multiaddrs,
             };
-            if self.record_filtering != KademliaStoreInserts::Unfiltered {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundAddProviderRequest { record },
-                    ));
-            } else if let Err(e) = self.store.add_provider(record) {
-                info!("Provider record not stored: {:?}", e);
+            match self.record_filtering {
+                KademliaStoreInserts::Unfiltered => {
+                    if let Err(e) = self.store.add_provider(record) {
+                        info!("Provider record not stored: {:?}", e);
+                    }
+                }
+                KademliaStoreInserts::FilterBoth => {
+                    self.queued_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::InboundAddProviderRequest { record },
+                        ));
+                }
             }
         }
     }
