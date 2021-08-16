@@ -99,7 +99,9 @@ libp2p-websocket = { version = "0.31.0", path = "transports/websocket", optional
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
+async-trait = "0.1"
 env_logger = "0.9.0"
+structopt = "0.3.21"
 tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
