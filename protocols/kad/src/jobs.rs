@@ -61,15 +61,15 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record::{self, Record, ProviderRecord, store::RecordStore};
-use libp2p_core::PeerId;
+use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
+use libp2p_core::PeerId;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::vec;
-use wasm_timer::{Instant, Delay};
+use wasm_timer::{Delay, Instant};
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
@@ -110,7 +110,7 @@ impl<T> PeriodicJob<T> {
     fn is_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
-                return true
+                return true;
             }
         }
         false
@@ -121,7 +121,7 @@ impl<T> PeriodicJob<T> {
 #[derive(Debug)]
 enum PeriodicJobState<T> {
     Running(T),
-    Waiting(Delay, Instant)
+    Waiting(Delay, Instant),
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -158,8 +158,8 @@ impl PutRecordJob {
             skipped: HashSet::new(),
             inner: PeriodicJob {
                 interval: replicate_interval,
-                state: PeriodicJobState::Waiting(delay, deadline)
-            }
+                state: PeriodicJobState::Waiting(delay, deadline),
+            },
         }
     }
 
@@ -192,11 +192,12 @@ impl PutRecordJob {
     /// to be run.
     pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
     where
-        for<'a> T: RecordStore<'a>
+        for<'a> T: RecordStore<'a>,
     {
         if self.inner.is_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
-            let records = store.records()
+            let records = store
+                .records()
                 .filter_map(|r| {
                     let is_publisher = r.publisher.as_ref() == Some(&self.local_id);
                     if self.skipped.contains(&r.key) || (!publish && is_publisher) {
@@ -204,8 +205,9 @@ impl PutRecordJob {
                     } else {
                         let mut record = r.into_owned();
                         if publish && is_publisher {
-                            record.expires = record.expires.or_else(||
-                                self.record_ttl.map(|ttl| now + ttl));
+                            record.expires = record
+                                .expires
+                                .or_else(|| self.record_ttl.map(|ttl| now + ttl));
                         }
                         Some(record)
                     }
@@ -228,7 +230,7 @@ impl PutRecordJob {
                 if r.is_expired(now) {
                     store.remove(&r.key)
                 } else {
-                    return Poll::Ready(r)
+                    return Poll::Ready(r);
                 }
             }
 
@@ -248,7 +250,7 @@ impl PutRecordJob {
 
 /// Periodic job for replicating provider records.
 pub struct AddProviderJob {
-    inner: PeriodicJob<vec::IntoIter<ProviderRecord>>
+    inner: PeriodicJob<vec::IntoIter<ProviderRecord>>,
 }
 
 impl AddProviderJob {
@@ -261,8 +263,8 @@ impl AddProviderJob {
                 state: {
                     let deadline = now + interval;
                     PeriodicJobState::Waiting(Delay::new_at(deadline), deadline)
-                }
-            }
+                },
+            },
         }
     }
 
@@ -284,12 +286,18 @@ impl AddProviderJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<ProviderRecord>
+    pub fn poll<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        store: &mut T,
+        now: Instant,
+    ) -> Poll<ProviderRecord>
     where
-        for<'a> T: RecordStore<'a>
+        for<'a> T: RecordStore<'a>,
     {
         if self.inner.is_ready(cx, now) {
-            let records = store.provided()
+            let records = store
+                .provided()
                 .map(|r| r.into_owned())
                 .collect::<Vec<_>>()
                 .into_iter();
@@ -301,7 +309,7 @@ impl AddProviderJob {
                 if r.is_expired(now) {
                     store.remove_provider(&r.key, &r.provider)
                 } else {
-                    return Poll::Ready(r)
+                    return Poll::Ready(r);
                 }
             }
 
@@ -317,11 +325,11 @@ impl AddProviderJob {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::record::store::MemoryStore;
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
     use rand::Rng;
-    use super::*;
 
     fn rand_put_record_job() -> PutRecordJob {
         let mut rng = rand::thread_rng();

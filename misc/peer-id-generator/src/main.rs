@@ -26,22 +26,26 @@ fn main() {
     // bytes 0x1220, meaning that only some characters are valid.
     const ALLOWED_FIRST_BYTE: &'static [u8] = b"NPQRSTUVWXYZ";
 
-    let prefix =
-        match env::args().nth(1) {
-            Some(prefix) => prefix,
-            None => {
-                println!(
+    let prefix = match env::args().nth(1) {
+        Some(prefix) => prefix,
+        None => {
+            println!(
                 "Usage: {} <prefix>\n\n\
                  Generates a peer id that starts with the chosen prefix using a secp256k1 public \
                  key.\n\n\
                  Prefix must be a sequence of characters in the base58 \
                  alphabet, and must start with one of the following: {}",
-                env::current_exe().unwrap().file_name().unwrap().to_str().unwrap(),
+                env::current_exe()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
                 str::from_utf8(ALLOWED_FIRST_BYTE).unwrap()
             );
-                return;
-            }
-        };
+            return;
+        }
+    };
 
     // The base58 alphabet is not necessarily obvious.
     const ALPHABET: &'static [u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

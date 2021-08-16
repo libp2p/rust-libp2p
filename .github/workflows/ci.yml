@@ -182,3 +182,24 @@ jobs:
 
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.9.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2.3.4
+
+    - uses: actions-rs/toolchain@v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: rustfmt
+
+    - name: Check formatting
+      run: cargo fmt -- --check

@@ -28,7 +28,7 @@
 //! cargo run --example ping
 //! ```
 //!
-//! It will print the PeerId and the listening address, e.g. `Listening on
+//! It will print the PeerId and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(future::poll_fn(move |cx| loop {
         match swarm.poll_next_unpin(cx) {
             Poll::Ready(Some(event)) => match event {
-                SwarmEvent::NewListenAddr{ address, .. } => println!("Listening on {:?}", address),
+                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
                 SwarmEvent::Behaviour(event) => println!("{:?}", event),
                 _ => {}
             },
