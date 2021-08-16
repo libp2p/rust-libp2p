@@ -150,7 +150,10 @@ pub enum KademliaStoreInserts {
     /// Provider records generate a [`KademliaEvent::InboundAddProviderRequest`],
     /// normal records generate a [`KademliaEvent::InboundPutRecordRequest`].
     ///
-    /// When deemed valid, a (provider) record needs to be explicitly stored in the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`], whichever is applicable. A mutable reference to the [`RecordStore`] can be retrieved via [`Kademlia::store_mut`].
+    /// When deemed valid, a (provider) record needs to be explicitly stored in
+    /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
+    /// whichever is applicable. A mutable reference to the [`RecordStore`] can
+    /// be retrieved via [`Kademlia::store_mut`].
     FilterBoth,
 }
 
