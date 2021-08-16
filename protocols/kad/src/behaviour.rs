@@ -1610,17 +1610,8 @@ where
             // The record is cloned because of the weird libp2p protocol
             // requirement to send back the value in the response, although this
             // is a waste of resources.
-            if self.record_filtering != KademliaStoreInserts::Unfiltered {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundPutRecordRequest {
-                            source,
-                            connection,
-                            record: record.clone(),
-                        },
-                    ));
-            } else {
-                match self.store.put(record.clone()) {
+            match self.record_filtering {
+                KademliaStoreInserts::Unfiltered => match self.store.put(record.clone()) {
                     Ok(()) => debug!(
                         "Record stored: {:?}; {} bytes",
                         record.key,
@@ -1636,6 +1627,16 @@ where
                             });
                         return;
                     }
+                },
+                KademliaStoreInserts::FilterBoth => {
+                    self.queued_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::InboundPutRecordRequest {
+                                source,
+                                connection,
+                                record: record.clone(),
+                            },
+                        ));
                 }
             }
         }
