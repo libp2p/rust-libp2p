@@ -2,7 +2,7 @@
 
 - Update dependencies.
 
-- Introduce `KademliaStoreInserts` option, which allows to record filtering (see
+- Introduce `KademliaStoreInserts` option, which allows to filter records (see
   [PR 2163]).
 
 [PR 2163]: https://github.com/libp2p/rust-libp2p/pull/2163
