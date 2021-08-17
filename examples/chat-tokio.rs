@@ -38,19 +38,19 @@
 
 use futures::StreamExt;
 use libp2p::{
-    Multiaddr,
-    NetworkBehaviour,
-    PeerId,
-    Transport,
     core::upgrade,
-    identity,
     floodsub::{self, Floodsub, FloodsubEvent},
+    identity,
     mdns::{Mdns, MdnsEvent},
     mplex,
     noise,
     swarm::{NetworkBehaviourEventProcess, SwarmBuilder, SwarmEvent},
     // `TokioTcpConfig` is available through the `tcp-tokio` feature.
     tcp::TokioTcpConfig,
+    Multiaddr,
+    NetworkBehaviour,
+    PeerId,
+    Transport,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
@@ -72,7 +72,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
-    let transport = TokioTcpConfig::new().nodelay(true)
+    let transport = TokioTcpConfig::new()
+        .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
@@ -95,7 +96,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+                println!(
+                    "Received: '{:?}' from {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    message.source
+                );
             }
         }
     }
@@ -104,16 +109,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) =>
+                MdnsEvent::Discovered(list) => {
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                MdnsEvent::Expired(list) =>
+                }
+                MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
+                }
             }
         }
     }
@@ -131,7 +138,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         SwarmBuilder::new(transport, behaviour, peer_id)
             // We want the connection background tasks to be spawned
             // onto the tokio runtime.
-            .executor(Box::new(|fut| { tokio::spawn(fut); }))
+            .executor(Box::new(|fut| {
+                tokio::spawn(fut);
+            }))
             .build()
     };
 

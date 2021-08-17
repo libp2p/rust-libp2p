@@ -19,6 +19,5 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-	prost_build::compile_protos(&["src/dht.proto"], &["src"]).unwrap();
+    prost_build::compile_protos(&["src/dht.proto"], &["src"]).unwrap();
 }
-

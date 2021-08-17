@@ -29,8 +29,8 @@ use lazy_static::lazy_static;
 use libp2p_core::UpgradeInfo;
 use libp2p_core::{identity, identity::ed25519};
 use rand::Rng;
-use sha2::{Sha512, Digest};
-use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
+use sha2::{Digest, Sha512};
+use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
 
 use super::*;
@@ -40,12 +40,10 @@ lazy_static! {
         .parse()
         .map(ProtocolParams)
         .expect("Invalid protocol name");
-
     static ref PARAMS_IX: ProtocolParams = "Noise_IX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
         .expect("Invalid protocol name");
-
     static ref PARAMS_XX: ProtocolParams = "Noise_XX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
@@ -115,7 +113,7 @@ impl Protocol<X25519> for X25519 {
 
     fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519>, NoiseError> {
         if bytes.len() != 32 {
-            return Err(NoiseError::InvalidKey)
+            return Err(NoiseError::InvalidKey);
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);
@@ -137,7 +135,7 @@ impl Keypair<X25519> {
     pub(super) fn default() -> Self {
         Keypair {
             secret: SecretKey(X25519([0u8; 32])),
-            public: PublicKey(X25519([0u8; 32]))
+            public: PublicKey(X25519([0u8; 32])),
         }
     }
 
@@ -170,14 +168,14 @@ impl Keypair<X25519> {
                 let kp = Keypair::from(SecretKey::from_ed25519(&p.secret()));
                 let id = KeypairIdentity {
                     public: id_keys.public(),
-                    signature: None
+                    signature: None,
                 };
                 Some(AuthenticKeypair {
                     keypair: kp,
-                    identity: id
+                    identity: id,
                 })
             }
-            _ => None
+            _ => None,
         }
     }
 }
@@ -193,10 +191,13 @@ impl From<SecretKey<X25519>> for Keypair<X25519> {
 impl PublicKey<X25519> {
     /// Construct a curve25519 public key from an Ed25519 public key.
     pub fn from_ed25519(pk: &ed25519::PublicKey) -> Self {
-        PublicKey(X25519(CompressedEdwardsY(pk.encode())
-            .decompress()
-            .expect("An Ed25519 public key is a valid point by construction.")
-            .to_montgomery().0))
+        PublicKey(X25519(
+            CompressedEdwardsY(pk.encode())
+                .decompress()
+                .expect("An Ed25519 public key is a valid point by construction.")
+                .to_montgomery()
+                .0,
+        ))
     }
 }
 
@@ -227,11 +228,21 @@ impl SecretKey<X25519> {
 
 #[doc(hidden)]
 impl snow::types::Dh for Keypair<X25519> {
-    fn name(&self) -> &'static str { "25519" }
-    fn pub_len(&self) -> usize { 32 }
-    fn priv_len(&self) -> usize { 32 }
-    fn pubkey(&self) -> &[u8] { self.public.as_ref() }
-    fn privkey(&self) -> &[u8] { self.secret.as_ref() }
+    fn name(&self) -> &'static str {
+        "25519"
+    }
+    fn pub_len(&self) -> usize {
+        32
+    }
+    fn priv_len(&self) -> usize {
+        32
+    }
+    fn pubkey(&self) -> &[u8] {
+        self.public.as_ref()
+    }
+    fn privkey(&self) -> &[u8] {
+        self.secret.as_ref()
+    }
 
     fn set(&mut self, sk: &[u8]) {
         let mut secret = [0u8; 32];
@@ -251,20 +262,20 @@ impl snow::types::Dh for Keypair<X25519> {
 
     fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), ()> {
         let mut p = [0; 32];
-        p.copy_from_slice(&pk[.. 32]);
+        p.copy_from_slice(&pk[..32]);
         let ss = x25519((self.secret.0).0, p);
-        shared_secret[.. 32].copy_from_slice(&ss[..]);
+        shared_secret[..32].copy_from_slice(&ss[..]);
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use libp2p_core::identity::ed25519;
     use quickcheck::*;
     use sodiumoxide::crypto::sign;
     use std::os::raw::c_int;
-    use super::*;
     use x25519_dalek::StaticSecret;
 
     // ed25519 to x25519 keypair conversion must yield the same results as
@@ -276,7 +287,8 @@ mod tests {
             let x25519 = Keypair::from(SecretKey::from_ed25519(&ed25519.secret()));
 
             let sodium_sec = ed25519_sk_to_curve25519(&sign::SecretKey(ed25519.encode()));
-            let sodium_pub = ed25519_pk_to_curve25519(&sign::PublicKey(ed25519.public().encode().clone()));
+            let sodium_pub =
+                ed25519_pk_to_curve25519(&sign::PublicKey(ed25519.public().encode().clone()));
 
             let our_pub = x25519.public.0;
             // libsodium does the [clamping] of the scalar upon key construction,
@@ -288,8 +300,7 @@ mod tests {
             // [clamping]: http://www.lix.polytechnique.fr/~smith/ECC/#scalar-clamping
             let our_sec = StaticSecret::from((x25519.secret.0).0).to_bytes();
 
-            sodium_sec.as_ref() == Some(&our_sec) &&
-            sodium_pub.as_ref() == Some(&our_pub.0)
+            sodium_sec.as_ref() == Some(&our_sec) && sodium_pub.as_ref() == Some(&our_pub.0)
         }
 
         quickcheck(prop as fn() -> _);
@@ -340,4 +351,3 @@ mod tests {
         }
     }
 }
-

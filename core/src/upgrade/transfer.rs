@@ -29,9 +29,10 @@ use std::{error, fmt, io};
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what [`read_length_prefixed`] expects.
-pub async fn write_length_prefixed(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
-    -> Result<(), io::Error>
-{
+pub async fn write_length_prefixed(
+    socket: &mut (impl AsyncWrite + Unpin),
+    data: impl AsRef<[u8]>,
+) -> Result<(), io::Error> {
     write_varint(socket, data.as_ref().len()).await?;
     socket.write_all(data.as_ref()).await?;
     socket.flush().await?;
@@ -44,11 +45,15 @@ pub async fn write_length_prefixed(socket: &mut (impl AsyncWrite + Unpin), data:
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what `read_one` expects.
 ///
-#[deprecated(since = "0.29.0", note = "Use `write_length_prefixed` instead. You will need to manually close the stream using `socket.close().await`.")]
+#[deprecated(
+    since = "0.29.0",
+    note = "Use `write_length_prefixed` instead. You will need to manually close the stream using `socket.close().await`."
+)]
 #[allow(dead_code)]
-pub async fn write_one(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
-    -> Result<(), io::Error>
-{
+pub async fn write_one(
+    socket: &mut (impl AsyncWrite + Unpin),
+    data: impl AsRef<[u8]>,
+) -> Result<(), io::Error> {
     write_varint(socket, data.as_ref().len()).await?;
     socket.write_all(data.as_ref()).await?;
     socket.close().await?;
@@ -61,9 +66,10 @@ pub async fn write_one(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<
 /// >           compatible with what `read_one` expects.
 #[deprecated(since = "0.29.0", note = "Use `write_length_prefixed` instead.")]
 #[allow(dead_code)]
-pub async fn write_with_len_prefix(socket: &mut (impl AsyncWrite + Unpin), data: impl AsRef<[u8]>)
-    -> Result<(), io::Error>
-{
+pub async fn write_with_len_prefix(
+    socket: &mut (impl AsyncWrite + Unpin),
+    data: impl AsRef<[u8]>,
+) -> Result<(), io::Error> {
     write_varint(socket, data.as_ref().len()).await?;
     socket.write_all(data.as_ref()).await?;
     socket.flush().await?;
@@ -73,9 +79,10 @@ pub async fn write_with_len_prefix(socket: &mut (impl AsyncWrite + Unpin), data:
 /// Writes a variable-length integer to the `socket`.
 ///
 /// > **Note**: Does **NOT** flush the socket.
-pub async fn write_varint(socket: &mut (impl AsyncWrite + Unpin), len: usize)
-    -> Result<(), io::Error>
-{
+pub async fn write_varint(
+    socket: &mut (impl AsyncWrite + Unpin),
+    len: usize,
+) -> Result<(), io::Error> {
     let mut len_data = unsigned_varint::encode::usize_buffer();
     let encoded_len = unsigned_varint::encode::usize(len, &mut len_data).len();
     socket.write_all(&len_data[..encoded_len]).await?;
@@ -95,7 +102,7 @@ pub async fn read_varint(socket: &mut (impl AsyncRead + Unpin)) -> Result<usize,
     let mut buffer_len = 0;
 
     loop {
-        match socket.read(&mut buffer[buffer_len..buffer_len+1]).await? {
+        match socket.read(&mut buffer[buffer_len..buffer_len + 1]).await? {
             0 => {
                 // Reaching EOF before finishing to read the length is an error, unless the EOF is
                 // at the very beginning of the substream, in which case we assume that the data is
@@ -116,7 +123,7 @@ pub async fn read_varint(socket: &mut (impl AsyncRead + Unpin)) -> Result<usize,
             Err(unsigned_varint::decode::Error::Overflow) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    "overflow in variable-length integer"
+                    "overflow in variable-length integer",
                 ));
             }
             // TODO: why do we have a `__Nonexhaustive` variant in the error? I don't know how to process it
@@ -134,11 +141,19 @@ pub async fn read_varint(socket: &mut (impl AsyncRead + Unpin)) -> Result<usize,
 ///
 /// > **Note**: Assumes that a variable-length prefix indicates the length of the message. This is
 /// >           compatible with what [`write_length_prefixed`] does.
-pub async fn read_length_prefixed(socket: &mut (impl AsyncRead + Unpin), max_size: usize) -> io::Result<Vec<u8>>
-{
+pub async fn read_length_prefixed(
+    socket: &mut (impl AsyncRead + Unpin),
+    max_size: usize,
+) -> io::Result<Vec<u8>> {
     let len = read_varint(socket).await?;
     if len > max_size {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Received data size ({} bytes) exceeds maximum ({} bytes)", len, max_size)))
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Received data size ({} bytes) exceeds maximum ({} bytes)",
+                len, max_size
+            ),
+        ));
     }
 
     let mut buf = vec![0; len];
@@ -157,9 +172,10 @@ pub async fn read_length_prefixed(socket: &mut (impl AsyncRead + Unpin), max_siz
 /// >           compatible with what `write_one` does.
 #[deprecated(since = "0.29.0", note = "Use `read_length_prefixed` instead.")]
 #[allow(dead_code, deprecated)]
-pub async fn read_one(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
-    -> Result<Vec<u8>, ReadOneError>
-{
+pub async fn read_one(
+    socket: &mut (impl AsyncRead + Unpin),
+    max_size: usize,
+) -> Result<Vec<u8>, ReadOneError> {
     let len = read_varint(socket).await?;
     if len > max_size {
         return Err(ReadOneError::TooLarge {
@@ -175,7 +191,10 @@ pub async fn read_one(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
 
 /// Error while reading one message.
 #[derive(Debug)]
-#[deprecated(since = "0.29.0", note = "Use `read_length_prefixed` instead of `read_one` to avoid depending on this type.")]
+#[deprecated(
+    since = "0.29.0",
+    note = "Use `read_length_prefixed` instead of `read_one` to avoid depending on this type."
+)]
 pub enum ReadOneError {
     /// Error on the socket.
     Io(std::io::Error),
@@ -239,7 +258,7 @@ mod tests {
     }
 
     // TODO: rewrite these tests
-/*
+    /*
     #[test]
     fn read_one_works() {
         let original_data = (0..rand::random::<usize>() % 10_000)

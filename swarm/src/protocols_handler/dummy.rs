@@ -18,15 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandler,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade}};
+use crate::NegotiatedSubstream;
+use libp2p_core::{
+    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade},
+    Multiaddr,
+};
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -39,7 +38,7 @@ pub struct DummyProtocolsHandler {
 impl Default for DummyProtocolsHandler {
     fn default() -> Self {
         DummyProtocolsHandler {
-            keep_alive: KeepAlive::No
+            keep_alive: KeepAlive::No,
         }
     }
 }
@@ -60,14 +59,14 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     fn inject_fully_negotiated_inbound(
         &mut self,
         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo
+        _: Self::InboundOpenInfo,
     ) {
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo
+        _: Self::OutboundOpenInfo,
     ) {
     }
 
@@ -75,9 +74,23 @@ impl ProtocolsHandler for DummyProtocolsHandler {
 
     fn inject_address_change(&mut self, _: &Multiaddr) {}
 
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error>) {}
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
+        >,
+    ) {
+    }
 
-    fn inject_listen_upgrade_error(&mut self, _: Self::InboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error>) {}
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: Self::InboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
+        >,
+    ) {
+    }
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
@@ -87,7 +100,12 @@ impl ProtocolsHandler for DummyProtocolsHandler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
     > {
         Poll::Pending
     }
