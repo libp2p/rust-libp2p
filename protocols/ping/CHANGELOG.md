@@ -1,5 +1,8 @@
 # 0.31.0 [unreleased]
 
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Update dependencies.
 
 - Don't close connection if ping protocol is unsupported by remote.

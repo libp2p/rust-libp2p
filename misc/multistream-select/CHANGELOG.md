@@ -1,5 +1,8 @@
 # 0.10.4 [unreleased]
 
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Implement `From<io::Error> for ProtocolError` instead of `Into`.
   [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)
 
