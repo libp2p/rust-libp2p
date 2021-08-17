@@ -42,6 +42,9 @@
 
 ## Version 0.40.0 [unreleased]
 
+- Make default features of `libp2p-core` optional in all individual crates.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Update individual crates.
     - `libp2p-core`
     - `libp2p-deflate`
