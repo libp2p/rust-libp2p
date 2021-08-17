@@ -291,39 +291,19 @@ where
             Self::Error,
         >,
     > {
-        match self {
-            EitherHandler::A(handler) => match handler.poll(cx) {
-                Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Either::Left(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::Close(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Close(Either::Left(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: protocol
-                            .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
-                            .map_info(Either::Left),
-                    });
-                }
-                Poll::Pending => Poll::Pending,
-            },
-            EitherHandler::B(handler) => match handler.poll(cx) {
-                Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Either::Right(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::Close(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Close(Either::Right(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: protocol
-                            .map_upgrade(|u| EitherUpgrade::B(SendWrapper(u)))
-                            .map_info(Either::Right),
-                    });
-                }
-                Poll::Pending => Poll::Pending,
-            },
-        }
+        let event = match self {
+            EitherHandler::A(handler) => futures::ready!(handler.poll(cx))
+                .map_custom(Either::Left)
+                .map_close(Either::Left)
+                .map_protocol(|p| EitherUpgrade::A(SendWrapper(p)))
+                .map_outbound_open_info(Either::Left),
+            EitherHandler::B(handler) => futures::ready!(handler.poll(cx))
+                .map_custom(Either::Right)
+                .map_close(Either::Right)
+                .map_protocol(|p| EitherUpgrade::B(SendWrapper(p)))
+                .map_outbound_open_info(Either::Right),
+        };
+
+        Poll::Ready(event)
     }
 }
