@@ -488,7 +488,7 @@ fn get_record_not_found() {
 /// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(records: Vec<Record>, seed: Seed) {
+    fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
@@ -501,216 +501,8 @@ fn put_record() {
             config.disjoint_query_paths(true);
         }
 
-        let mut swarms = {
-            let mut fully_connected_swarms =
-                build_fully_connected_nodes_with_config(num_total - 1, config.clone());
-
-            let mut single_swarm = build_node_with_config(config);
-            // Connect `single_swarm` to three bootnodes.
-            for i in 0..3 {
-                single_swarm.1.behaviour_mut().add_address(
-                    fully_connected_swarms[i].1.local_peer_id(),
-                    fully_connected_swarms[i].0.clone(),
-                );
-            }
-
-            let mut swarms = vec![single_swarm];
-            swarms.append(&mut fully_connected_swarms);
-
-            // Drop the swarm addresses.
-            swarms
-                .into_iter()
-                .map(|(_addr, swarm)| swarm)
-                .collect::<Vec<_>>()
-        };
-
-        let records = records
-            .into_iter()
-            .take(num_total)
-            .map(|mut r| {
-                // We don't want records to expire prematurely, as they would
-                // be removed from storage and no longer replicated, but we still
-                // want to check that an explicitly set expiration is preserved.
-                r.expires = r.expires.map(|t| t + Duration::from_secs(60));
-                (r.key.clone(), r)
-            })
-            .collect::<HashMap<_, _>>();
-
-        // Initiate put_record queries.
-        let mut qids = HashSet::new();
-        for r in records.values() {
-            let qid = swarms[0]
-                .behaviour_mut()
-                .put_record(r.clone(), Quorum::All)
-                .unwrap();
-            match swarms[0].behaviour_mut().query(&qid) {
-                Some(q) => match q.info() {
-                    QueryInfo::PutRecord { phase, record, .. } => {
-                        assert_eq!(phase, &PutRecordPhase::GetClosestPeers);
-                        assert_eq!(record.key, r.key);
-                        assert_eq!(record.value, r.value);
-                        assert!(record.expires.is_some());
-                        qids.insert(qid);
-                    }
-                    i => panic!("Unexpected query info: {:?}", i),
-                },
-                None => panic!("Query not found: {:?}", qid),
-            }
-        }
-
-        // Each test run republishes all records once.
-        let mut republished = false;
-        // The accumulated results for one round of publishing.
-        let mut results = Vec::new();
-
-        block_on(poll_fn(move |ctx| loop {
-            // Poll all swarms until they are "Pending".
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryCompleted {
-                                id,
-                                result: QueryResult::PutRecord(res),
-                                stats,
-                            },
-                        )))
-                        | Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryCompleted {
-                                id,
-                                result: QueryResult::RepublishRecord(res),
-                                stats,
-                            },
-                        ))) => {
-                            assert!(qids.is_empty() || qids.remove(&id));
-                            assert!(stats.duration().is_some());
-                            assert!(stats.num_successes() >= replication_factor.get() as u32);
-                            assert!(stats.num_requests() >= stats.num_successes());
-                            assert_eq!(stats.num_failures(), 0);
-                            match res {
-                                Err(e) => panic!("{:?}", e),
-                                Ok(ok) => {
-                                    assert!(records.contains_key(&ok.key));
-                                    let record = swarm.behaviour_mut().store.get(&ok.key).unwrap();
-                                    results.push(record.into_owned());
-                                }
-                            }
-                        }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                        Poll::Pending => break,
-                    }
-                }
-            }
-
-            // All swarms are Pending and not enough results have been collected
-            // so far, thus wait to be polled again for further progress.
-            if results.len() != records.len() {
-                return Poll::Pending;
-            }
-
-            // Consume the results, checking that each record was replicated
-            // correctly to the closest peers to the key.
-            while let Some(r) = results.pop() {
-                let expected = records.get(&r.key).unwrap();
-
-                assert_eq!(r.key, expected.key);
-                assert_eq!(r.value, expected.value);
-                assert_eq!(r.expires, expected.expires);
-                assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
-
-                let key = kbucket::Key::new(r.key.clone());
-                let mut expected = swarms
-                    .iter()
-                    .skip(1)
-                    .map(Swarm::local_peer_id)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
-                        .distance(&key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&key))
-                });
-
-                let expected = expected
-                    .into_iter()
-                    .take(replication_factor.get())
-                    .collect::<HashSet<_>>();
-
-                let actual = swarms
-                    .iter()
-                    .skip(1)
-                    .filter_map(|swarm| {
-                        if swarm.behaviour().store.get(key.preimage()).is_some() {
-                            Some(*swarm.local_peer_id())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<HashSet<_>>();
-
-                assert_eq!(actual.len(), replication_factor.get());
-
-                let actual_not_expected = actual.difference(&expected).collect::<Vec<&PeerId>>();
-                assert!(
-                    actual_not_expected.is_empty(),
-                    "Did not expect records to be stored on nodes {:?}.",
-                    actual_not_expected,
-                );
-
-                let expected_not_actual = expected.difference(&actual).collect::<Vec<&PeerId>>();
-                assert!(
-                    expected_not_actual.is_empty(),
-                    "Expected record to be stored on nodes {:?}.",
-                    expected_not_actual,
-                );
-            }
-
-            if republished {
-                assert_eq!(
-                    swarms[0].behaviour_mut().store.records().count(),
-                    records.len()
-                );
-                assert_eq!(swarms[0].behaviour_mut().queries.size(), 0);
-                for k in records.keys() {
-                    swarms[0].behaviour_mut().store.remove(&k);
-                }
-                assert_eq!(swarms[0].behaviour_mut().store.records().count(), 0);
-                // All records have been republished, thus the test is complete.
-                return Poll::Ready(());
-            }
-
-            // Tell the replication job to republish asap.
-            swarms[0]
-                .behaviour_mut()
-                .put_record_job
-                .as_mut()
-                .unwrap()
-                .asap(true);
-            republished = true;
-        }))
-    }
-
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_, _) -> _)
-}
-
-/// A node joining a fully connected network cannot store a record if the nodes ignore it through
-/// [KademliaStoreInserts::FilterBoth].
-#[test]
-fn put_record_filtered_accept() {
-    fn prop(records: Vec<Record>, seed: Seed) {
-        let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor =
-            NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
-        // At least 4 nodes, 1 under test + 3 bootnodes.
-        let num_total = usize::max(4, replication_factor.get() * 2);
-
-        let mut config = KademliaConfig::default();
-        config.set_replication_factor(replication_factor);
-        config.set_record_filtering(KademliaStoreInserts::FilterBoth);
-        if rng.gen() {
-            config.disjoint_query_paths(true);
+        if filter_records {
+            config.set_record_filtering(KademliaStoreInserts::FilterBoth);
         }
 
         let mut swarms = {
@@ -811,12 +603,18 @@ fn put_record_filtered_accept() {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
                             KademliaEvent::InboundPutRecordRequest { record, .. },
                         ))) => {
-                            // Accept the record
-                            swarm
-                                .behaviour_mut()
-                                .store_mut()
-                                .put(record)
-                                .expect("record is stored");
+                            assert_ne!(
+                                swarm.behaviour().record_filtering,
+                                KademliaStoreInserts::Unfiltered
+                            );
+                            if !drop_records {
+                                // Accept the record
+                                swarm
+                                    .behaviour_mut()
+                                    .store_mut()
+                                    .put(record)
+                                    .expect("record is stored");
+                            }
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
@@ -872,21 +670,29 @@ fn put_record_filtered_accept() {
                     })
                     .collect::<HashSet<_>>();
 
-                assert_eq!(actual.len(), replication_factor.get());
+                if swarms[0].behaviour().record_filtering != KademliaStoreInserts::Unfiltered
+                    && drop_records
+                {
+                    assert_eq!(actual.len(), 0);
+                } else {
+                    assert_eq!(actual.len(), replication_factor.get());
 
-                let actual_not_expected = actual.difference(&expected).collect::<Vec<&PeerId>>();
-                assert!(
-                    actual_not_expected.is_empty(),
-                    "Did not expect records to be stored on nodes {:?}.",
-                    actual_not_expected,
-                );
+                    let actual_not_expected =
+                        actual.difference(&expected).collect::<Vec<&PeerId>>();
+                    assert!(
+                        actual_not_expected.is_empty(),
+                        "Did not expect records to be stored on nodes {:?}.",
+                        actual_not_expected,
+                    );
 
-                let expected_not_actual = expected.difference(&actual).collect::<Vec<&PeerId>>();
-                assert!(
-                    expected_not_actual.is_empty(),
-                    "Expected record to be stored on nodes {:?}.",
-                    expected_not_actual,
-                );
+                    let expected_not_actual =
+                        expected.difference(&actual).collect::<Vec<&PeerId>>();
+                    assert!(
+                        expected_not_actual.is_empty(),
+                        "Expected record to be stored on nodes {:?}.",
+                        expected_not_actual,
+                    );
+                }
             }
 
             if republished {
@@ -914,186 +720,9 @@ fn put_record_filtered_accept() {
         }))
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_, _) -> _)
-}
-
-/// A node joining a fully connected network cannot store a record if the nodes ignore it through
-/// [KademliaStoreInserts::FilterBoth].
-#[test]
-fn put_record_filtered_out() {
-    fn prop(records: Vec<Record>, seed: Seed) {
-        let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor =
-            NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
-        // At least 4 nodes, 1 under test + 3 bootnodes.
-        let num_total = usize::max(4, replication_factor.get() * 2);
-
-        let mut config = KademliaConfig::default();
-        config.set_replication_factor(replication_factor);
-        config.set_record_filtering(KademliaStoreInserts::FilterBoth);
-        if rng.gen() {
-            config.disjoint_query_paths(true);
-        }
-
-        let mut swarms = {
-            let mut fully_connected_swarms =
-                build_fully_connected_nodes_with_config(num_total - 1, config.clone());
-
-            let mut single_swarm = build_node_with_config(config);
-            // Connect `single_swarm` to three bootnodes.
-            for i in 0..3 {
-                single_swarm.1.behaviour_mut().add_address(
-                    fully_connected_swarms[i].1.local_peer_id(),
-                    fully_connected_swarms[i].0.clone(),
-                );
-            }
-
-            let mut swarms = vec![single_swarm];
-            swarms.append(&mut fully_connected_swarms);
-
-            // Drop the swarm addresses.
-            swarms
-                .into_iter()
-                .map(|(_addr, swarm)| swarm)
-                .collect::<Vec<_>>()
-        };
-
-        let records = records
-            .into_iter()
-            .take(num_total)
-            .map(|mut r| {
-                // We don't want records to expire prematurely, as they would
-                // be removed from storage and no longer replicated, but we still
-                // want to check that an explicitly set expiration is preserved.
-                r.expires = r.expires.map(|t| t + Duration::from_secs(60));
-                (r.key.clone(), r)
-            })
-            .collect::<HashMap<_, _>>();
-
-        // Initiate put_record queries.
-        let mut qids = HashSet::new();
-        for r in records.values() {
-            let qid = swarms[0]
-                .behaviour_mut()
-                .put_record(r.clone(), Quorum::All)
-                .unwrap();
-            match swarms[0].behaviour_mut().query(&qid) {
-                Some(q) => match q.info() {
-                    QueryInfo::PutRecord { phase, record, .. } => {
-                        assert_eq!(phase, &PutRecordPhase::GetClosestPeers);
-                        assert_eq!(record.key, r.key);
-                        assert_eq!(record.value, r.value);
-                        assert!(record.expires.is_some());
-                        qids.insert(qid);
-                    }
-                    i => panic!("Unexpected query info: {:?}", i),
-                },
-                None => panic!("Query not found: {:?}", qid),
-            }
-        }
-
-        // The accumulated results for one round of publishing.
-        let mut results = Vec::new();
-
-        block_on(poll_fn(move |ctx| {
-            // Poll all swarms until they are "Pending".
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryCompleted {
-                                id,
-                                result: QueryResult::PutRecord(res),
-                                stats,
-                            },
-                        )))
-                        | Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryCompleted {
-                                id,
-                                result: QueryResult::RepublishRecord(res),
-                                stats,
-                            },
-                        ))) => {
-                            assert!(qids.is_empty() || qids.remove(&id));
-                            assert!(stats.duration().is_some());
-                            assert!(stats.num_successes() >= replication_factor.get() as u32);
-                            assert!(stats.num_requests() >= stats.num_successes());
-                            assert_eq!(stats.num_failures(), 0);
-                            match res {
-                                Err(e) => panic!("{:?}", e),
-                                Ok(ok) => {
-                                    assert!(records.contains_key(&ok.key));
-                                    let record = swarm.behaviour_mut().store.get(&ok.key).unwrap();
-                                    results.push(record.into_owned());
-                                }
-                            }
-                        }
-                        Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::InboundPutRecordRequest { record: _, .. },
-                        ))) => {
-                            // Ignore the record
-                        }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                        Poll::Pending => break,
-                    }
-                }
-            }
-
-            // All swarms are Pending and not enough results have been collected
-            // so far, thus wait to be polled again for further progress.
-            if results.len() != records.len() {
-                return Poll::Pending;
-            }
-
-            // Consume the results, checking that each record was replicated
-            // correctly to the closest peers to the key.
-            while let Some(r) = results.pop() {
-                let expected = records.get(&r.key).unwrap();
-
-                assert_eq!(r.key, expected.key);
-                assert_eq!(r.value, expected.value);
-                assert_eq!(r.expires, expected.expires);
-                assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
-
-                let key = kbucket::Key::new(r.key.clone());
-                let mut expected = swarms
-                    .iter()
-                    .skip(1)
-                    .map(Swarm::local_peer_id)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
-                        .distance(&key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&key))
-                });
-
-                let expected = expected
-                    .into_iter()
-                    .take(replication_factor.get())
-                    .collect::<HashSet<_>>();
-
-                let actual = swarms
-                    .iter()
-                    .skip(1)
-                    .filter_map(|swarm| {
-                        if swarm.behaviour().store.get(key.preimage()).is_some() {
-                            Some(*swarm.local_peer_id())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<HashSet<_>>();
-
-                assert_eq!(actual.len(), 0);
-            }
-            return Poll::Ready(());
-        }))
-    }
-
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_, _) -> _)
+    QuickCheck::new()
+        .tests(4)
+        .quickcheck(prop as fn(_, _, _, _) -> _)
 }
 
 #[test]
