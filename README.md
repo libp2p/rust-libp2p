@@ -12,7 +12,10 @@ This repository is the central place for Rust development of the [libp2p](https:
 - The **[examples](examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
-- To **report bugs, suggest improvements or request new features** please open
+- For **security related issues** please reach out to security@ipfs.io. Please
+  do not file a public issue on GitHub.
+
+- To **report bugs, suggest improvements or request new features** please open a
   GitHub issue on this repository.
 
 - For **rust-libp2p specific questions** please use the GitHub _Discussions_
