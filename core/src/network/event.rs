@@ -270,8 +270,7 @@ where
                 error,
             } => f
                 .debug_struct("DialError")
-                // TODO: Bring back.
-                // .field("attempts_remaining", attempts_remaining)
+                .field("attempts_remaining", &Into::<u32>::into(attempts_remaining))
                 .field("peer_id", peer_id)
                 .field("multiaddr", multiaddr)
                 .field("error", error)

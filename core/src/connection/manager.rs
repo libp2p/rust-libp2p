@@ -20,7 +20,7 @@
 
 use super::{
     handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-    Connected, ConnectedPoint, Connection, ConnectionError, ConnectionHandler,
+    Connected, ConnectedPoint, Connection, ConnectionError, ConnectionHandler, ConnectionLimit,
     IntoConnectionHandler, PendingConnectionError, Substream,
 };
 use crate::{muxing::StreamMuxer, Executor};
@@ -473,7 +473,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     ///
     /// When the connection is ultimately closed, [`Event::ConnectionClosed`]
     /// is emitted by [`Manager::poll`].
-    pub fn start_close(mut self) {
+    pub fn start_close(mut self, error: Option<ConnectionLimit>) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
         match self
@@ -481,7 +481,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
             .get_mut()
             .sender
             .clone()
-            .try_send(task::Command::Close)
+            .try_send(task::Command::Close(error))
         {
             Ok(()) => {}
             Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),

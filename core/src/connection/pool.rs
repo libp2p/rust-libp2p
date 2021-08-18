@@ -20,10 +20,10 @@
 
 use crate::{
     connection::{
-        self,
+
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
         manager::{self, Manager, ManagerConfig},
-        Connected, Connection, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
         IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
@@ -385,7 +385,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
             // Count upwards because we push to / pop from the end. See also `Pool::poll`.
             for (&id, endpoint) in conns.iter() {
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
-                    e.start_close();
+                    e.start_close(None);
                     // TODO: I removed the disconnected logic, thus depending on start_close to
                     // eventually trigger a ConnectionClosed event. Make sure that is the case and
                     // also that the num_established counters are kept consistent.
@@ -549,18 +549,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
 
                         // Check general established connection limit.
                         if let Err(e) = self.counters.check_max_established(&endpoint) {
-                            // TODO: Good idea? How should we let the user know that the close
-                            // happened due to a conneciton limit?
-                            entry.start_close();
-                            // let connected = entry.remove();
-                            // return Poll::Ready(PoolEvent::PendingConnectionError {
-                            //     id,
-                            //     endpoint: connected.endpoint,
-                            //     error: PendingConnectionError::ConnectionLimit(e),
-                            //     handler: None,
-                            //     peer,
-                            //     pool: self,
-                            // });
+                            entry.start_close(Some(e));
                             continue;
                         }
 
@@ -568,18 +557,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                         let current =
                             num_peer_established(&self.established, &entry.connected().peer_id);
                         if let Err(e) = self.counters.check_max_established_per_peer(current) {
-                            // TODO: Good idea? How should we let the user know that the close
-                            // happened due to a conneciton limit?
-                            entry.start_close();
-                            // let connected = entry.remove();
-                            // return Poll::Ready(PoolEvent::PendingConnectionError {
-                            //     id,
-                            //     endpoint: connected.endpoint,
-                            //     error: PendingConnectionError::ConnectionLimit(e),
-                            //     handler: None,
-                            //     peer,
-                            //     pool: self,
-                            // });
+                            entry.start_close(Some(e));
                             continue;
                         }
 
@@ -769,7 +747,7 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     ///
     /// Has no effect if the connection is already closing.
     pub fn start_close(self) {
-        self.entry.start_close()
+        self.entry.start_close(None)
     }
 }
 
