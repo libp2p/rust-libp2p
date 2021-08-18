@@ -1275,7 +1275,6 @@ impl NetworkBehaviour for DummyBehaviour {
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
             Self::ProtocolsHandler,
         >,

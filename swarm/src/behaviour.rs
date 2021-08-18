@@ -26,6 +26,10 @@ use libp2p_core::{
 };
 use std::{error, task::Context, task::Poll};
 
+/// Custom event that can be received by the [`ProtocolsHandler`].
+type THandlerInEvent<THandler> =
+    <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent;
+
 /// A behaviour for the network. Allows customizing the swarm.
 ///
 /// This trait has been designed to be composable. Multiple implementations can be combined into
@@ -112,7 +116,14 @@ pub trait NetworkBehaviour: Send + 'static {
     /// A call to this method is always paired with an earlier call to
     /// `inject_connection_established` with the same peer ID, connection ID and
     /// endpoint.
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint, _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler) {}
+    fn inject_connection_closed(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
+    }
 
     /// Informs the behaviour that the [`ConnectedPoint`] of an existing connection has changed.
     fn inject_address_change(
@@ -182,8 +193,11 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent, Self::ProtocolsHandler>>;
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -228,9 +242,13 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 /// in whose context it is executing.
 ///
 /// [`Swarm`]: super::Swarm
+//
+// Note: `TInEvent` is needed to be able to implement
+// [`NetworkBehaviourAction::map_in`], mapping the handler `InEvent` leaving the
+// handler itself untouched.
 #[derive(Debug)]
-// TODO: Derive TInEvent from THandler.
-pub enum NetworkBehaviourAction<TInEvent, TOutEvent, THandler> {
+pub enum NetworkBehaviourAction<TOutEvent, THandler: IntoProtocolsHandler, TInEvent = THandlerInEvent<THandler>>
+{
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
@@ -317,17 +335,29 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent, THandler> {
     },
 }
 
-impl<TInEvent, TOutEvent, THandler> NetworkBehaviourAction<TInEvent, TOutEvent, THandler> {
+impl<TOutEvent, THandler: IntoProtocolsHandler> NetworkBehaviourAction<TOutEvent, THandler> {
     /// Map the handler event.
-    pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent, THandler> {
+    pub fn map_in<New>(
+        self,
+        f: impl FnOnce(THandlerInEvent<THandler>) -> New,
+    ) -> NetworkBehaviourAction<TOutEvent, THandler, New>
+    where
+        Self: ,
+    {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
             NetworkBehaviourAction::DialAddress { address, handler } => {
                 NetworkBehaviourAction::DialAddress { address, handler }
             }
-            NetworkBehaviourAction::DialPeer { peer_id, condition, handler } => {
-                NetworkBehaviourAction::DialPeer { peer_id, condition, handler }
-            }
+            NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            } => NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -351,15 +381,21 @@ impl<TInEvent, TOutEvent, THandler> NetworkBehaviourAction<TInEvent, TOutEvent, 
     }
 
     /// Map the event the swarm will return.
-    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E, THandler> {
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, THandler> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
             NetworkBehaviourAction::DialAddress { address, handler } => {
                 NetworkBehaviourAction::DialAddress { address, handler }
             }
-            NetworkBehaviourAction::DialPeer { peer_id, condition, handler } => {
-                NetworkBehaviourAction::DialPeer { peer_id, condition, handler }
-            }
+            NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            } => NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,

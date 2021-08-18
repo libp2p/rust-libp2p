@@ -329,8 +329,7 @@ where
                             Poll::Ready(Err(error)) => {
                                 // Don't accept any further commands.
                                 this.commands.get_mut().close();
-                                // TODO: Good idea if there is already an error?
-                                let (handler, _) = connection.close();
+                                let (handler, _closing_muxer) = connection.close();
                                 // Terminate the task with the error, dropping the connection.
                                 let event = Event::Closed {
                                     id,

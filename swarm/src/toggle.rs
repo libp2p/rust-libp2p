@@ -204,9 +204,11 @@ where
         }
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent, Self::ProtocolsHandler>>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(inner) = self.inner.as_mut() {
             // inner.poll(cx, params)
             todo!("Wrap handler in Dial events with ToggleHandler.");
