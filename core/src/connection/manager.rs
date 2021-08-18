@@ -20,8 +20,8 @@
 
 use super::{
     handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-    Connected, ConnectedPoint, Connection, ConnectionError, ConnectionHandler,
-    IntoConnectionHandler, PendingConnectionError, Substream,
+    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, IntoConnectionHandler,
+    PendingConnectionError, Substream,
 };
 use crate::{muxing::StreamMuxer, Executor};
 use fnv::FnvHashMap;
@@ -267,40 +267,6 @@ impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
             future,
             handler,
         ));
-        if let Some(executor) = &mut self.executor {
-            executor.exec(task);
-        } else {
-            self.local_spawns.push(task);
-        }
-
-        ConnectionId(task_id)
-    }
-
-    /// Adds an existing connection to the manager.
-    pub fn add<M>(&mut self, conn: Connection<M, H::Handler>, info: Connected) -> ConnectionId
-    where
-        H: IntoConnectionHandler + Send + 'static,
-        H::Handler: ConnectionHandler<Substream = Substream<M>> + Send + 'static,
-        <H::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TE: error::Error + Send + 'static,
-        M: StreamMuxer + Send + Sync + 'static,
-        M::OutboundSubstream: Send + 'static,
-    {
-        let task_id = self.next_task_id;
-        self.next_task_id.0 += 1;
-
-        let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
-        self.tasks.insert(
-            task_id,
-            TaskInfo {
-                sender: tx,
-                state: TaskState::Established(info),
-            },
-        );
-
-        let task: Pin<Box<Task<Pin<Box<future::Pending<_>>>, _, _, _>>> =
-            Box::pin(Task::established(task_id, self.events_tx.clone(), rx, conn));
-
         if let Some(executor) = &mut self.executor {
             executor.exec(task);
         } else {

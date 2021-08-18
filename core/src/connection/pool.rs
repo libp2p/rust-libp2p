@@ -20,11 +20,10 @@
 
 use crate::{
     connection::{
-        self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
         manager::{self, Manager, ManagerConfig},
-        Connected, Connection, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
-        IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
+        IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     ConnectedPoint, PeerId,

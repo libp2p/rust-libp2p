@@ -21,7 +21,7 @@
 use super::{DialError, DialingOpts, Network};
 use crate::{
     connection::{
-        handler::THandlerInEvent, pool::Pool, Connected, ConnectedPoint, Connection,
+        handler::THandlerInEvent, pool::Pool, ConnectedPoint,
         ConnectionHandler, ConnectionId, ConnectionLimit, EstablishedConnection,
         EstablishedConnectionIter, IntoConnectionHandler, PendingConnection, Substream,
     },
