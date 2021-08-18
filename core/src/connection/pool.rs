@@ -54,12 +54,6 @@ pub struct Pool<THandler: IntoConnectionHandler, TTransErr> {
 
     /// The pending connections that are currently being negotiated.
     pending: FnvHashMap<ConnectionId, (ConnectedPoint, Option<PeerId>)>,
-
-    /// Established connections that have been closed in the context of
-    /// a [`Pool::disconnect`] in order to emit a `ConnectionClosed`
-    /// event for each. Every `ConnectionEstablished` event must be
-    /// paired with (eventually) a `ConnectionClosed`.
-    disconnected: Vec<Disconnected>,
 }
 
 impl<THandler: IntoConnectionHandler, TTransErr> fmt::Debug for Pool<THandler, TTransErr> {
@@ -201,7 +195,6 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
             manager: Manager::new(manager_config),
             established: Default::default(),
             pending: Default::default(),
-            disconnected: Vec::new(),
         }
     }
 
@@ -421,16 +414,12 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
     pub fn disconnect(&mut self, peer: &PeerId) {
         if let Some(conns) = self.established.get(peer) {
             // Count upwards because we push to / pop from the end. See also `Pool::poll`.
-            let mut num_established = 0;
             for (&id, endpoint) in conns.iter() {
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
-                    let connected = e.remove();
-                    self.disconnected.push(Disconnected {
-                        id,
-                        connected,
-                        num_established,
-                    });
-                    num_established += 1;
+                    e.start_close();
+                    // TODO: I removed the disconnected logic, thus depending on start_close to
+                    // eventually trigger a ConnectionClosed event. Make sure that is the case and
+                    // also that the num_established counters are kept consistent.
                 }
                 self.counters.dec_established(endpoint);
             }
@@ -536,29 +525,6 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         &'a mut self,
         cx: &mut Context<'_>,
     ) -> Poll<PoolEvent<'a, THandler, TTransErr>> {
-        // Drain events resulting from forced disconnections.
-        //
-        // Note: The `Disconnected` entries in `self.disconnected`
-        // are inserted in ascending order of the remaining `num_established`
-        // connections. Thus we `pop()` them off from the end to emit the
-        // events in an order that properly counts down `num_established`.
-        // See also `Pool::disconnect`.
-        if let Some(Disconnected {
-            id,
-            connected,
-            num_established,
-        }) = self.disconnected.pop()
-        {
-            return Poll::Ready(PoolEvent::ConnectionClosed {
-                id,
-                connected,
-                num_established,
-                error: None,
-                pool: self,
-                handler: todo!(),
-            });
-        }
-
         // Poll the connection `Manager`.
         loop {
             let item = match self.manager.poll(cx) {
@@ -1107,16 +1073,4 @@ impl ConnectionLimits {
         self.max_established_per_peer = limit;
         self
     }
-}
-
-/// Information about a former established connection to a peer
-/// that was dropped via [`Pool::disconnect`].
-struct Disconnected {
-    /// The unique identifier of the dropped connection.
-    id: ConnectionId,
-    /// Information about the dropped connection.
-    connected: Connected,
-    /// The remaining number of established connections
-    /// to the same peer.
-    num_established: u32,
 }

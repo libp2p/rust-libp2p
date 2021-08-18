@@ -223,6 +223,7 @@ where
                         Poll::Pending => {}
                         Poll::Ready(None) => {
                             // The manager has dropped the task; abort.
+                            // TODO: Should we return the handler in this case?
                             return Poll::Ready(());
                         }
                         Poll::Ready(Some(_)) => {
@@ -275,6 +276,7 @@ where
                             }
                             Poll::Ready(None) => {
                                 // The manager has dropped the task or disappeared; abort.
+                                // TODO: Should we return the handler in this case?
                                 return Poll::Ready(());
                             }
                         }

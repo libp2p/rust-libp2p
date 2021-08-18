@@ -467,7 +467,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     }
 
     /// Sends a close command to the associated background task,
-    /// thus initiating a graceful active close of the connection.
+    /// thus initiating a graceful active close of the connectione
     ///
     /// Has no effect if the connection is already closing.
     ///
@@ -496,16 +496,17 @@ impl<'a, I> EstablishedEntry<'a, I> {
         }
     }
 
-    /// Instantly removes the entry from the manager, dropping
-    /// the command channel to the background task of the connection,
-    /// which will thus drop the connection asap without an orderly
-    /// close or emitting another event.
-    pub fn remove(self) -> Connected {
-        match self.task.remove().state {
-            TaskState::Established(c) => c,
-            TaskState::Pending => unreachable!("By Entry::new()"),
-        }
-    }
+    // TODO: Needed?
+    // /// Instantly removes the entry from the manager, dropping
+    // /// the command channel to the background task of the connection,
+    // /// which will thus drop the connection asap without an orderly
+    // /// close or emitting another event.
+    // pub fn remove(self) -> Connected {
+    //     match self.task.remove().state {
+    //         TaskState::Established(c) => c,
+    //         TaskState::Pending => unreachable!("By Entry::new()"),
+    //     }
+    // }
 
     /// Returns the connection ID.
     pub fn id(&self) -> ConnectionId {
