@@ -69,6 +69,9 @@ pub struct Kademlia<TStore> {
     /// Configuration of the wire protocol.
     protocol_config: KademliaProtocolConfig,
 
+    /// Configuration of [`RecordStore`] filtering.
+    record_filtering: KademliaStoreInserts,
+
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
 
@@ -131,6 +134,29 @@ pub enum KademliaBucketInserts {
     Manual,
 }
 
+/// The configurable filtering strategies for the acceptance of
+/// incoming records.
+///
+/// This can be used for e.g. signature verification or validating
+/// the accompanying [`Key`].
+///
+/// [`Key`]: crate::record::Key
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum KademliaStoreInserts {
+    /// Whenever a (provider) record is received,
+    /// the record is forwarded immediately to the [`RecordStore`].
+    Unfiltered,
+    /// Whenever a (provider) record is received, an event is emitted.
+    /// Provider records generate a [`KademliaEvent::InboundAddProviderRequest`],
+    /// normal records generate a [`KademliaEvent::InboundPutRecordRequest`].
+    ///
+    /// When deemed valid, a (provider) record needs to be explicitly stored in
+    /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
+    /// whichever is applicable. A mutable reference to the [`RecordStore`] can
+    /// be retrieved via [`Kademlia::store_mut`].
+    FilterBoth,
+}
+
 /// The configuration for the `Kademlia` behaviour.
 ///
 /// The configuration is consumed by [`Kademlia::new`].
@@ -142,6 +168,7 @@ pub struct KademliaConfig {
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
+    record_filtering: KademliaStoreInserts,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
@@ -175,6 +202,7 @@ impl Default for KademliaConfig {
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
+            record_filtering: KademliaStoreInserts::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
@@ -256,6 +284,15 @@ impl KademliaConfig {
     /// Does not apply to provider records.
     pub fn set_record_ttl(&mut self, record_ttl: Option<Duration>) -> &mut Self {
         self.record_ttl = record_ttl;
+        self
+    }
+
+    /// Sets whether or not records should be filtered before being stored.
+    ///
+    /// See [`KademliaStoreInserts`] for the different values.
+    /// Defaults to [`KademliaStoreInserts::Unfiltered`].
+    pub fn set_record_filtering(&mut self, filtering: KademliaStoreInserts) -> &mut Self {
+        self.record_filtering = filtering;
         self
     }
 
@@ -393,6 +430,7 @@ where
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
             kbucket_inserts: config.kbucket_inserts,
             protocol_config: config.protocol_config,
+            record_filtering: config.record_filtering,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
@@ -1572,22 +1610,33 @@ where
             // The record is cloned because of the weird libp2p protocol
             // requirement to send back the value in the response, although this
             // is a waste of resources.
-            match self.store.put(record.clone()) {
-                Ok(()) => debug!(
-                    "Record stored: {:?}; {} bytes",
-                    record.key,
-                    record.value.len()
-                ),
-                Err(e) => {
-                    info!("Record not stored: {:?}", e);
+            match self.record_filtering {
+                KademliaStoreInserts::Unfiltered => match self.store.put(record.clone()) {
+                    Ok(()) => debug!(
+                        "Record stored: {:?}; {} bytes",
+                        record.key,
+                        record.value.len()
+                    ),
+                    Err(e) => {
+                        info!("Record not stored: {:?}", e);
+                        self.queued_events
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id: source,
+                                handler: NotifyHandler::One(connection),
+                                event: KademliaHandlerIn::Reset(request_id),
+                            });
+                        return;
+                    }
+                },
+                KademliaStoreInserts::FilterBoth => {
                     self.queued_events
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: source,
-                            handler: NotifyHandler::One(connection),
-                            event: KademliaHandlerIn::Reset(request_id),
-                        });
-
-                    return;
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::InboundPutRecordRequest {
+                                source,
+                                connection,
+                                record: record.clone(),
+                            },
+                        ));
                 }
             }
         }
@@ -1620,8 +1669,18 @@ where
                 expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
                 addresses: provider.multiaddrs,
             };
-            if let Err(e) = self.store.add_provider(record) {
-                info!("Provider record not stored: {:?}", e);
+            match self.record_filtering {
+                KademliaStoreInserts::Unfiltered => {
+                    if let Err(e) = self.store.add_provider(record) {
+                        info!("Provider record not stored: {:?}", e);
+                    }
+                }
+                KademliaStoreInserts::FilterBoth => {
+                    self.queued_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::InboundAddProviderRequest { record },
+                        ));
+                }
             }
         }
     }
@@ -2257,6 +2316,20 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug)]
 pub enum KademliaEvent {
+    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
+    ///
+    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
+    InboundPutRecordRequest {
+        source: PeerId,
+        connection: ConnectionId,
+        record: Record,
+    },
+
+    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaStoreInserts::FilterBoth`] is enabled.
+    ///
+    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
+    InboundAddProviderRequest { record: ProviderRecord },
+
     /// An inbound request has been received and handled.
     //
     // Note on the difference between 'request' and 'query': A request is a
