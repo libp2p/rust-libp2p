@@ -27,8 +27,9 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
-    AddressScore, DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, ProtocolsHandler, ProtocolsHandlerUpgrErr,
+    AddressScore, DialPeerCondition, IntoProtocolsHandler, NegotiatedSubstream, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
+    ProtocolsHandlerUpgrErr,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -173,9 +174,11 @@ impl Identify {
         for p in peers {
             if self.pending_push.insert(p) {
                 if !self.connected.contains_key(&p) {
+                    let handler = self.new_handler();
                     self.events.push_back(NetworkBehaviourAction::DialPeer {
                         peer_id: p,
                         condition: DialPeerCondition::Disconnected,
+                        handler,
                     });
                 }
             }
@@ -213,13 +216,14 @@ impl NetworkBehaviour for Identify {
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler) {
         if !self.connected.contains_key(peer_id) {
             self.pending_push.remove(peer_id);
         }

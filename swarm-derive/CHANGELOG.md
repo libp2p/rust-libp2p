@@ -1,3 +1,5 @@
+# 0.25.0 [unreleased]
+
 # 0.24.0 [2021-07-12]
 
 - Handle `NetworkBehaviourAction::CloseConnection`. See [PR 2110] for details.

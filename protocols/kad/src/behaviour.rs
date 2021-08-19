@@ -394,6 +394,7 @@ impl KademliaConfig {
 impl<TStore> Kademlia<TStore>
 where
     for<'a> TStore: RecordStore<'a>,
+    TStore: Send + 'static,
 {
     /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
@@ -561,7 +562,7 @@ where
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
-                        let handler = self.new_handler(),
+                        let handler = self.new_handler();
                         self.queued_events
                             .push_back(NetworkBehaviourAction::DialPeer {
                                 peer_id: disconnected.into_preimage(),
@@ -1142,7 +1143,7 @@ where
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
-                                    let handler = self.new_handler(),
+                                    let handler = self.new_handler();
                                     self.queued_events
                                         .push_back(NetworkBehaviourAction::DialPeer {
                                             peer_id: disconnected.into_preimage(),
@@ -2258,7 +2259,7 @@ where
                                 });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            let handler = self.new_handler(),
+                            let handler = self.new_handler();
                             self.queued_events
                                 .push_back(NetworkBehaviourAction::DialPeer {
                                     peer_id,

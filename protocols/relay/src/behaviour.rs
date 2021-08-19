@@ -474,11 +474,12 @@ impl NetworkBehaviour for Relay {
                                 src_connection_id: connection,
                             },
                         );
+                        let handler = self.new_handler();
                         self.outbox_to_swarm
                             .push_back(NetworkBehaviourAction::DialPeer {
                                 peer_id: dest_id,
                                 condition: DialPeerCondition::NotDialing,
-                                handler: self.new_handler(),
+                                handler,
                             });
                     } else {
                         self.outbox_to_swarm

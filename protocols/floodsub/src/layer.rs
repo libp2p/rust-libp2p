@@ -106,10 +106,11 @@ impl Floodsub {
         }
 
         if self.target_peers.insert(peer_id) {
+            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::DialPeer {
                 peer_id,
                 condition: DialPeerCondition::Disconnected,
-                handler: self.new_handler(),
+                handler,
             });
         }
     }
