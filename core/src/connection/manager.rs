@@ -20,7 +20,7 @@
 
 use super::{
     handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-    Connected, ConnectedPoint, Connection, ConnectionError, ConnectionHandler, ConnectionLimit,
+    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionLimit,
     IntoConnectionHandler, PendingConnectionError, Substream,
 };
 use crate::{muxing::StreamMuxer, Executor};
@@ -277,40 +277,6 @@ impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
         ConnectionId(task_id)
     }
 
-    /// Adds an existing connection to the manager.
-    pub fn add<M>(&mut self, conn: Connection<M, H::Handler>, info: Connected) -> ConnectionId
-    where
-        H: IntoConnectionHandler + Send + 'static,
-        H::Handler: ConnectionHandler<Substream = Substream<M>> + Send + 'static,
-        <H::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TE: error::Error + Send + 'static,
-        M: StreamMuxer + Send + Sync + 'static,
-        M::OutboundSubstream: Send + 'static,
-    {
-        let task_id = self.next_task_id;
-        self.next_task_id.0 += 1;
-
-        let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
-        self.tasks.insert(
-            task_id,
-            TaskInfo {
-                sender: tx,
-                state: TaskState::Established(info),
-            },
-        );
-
-        let task: Pin<Box<Task<Pin<Box<future::Pending<_>>>, _, _, _>>> =
-            Box::pin(Task::established(task_id, self.events_tx.clone(), rx, conn));
-
-        if let Some(executor) = &mut self.executor {
-            executor.exec(task);
-        } else {
-            self.local_spawns.push(task);
-        }
-
-        ConnectionId(task_id)
-    }
-
     /// Gets an entry for a managed connection, if it exists.
     pub fn entry(&mut self, id: ConnectionId) -> Option<Entry<'_, THandlerInEvent<H>>> {
         if let hash_map::Entry::Occupied(task) = self.tasks.entry(id.0) {
@@ -495,18 +461,6 @@ impl<'a, I> EstablishedEntry<'a, I> {
             TaskState::Pending => unreachable!("By Entry::new()"),
         }
     }
-
-    // TODO: Needed?
-    // /// Instantly removes the entry from the manager, dropping
-    // /// the command channel to the background task of the connection,
-    // /// which will thus drop the connection asap without an orderly
-    // /// close or emitting another event.
-    // pub fn remove(self) -> Connected {
-    //     match self.task.remove().state {
-    //         TaskState::Established(c) => c,
-    //         TaskState::Pending => unreachable!("By Entry::new()"),
-    //     }
-    // }
 
     /// Returns the connection ID.
     pub fn id(&self) -> ConnectionId {

@@ -387,8 +387,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
                     e.start_close(None);
                     // TODO: I removed the disconnected logic, thus depending on start_close to
-                    // eventually trigger a ConnectionClosed event. Make sure that is the case and
-                    // also that the num_established counters are kept consistent.
+                    // eventually trigger a ConnectionClosed event. Make sure that is the case.
                 }
                 self.counters.dec_established(endpoint);
             }

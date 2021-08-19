@@ -71,6 +71,9 @@ pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s).
     Transport(TransportError<TTransErr>),
 
+    /// Pending connection attempt has been aborted.
+    Aborted,
+
     /// The peer identity obtained on the connection did not
     /// match the one that was expected or is otherwise invalid.
     InvalidPeerId,
@@ -87,6 +90,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {}", err),
+            PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
             PendingConnectionError::Transport(err) => {
                 write!(f, "Pending connection: Transport error: {}", err)
             }
@@ -106,6 +110,7 @@ where
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(err) => Some(err),
             PendingConnectionError::InvalidPeerId => None,
+            PendingConnectionError::Aborted => None,
         }
     }
 }

@@ -131,24 +131,6 @@ where
             },
         }
     }
-
-    /// Create a task for an existing node we are already connected to.
-    pub fn established(
-        id: TaskId,
-        events: mpsc::Sender<Event<H, E>>,
-        commands: mpsc::Receiver<Command<THandlerInEvent<H>>>,
-        connection: Connection<M, H::Handler>,
-    ) -> Self {
-        Task {
-            id,
-            events,
-            commands: commands.fuse(),
-            state: State::Established {
-                connection,
-                event: None,
-            },
-        }
-    }
 }
 
 /// The state associated with the `Task` of a connection.
@@ -227,8 +209,16 @@ where
                         Poll::Pending => {}
                         Poll::Ready(None) => {
                             // The manager has dropped the task; abort.
-                            // TODO: Should we return the handler in this case?
-                            return Poll::Ready(());
+                            // Don't accept any further commands and terminate the
+                            // task with a final event.
+                            this.commands.get_mut().close();
+                            let event = Event::Failed {
+                                id,
+                                handler,
+                                error: PendingConnectionError::Aborted,
+                            };
+                            this.state = State::Terminating(event);
+                            continue 'poll;
                         }
                         Poll::Ready(Some(_)) => {
                             panic!("Task received command while the connection is pending.")
@@ -280,9 +270,10 @@ where
                                 continue 'poll;
                             }
                             Poll::Ready(None) => {
+                                todo!("Safe to assume that this should never happen?");
                                 // The manager has dropped the task or disappeared; abort.
                                 // TODO: Should we return the handler in this case?
-                                return Poll::Ready(());
+                                // return Poll::Ready(());
                             }
                         }
                     }
