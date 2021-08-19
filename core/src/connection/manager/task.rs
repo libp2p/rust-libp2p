@@ -130,24 +130,6 @@ where
             },
         }
     }
-
-    /// Create a task for an existing node we are already connected to.
-    pub fn established(
-        id: TaskId,
-        events: mpsc::Sender<Event<H, E>>,
-        commands: mpsc::Receiver<Command<THandlerInEvent<H>>>,
-        connection: Connection<M, H::Handler>,
-    ) -> Self {
-        Task {
-            id,
-            events,
-            commands: commands.fuse(),
-            state: State::Established {
-                connection,
-                event: None,
-            },
-        }
-    }
 }
 
 /// The state associated with the `Task` of a connection.

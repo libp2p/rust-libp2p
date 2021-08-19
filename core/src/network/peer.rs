@@ -21,9 +21,9 @@
 use super::{DialError, DialingOpts, Network};
 use crate::{
     connection::{
-        handler::THandlerInEvent, pool::Pool, Connected, ConnectedPoint, Connection,
-        ConnectionHandler, ConnectionId, ConnectionLimit, EstablishedConnection,
-        EstablishedConnectionIter, IntoConnectionHandler, PendingConnection, Substream,
+        handler::THandlerInEvent, pool::Pool, ConnectedPoint, ConnectionHandler, ConnectionId,
+        ConnectionLimit, EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler,
+        PendingConnection, Substream,
     },
     Multiaddr, PeerId, StreamMuxer, Transport,
 };
@@ -471,44 +471,6 @@ where
     /// Returns the `DisconnectedPeer` into a `Peer`.
     pub fn into_peer(self) -> Peer<'a, TTrans, THandler> {
         Peer::Disconnected(self)
-    }
-
-    /// Moves the peer into a connected state by supplying an existing
-    /// established connection.
-    ///
-    /// No event is generated for this action.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `connected.peer_id` does not identify the current peer.
-    pub fn set_connected<TMuxer>(
-        self,
-        connected: Connected,
-        connection: Connection<TMuxer, THandler::Handler>,
-    ) -> Result<ConnectedPeer<'a, TTrans, THandler>, ConnectionLimit>
-    where
-        THandler: Send + 'static,
-        TTrans::Error: Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
-        <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-    {
-        if connected.peer_id != self.peer_id {
-            panic!(
-                "Invalid peer ID given: {:?}. Expected: {:?}",
-                connected.peer_id, self.peer_id
-            )
-        }
-
-        self.network
-            .pool
-            .add(connection, connected)
-            .map(move |_id| ConnectedPeer {
-                network: self.network,
-                peer_id: self.peer_id,
-            })
     }
 }
 
