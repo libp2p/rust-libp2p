@@ -247,8 +247,11 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 // [`NetworkBehaviourAction::map_in`], mapping the handler `InEvent` leaving the
 // handler itself untouched.
 #[derive(Debug)]
-pub enum NetworkBehaviourAction<TOutEvent, THandler: IntoProtocolsHandler, TInEvent = THandlerInEvent<THandler>>
-{
+pub enum NetworkBehaviourAction<
+    TOutEvent,
+    THandler: IntoProtocolsHandler,
+    TInEvent = THandlerInEvent<THandler>,
+> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
@@ -335,15 +338,14 @@ pub enum NetworkBehaviourAction<TOutEvent, THandler: IntoProtocolsHandler, TInEv
     },
 }
 
-impl<TOutEvent, THandler: IntoProtocolsHandler> NetworkBehaviourAction<TOutEvent, THandler> {
+impl<TOutEvent, THandler: IntoProtocolsHandler, TInEventOld>
+    NetworkBehaviourAction<TOutEvent, THandler, TInEventOld>
+{
     /// Map the handler event.
-    pub fn map_in<New>(
+    pub fn map_in<TInEventNew>(
         self,
-        f: impl FnOnce(THandlerInEvent<THandler>) -> New,
-    ) -> NetworkBehaviourAction<TOutEvent, THandler, New>
-    where
-        Self: ,
-    {
+        f: impl FnOnce(TInEventOld) -> TInEventNew,
+    ) -> NetworkBehaviourAction<TOutEvent, THandler, TInEventNew> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
             NetworkBehaviourAction::DialAddress { address, handler } => {
@@ -379,7 +381,9 @@ impl<TOutEvent, THandler: IntoProtocolsHandler> NetworkBehaviourAction<TOutEvent
             },
         }
     }
+}
 
+impl<TOutEvent, THandler: IntoProtocolsHandler> NetworkBehaviourAction<TOutEvent, THandler> {
     /// Map the event the swarm will return.
     pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, THandler> {
         match self {

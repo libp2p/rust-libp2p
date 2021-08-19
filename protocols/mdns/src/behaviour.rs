@@ -289,8 +289,8 @@ impl NetworkBehaviour for Mdns {
         params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
+            DummyProtocolsHandler,
         >,
     > {
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {

@@ -40,7 +40,12 @@ use std::{collections::VecDeque, iter};
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
+    events: VecDeque<
+        NetworkBehaviourAction<
+            FloodsubEvent,
+            OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>,
+        >,
+    >,
 
     config: FloodsubConfig,
 
@@ -104,6 +109,7 @@ impl Floodsub {
             self.events.push_back(NetworkBehaviourAction::DialPeer {
                 peer_id,
                 condition: DialPeerCondition::Disconnected,
+                handler: self.new_handler(),
             });
         }
     }
@@ -302,9 +308,11 @@ impl NetworkBehaviour for Floodsub {
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
         if self.target_peers.contains(id) {
+            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::DialPeer {
                 peer_id: *id,
                 condition: DialPeerCondition::Disconnected,
+                handler,
             });
         }
     }
@@ -426,12 +434,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

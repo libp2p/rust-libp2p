@@ -303,7 +303,7 @@ impl RequestResponseConfig {
 /// A request/response protocol for some message codec.
 pub struct RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: RequestResponseCodec + Send,
 {
     /// The supported inbound protocols.
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -320,8 +320,8 @@ where
     /// Pending events to return from `poll`.
     pending_events: VecDeque<
         NetworkBehaviourAction<
-            RequestProtocol<TCodec>,
             RequestResponseEvent<TCodec::Request, TCodec::Response>,
+            RequestResponseHandler<TCodec>,
         >,
     >,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
@@ -863,12 +863,7 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            RequestProtocol<TCodec>,
-            RequestResponseEvent<TCodec::Request, TCodec::Response>,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
