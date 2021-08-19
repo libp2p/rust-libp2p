@@ -333,17 +333,20 @@ where
     pub fn dial_addr(&mut self, addr: Multiaddr) -> Result<(), DialError> {
         let handler = self.behaviour.new_handler();
         self.dial_addr_with_handler(addr, handler)
+            .map_err(|e| DialError::from_network_dial_error(e))
+            .map_err(|(e, _)| e)
     }
 
     fn dial_addr_with_handler(
         &mut self,
         addr: Multiaddr,
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
-    ) -> Result<(), DialError> {
+    ) -> Result<(), network::DialError<NodeHandlerWrapperBuilder<THandler<TBehaviour>>>> {
         let handler = handler
             .into_node_handler_builder()
             .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-        Ok(self.network.dial(&addr, handler).map(|_id| ())?)
+
+        self.network.dial(&addr, handler).map(|_id| ())
     }
 
     /// Initiates a new dialing attempt to the given peer.
@@ -358,8 +361,7 @@ where
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
-            // TODO: Needed?
-            // self.behaviour.inject_dial_failure(peer_id);
+            self.behaviour.inject_dial_failure(peer_id, handler);
             return Err(DialError::Banned);
         }
 
@@ -370,30 +372,26 @@ where
             .into_iter()
             .filter(|a| !self_listening.contains(a));
 
-        let result = if let Some(first) = addrs.next() {
-            let handler = handler
-                .into_node_handler_builder()
-                .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-            self.network
-                .peer(*peer_id)
-                .dial(first, addrs, handler)
-                .map(|_| ())
-                .map_err(DialError::from)
-        } else {
-            Err(DialError::NoAddresses)
+        let first = match addrs.next() {
+            Some(first) => first,
+            None => {
+                self.behaviour.inject_dial_failure(peer_id, handler);
+                return Err(DialError::NoAddresses);
+            }
         };
 
-        if let Err(error) = &result {
-            log::debug!(
-                "New dialing attempt to peer {:?} failed: {:?}.",
-                peer_id,
-                error
-            );
-            // TODO: Needed?
-            // self.behaviour.inject_dial_failure(&peer_id);
+        let handler = handler
+            .into_node_handler_builder()
+            .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
+        match self.network.peer(*peer_id).dial(first, addrs, handler) {
+            Ok(_connection_id) => Ok(()),
+            Err(error) => {
+                let (error, handler) = DialError::from_network_dial_error(error);
+                self.behaviour
+                    .inject_dial_failure(&peer_id, handler.into_protocol_handler());
+                Err(error)
+            }
         }
-
-        result
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
@@ -1181,7 +1179,7 @@ where
 }
 
 /// The possible failures of [`Swarm::dial`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DialError {
     /// The peer is currently banned.
     Banned,
@@ -1190,16 +1188,22 @@ pub enum DialError {
     ConnectionLimit(ConnectionLimit),
     /// The address given for dialing is invalid.
     InvalidAddress(Multiaddr),
+    LocalPeerId,
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
 }
 
-impl From<network::DialError> for DialError {
-    fn from(err: network::DialError) -> DialError {
-        match err {
-            network::DialError::ConnectionLimit(l) => DialError::ConnectionLimit(l),
-            network::DialError::InvalidAddress(a) => DialError::InvalidAddress(a),
+impl DialError {
+    fn from_network_dial_error<THandler>(error: network::DialError<THandler>) -> (Self, THandler) {
+        match error {
+            network::DialError::ConnectionLimit { limit, handler } => {
+                (DialError::ConnectionLimit(limit), handler)
+            }
+            network::DialError::InvalidAddress { address, handler } => {
+                (DialError::InvalidAddress(address), handler)
+            }
+            network::DialError::LocalPeerId { handler } => (DialError::LocalPeerId, handler),
         }
     }
 }
@@ -1209,6 +1213,7 @@ impl fmt::Display for DialError {
         match self {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
+            DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
             DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
         }
@@ -1220,6 +1225,7 @@ impl error::Error for DialError {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
             DialError::InvalidAddress(_) => None,
+            DialError::LocalPeerId => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
         }
@@ -1273,12 +1279,7 @@ impl NetworkBehaviour for DummyBehaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            Self::OutEvent,
-            Self::ProtocolsHandler,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         Poll::Pending
     }
 }

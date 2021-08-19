@@ -22,7 +22,7 @@ mod event;
 pub mod peer;
 
 pub use crate::connection::{ConnectionCounters, ConnectionLimits};
-pub use event::{IncomingConnection, NetworkEvent, DialAttemptsRemaining};
+pub use event::{DialAttemptsRemaining, IncomingConnection, NetworkEvent};
 pub use peer::Peer;
 
 use crate::{
@@ -202,7 +202,7 @@ where
         &mut self,
         address: &Multiaddr,
         handler: THandler,
-    ) -> Result<ConnectionId, DialError>
+    ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -235,15 +235,11 @@ where
             Ok(f) => {
                 let f =
                     f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
-                self.pool
-                    .add_outgoing(f, handler, info)
-                    .map_err(DialError::ConnectionLimit)
+                self.pool.add_outgoing(f, handler, info)
             }
             Err(err) => {
                 let f = future::err(PendingConnectionError::Transport(err));
-                self.pool
-                    .add_outgoing(f, handler, info)
-                    .map_err(DialError::ConnectionLimit)
+                self.pool.add_outgoing(f, handler, info)
             }
         }
     }
@@ -473,7 +469,10 @@ where
     }
 
     /// Initiates a connection attempt to a known peer.
-    fn dial_peer(&mut self, opts: DialingOpts<PeerId, THandler>) -> Result<ConnectionId, DialError>
+    fn dial_peer(
+        &mut self,
+        opts: DialingOpts<PeerId, THandler>,
+    ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TTrans::Dial: Send + 'static,
@@ -505,7 +504,7 @@ fn dial_peer_impl<TMuxer, THandler, TTrans>(
     pool: &mut Pool<THandler, TTrans::Error>,
     dialing: &mut FnvHashMap<PeerId, SmallVec<[peer::DialingState; 10]>>,
     opts: DialingOpts<PeerId, THandler>,
-) -> Result<ConnectionId, DialError>
+) -> Result<ConnectionId, DialError<THandler>>
 where
     THandler: IntoConnectionHandler + Send + 'static,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
@@ -520,7 +519,15 @@ where
     // Ensure the address to dial encapsulates the `p2p` protocol for the
     // targeted peer, so that the transport has a "fully qualified" address
     // to work with.
-    let addr = p2p_addr(opts.peer, opts.address).map_err(DialError::InvalidAddress)?;
+    let addr = match p2p_addr(opts.peer, opts.address) {
+        Ok(address) => address,
+        Err(address) => {
+            return Err(DialError::InvalidAddress {
+                address,
+                handler: opts.handler,
+            })
+        }
+    };
 
     let result = match transport.dial(addr.clone()) {
         Ok(fut) => {
@@ -530,7 +537,6 @@ where
                 peer_id: Some(&opts.peer),
             };
             pool.add_outgoing(fut, opts.handler, info)
-                .map_err(DialError::ConnectionLimit)
         }
         Err(err) => {
             let fut = future::err(PendingConnectionError::Transport(err));
@@ -539,7 +545,6 @@ where
                 peer_id: Some(&opts.peer),
             };
             pool.add_outgoing(fut, opts.handler, info)
-                .map_err(DialError::ConnectionLimit)
         }
     };
 
@@ -752,13 +757,43 @@ fn p2p_addr(peer: PeerId, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
 }
 
 /// Possible (synchronous) errors when dialing a peer.
-#[derive(Clone, Debug)]
-pub enum DialError {
+#[derive(Clone)]
+pub enum DialError<THandler> {
     /// The dialing attempt is rejected because of a connection limit.
-    ConnectionLimit(ConnectionLimit),
+    ConnectionLimit {
+        limit: ConnectionLimit,
+        handler: THandler,
+    },
     /// The address being dialed is invalid, e.g. if it refers to a different
     /// remote peer than the one being dialed.
-    InvalidAddress(Multiaddr),
+    InvalidAddress {
+        address: Multiaddr,
+        handler: THandler,
+    },
+    LocalPeerId {
+        handler: THandler,
+    },
+}
+
+impl<THandler> fmt::Debug for DialError<THandler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            DialError::ConnectionLimit { limit, handler: _ } => f
+                .debug_struct("DialError::ConnectionLimit")
+                .field("limit", limit)
+                .finish(),
+            DialError::InvalidAddress {
+                address,
+                handler: _,
+            } => f
+                .debug_struct("DialError::InvalidAddress")
+                .field("address", address)
+                .finish(),
+            DialError::LocalPeerId { handler: _ } => {
+                f.debug_struct("DialError::LocalPeerId").finish()
+            }
+        }
+    }
 }
 
 #[cfg(test)]

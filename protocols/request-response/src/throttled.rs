@@ -44,7 +44,9 @@ use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHan
 use codec::{Codec, Message, ProtocolWrapper, Type};
 use futures::ready;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_swarm::{
+    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+};
 use lru::LruCache;
 use std::{cmp::max, num::NonZeroU16};
 use std::{
@@ -57,7 +59,7 @@ pub type ResponseChannel<R> = super::ResponseChannel<Message<R>>;
 /// A wrapper around [`RequestResponse`] which adds request limits per peer.
 pub struct Throttled<C>
 where
-    C: RequestResponseCodec + Send,
+    C: RequestResponseCodec + Clone + Send + 'static,
     C::Protocol: Sync,
 {
     /// A random id used for logging.
@@ -439,8 +441,14 @@ where
         self.behaviour.inject_connection_established(p, id, end)
     }
 
-    fn inject_connection_closed(&mut self, peer: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
-        self.behaviour.inject_connection_closed(peer, id, end);
+    fn inject_connection_closed(
+        &mut self,
+        peer: &PeerId,
+        id: &ConnectionId,
+        end: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
+        self.behaviour.inject_connection_closed(peer, id, end, handler);
         if let Some(info) = self.peer_info.get_mut(peer) {
             if let Some(grant) = &mut info.recv_budget.grant {
                 log::debug! { "{:08x}: resending credit grant {} to {} after connection closed",
@@ -484,8 +492,8 @@ where
         self.behaviour.inject_disconnected(p)
     }
 
-    fn inject_dial_failure(&mut self, p: &PeerId) {
-        self.behaviour.inject_dial_failure(p)
+    fn inject_dial_failure(&mut self, p: &PeerId, handler: Self::ProtocolsHandler) {
+        self.behaviour.inject_dial_failure(p, handler)
     }
 
     fn inject_event(
@@ -501,7 +509,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<RequestProtocol<Codec<C>>, Self::OutEvent>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         loop {
             if let Some(ev) = self.events.pop_front() {
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
@@ -737,11 +745,11 @@ where
                         RequestResponseEvent::ResponseSent { peer, request_id },
                     ))
                 }
-                NetworkBehaviourAction::DialAddress { address } => {
-                    NetworkBehaviourAction::DialAddress { address }
+                NetworkBehaviourAction::DialAddress { address, handler } => {
+                    NetworkBehaviourAction::DialAddress { address, handler }
                 }
-                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
-                    NetworkBehaviourAction::DialPeer { peer_id, condition }
+                NetworkBehaviourAction::DialPeer { peer_id, condition, handler } => {
+                    NetworkBehaviourAction::DialPeer { peer_id, condition, handler }
                 }
                 NetworkBehaviourAction::NotifyHandler {
                     peer_id,

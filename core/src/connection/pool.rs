@@ -20,13 +20,13 @@
 
 use crate::{
     connection::{
-
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
         manager::{self, Manager, ManagerConfig},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
-        IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
+        IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
+    network::DialError,
     ConnectedPoint, PeerId,
 };
 use either::Either;
@@ -240,7 +240,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         future: TFut,
         handler: THandler,
         info: OutgoingInfo<'_>,
-    ) -> Result<ConnectionId, ConnectionLimit>
+    ) -> Result<ConnectionId, DialError<THandler>>
     where
         TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
             + Send
@@ -252,7 +252,9 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
-        self.counters.check_max_pending_outgoing()?;
+        if let Err(limit) = self.counters.check_max_pending_outgoing() {
+            return Err(DialError::ConnectionLimit { limit, handler });
+        };
         let endpoint = info.to_connected_point();
         Ok(self.add_pending(future, handler, endpoint, info.peer_id.cloned()))
     }
