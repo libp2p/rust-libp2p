@@ -384,30 +384,18 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
     /// > performing such an orderly close.
     pub fn disconnect(&mut self, peer: &PeerId) {
         if let Some(conns) = self.established.get(peer) {
-            // Count upwards because we push to / pop from the end. See also `Pool::poll`.
             for (&id, endpoint) in conns.iter() {
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
                     e.start_close(None);
-                    // TODO: I removed the disconnected logic, thus depending on start_close to
-                    // eventually trigger a ConnectionClosed event. Make sure that is the case.
                 }
-                self.counters.dec_established(endpoint);
             }
         }
-        self.established.remove(peer);
 
-        let mut aborted = Vec::new();
         for (&id, (_endpoint, peer2)) in &self.pending {
             if Some(peer) == peer2.as_ref() {
                 if let Some(manager::Entry::Pending(e)) = self.manager.entry(id) {
                     e.abort();
-                    aborted.push(id);
                 }
-            }
-        }
-        for id in aborted {
-            if let Some((endpoint, _)) = self.pending.remove(&id) {
-                self.counters.dec_pending(&endpoint);
             }
         }
     }

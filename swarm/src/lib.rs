@@ -1353,17 +1353,15 @@ mod tests {
         <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Clone
     {
         for s in &[swarm1, swarm2] {
-            if s.behaviour.inject_connection_closed.len() < num_connections {
-                assert_eq!(s.behaviour.inject_disconnected.len(), 0);
-            } else {
-                assert_eq!(s.behaviour.inject_disconnected.len(), 1);
-            }
             assert_eq!(s.behaviour.inject_connection_established.len(), 0);
             assert_eq!(s.behaviour.inject_connected.len(), 0);
         }
         [swarm1, swarm2]
             .iter()
-            .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
+            .all(|s| s.behaviour.inject_connection_closed.len() == num_connections) &&
+            [swarm1, swarm2]
+            .iter()
+            .all(|s| s.behaviour.inject_disconnected.len() == 1)
     }
 
     /// Establishes multiple connections between two peers,
