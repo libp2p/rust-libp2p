@@ -116,8 +116,9 @@ where
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            // TODO: Unwrap safe here?
-            inner.inject_connection_closed(peer_id, connection, endpoint, handler.inner.unwrap())
+            if let Some(handler) = handler.inner {
+                inner.inject_connection_closed(peer_id, connection, endpoint, handler)
+            }
         }
     }
 
@@ -157,8 +158,9 @@ where
 
     fn inject_dial_failure(&mut self, peer_id: &PeerId, handler: Self::ProtocolsHandler) {
         if let Some(inner) = self.inner.as_mut() {
-            // TODO: Unwrap safe here?
-            inner.inject_dial_failure(peer_id, handler.inner.unwrap())
+            if let Some(handler) = handler.inner {
+                inner.inject_dial_failure(peer_id, handler)
+            }
         }
     }
 
@@ -210,8 +212,9 @@ where
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(inner) = self.inner.as_mut() {
-            // inner.poll(cx, params)
-            todo!("Wrap handler in Dial events with ToggleHandler.");
+            inner
+                .poll(cx, params)
+                .map(|action| action.map_handler(|h| ToggleIntoProtoHandler { inner: Some(h) }))
         } else {
             Poll::Pending
         }
