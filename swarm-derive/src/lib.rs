@@ -223,15 +223,31 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_connection_closed()`.
     let inject_connection_closed_stmts = {
-        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(&field) {
-                return None;
-            }
-            Some(match field.ident {
-                Some(ref i) => quote!{ self.#i.inject_connection_closed(peer_id, connection_id, endpoint); },
-                None => quote!{ self.#field_n.inject_connection_closed(peer_id, connection_id, endpoint); },
+        data_struct
+            .fields
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|f| !is_ignored(&f.1))
+            .enumerate()
+            .map(move |(enum_n, (field_n, field))| {
+                let handler = if field_n == 0 {
+                    quote! { let handler = handlers }
+                } else {
+                    quote! {
+                        let (handlers, handler) = handlers.into_inner()
+                    }
+                };
+                let inject = match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_connection_closed(peer_id, connection_id, endpoint, handler) },
+                    None => quote!{ self.#enum_n.inject_connection_closed(peer_id, connection_id, endpoint, handler) },
+                };
+
+                quote! {
+                    #handler;
+                    #inject;
+                }
             })
-        })
     };
 
     // Build the list of statements to put in the body of `inject_addr_reach_failure()`.
@@ -255,15 +271,27 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
-                    return None;
-                }
+            .rev()
+            .filter(|f| !is_ignored(&f.1))
+            .enumerate()
+            .map(move |(enum_n, (field_n, field))| {
+                let handler = if field_n == 0 {
+                    quote! { let handler = handlers }
+                } else {
+                    quote! {
+                        let (handlers, handler) = handlers.into_inner()
+                    }
+                };
 
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_dial_failure(peer_id); },
-                    None => quote! { self.#field_n.inject_dial_failure(peer_id); },
-                })
+                let inject = match field.ident {
+                    Some(ref i) => quote! { self.#i.inject_dial_failure(peer_id, handler) },
+                    None => quote! { self.#enum_n.inject_dial_failure(peer_id, handler) },
+                };
+
+                quote! {
+                    #handler;
+                    #inject;
+                }
             })
     };
 
@@ -426,6 +454,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 ref mut ev @ None => *ev = Some(field_info),
             }
         }
+        // ph_ty = Some(quote! )
         ph_ty.unwrap_or(quote! {()}) // TODO: `!` instead
     };
 
@@ -500,6 +529,36 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
+        let wrapped_handler = {
+            let mut out_handler = None;
+
+            for (f_n, f) in data_struct.fields.iter().enumerate() {
+                if is_ignored(&f) {
+                    continue;
+                }
+
+                let f_name = match f.ident {
+                    Some(ref i) => quote! { self.#i },
+                    None => quote! { self.#f_n },
+                };
+
+                let builder = if field_n == f_n {
+                    quote! { handler }
+                } else {
+                    quote! { #f_name.new_handler() }
+                };
+
+                match out_handler {
+                    Some(h) => {
+                        out_handler = Some(quote! { #into_protocols_handler::select(#h, #builder) })
+                    }
+                    ref mut h @ None => *h = Some(builder),
+                }
+            }
+
+            out_handler.unwrap() // _or(quote! {()}) // TODO: incorrect
+        };
+
         let generate_event_match_arm = if event_process {
             quote! {
                 std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
@@ -519,10 +578,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
                     #generate_event_match_arm
                     std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler });
+                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: #wrapped_handler });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler });
+                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: #wrapped_handler });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
@@ -578,7 +637,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_address_change_stmts);*
             }
 
-            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
+            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ProtocolsHandler as #into_protocols_handler>::Handler) {
                 #(#inject_connection_closed_stmts);*
             }
 
@@ -586,7 +645,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_addr_reach_failure_stmts);*
             }
 
-            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handler: Self::ProtocolsHandler) {
+            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler) {
                 #(#inject_dial_failure_stmts);*
             }
 
@@ -632,7 +691,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ProtocolsHandler>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
-                let f: std::task::Poll<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
+                let f: std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ProtocolsHandler>> = #poll_method;
                 f
             }
         }
