@@ -1358,10 +1358,10 @@ mod tests {
         }
         [swarm1, swarm2]
             .iter()
-            .all(|s| s.behaviour.inject_connection_closed.len() == num_connections) &&
-            [swarm1, swarm2]
-            .iter()
-            .all(|s| s.behaviour.inject_disconnected.len() == 1)
+            .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
+            && [swarm1, swarm2]
+                .iter()
+                .all(|s| s.behaviour.inject_disconnected.len() == 1)
     }
 
     /// Establishes multiple connections between two peers,

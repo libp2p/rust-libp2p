@@ -448,7 +448,8 @@ where
         end: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
-        self.behaviour.inject_connection_closed(peer, id, end, handler);
+        self.behaviour
+            .inject_connection_closed(peer, id, end, handler);
         if let Some(info) = self.peer_info.get_mut(peer) {
             if let Some(grant) = &mut info.recv_budget.grant {
                 log::debug! { "{:08x}: resending credit grant {} to {} after connection closed",
@@ -748,9 +749,15 @@ where
                 NetworkBehaviourAction::DialAddress { address, handler } => {
                     NetworkBehaviourAction::DialAddress { address, handler }
                 }
-                NetworkBehaviourAction::DialPeer { peer_id, condition, handler } => {
-                    NetworkBehaviourAction::DialPeer { peer_id, condition, handler }
-                }
+                NetworkBehaviourAction::DialPeer {
+                    peer_id,
+                    condition,
+                    handler,
+                } => NetworkBehaviourAction::DialPeer {
+                    peer_id,
+                    condition,
+                    handler,
+                },
                 NetworkBehaviourAction::NotifyHandler {
                     peer_id,
                     handler,

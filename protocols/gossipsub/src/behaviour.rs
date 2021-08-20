@@ -3176,7 +3176,11 @@ where
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.events.pop_front() {
-            let event: NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler, Arc<GossipsubHandlerIn>> = event;
+            let event: NetworkBehaviourAction<
+                Self::OutEvent,
+                Self::ProtocolsHandler,
+                Arc<GossipsubHandlerIn>,
+            > = event;
             return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
                 // clone send event reference if others references are present
                 Arc::try_unwrap(e).unwrap_or_else(|e| (*e).clone())

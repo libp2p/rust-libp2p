@@ -53,7 +53,7 @@ fn max_outgoing() {
         .dial(Multiaddr::empty(), Vec::new(), TestHandler())
         .expect_err("Unexpected dialing success.")
     {
-        DialError::ConnectionLimit{limit, handler: _} => {
+        DialError::ConnectionLimit { limit, handler: _ } => {
             assert_eq!(limit.current, outgoing_limit);
             assert_eq!(limit.limit, outgoing_limit);
         }

@@ -384,7 +384,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
     /// > performing such an orderly close.
     pub fn disconnect(&mut self, peer: &PeerId) {
         if let Some(conns) = self.established.get(peer) {
-            for (&id, endpoint) in conns.iter() {
+            for (&id, _endpoint) in conns.iter() {
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
                     e.start_close(None);
                 }
