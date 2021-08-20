@@ -376,12 +376,8 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
     /// (Forcefully) close all connections to the given peer.
     ///
     /// All connections to the peer, whether pending or established are
-    /// dropped asap and no more events from these connections are emitted
+    /// closed asap and no more events from these connections are emitted
     /// by the pool effective immediately.
-    ///
-    /// > **Note**: Established connections are dropped without performing
-    /// > an orderly close. See [`EstablishedConnection::start_close`] for
-    /// > performing such an orderly close.
     pub fn disconnect(&mut self, peer: &PeerId) {
         if let Some(conns) = self.established.get(peer) {
             for (&id, _endpoint) in conns.iter() {
