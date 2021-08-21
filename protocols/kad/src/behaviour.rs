@@ -148,7 +148,7 @@ pub struct KademliaConfig {
     kbucket_inserts: KademliaBucketInserts,
     caching: KademliaCaching,
     // Set the peer mode.
-    client: Mode,
+    mode: Mode,
 }
 
 /// The configuration for Kademlia "write-back" caching after successful
@@ -183,7 +183,7 @@ impl Default for KademliaConfig {
             kbucket_inserts: KademliaBucketInserts::OnConnected,
             caching: KademliaCaching::Enabled { max_peers: 1 },
             // By default, a peer will not be in client mode.
-            client: Mode::default(),
+            mode: Mode::default(),
         }
     }
 }
@@ -357,16 +357,18 @@ impl KademliaConfig {
         self
     }
 
-    /// Enable or disable the `client` mode of a node.
+    /// Sets the [`Mode`] the node is operating in.
     ///
-    /// Client mode is disabled by default.
+    /// The default is [`Mode::Server`].
     ///
-    /// In `client` mode, the peer would not be added to any other peers
-    /// routing table. The client peer can send queries over the Kademlia
-    /// network, but will not receive any queries from the other peers in
-    /// the network.
+    /// In [`Mode::Client`] the node does not advertise support for the Kademlia
+    /// protocol, nor does it accept incoming Kademlia streams. Peers will thus not
+    /// include the local node in their routing table. The node can still make
+    /// outbound requests.
+    ///
+    /// Use [`Mode::Client`] when not publicly reachable.
     pub fn set_mode(&mut self, mode: Mode) -> &mut Self {
-        self.client = mode;
+        self.mode = mode;
         self
     }
 }
@@ -1662,7 +1664,7 @@ where
             protocol_config: self.protocol_config.clone(),
             allow_listening: true,
             idle_timeout: self.connection_idle_timeout,
-            client: Mode::default(),
+            mode: Mode::default(),
         })
     }
 

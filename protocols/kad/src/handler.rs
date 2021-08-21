@@ -62,7 +62,7 @@ impl<T: Clone + fmt::Debug + Send + 'static> IntoProtocolsHandler for KademliaHa
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        match self.config.client {
+        match self.config.mode {
             Mode::Client => upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade),
             Mode::Server => {
                 if self.config.allow_listening {
@@ -129,8 +129,8 @@ pub struct KademliaHandlerConfig {
     /// Time after which we close an idle connection.
     pub idle_timeout: Duration,
 
-    // If Mode::Client, node will act in `client` mode in the Kademlia network.
-    pub client: Mode,
+    /// [`Mode`] the handler is operating in.
+    pub mode: Mode,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -488,7 +488,7 @@ where
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        match self.config.client {
+        match self.config.mode {
             Mode::Server => {
                 if self.config.allow_listening {
                     SubstreamProtocol::new(self.config.protocol_config.clone(), ())
@@ -537,7 +537,6 @@ where
         self.next_connec_unique_id.0 += 1;
         self.substreams
             .push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
-        // TODO:
         // Just because another peer is sending us Kademlia requests, doesn't necessarily
         // mean that it will answer the Kademlia requests that we send to it.
         // Thus, Commenting this code out for now.
@@ -784,7 +783,7 @@ impl Default for KademliaHandlerConfig {
             protocol_config: Default::default(),
             allow_listening: true,
             idle_timeout: Duration::from_secs(10),
-            client: Mode::default(),
+            mode: Mode::default(),
         }
     }
 }

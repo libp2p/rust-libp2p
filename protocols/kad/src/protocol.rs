@@ -47,6 +47,7 @@ pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
 pub const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 
 #[derive(Debug, Clone)]
+/// See [`crate::KademliaConfig::set_mode`].
 pub enum Mode {
     Client,
     Server,
