@@ -20,11 +20,10 @@
 
 use crate::{
     connection::{
-        self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
         manager::{self, Manager, ManagerConfig},
-        Connected, Connection, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
-        IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
+        IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     ConnectedPoint, PeerId,
@@ -311,37 +310,6 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         self.counters.inc_pending(&endpoint);
         self.pending.insert(id, (endpoint, peer));
         id
-    }
-
-    /// Adds an existing established connection to the pool.
-    ///
-    /// Returns the assigned connection ID on success. An error is returned
-    /// if the configured maximum number of established connections for the
-    /// connected peer has been reached.
-    pub fn add<TMuxer>(
-        &mut self,
-        c: Connection<TMuxer, THandler::Handler>,
-        i: Connected,
-    ) -> Result<ConnectionId, ConnectionLimit>
-    where
-        THandler: IntoConnectionHandler + Send + 'static,
-        THandler::Handler:
-            ConnectionHandler<Substream = connection::Substream<TMuxer>> + Send + 'static,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TTransErr: error::Error + Send + 'static,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
-    {
-        self.counters.check_max_established(&i.endpoint)?;
-        self.counters
-            .check_max_established_per_peer(self.num_peer_established(&i.peer_id))?;
-        let id = self.manager.add(c, i.clone());
-        self.counters.inc_established(&i.endpoint);
-        self.established
-            .entry(i.peer_id)
-            .or_default()
-            .insert(id, i.endpoint);
-        Ok(id)
     }
 
     /// Gets an entry representing a connection in the pool.

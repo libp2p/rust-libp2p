@@ -1,5 +1,8 @@
 # 0.30.0 [unreleased]
 
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Update dependencies.
 
 # 0.29.0 [2021-07-12]

@@ -1,5 +1,8 @@
 # 0.31.0 [unreleased]
 
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Update dependencies.
 
 - Provide default implementations for all functions of `NetworkBehaviour`,
@@ -13,9 +16,13 @@
 - Require `ProtocolsHandler::{InEvent,OutEvent,Error}` to implement `Debug` (see
   [PR 2183]).
 
-[PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150/
+- Implement `ProtocolsHandler` on `either::Either`representing either of two
+  `ProtocolsHandler` implementations (see [PR 2192]).
+
+[PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
 
 # 0.30.0 [2021-07-12]
 

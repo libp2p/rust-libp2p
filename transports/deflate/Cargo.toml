@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.30.0", path = "../../core" }
+libp2p-core = { version = "0.30.0", path = "../../core", default-features = false  }
 flate2 = "1.0"
 
 [dev-dependencies]
