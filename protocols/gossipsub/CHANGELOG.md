@@ -1,5 +1,8 @@
 # 0.33.0 [unreleased]
 
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Improve internal peer tracking.
   [PR 2175](https://github.com/libp2p/rust-libp2p/pull/2175)
 

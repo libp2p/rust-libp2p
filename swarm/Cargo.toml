@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 either = "1.6.0"
 futures = "0.3.1"
-libp2p-core = { version = "0.30.0", path = "../core" }
+libp2p-core = { version = "0.30.0", path = "../core", default-features = false }
 log = "0.4"
 rand = "0.7"
 smallvec = "1.6.1"

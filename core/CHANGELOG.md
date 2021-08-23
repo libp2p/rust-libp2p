@@ -20,10 +20,14 @@
 - Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
   (see [PR 2183]).
 
+- Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
+
+
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
 [PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
 
 # 0.29.0 [2021-07-12]
 
