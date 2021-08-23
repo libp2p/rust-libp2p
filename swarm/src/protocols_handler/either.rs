@@ -29,33 +29,35 @@ use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::task::{Context, Poll};
 
-pub enum IntoEitherHandler<A, B> {
-    A(A),
-    B(B),
+pub enum IntoEitherHandler<L, R> {
+    Left(L),
+    Right(R),
 }
 
 /// Implementation of a [`IntoProtocolsHandler`] that represents either of two [`IntoProtocolsHandler`]
 /// implementations.
-impl<A, B> IntoProtocolsHandler for IntoEitherHandler<A, B>
+impl<L, R> IntoProtocolsHandler for IntoEitherHandler<L, R>
 where
-    A: IntoProtocolsHandler,
-    B: IntoProtocolsHandler,
+    L: IntoProtocolsHandler,
+    R: IntoProtocolsHandler,
 {
-    type Handler = EitherHandler<A::Handler, B::Handler>;
+    type Handler = Either<L::Handler, R::Handler>;
 
     fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
         match self {
-            IntoEitherHandler::A(into_handler) => EitherHandler::A(into_handler.into_handler(p, c)),
-            IntoEitherHandler::B(into_handler) => EitherHandler::B(into_handler.into_handler(p, c)),
+            IntoEitherHandler::Left(into_handler) => Either::Left(into_handler.into_handler(p, c)),
+            IntoEitherHandler::Right(into_handler) => {
+                Either::Right(into_handler.into_handler(p, c))
+            }
         }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         match self {
-            IntoEitherHandler::A(into_handler) => {
+            IntoEitherHandler::Left(into_handler) => {
                 EitherUpgrade::A(SendWrapper(into_handler.inbound_protocol()))
             }
-            IntoEitherHandler::B(into_handler) => {
+            IntoEitherHandler::Right(into_handler) => {
                 EitherUpgrade::B(SendWrapper(into_handler.inbound_protocol()))
             }
         }
@@ -64,34 +66,28 @@ where
 
 /// Implementation of a [`ProtocolsHandler`] that represents either of two [`ProtocolsHandler`]
 /// implementations.
-#[derive(Debug)]
-pub enum EitherHandler<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A, B> ProtocolsHandler for EitherHandler<A, B>
+impl<L, R> ProtocolsHandler for Either<L, R>
 where
-    A: ProtocolsHandler,
-    B: ProtocolsHandler,
+    L: ProtocolsHandler,
+    R: ProtocolsHandler,
 {
-    type InEvent = Either<A::InEvent, B::InEvent>;
-    type OutEvent = Either<A::OutEvent, B::OutEvent>;
-    type Error = Either<A::Error, B::Error>;
+    type InEvent = Either<L::InEvent, R::InEvent>;
+    type OutEvent = Either<L::OutEvent, R::OutEvent>;
+    type Error = Either<L::Error, R::Error>;
     type InboundProtocol =
-        EitherUpgrade<SendWrapper<A::InboundProtocol>, SendWrapper<B::InboundProtocol>>;
+        EitherUpgrade<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
-        EitherUpgrade<SendWrapper<A::OutboundProtocol>, SendWrapper<B::OutboundProtocol>>;
-    type InboundOpenInfo = Either<A::InboundOpenInfo, B::InboundOpenInfo>;
-    type OutboundOpenInfo = Either<A::OutboundOpenInfo, B::OutboundOpenInfo>;
+        EitherUpgrade<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
+    type InboundOpenInfo = Either<L::InboundOpenInfo, R::InboundOpenInfo>;
+    type OutboundOpenInfo = Either<L::OutboundOpenInfo, R::OutboundOpenInfo>;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self {
-            EitherHandler::A(a) => a
+            Either::Left(a) => a
                 .listen_protocol()
                 .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
                 .map_info(Either::Left),
-            EitherHandler::B(b) => b
+            Either::Right(b) => b
                 .listen_protocol()
                 .map_upgrade(|u| EitherUpgrade::B(SendWrapper(u)))
                 .map_info(Either::Right),
@@ -104,10 +100,10 @@ where
         info: Self::OutboundOpenInfo,
     ) {
         match (self, output, info) {
-            (EitherHandler::A(handler), EitherOutput::First(output), Either::Left(info)) => {
+            (Either::Left(handler), EitherOutput::First(output), Either::Left(info)) => {
                 handler.inject_fully_negotiated_outbound(output, info)
             }
-            (EitherHandler::B(handler), EitherOutput::Second(output), Either::Right(info)) => {
+            (Either::Right(handler), EitherOutput::Second(output), Either::Right(info)) => {
                 handler.inject_fully_negotiated_outbound(output, info)
             }
             _ => unreachable!(),
@@ -120,10 +116,10 @@ where
         info: Self::InboundOpenInfo,
     ) {
         match (self, output, info) {
-            (EitherHandler::A(handler), EitherOutput::First(output), Either::Left(info)) => {
+            (Either::Left(handler), EitherOutput::First(output), Either::Left(info)) => {
                 handler.inject_fully_negotiated_inbound(output, info)
             }
-            (EitherHandler::B(handler), EitherOutput::Second(output), Either::Right(info)) => {
+            (Either::Right(handler), EitherOutput::Second(output), Either::Right(info)) => {
                 handler.inject_fully_negotiated_inbound(output, info)
             }
             _ => unreachable!(),
@@ -132,16 +128,16 @@ where
 
     fn inject_event(&mut self, event: Self::InEvent) {
         match (self, event) {
-            (EitherHandler::A(handler), Either::Left(event)) => handler.inject_event(event),
-            (EitherHandler::B(handler), Either::Right(event)) => handler.inject_event(event),
+            (Either::Left(handler), Either::Left(event)) => handler.inject_event(event),
+            (Either::Right(handler), Either::Right(event)) => handler.inject_event(event),
             _ => unreachable!(),
         }
     }
 
     fn inject_address_change(&mut self, addr: &Multiaddr) {
         match self {
-            EitherHandler::A(handler) => handler.inject_address_change(addr),
-            EitherHandler::B(handler) => handler.inject_address_change(addr),
+            Either::Left(handler) => handler.inject_address_change(addr),
+            Either::Right(handler) => handler.inject_address_change(addr),
         }
     }
 
@@ -152,31 +148,31 @@ where
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timer => match (self, info) {
-                (EitherHandler::A(handler), Either::Left(info)) => {
+                (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
                 }
-                (EitherHandler::B(handler), Either::Right(info)) => {
+                (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
                 }
                 _ => unreachable!(),
             },
             ProtocolsHandlerUpgrErr::Timeout => match (self, info) {
-                (EitherHandler::A(handler), Either::Left(info)) => {
+                (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
                 }
-                (EitherHandler::B(handler), Either::Right(info)) => {
+                (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
                 }
                 _ => unreachable!(),
             },
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)) => match (self, info) {
-                (EitherHandler::A(handler), Either::Left(info)) => {
+                (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_dial_upgrade_error(
                         info,
                         ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
                     );
                 }
-                (EitherHandler::B(handler), Either::Right(info)) => {
+                (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_dial_upgrade_error(
                         info,
                         ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
@@ -186,7 +182,7 @@ where
             },
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
                 match (self, info) {
-                    (EitherHandler::A(handler), Either::Left(info)) => {
+                    (Either::Left(handler), Either::Left(info)) => {
                         handler.inject_dial_upgrade_error(
                             info,
                             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
@@ -197,7 +193,7 @@ where
             }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
                 match (self, info) {
-                    (EitherHandler::B(handler), Either::Right(info)) => {
+                    (Either::Right(handler), Either::Right(info)) => {
                         handler.inject_dial_upgrade_error(
                             info,
                             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
@@ -216,31 +212,31 @@ where
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timer => match (self, info) {
-                (EitherHandler::A(handler), Either::Left(info)) => {
+                (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
                 }
-                (EitherHandler::B(handler), Either::Right(info)) => {
+                (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
                 }
                 _ => unreachable!(),
             },
             ProtocolsHandlerUpgrErr::Timeout => match (self, info) {
-                (EitherHandler::A(handler), Either::Left(info)) => {
+                (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
                 }
-                (EitherHandler::B(handler), Either::Right(info)) => {
+                (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
                 }
                 _ => unreachable!(),
             },
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)) => match (self, info) {
-                (EitherHandler::A(handler), Either::Left(info)) => {
+                (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_listen_upgrade_error(
                         info,
                         ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
                     );
                 }
-                (EitherHandler::B(handler), Either::Right(info)) => {
+                (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_listen_upgrade_error(
                         info,
                         ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
@@ -250,7 +246,7 @@ where
             },
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
                 match (self, info) {
-                    (EitherHandler::A(handler), Either::Left(info)) => {
+                    (Either::Left(handler), Either::Left(info)) => {
                         handler.inject_listen_upgrade_error(
                             info,
                             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
@@ -261,7 +257,7 @@ where
             }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
                 match (self, info) {
-                    (EitherHandler::B(handler), Either::Right(info)) => {
+                    (Either::Right(handler), Either::Right(info)) => {
                         handler.inject_listen_upgrade_error(
                             info,
                             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
@@ -275,8 +271,8 @@ where
 
     fn connection_keep_alive(&self) -> KeepAlive {
         match self {
-            EitherHandler::A(handler) => handler.connection_keep_alive(),
-            EitherHandler::B(handler) => handler.connection_keep_alive(),
+            Either::Left(handler) => handler.connection_keep_alive(),
+            Either::Right(handler) => handler.connection_keep_alive(),
         }
     }
 
@@ -291,39 +287,19 @@ where
             Self::Error,
         >,
     > {
-        match self {
-            EitherHandler::A(handler) => match handler.poll(cx) {
-                Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Either::Left(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::Close(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Close(Either::Left(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: protocol
-                            .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
-                            .map_info(Either::Left),
-                    });
-                }
-                Poll::Pending => Poll::Pending,
-            },
-            EitherHandler::B(handler) => match handler.poll(cx) {
-                Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Either::Right(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::Close(event)) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Close(Either::Right(event)));
-                }
-                Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: protocol
-                            .map_upgrade(|u| EitherUpgrade::B(SendWrapper(u)))
-                            .map_info(Either::Right),
-                    });
-                }
-                Poll::Pending => Poll::Pending,
-            },
-        }
+        let event = match self {
+            Either::Left(handler) => futures::ready!(handler.poll(cx))
+                .map_custom(Either::Left)
+                .map_close(Either::Left)
+                .map_protocol(|p| EitherUpgrade::A(SendWrapper(p)))
+                .map_outbound_open_info(Either::Left),
+            Either::Right(handler) => futures::ready!(handler.poll(cx))
+                .map_custom(Either::Right)
+                .map_close(Either::Right)
+                .map_protocol(|p| EitherUpgrade::B(SendWrapper(p)))
+                .map_outbound_open_info(Either::Right),
+        };
+
+        Poll::Ready(event)
     }
 }
