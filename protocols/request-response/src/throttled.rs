@@ -40,7 +40,7 @@ use super::{
     ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
-use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
+use crate::handler::{RequestResponseHandler, RequestResponseHandlerEvent};
 use codec::{Codec, Message, ProtocolWrapper, Type};
 use futures::ready;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};

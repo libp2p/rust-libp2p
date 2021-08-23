@@ -29,7 +29,7 @@ use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_swarm::{
     DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
-    PollParameters, ProtocolsHandler,
+    PollParameters,
 };
 use log::warn;
 use smallvec::SmallVec;
