@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol;
+use either::Either;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
@@ -32,7 +33,6 @@ use libp2p_swarm::{
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
-use either::Either;
 
 pub enum In {
     Connect {
@@ -94,30 +94,44 @@ impl fmt::Debug for Event {
     }
 }
 
-pub struct Prototype {}
-
-impl Prototype {
-    pub(crate) fn new() -> Self {
-        Self {}
-    }
+pub enum Prototype {
+    RelayedConnection,
+    DirectConnection,
+    UnknownConnection,
 }
 
 impl IntoProtocolsHandler for Prototype {
     type Handler = Either<Handler, DummyProtocolsHandler>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        if endpoint
+        let is_relayed_addr = endpoint
             .get_remote_address()
             .iter()
-            .any(|p| p == Protocol::P2pCircuit)
-        {
-            Either::Left(Handler {
-                remote_addr: endpoint.get_remote_address().clone(),
-                queued_events: Default::default(),
-                inbound_connects: Default::default(),
-            })
-        } else {
-            Either::Right(DummyProtocolsHandler::default())
+            .any(|p| p == Protocol::P2pCircuit);
+
+        match self {
+            Self::RelayedConnection | Self::UnknownConnection if is_relayed_addr => {
+                // TODO: When handler is created via new_handler, the connection is inbound. It should only
+                // ever be us initiating a dcutr request on this handler then, as one never initiates a
+                // request on an outbound handler. Should this be enforced?
+                Either::Left(Handler {
+                    remote_addr: endpoint.get_remote_address().clone(),
+                    queued_events: Default::default(),
+                    inbound_connects: Default::default(),
+                })
+            }
+            Self::DirectConnection | Self::UnknownConnection if !is_relayed_addr => {
+                Either::Right(DummyProtocolsHandler::default())
+            }
+            Self::RelayedConnection => {
+                todo!("Expected relayed connection.")
+            }
+            Self::DirectConnection => {
+                todo!("Expected non-relayed connection.")
+            }
+            Self::UnknownConnection => {
+                todo!("Should be unreachable. Provable at compile time?")
+            }
         }
     }
 

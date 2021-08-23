@@ -70,10 +70,7 @@ impl NetworkBehaviour for Behaviour {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        // TODO: When handler is created via new_handler, the connection is inbound. It should only
-        // ever be us initiating a dcutr request on this handler then, as one never initiates a
-        // request on an outbound handler. Should this be enforced?
-        handler::Prototype::new()
+        handler::Prototype::UnknownConnection
     }
 
     fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -170,23 +167,21 @@ impl NetworkBehaviour for Behaviour {
                     ));
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
-                let handler = self.new_handler();
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::DialAddress {
                         // TODO: Handle empty addresses.
                         // TODO: What about the other addresses?
                         address: remote_addrs.into_iter().next().unwrap(),
-                        handler,
+                        handler: handler::Prototype::DirectConnection,
                     });
             }
             handler::Event::OutboundConnectNeg(remote_addrs) => {
-                let handler = self.new_handler();
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::DialAddress {
                         // TODO: Handle empty addresses.
                         // TODO: What about the other addresses?
                         address: remote_addrs.into_iter().next().unwrap(),
-                        handler,
+                        handler: handler::Prototype::DirectConnection,
                     });
             }
         }
