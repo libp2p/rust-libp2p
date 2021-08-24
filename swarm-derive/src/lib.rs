@@ -556,7 +556,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            out_handler.unwrap() // _or(quote! {()}) // TODO: incorrect
+            out_handler.unwrap_or(quote! {()}) // TODO: incorrect
         };
 
         let generate_event_match_arm = if event_process {

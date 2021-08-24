@@ -66,8 +66,7 @@ where
         self
     }
 
-    // TODO: Rethink this method.
-    pub(crate) fn into_protocol_handler(self) -> TIntoProtoHandler {
+    pub(crate) fn into_protocols_handler(self) -> TIntoProtoHandler {
         self.handler
     }
 }
@@ -136,9 +135,7 @@ where
 }
 
 impl<TProtoHandler: ProtocolsHandler> NodeHandlerWrapper<TProtoHandler> {
-    // TODO: Should this be a From impl?
-    // TODO: Find better name.
-    pub fn into_protocol_handler(self) -> TProtoHandler {
+    pub(crate) fn into_protocols_handler(self) -> TProtoHandler {
         self.handler
     }
 }

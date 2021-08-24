@@ -434,7 +434,6 @@ where
                         log::warn!("Dialing aborted: {:?}", e);
                     }
                 }
-                // TODO: Include handler in event.
                 event
             }
             Poll::Ready(PoolEvent::ConnectionClosed {
@@ -626,7 +625,6 @@ where
         match endpoint {
             ConnectedPoint::Dialer { address } => (
                 None,
-                // TODO: This is the place to return the handler.
                 NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
@@ -638,7 +636,6 @@ where
                 send_back_addr,
             } => (
                 None,
-                // TODO: This is the place to return the handler.
                 NetworkEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,

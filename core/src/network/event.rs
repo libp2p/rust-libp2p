@@ -239,7 +239,6 @@ where
                 local_addr,
                 send_back_addr,
                 error,
-                // TODO: Should this be printed as well?
                 handler: _,
             } => f
                 .debug_struct("IncomingConnectionError")

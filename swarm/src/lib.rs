@@ -388,7 +388,7 @@ where
             Err(error) => {
                 let (error, handler) = DialError::from_network_dial_error(error);
                 self.behaviour
-                    .inject_dial_failure(&peer_id, handler.into_protocol_handler());
+                    .inject_dial_failure(&peer_id, handler.into_protocols_handler());
                 Err(error)
             }
         }
@@ -595,7 +595,7 @@ where
                         &peer_id,
                         &id,
                         &endpoint,
-                        handler.into_protocol_handler(),
+                        handler.into_protocols_handler(),
                     );
                     if num_established == 0 {
                         this.behaviour.inject_disconnected(&peer_id);
@@ -714,7 +714,7 @@ where
                         DialAttemptsRemaining::None(handler) => {
                             num_remaining = 0;
                             this.behaviour
-                                .inject_dial_failure(&peer_id, handler.into_protocol_handler());
+                                .inject_dial_failure(&peer_id, handler.into_protocols_handler());
                         }
                     }
 
@@ -835,7 +835,9 @@ where
                                     }
                                 }
                             }
-                            // TODO: Return the handler to the behaviour.
+                            // TODO: Return the handler to the behaviour. Though keep in mind that
+                            // one can not just call dial_failure, as it is not really a failure on
+                            // all DialPeerConditions.
                         }
                     }
                 }
