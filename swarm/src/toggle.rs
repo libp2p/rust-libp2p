@@ -164,6 +164,19 @@ where
         }
     }
 
+    fn inject_listen_failure(
+        &mut self,
+        local_addr: &Multiaddr,
+        send_back_addr: &Multiaddr,
+        handler: Self::ProtocolsHandler,
+    ) {
+        if let Some(inner) = self.inner.as_mut() {
+            if let Some(handler) = handler.inner {
+                inner.inject_listen_failure(local_addr, send_back_addr, handler)
+            }
+        }
+    }
+
     fn inject_new_listener(&mut self, id: ListenerId) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_new_listener(id)

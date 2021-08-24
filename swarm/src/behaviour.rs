@@ -166,6 +166,18 @@ pub trait NetworkBehaviour: Send + 'static {
     /// `inject_connected` has not been called, or `inject_disconnected` has been called since then.
     fn inject_dial_failure(&mut self, _peer_id: &PeerId, _handler: Self::ProtocolsHandler) {}
 
+    /// Indicates to the behaviour that an error happened on an incoming connection during its
+    /// initial handshake.
+    ///
+    /// This can include, for example, an error during the handshake of the encryption layer, or the
+    /// connection unexpectedly closed.
+    fn inject_listen_failure(
+        &mut self,
+        _local_addr: &Multiaddr,
+        _send_back_addr: &Multiaddr,
+        _handler: Self::ProtocolsHandler,
+    ) {}
+
     /// Indicates to the behaviour that a new listener was created.
     fn inject_new_listener(&mut self, _id: ListenerId) {}
 

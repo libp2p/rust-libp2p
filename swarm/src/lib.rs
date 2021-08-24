@@ -687,10 +687,14 @@ where
                     local_addr,
                     send_back_addr,
                     error,
-                    handler: _,
+                    handler,
                 }) => {
-                    // TODO: Should handler not be injected into behaviour?
                     log::debug!("Incoming connection failed: {:?}", error);
+                    this.behaviour.inject_listen_failure(
+                        &local_addr,
+                        &send_back_addr,
+                        handler.into_protocols_handler(),
+                    );
                     return Poll::Ready(SwarmEvent::IncomingConnectionError {
                         local_addr,
                         send_back_addr,

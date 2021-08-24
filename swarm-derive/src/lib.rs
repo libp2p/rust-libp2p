@@ -295,6 +295,36 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
     };
 
+    // Build the list of statements to put in the body of `inject_listen_failure()`.
+    let inject_listen_failure_stmts = {
+        data_struct
+            .fields
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|f| !is_ignored(&f.1))
+            .enumerate()
+            .map(move |(enum_n, (field_n, field))| {
+                let handler = if field_n == 0 {
+                    quote! { let handler = handlers }
+                } else {
+                    quote! {
+                        let (handlers, handler) = handlers.into_inner()
+                    }
+                };
+
+                let inject = match field.ident {
+                    Some(ref i) => quote! { self.#i.inject_listen_failure(local_addr, send_back_addr, handler) },
+                    None => quote! { self.#enum_n.inject_listen_failure(local_addr, send_back_addr, handler) },
+                };
+
+                quote! {
+                    #handler;
+                    #inject;
+                }
+            })
+    };
+
     // Build the list of statements to put in the body of `inject_new_listener()`.
     let inject_new_listener_stmts = {
         data_struct
@@ -647,6 +677,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler) {
                 #(#inject_dial_failure_stmts);*
+            }
+
+            fn inject_listen_failure(&mut self, local_addr: &#multiaddr, send_back_addr: &#multiaddr, handlers: Self::ProtocolsHandler) {
+                #(#inject_listen_failure_stmts);*
             }
 
             fn inject_new_listener(&mut self, id: #listener_id) {
