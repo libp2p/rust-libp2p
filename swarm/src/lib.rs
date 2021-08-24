@@ -703,23 +703,31 @@ where
                     error,
                     attempts_remaining,
                 }) => {
-                    log::debug!(
-                        "Connection attempt to {:?} via {:?} failed with {:?}. Attempts remaining: {}.",
-                        // TODO: Can we do better on conversion?
-                        peer_id, multiaddr, error, Into::<u32>::into(&attempts_remaining));
                     this.behaviour
                         .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
-                    let attempts_remaining_num = (&attempts_remaining).into();
-                    if let DialAttemptsRemaining::None(handler) = attempts_remaining {
-                        this.behaviour
-                            .inject_dial_failure(&peer_id, handler.into_protocol_handler());
+
+                    let num_remaining: u32;
+                    match attempts_remaining {
+                        DialAttemptsRemaining::Some(n) => {
+                            num_remaining = n.into();
+                        }
+                        DialAttemptsRemaining::None(handler) => {
+                            num_remaining = 0;
+                            this.behaviour
+                                .inject_dial_failure(&peer_id, handler.into_protocol_handler());
+                        }
                     }
+
+                    log::debug!(
+                        "Connection attempt to {:?} via {:?} failed with {:?}. Attempts remaining: {}.",
+                        peer_id, multiaddr, error, num_remaining,
+                    );
+
                     return Poll::Ready(SwarmEvent::UnreachableAddr {
                         peer_id,
                         address: multiaddr,
                         error,
-                        // TODO: Can we do better?
-                        attempts_remaining: attempts_remaining_num,
+                        attempts_remaining: num_remaining,
                     });
                 }
                 Poll::Ready(NetworkEvent::UnknownPeerDialError {

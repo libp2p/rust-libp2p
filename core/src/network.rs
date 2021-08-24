@@ -45,7 +45,7 @@ use std::{
     collections::hash_map,
     convert::TryFrom as _,
     error, fmt,
-    num::NonZeroUsize,
+    num::{NonZeroU32, NonZeroUsize},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -599,7 +599,7 @@ where
         let num_remain = u32::try_from(attempt.remaining.len()).unwrap();
         let failed_addr = attempt.current.1.clone();
 
-        let (opts, attempts_remaining) = if num_remain > 0 {
+        let (opts, attempts_remaining) = if let Some(num_remain) = NonZeroU32::new(num_remain) {
             let next_attempt = attempt.remaining.remove(0);
             let opts = DialingOpts {
                 peer: peer_id,
@@ -614,7 +614,6 @@ where
 
         (
             opts,
-            // TODO: This is the place to return the handler.
             NetworkEvent::DialError {
                 attempts_remaining,
                 peer_id,

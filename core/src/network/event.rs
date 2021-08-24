@@ -174,15 +174,14 @@ where
 }
 
 pub enum DialAttemptsRemaining<THandler> {
-    // TODO: Make this a NonZeroU32.
-    Some(u32),
+    Some(NonZeroU32),
     None(THandler),
 }
 
 impl<THandler> From<&DialAttemptsRemaining<THandler>> for u32 {
     fn from(attempts_remaining: &DialAttemptsRemaining<THandler>) -> Self {
         match attempts_remaining {
-            DialAttemptsRemaining::Some(attempts) => *attempts,
+            DialAttemptsRemaining::Some(attempts) => (*attempts).into(),
             DialAttemptsRemaining::None(_) => 0,
         }
     }
