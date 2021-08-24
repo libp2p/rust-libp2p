@@ -43,7 +43,8 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    DialError, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -1864,9 +1865,32 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler) {
-        for query in self.queries.iter_mut() {
-            query.on_failure(peer_id);
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: &PeerId,
+        _: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
+        match error {
+            DialError::Banned
+            | DialError::ConnectionLimit(_)
+            | DialError::InvalidAddress(_)
+            | DialError::UnreachableAddr(_)
+            | DialError::LocalPeerId
+            | DialError::NoAddresses => {
+                for query in self.queries.iter_mut() {
+                    query.on_failure(peer_id);
+                }
+            }
+            DialError::DialPeerConditionFalse(
+                DialPeerCondition::Disconnected | DialPeerCondition::NotDialing,
+            ) => {
+                // We might (still) be connected, or about to be connected, thus do not report the
+                // failure to the queries.
+            }
+            DialError::DialPeerConditionFalse(DialPeerCondition::Always) => {
+                unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
+            }
         }
     }
 

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    DialError,
     IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     ProtocolsHandler,
 };
@@ -234,9 +235,9 @@ where
         self.inner.inject_addr_reach_failure(p, a, e);
     }
 
-    fn inject_dial_failure(&mut self, p: &PeerId, handler: Self::ProtocolsHandler) {
+    fn inject_dial_failure(&mut self, p: &PeerId, handler: Self::ProtocolsHandler, error: DialError) {
         self.inject_dial_failure.push(p.clone());
-        self.inner.inject_dial_failure(p, handler);
+        self.inner.inject_dial_failure(p, handler, error);
     }
 
     fn inject_new_listener(&mut self, id: ListenerId) {

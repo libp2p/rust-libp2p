@@ -27,8 +27,8 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
-    AddressScore, DialPeerCondition, IntoProtocolsHandler, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
+    AddressScore, DialError, DialPeerCondition, IntoProtocolsHandler, NegotiatedSubstream,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
 };
 use std::{
@@ -223,7 +223,7 @@ impl NetworkBehaviour for Identify {
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler) {
+    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
         if !self.connected.contains_key(peer_id) {
             self.pending_push.remove(peer_id);
         }

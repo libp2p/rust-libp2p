@@ -29,7 +29,7 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId, ListenerId};
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::PeerId;
 use libp2p_swarm::{
-    DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
@@ -302,7 +302,20 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler) {
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: &PeerId,
+        _: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
+        if let DialError::DialPeerConditionFalse(
+            DialPeerCondition::Disconnected | DialPeerCondition::NotDialing,
+        ) = error
+        {
+            // Return early. The dial, that this dial was canceled for, might still succeed.
+            return;
+        }
+
         if let Entry::Occupied(o) = self.listeners.entry(*peer_id) {
             if matches!(o.get(), RelayListener::Connecting { .. }) {
                 // By removing the entry, the channel to the listener is dropped and thus the

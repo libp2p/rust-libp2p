@@ -45,7 +45,7 @@ use codec::{Codec, Message, ProtocolWrapper, Type};
 use futures::ready;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use lru::LruCache;
 use std::{cmp::max, num::NonZeroU16};
@@ -493,8 +493,13 @@ where
         self.behaviour.inject_disconnected(p)
     }
 
-    fn inject_dial_failure(&mut self, p: &PeerId, handler: Self::ProtocolsHandler) {
-        self.behaviour.inject_dial_failure(p, handler)
+    fn inject_dial_failure(
+        &mut self,
+        p: &PeerId,
+        handler: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
+        self.behaviour.inject_dial_failure(p, handler, error)
     }
 
     fn inject_event(

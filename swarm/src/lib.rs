@@ -361,8 +361,10 @@ where
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
-            self.behaviour.inject_dial_failure(peer_id, handler);
-            return Err(DialError::Banned);
+            let error = DialError::Banned;
+            self.behaviour
+                .inject_dial_failure(peer_id, handler, error.clone());
+            return Err(error);
         }
 
         let self_listening = &self.listened_addrs;
@@ -375,8 +377,10 @@ where
         let first = match addrs.next() {
             Some(first) => first,
             None => {
-                self.behaviour.inject_dial_failure(peer_id, handler);
-                return Err(DialError::NoAddresses);
+                let error = DialError::NoAddresses;
+                self.behaviour
+                    .inject_dial_failure(peer_id, handler, error.clone());
+                return Err(error);
             }
         };
 
@@ -387,8 +391,11 @@ where
             Ok(_connection_id) => Ok(()),
             Err(error) => {
                 let (error, handler) = DialError::from_network_dial_error(error);
-                self.behaviour
-                    .inject_dial_failure(&peer_id, handler.into_protocols_handler());
+                self.behaviour.inject_dial_failure(
+                    &peer_id,
+                    handler.into_protocols_handler(),
+                    error.clone(),
+                );
                 Err(error)
             }
         }
@@ -717,8 +724,11 @@ where
                         }
                         DialAttemptsRemaining::None(handler) => {
                             num_remaining = 0;
-                            this.behaviour
-                                .inject_dial_failure(&peer_id, handler.into_protocols_handler());
+                            this.behaviour.inject_dial_failure(
+                                &peer_id,
+                                handler.into_protocols_handler(),
+                                DialError::UnreachableAddr(multiaddr.clone()),
+                            );
                         }
                     }
 
@@ -806,43 +816,40 @@ where
                     condition,
                     handler,
                 }) => {
-                    if this.banned_peers.contains(&peer_id) {
-                        this.behaviour.inject_dial_failure(&peer_id, handler);
+                    let condition_matched = match condition {
+                        DialPeerCondition::Disconnected => this.network.is_disconnected(&peer_id),
+                        DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
+                        DialPeerCondition::Always => true,
+                    };
+                    if condition_matched {
+                        if Swarm::dial_with_handler(this, &peer_id, handler).is_ok() {
+                            return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                        }
                     } else {
-                        let condition_matched = match condition {
-                            DialPeerCondition::Disconnected => {
-                                this.network.is_disconnected(&peer_id)
-                            }
-                            DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
-                            DialPeerCondition::Always => true,
-                        };
-                        if condition_matched {
-                            if Swarm::dial_with_handler(this, &peer_id, handler).is_ok() {
-                                return Poll::Ready(SwarmEvent::Dialing(peer_id));
-                            }
-                        } else {
-                            // Even if the condition for a _new_ dialing attempt is not met,
-                            // we always add any potentially new addresses of the peer to an
-                            // ongoing dialing attempt, if there is one.
-                            log::trace!(
-                                "Condition for new dialing attempt to {:?} not met: {:?}",
-                                peer_id,
-                                condition
-                            );
-                            let self_listening = &this.listened_addrs;
-                            if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
-                                let addrs = this.behaviour.addresses_of_peer(peer.id());
-                                let mut attempt = peer.some_attempt();
-                                for a in addrs {
-                                    if !self_listening.contains(&a) {
-                                        attempt.add_address(a);
-                                    }
+                        // Even if the condition for a _new_ dialing attempt is not met,
+                        // we always add any potentially new addresses of the peer to an
+                        // ongoing dialing attempt, if there is one.
+                        log::trace!(
+                            "Condition for new dialing attempt to {:?} not met: {:?}",
+                            peer_id,
+                            condition
+                        );
+                        let self_listening = &this.listened_addrs;
+                        if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
+                            let addrs = this.behaviour.addresses_of_peer(peer.id());
+                            let mut attempt = peer.some_attempt();
+                            for a in addrs {
+                                if !self_listening.contains(&a) {
+                                    attempt.add_address(a);
                                 }
                             }
-                            // TODO: Return the handler to the behaviour. Though keep in mind that
-                            // one can not just call dial_failure, as it is not really a failure on
-                            // all DialPeerConditions.
                         }
+
+                        this.behaviour.inject_dial_failure(
+                            &peer_id,
+                            handler,
+                            DialError::DialPeerConditionFalse(condition),
+                        );
                     }
                 }
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler {
@@ -1192,7 +1199,7 @@ where
     }
 }
 
-/// The possible failures of [`Swarm::dial`].
+/// The possible failures of dialing.
 #[derive(Debug, Clone)]
 pub enum DialError {
     /// The peer is currently banned.
@@ -1202,10 +1209,15 @@ pub enum DialError {
     ConnectionLimit(ConnectionLimit),
     /// The address given for dialing is invalid.
     InvalidAddress(Multiaddr),
+    // TODO: Document
+    UnreachableAddr(Multiaddr),
+    // TODO: Document
     LocalPeerId,
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
+    // TODO: Document
+    DialPeerConditionFalse(DialPeerCondition),
 }
 
 impl DialError {
@@ -1229,7 +1241,11 @@ impl fmt::Display for DialError {
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
             DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
+            DialError::UnreachableAddr(a) => write!(f, "Dial error: unreachable address: {}", a),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
+            DialError::DialPeerConditionFalse(c) => {
+                write!(f, "Dial error: condition {:?} for dialing peer was false.", c)
+            }
         }
     }
 }
@@ -1239,9 +1255,11 @@ impl error::Error for DialError {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
             DialError::InvalidAddress(_) => None,
+            DialError::UnreachableAddr(_) => None,
             DialError::LocalPeerId => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
+            DialError::DialPeerConditionFalse(_) => None,
         }
     }
 }

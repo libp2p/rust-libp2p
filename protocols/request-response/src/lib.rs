@@ -68,7 +68,7 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
@@ -686,7 +686,7 @@ where
         self.connected.remove(peer);
     }
 
-    fn inject_dial_failure(&mut self, peer: &PeerId, _: Self::ProtocolsHandler) {
+    fn inject_dial_failure(&mut self, peer: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
         // If there are pending outgoing requests when a dial failure occurs,
         // it is implied that we are not connected to the peer, since pending
         // outgoing requests are drained when a connection is established and

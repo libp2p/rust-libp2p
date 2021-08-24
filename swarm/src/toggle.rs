@@ -24,7 +24,8 @@ use crate::protocols_handler::{
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{
-    NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters,
+    DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
+    PollParameters,
 };
 use either::Either;
 use libp2p_core::{
@@ -156,10 +157,15 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, handler: Self::ProtocolsHandler) {
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: &PeerId,
+        handler: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
         if let Some(inner) = self.inner.as_mut() {
             if let Some(handler) = handler.inner {
-                inner.inject_dial_failure(peer_id, handler)
+                inner.inject_dial_failure(peer_id, handler, error)
             }
         }
     }

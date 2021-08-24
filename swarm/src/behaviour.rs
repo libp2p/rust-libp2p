@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
-use crate::{AddressRecord, AddressScore};
+use crate::{AddressRecord, AddressScore, DialError};
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Multiaddr, PeerId,
@@ -164,7 +164,13 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// The `peer_id` is guaranteed to be in a disconnected state. In other words,
     /// `inject_connected` has not been called, or `inject_disconnected` has been called since then.
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId, _handler: Self::ProtocolsHandler) {}
+    fn inject_dial_failure(
+        &mut self,
+        _peer_id: &PeerId,
+        _handler: Self::ProtocolsHandler,
+        _error: DialError,
+    ) {
+    }
 
     /// Indicates to the behaviour that an error happened on an incoming connection during its
     /// initial handshake.
@@ -176,7 +182,8 @@ pub trait NetworkBehaviour: Send + 'static {
         _local_addr: &Multiaddr,
         _send_back_addr: &Multiaddr,
         _handler: Self::ProtocolsHandler,
-    ) {}
+    ) {
+    }
 
     /// Indicates to the behaviour that a new listener was created.
     fn inject_new_listener(&mut self, _id: ListenerId) {}
@@ -501,7 +508,6 @@ pub enum NotifyHandler {
 /// The available conditions under which a new dialing attempt to
 /// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].
 #[derive(Debug, Copy, Clone)]
-#[non_exhaustive]
 pub enum DialPeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
     /// considered disconnected, i.e. there is no established connection

@@ -57,6 +57,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let connection_id = quote! {::libp2p::core::connection::ConnectionId};
     let connected_point = quote! {::libp2p::core::ConnectedPoint};
     let listener_id = quote! {::libp2p::core::connection::ListenerId};
+    let dial_error = quote! {::libp2p::swarm::DialError};
 
     let poll_parameters = quote! {::libp2p::swarm::PollParameters};
 
@@ -284,8 +285,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 };
 
                 let inject = match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_dial_failure(peer_id, handler) },
-                    None => quote! { self.#enum_n.inject_dial_failure(peer_id, handler) },
+                    Some(ref i) => quote! { self.#i.inject_dial_failure(peer_id, handler, error.clone()) },
+                    None => quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error.clone()) },
                 };
 
                 quote! {
@@ -675,7 +676,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_addr_reach_failure_stmts);*
             }
 
-            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler) {
+            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler, error: #dial_error) {
                 #(#inject_dial_failure_stmts);*
             }
 

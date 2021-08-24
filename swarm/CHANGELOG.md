@@ -19,6 +19,8 @@
 - Implement `ProtocolsHandler` on `either::Either`representing either of two
   `ProtocolsHandler` implementations (see [PR 2192]).
 
+TODO: Mention `inject_dial_failure` now called on DialPeerCondition not met.
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
