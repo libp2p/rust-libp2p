@@ -79,7 +79,7 @@ pub trait NetworkBehaviour: Send + 'static {
     /// (ie. the objects returned by `new_handler`) can communicate by passing messages. Messages
     /// sent from the handler to the behaviour are injected with [`NetworkBehaviour::inject_event`],
     /// and the behaviour can send a message to the handler by making [`NetworkBehaviour::poll`]
-    /// return [`NetworkBehaviourAction::SendEvent`].
+    /// return [`NetworkBehaviourAction::NotifyHandler`].
     ///
     /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
     /// connection closing.
