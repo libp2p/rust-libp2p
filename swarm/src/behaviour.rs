@@ -468,7 +468,7 @@ where
     THandlerOld: IntoProtocolsHandler,
     <THandlerOld as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent>,
 {
-    /// Map the handler event.
+    /// Map the handler.
     pub fn map_handler<THandlerNew>(
         self,
         f: impl FnOnce(THandlerOld) -> THandlerNew,

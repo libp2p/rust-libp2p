@@ -20,12 +20,15 @@
 - Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
   (see [PR 2183]).
 
+- Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
+
 - Report `ConnectionLimit` error through `ConnectionError` and thus through
   `NetworkEvent::ConnectionClosed` instead of previously through
   `PendingConnectionError` and thus `NetworkEvent::{IncomingConnectionError,
   DialError}` (see [PR 2191]).
 
-- Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
+- Report abortion of pending connection through `DialError`,
+  `UnknownPeerDialError` or `IncomingConnectionError` (see [PR 2191]).
 
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
