@@ -1244,7 +1244,11 @@ impl fmt::Display for DialError {
             DialError::UnreachableAddr(a) => write!(f, "Dial error: unreachable address: {}", a),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
-                write!(f, "Dial error: condition {:?} for dialing peer was false.", c)
+                write!(
+                    f,
+                    "Dial error: condition {:?} for dialing peer was false.",
+                    c
+                )
             }
         }
     }

@@ -19,8 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    DialError,
-    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     ProtocolsHandler,
 };
 use libp2p_core::{
@@ -235,7 +234,12 @@ where
         self.inner.inject_addr_reach_failure(p, a, e);
     }
 
-    fn inject_dial_failure(&mut self, p: &PeerId, handler: Self::ProtocolsHandler, error: DialError) {
+    fn inject_dial_failure(
+        &mut self,
+        p: &PeerId,
+        handler: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
         self.inject_dial_failure.push(p.clone());
         self.inner.inject_dial_failure(p, handler, error);
     }

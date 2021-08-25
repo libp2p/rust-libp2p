@@ -767,9 +767,7 @@ pub enum DialError<THandler> {
         handler: THandler,
     },
     /// The dialing attempt is rejected because the peer being dialed is the local peer.
-    LocalPeerId {
-        handler: THandler,
-    },
+    LocalPeerId { handler: THandler },
 }
 
 impl<THandler> fmt::Debug for DialError<THandler> {
