@@ -36,11 +36,48 @@
 
 ## Utilities
 
+- [`libp2p-metrics` CHANGELOG](misc/metrics/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 
 # `libp2p` facade crate
 
-## Version 0.39.0 [unreleased]
+## Version 0.40.0 [unreleased]
+
+- Update individual crates.
+    - `libp2p-core`
+    - `libp2p-deflate`
+    - `libp2p-dns`
+    - `libp2p-floodsub`
+    - `libp2p-gossipsub`
+    - `libp2p-identify`
+    - `libp2p-kad`
+    - `libp2p-mdns`
+    - `libp2p-mplex`
+    - `libp2p-noise`
+    - `libp2p-ping`
+    - `libp2p-plaintext`
+    - `libp2p-relay`
+    - `libp2p-request-response`
+    - `libp2p-swarm`
+    - `libp2p-tcp`
+    - `libp2p-uds`
+    - `libp2p-wasm-ext`
+    - `libp2p-websocket`
+    - `libp2p-yamux`
+
+- Re-export the `wasm-bindgen` feature from `parking_lot`, so
+  `libp2p` users can opt-in to that crate's Wasm support. See [PR 2180].
+
+- Add `libp2p-metrics`.
+
+[PR 2180]: https://github.com/libp2p/rust-libp2p/pull/2180/
+
+## Version 0.39.1 [2021-07-12]
+
+- Update individual crates.
+    - `libp2p-swarm-derive`
+
+## Version 0.39.0 [2021-07-12]
 
 - Update individual crates.
     - `libp2p-core`

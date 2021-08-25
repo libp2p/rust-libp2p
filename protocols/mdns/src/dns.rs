@@ -371,8 +371,7 @@ fn append_txt_record(
     if value.len() > MAX_TXT_VALUE_LENGTH {
         return Err(MdnsResponseError::TxtRecordTooLong);
     }
-    let mut buffer = Vec::new();
-    buffer.push(value.len() as u8);
+    let mut buffer = vec![value.len() as u8];
     append_character_string(&mut buffer, value)?;
 
     append_u16(out, buffer.len() as u16);
@@ -418,9 +417,7 @@ mod tests {
 
     #[test]
     fn build_query_response_correct() {
-        let my_peer_id = identity::Keypair::generate_ed25519()
-            .public()
-            .into_peer_id();
+        let my_peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
         let packets = build_query_response(

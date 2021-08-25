@@ -143,6 +143,7 @@ pub enum RegisterError {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// We successfully discovered other nodes with using the contained rendezvous node.
     Discovered {

@@ -1,4 +1,30 @@
-# 0.30.0 [unreleased]
+# 0.31.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Provide default implementations for all functions of `NetworkBehaviour`,
+  except for `new_handler`, `inject_event` and `poll`.
+  This should make it easier to create new implementations. See [PR 2150].
+
+- Remove `Swarm` type alias and rename `ExpandedSwarm` to `Swarm`. Reduce direct
+  trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
+  through associated types on `TBehaviour`. See [PR 2182].
+
+- Require `ProtocolsHandler::{InEvent,OutEvent,Error}` to implement `Debug` (see
+  [PR 2183]).
+
+- Implement `ProtocolsHandler` on `either::Either`representing either of two
+  `ProtocolsHandler` implementations (see [PR 2192]).
+
+[PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
+[PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
+
+# 0.30.0 [2021-07-12]
 
 - Update dependencies.
 
@@ -15,7 +41,17 @@
 
   See [PR 2100] for details.
 
+- Add `ExpandedSwarm::disconnect_peer_id` and
+  `NetworkBehaviourAction::CloseConnection` to close connections to a specific
+  peer via an `ExpandedSwarm` or `NetworkBehaviour`. See [PR 2110] for details.
+
+- Expose the `ListenerId` in `SwarmEvent`s that are associated with a listener.
+
+  See [PR 2123] for details.
+
 [PR 2100]: https://github.com/libp2p/rust-libp2p/pull/2100
+[PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
+[PR 2123]: https://github.com/libp2p/rust-libp2p/pull/2123
 
 # 0.29.0 [2021-04-13]
 

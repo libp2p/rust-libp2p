@@ -200,6 +200,7 @@ where
 }
 
 /// Event sent from the [`libp2p_swarm::NetworkBehaviour`] to the [`SubstreamProtocolsHandler`].
+#[derive(Debug)]
 pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     /// Open a new substream using the provided `open_info`.
     ///
@@ -216,6 +217,7 @@ pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
 }
 
 /// Event produced by the [`SubstreamProtocolsHandler`] for the corresponding [`libp2p_swarm::NetworkBehaviour`].
+#[derive(Debug)]
 pub enum OutEvent<TInbound, TOutbound, TInboundError, TOutboundError> {
     /// An inbound substream produced an event.
     InboundEvent {
@@ -268,13 +270,13 @@ where
         Error = TOutboundError,
         OpenInfo = TOutboundOpenInfo,
     >,
-    TInboundInEvent: Send + 'static,
-    TInboundOutEvent: Send + 'static,
-    TOutboundInEvent: Send + 'static,
-    TOutboundOutEvent: Send + 'static,
-    TOutboundOpenInfo: Send + 'static,
-    TInboundError: Send + 'static,
-    TOutboundError: Send + 'static,
+    TInboundInEvent: fmt::Debug + Send + 'static,
+    TInboundOutEvent: fmt::Debug + Send + 'static,
+    TOutboundInEvent: fmt::Debug + Send + 'static,
+    TOutboundOutEvent: fmt::Debug + Send + 'static,
+    TOutboundOpenInfo: fmt::Debug + Send + 'static,
+    TInboundError: fmt::Debug + Send + 'static,
+    TOutboundError: fmt::Debug + Send + 'static,
     TInboundSubstreamHandler: Send + 'static,
     TOutboundSubstreamHandler: Send + 'static,
 {

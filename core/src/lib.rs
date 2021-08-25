@@ -59,23 +59,23 @@ pub mod either;
 pub mod identity;
 pub mod muxing;
 pub mod network;
+pub mod peer_record;
+pub mod signed_envelope;
 pub mod transport;
 pub mod upgrade;
-pub mod signed_envelope;
-pub mod peer_record;
 
+pub use connection::{Connected, ConnectedPoint, Endpoint};
+pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;
-pub use peer_id::PeerId;
-pub use identity::PublicKey;
-pub use transport::Transport;
-pub use translation::address_translation;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
-pub use connection::{Connected, Endpoint, ConnectedPoint};
 pub use network::Network;
-pub use signed_envelope::SignedEnvelope;
+pub use peer_id::PeerId;
 pub use peer_record::PeerRecord;
+pub use signed_envelope::SignedEnvelope;
+pub use translation::address_translation;
+pub use transport::Transport;
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
 use std::{future::Future, pin::Pin};
 

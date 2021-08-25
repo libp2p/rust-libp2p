@@ -72,7 +72,7 @@ impl SignedEnvelope {
         use prost::Message;
 
         let envelope = crate::envelope_proto::Envelope {
-            public_key: Some(self.key.into()),
+            public_key: Some((&self.key).into()),
             payload_type: self.payload_type,
             payload: self.payload,
             signature: self.signature,
@@ -93,7 +93,10 @@ impl SignedEnvelope {
         let envelope = crate::envelope_proto::Envelope::decode(bytes)?;
 
         Ok(Self {
-            key: envelope.public_key.ok_or(DecodingError::MissingPublicKey)?.try_into()?,
+            key: envelope
+                .public_key
+                .ok_or(DecodingError::MissingPublicKey)?
+                .try_into()?,
             payload_type: envelope.payload_type,
             payload: envelope.payload,
             signature: envelope.signature,
@@ -160,7 +163,7 @@ impl fmt::Display for DecodingError {
         match self {
             Self::InvalidEnvelope(_) => write!(f, "Failed to decode envelope"),
             Self::InvalidPublicKey(_) => write!(f, "Failed to convert public key"),
-            Self::MissingPublicKey => write!(f, "Public key is missing from protobuf struct")
+            Self::MissingPublicKey => write!(f, "Public key is missing from protobuf struct"),
         }
     }
 }
@@ -170,7 +173,7 @@ impl std::error::Error for DecodingError {
         match self {
             Self::InvalidEnvelope(inner) => Some(inner),
             Self::InvalidPublicKey(inner) => Some(inner),
-            Self::MissingPublicKey => None
+            Self::MissingPublicKey => None,
         }
     }
 }

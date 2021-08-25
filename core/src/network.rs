@@ -27,6 +27,7 @@ pub use peer::Peer;
 
 use crate::{
     connection::{
+        handler::{THandlerInEvent, THandlerOutEvent},
         manager::ManagerConfig,
         pool::{Pool, PoolEvent},
         ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo, IntoConnectionHandler,
@@ -50,7 +51,7 @@ use std::{
 };
 
 /// Implementation of `Stream` that handles the nodes.
-pub struct Network<TTrans, TInEvent, TOutEvent, THandler>
+pub struct Network<TTrans, THandler>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
@@ -62,13 +63,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    pool: Pool<
-        TInEvent,
-        TOutEvent,
-        THandler,
-        TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error,
-    >,
+    pool: Pool<THandler, TTrans::Error>,
 
     /// The ongoing dialing attempts.
     ///
@@ -85,8 +80,7 @@ where
     dialing: FnvHashMap<PeerId, SmallVec<[peer::DialingState; 10]>>,
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug
-    for Network<TTrans, TInEvent, TOutEvent, THandler>
+impl<TTrans, THandler> fmt::Debug for Network<TTrans, THandler>
 where
     TTrans: fmt::Debug + Transport,
     THandler: fmt::Debug + ConnectionHandler,
@@ -101,14 +95,14 @@ where
     }
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler> Unpin for Network<TTrans, TInEvent, TOutEvent, THandler>
+impl<TTrans, THandler> Unpin for Network<TTrans, THandler>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
 {
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler> Network<TTrans, TInEvent, TOutEvent, THandler>
+impl<TTrans, THandler> Network<TTrans, THandler>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
@@ -119,15 +113,14 @@ where
     }
 }
 
-impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler> Network<TTrans, TInEvent, TOutEvent, THandler>
+impl<TTrans, TMuxer, THandler> Network<TTrans, THandler>
 where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
     THandler: IntoConnectionHandler + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>
-        + Send,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
 {
     /// Creates a new node events stream.
     pub fn new(transport: TTrans, local_peer_id: PeerId, config: NetworkConfig) -> Self {
@@ -216,8 +209,6 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
     {
         // If the address ultimately encapsulates an expected peer ID, dial that peer
         // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
@@ -312,7 +303,7 @@ where
     }
 
     /// Obtains a view of a [`Peer`] with the given ID in the network.
-    pub fn peer(&mut self, peer_id: PeerId) -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler> {
+    pub fn peer(&mut self, peer_id: PeerId) -> Peer<'_, TTrans, THandler> {
         Peer::new(self, peer_id)
     }
 
@@ -327,8 +318,6 @@ where
         handler: THandler,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TTrans: Transport<Output = (PeerId, TMuxer)>,
@@ -349,7 +338,9 @@ where
     pub fn poll<'a>(
         &'a mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler>>
+    ) -> Poll<
+        NetworkEvent<'a, TTrans, THandlerInEvent<THandler>, THandlerOutEvent<THandler>, THandler>,
+    >
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -357,15 +348,7 @@ where
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
         THandler: IntoConnectionHandler + Send + 'static,
-        THandler::Handler: ConnectionHandler<
-                Substream = Substream<TMuxer>,
-                InEvent = TInEvent,
-                OutEvent = TOutEvent,
-            > + Send
-            + 'static,
         <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     {
         // Poll the listener(s) for new connections.
@@ -494,8 +477,6 @@ where
         TTrans::Error: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
     {
         dial_peer_impl(
             self.transport().clone(),
@@ -516,15 +497,9 @@ struct DialingOpts<PeerId, THandler> {
 }
 
 /// Standalone implementation of `Network::dial_peer` for more granular borrowing.
-fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TTrans>(
+fn dial_peer_impl<TMuxer, THandler, TTrans>(
     transport: TTrans,
-    pool: &mut Pool<
-        TInEvent,
-        TOutEvent,
-        THandler,
-        TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error,
-    >,
+    pool: &mut Pool<THandler, TTrans::Error>,
     dialing: &mut FnvHashMap<PeerId, SmallVec<[peer::DialingState; 10]>>,
     opts: DialingOpts<PeerId, THandler>,
 ) -> Result<ConnectionId, DialError>
@@ -532,16 +507,12 @@ where
     THandler: IntoConnectionHandler + Send + 'static,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>
-        + Send
-        + 'static,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TTrans::Dial: Send + 'static,
     TTrans::Error: error::Error + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send + 'static,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
 {
     // Ensure the address to dial encapsulates the `p2p` protocol for the
     // targeted peer, so that the transport has a "fully qualified" address
@@ -587,7 +558,7 @@ where
 ///
 /// If the failed connection attempt was a dialing attempt and there
 /// are more addresses to try, new `DialingOpts` are returned.
-fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler>(
+fn on_connection_failed<'a, TTrans, THandler>(
     dialing: &mut FnvHashMap<PeerId, SmallVec<[peer::DialingState; 10]>>,
     id: ConnectionId,
     endpoint: ConnectedPoint,
@@ -595,7 +566,7 @@ fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler>(
     handler: Option<THandler>,
 ) -> (
     Option<DialingOpts<PeerId, THandler>>,
-    NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler>,
+    NetworkEvent<'a, TTrans, THandlerInEvent<THandler>, THandlerOutEvent<THandler>, THandler>,
 )
 where
     TTrans: Transport,

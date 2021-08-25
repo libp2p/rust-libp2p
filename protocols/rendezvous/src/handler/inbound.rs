@@ -30,6 +30,7 @@ use std::fmt;
 use std::task::{Context, Poll};
 
 /// The state of an inbound substream (i.e. the remote node opened it).
+#[allow(clippy::large_enum_variant)]
 pub enum Stream {
     /// We are in the process of reading a message from the substream.
     PendingRead(Framed<NegotiatedSubstream, RendezvousCodec>),

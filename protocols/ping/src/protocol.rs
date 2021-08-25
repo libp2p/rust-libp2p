@@ -82,7 +82,7 @@ impl OutboundUpgrade<NegotiatedSubstream> for Ping {
 /// Sends a ping and waits for the pong.
 pub async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
 where
-    S: AsyncRead + AsyncWrite + Unpin
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let payload: [u8; PING_SIZE] = thread_rng().sample(distributions::Standard);
     log::debug!("Preparing ping payload {:?}", payload);
@@ -95,14 +95,17 @@ where
     if recv_payload == payload {
         Ok((stream, started.elapsed()))
     } else {
-        Err(io::Error::new(io::ErrorKind::InvalidData, "Ping payload mismatch"))
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Ping payload mismatch",
+        ))
     }
 }
 
 /// Waits for a ping and sends a pong.
 pub async fn recv_ping<S>(mut stream: S) -> io::Result<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut payload = [0u8; PING_SIZE];
     log::debug!("Waiting for ping ...");
@@ -118,11 +121,7 @@ mod tests {
     use super::*;
     use libp2p_core::{
         multiaddr::multiaddr,
-        transport::{
-            Transport,
-            ListenerEvent,
-            memory::MemoryTransport
-        }
+        transport::{memory::MemoryTransport, ListenerEvent, Transport},
     };
     use rand::{thread_rng, Rng};
     use std::time::Duration;

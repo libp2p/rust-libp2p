@@ -47,16 +47,14 @@ impl error::Error for PlainTextError {
 impl fmt::Display for PlainTextError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PlainTextError::IoError(e) =>
-                write!(f, "I/O error: {}", e),
-            PlainTextError::InvalidPayload(protobuf_error) => {
-                match protobuf_error {
-                    Some(e) => write!(f, "Protobuf error: {}", e),
-                    None => f.write_str("Failed to parse one of the handshake protobuf messages")
-                }
+            PlainTextError::IoError(e) => write!(f, "I/O error: {}", e),
+            PlainTextError::InvalidPayload(protobuf_error) => match protobuf_error {
+                Some(e) => write!(f, "Protobuf error: {}", e),
+                None => f.write_str("Failed to parse one of the handshake protobuf messages"),
             },
-            PlainTextError::InvalidPeerId =>
-                f.write_str("The peer id of the exchange isn't consistent with the remote public key"),
+            PlainTextError::InvalidPeerId => f.write_str(
+                "The peer id of the exchange isn't consistent with the remote public key",
+            ),
         }
     }
 }

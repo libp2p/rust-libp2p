@@ -1,0 +1,63 @@
+# Run `docker-compose up` to start the setup.
+
+version: '2.1'
+services:
+  relay: 
+    image: libp2p-relay
+    command:
+      - "./relay"
+      - "--mode=relay"
+      - "--secret-key-seed=1"
+      - "--address=/ip6/::/tcp/4444"
+    build:
+      context: ../../../.
+      dockerfile: ./protocols/relay/examples/Dockerfile
+    networks:
+      - network-a
+      - network-b
+
+  client-listen: 
+    image: libp2p-relay
+    command:
+      - "./relay"
+      - "--mode=client-listen"
+      - "--secret-key-seed=2"
+      - "--address=/dns6/relay/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit"
+    build:
+      context: ../../../.
+      dockerfile: ./protocols/relay/examples/Dockerfile
+    depends_on:
+        - "relay"
+    networks:
+      - network-a
+
+  client-dial: 
+    image: libp2p-relay
+    command:
+      - "./relay"
+      - "--mode=client-dial"
+      - "--secret-key-seed=3"
+      - "--address=/dns6/relay/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3"
+    build:
+      context: ../../../.
+      dockerfile: ./protocols/relay/examples/Dockerfile
+    depends_on:
+      - "client-listen"
+    networks:
+      - network-b
+      
+networks:
+  network-a:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 2001:3984:3989::/64
+  network-b:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 2001:3984:3988::/64

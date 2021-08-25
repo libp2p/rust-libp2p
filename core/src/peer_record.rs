@@ -61,7 +61,7 @@ impl PeerRecord {
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("now() is never before UNIX_EPOCH")
             .as_secs();
-        let peer_id = key.public().into_peer_id();
+        let peer_id = key.public().to_peer_id();
 
         let payload = {
             let record = peer_record_proto::PeerRecord {

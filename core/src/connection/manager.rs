@@ -18,33 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    Executor,
-    muxing::StreamMuxer,
+use super::{
+    handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
+    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, IntoConnectionHandler,
+    PendingConnectionError, Substream,
 };
+use crate::{muxing::StreamMuxer, Executor};
 use fnv::FnvHashMap;
-use futures::{
-    prelude::*,
-    channel::mpsc,
-    stream::FuturesUnordered
-};
+use futures::{channel::mpsc, prelude::*, stream::FuturesUnordered};
 use std::{
     collections::hash_map,
-    error,
-    fmt,
-    mem,
+    error, fmt, mem,
     pin::Pin,
     task::{Context, Poll},
-};
-use super::{
-    Connected,
-    ConnectedPoint,
-    Connection,
-    ConnectionError,
-    ConnectionHandler,
-    IntoConnectionHandler,
-    PendingConnectionError,
-    Substream
 };
 use task::{Task, TaskId};
 
@@ -88,7 +74,7 @@ impl ConnectionId {
 }
 
 /// A connection `Manager` orchestrates the I/O of a set of connections.
-pub struct Manager<I, O, H, E, HE> {
+pub struct Manager<H: IntoConnectionHandler, E> {
     /// The tasks of the managed connections.
     ///
     /// Each managed connection is associated with a (background) task
@@ -96,7 +82,7 @@ pub struct Manager<I, O, H, E, HE> {
     /// background task via a channel. Closing that channel (i.e. dropping
     /// the sender in the associated `TaskInfo`) stops the background task,
     /// which will attempt to gracefully close the connection.
-    tasks: FnvHashMap<TaskId, TaskInfo<I>>,
+    tasks: FnvHashMap<TaskId, TaskInfo<THandlerInEvent<H>>>,
 
     /// Next available identifier for a new connection / task.
     next_task_id: TaskId,
@@ -115,14 +101,13 @@ pub struct Manager<I, O, H, E, HE> {
 
     /// Sender distributed to managed tasks for reporting events back
     /// to the manager.
-    events_tx: mpsc::Sender<task::Event<O, H, E, HE>>,
+    events_tx: mpsc::Sender<task::Event<H, E>>,
 
     /// Receiver for events reported from managed tasks.
-    events_rx: mpsc::Receiver<task::Event<O, H, E, HE>>
+    events_rx: mpsc::Receiver<task::Event<H, E>>,
 }
 
-impl<I, O, H, E, HE> fmt::Debug for Manager<I, O, H, E, HE>
-{
+impl<H: IntoConnectionHandler, E> fmt::Debug for Manager<H, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.tasks.iter().map(|(id, task)| (id, &task.state)))
@@ -179,7 +164,7 @@ enum TaskState {
 
 /// Events produced by the [`Manager`].
 #[derive(Debug)]
-pub enum Event<'a, I, O, H, TE, HE> {
+pub enum Event<'a, H: IntoConnectionHandler, TE> {
     /// A connection attempt has failed.
     PendingConnectionError {
         /// The connection ID.
@@ -191,7 +176,7 @@ pub enum Event<'a, I, O, H, TE, HE> {
         /// What happened.
         error: PendingConnectionError<TE>,
         /// The handler that was supposed to handle the failed connection.
-        handler: H
+        handler: H,
     },
 
     /// An established connection has been closed.
@@ -206,27 +191,27 @@ pub enum Event<'a, I, O, H, TE, HE> {
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// has been actively closed.
-        error: Option<ConnectionError<HE>>,
+        error: Option<ConnectionError<THandlerError<H>>>,
     },
 
     /// A connection has been established.
     ConnectionEstablished {
         /// The entry associated with the new connection.
-        entry: EstablishedEntry<'a, I>,
+        entry: EstablishedEntry<'a, THandlerInEvent<H>>,
     },
 
     /// A connection handler has produced an event.
     ConnectionEvent {
         /// The entry associated with the connection that produced the event.
-        entry: EstablishedEntry<'a, I>,
+        entry: EstablishedEntry<'a, THandlerInEvent<H>>,
         /// The produced event.
-        event: O
+        event: THandlerOutEvent<H>,
     },
 
     /// A connection to a node has changed its address.
     AddressChange {
         /// The entry associated with the connection that changed address.
-        entry: EstablishedEntry<'a, I>,
+        entry: EstablishedEntry<'a, THandlerInEvent<H>>,
         /// The former [`ConnectedPoint`].
         old_endpoint: ConnectedPoint,
         /// The new [`ConnectedPoint`].
@@ -234,7 +219,7 @@ pub enum Event<'a, I, O, H, TE, HE> {
     },
 }
 
-impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
+impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
     /// Creates a new connection manager.
     pub fn new(config: ManagerConfig) -> Self {
         let (tx, rx) = mpsc::channel(config.task_event_buffer_size);
@@ -245,7 +230,7 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             events_tx: tx,
-            events_rx: rx
+            events_rx: rx,
         }
     }
 
@@ -255,67 +240,33 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
     /// processing the node's events.
     pub fn add_pending<F, M>(&mut self, future: F, handler: H) -> ConnectionId
     where
-        I: Send + 'static,
-        O: Send + 'static,
         TE: error::Error + Send + 'static,
-        HE: error::Error + Send + 'static,
         M: StreamMuxer + Send + Sync + 'static,
         M::OutboundSubstream: Send + 'static,
         F: Future<Output = ConnectResult<M, TE>> + Send + 'static,
         H: IntoConnectionHandler + Send + 'static,
-        H::Handler: ConnectionHandler<
-            Substream = Substream<M>,
-            InEvent = I,
-            OutEvent = O,
-            Error = HE
-        > + Send + 'static,
+        H::Handler: ConnectionHandler<Substream = Substream<M>> + Send + 'static,
         <H::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
     {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
         let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
-        self.tasks.insert(task_id, TaskInfo { sender: tx, state: TaskState::Pending });
+        self.tasks.insert(
+            task_id,
+            TaskInfo {
+                sender: tx,
+                state: TaskState::Pending,
+            },
+        );
 
-        let task = Box::pin(Task::pending(task_id, self.events_tx.clone(), rx, future, handler));
-        if let Some(executor) = &mut self.executor {
-            executor.exec(task);
-        } else {
-            self.local_spawns.push(task);
-        }
-
-        ConnectionId(task_id)
-    }
-
-    /// Adds an existing connection to the manager.
-    pub fn add<M>(&mut self, conn: Connection<M, H::Handler>, info: Connected) -> ConnectionId
-    where
-        H: IntoConnectionHandler + Send + 'static,
-        H::Handler: ConnectionHandler<
-            Substream = Substream<M>,
-            InEvent = I,
-            OutEvent = O,
-            Error = HE
-        > + Send + 'static,
-        <H::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TE: error::Error + Send + 'static,
-        HE: error::Error + Send + 'static,
-        I: Send + 'static,
-        O: Send + 'static,
-        M: StreamMuxer + Send + Sync + 'static,
-        M::OutboundSubstream: Send + 'static,
-    {
-        let task_id = self.next_task_id;
-        self.next_task_id.0 += 1;
-
-        let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
-        self.tasks.insert(task_id, TaskInfo {
-            sender: tx, state: TaskState::Established(info)
-        });
-
-        let task: Pin<Box<Task<Pin<Box<future::Pending<_>>>, _, _, _, _, _>>> =
-            Box::pin(Task::established(task_id, self.events_tx.clone(), rx, conn));
-
+        let task = Box::pin(Task::pending(
+            task_id,
+            self.events_tx.clone(),
+            rx,
+            future,
+            handler,
+        ));
         if let Some(executor) = &mut self.executor {
             executor.exec(task);
         } else {
@@ -326,7 +277,7 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
     }
 
     /// Gets an entry for a managed connection, if it exists.
-    pub fn entry(&mut self, id: ConnectionId) -> Option<Entry<'_, I>> {
+    pub fn entry(&mut self, id: ConnectionId) -> Option<Entry<'_, THandlerInEvent<H>>> {
         if let hash_map::Entry::Occupied(task) = self.tasks.entry(id.0) {
             Some(Entry::new(task))
         } else {
@@ -336,11 +287,17 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
 
     /// Checks whether an established connection with the given ID is currently managed.
     pub fn is_established(&self, id: &ConnectionId) -> bool {
-        matches!(self.tasks.get(&id.0), Some(TaskInfo { state: TaskState::Established(..), .. }))
+        matches!(
+            self.tasks.get(&id.0),
+            Some(TaskInfo {
+                state: TaskState::Established(..),
+                ..
+            })
+        )
     }
 
     /// Polls the manager for events relating to the managed connections.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<Event<'a, I, O, H, TE, HE>> {
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<Event<'a, H, TE>> {
         // Advance the content of `local_spawns`.
         while let Poll::Ready(Some(_)) = self.local_spawns.poll_next_unpin(cx) {}
 
@@ -348,8 +305,9 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
         let event = loop {
             match self.events_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
-                    if self.tasks.contains_key(event.id()) { // (1)
-                        break event
+                    if self.tasks.contains_key(event.id()) {
+                        // (1)
+                        break event;
                     }
                 }
                 Poll::Pending => return Poll::Pending,
@@ -359,12 +317,12 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
 
         if let hash_map::Entry::Occupied(mut task) = self.tasks.entry(*event.id()) {
             Poll::Ready(match event {
-                task::Event::Notify { id: _, event } =>
-                    Event::ConnectionEvent {
-                        entry: EstablishedEntry { task },
-                        event
-                    },
-                task::Event::Established { id: _, info } => { // (2)
+                task::Event::Notify { id: _, event } => Event::ConnectionEvent {
+                    entry: EstablishedEntry { task },
+                    event,
+                },
+                task::Event::Established { id: _, info } => {
+                    // (2)
                     task.get_mut().state = TaskState::Established(info); // (3)
                     Event::ConnectionEstablished {
                         entry: EstablishedEntry { task },
@@ -396,11 +354,14 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
                     let id = ConnectionId(id);
                     let task = task.remove();
                     match task.state {
-                        TaskState::Established(connected) =>
-                            Event::ConnectionClosed { id, connected, error },
+                        TaskState::Established(connected) => Event::ConnectionClosed {
+                            id,
+                            connected,
+                            error,
+                        },
                         TaskState::Pending => unreachable!(
                             "`Event::Closed` implies (2) occurred on that task and thus (3)."
-                            ),
+                        ),
                     }
                 }
             })
@@ -414,14 +375,14 @@ impl<I, O, H, TE, HE> Manager<I, O, H, TE, HE> {
 #[derive(Debug)]
 pub enum Entry<'a, I> {
     Pending(PendingEntry<'a, I>),
-    Established(EstablishedEntry<'a, I>)
+    Established(EstablishedEntry<'a, I>),
 }
 
 impl<'a, I> Entry<'a, I> {
     fn new(task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I>>) -> Self {
         match &task.get().state {
             TaskState::Pending => Entry::Pending(PendingEntry { task }),
-            TaskState::Established(_) => Entry::Established(EstablishedEntry { task })
+            TaskState::Established(_) => Entry::Established(EstablishedEntry { task }),
         }
     }
 }
@@ -449,10 +410,13 @@ impl<'a, I> EstablishedEntry<'a, I> {
     /// > the connection handler not being ready at this time.
     pub fn notify_handler(&mut self, event: I) -> Result<(), I> {
         let cmd = task::Command::NotifyHandler(event); // (*)
-        self.task.get_mut().sender.try_send(cmd)
+        self.task
+            .get_mut()
+            .sender
+            .try_send(cmd)
             .map_err(|e| match e.into_inner() {
                 task::Command::NotifyHandler(event) => event,
-                _ => panic!("Unexpected command. Expected `NotifyHandler`") // see (*)
+                _ => panic!("Unexpected command. Expected `NotifyHandler`"), // see (*)
             })
     }
 
@@ -462,7 +426,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(),()>> {
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
         self.task.get_mut().sender.poll_ready(cx).map_err(|_| ())
     }
 
@@ -476,9 +440,15 @@ impl<'a, I> EstablishedEntry<'a, I> {
     pub fn start_close(mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
-        match self.task.get_mut().sender.clone().try_send(task::Command::Close) {
-            Ok(()) => {},
-            Err(e) => assert!(e.is_disconnected(), "No capacity for close command.")
+        match self
+            .task
+            .get_mut()
+            .sender
+            .clone()
+            .try_send(task::Command::Close)
+        {
+            Ok(()) => {}
+            Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
         }
     }
 
@@ -486,7 +456,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     pub fn connected(&self) -> &Connected {
         match &self.task.get().state {
             TaskState::Established(c) => c,
-            TaskState::Pending => unreachable!("By Entry::new()")
+            TaskState::Pending => unreachable!("By Entry::new()"),
         }
     }
 
@@ -497,7 +467,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     pub fn remove(self) -> Connected {
         match self.task.remove().state {
             TaskState::Established(c) => c,
-            TaskState::Pending => unreachable!("By Entry::new()")
+            TaskState::Pending => unreachable!("By Entry::new()"),
         }
     }
 
@@ -511,7 +481,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
 /// (i.e. pending).
 #[derive(Debug)]
 pub struct PendingEntry<'a, I> {
-    task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I>>
+    task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I>>,
 }
 
 impl<'a, I> PendingEntry<'a, I> {
@@ -521,7 +491,7 @@ impl<'a, I> PendingEntry<'a, I> {
     }
 
     /// Aborts the pending connection attempt.
-    pub fn abort(self)  {
+    pub fn abort(self) {
         self.task.remove();
     }
 }

@@ -1,4 +1,16 @@
-# 0.12.0 [unreleased]
+# 0.13.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Manually implement `Debug` for `RequestResponseHandlerEvent` and
+  `RequestProtocol`. See [PR 2183].
+
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+
+# 0.12.0 [2021-07-12]
 
 - Update dependencies.
 

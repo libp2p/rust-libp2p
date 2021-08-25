@@ -1,4 +1,24 @@
-# 0.30.0 [unreleased]
+# 0.31.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Don't close connection if ping protocol is unsupported by remote.
+  Previously, a failed protocol negotation for ping caused a force close of the connection.
+  As a result, all nodes in a network had to support ping.
+  To allow networks where some nodes don't support ping, we now emit
+  `PingFailure::Unsupported` once for every connection on which ping is not supported.
+
+  In case you want to stick with the old behavior, you need to close the connection
+  manually on `PingFailure::Unsupported`.
+
+  Fixes [#2109](https://github.com/libp2p/rust-libp2p/issues/2109). Also see [PR 2149].
+
+  [PR 2149]: https://github.com/libp2p/rust-libp2p/pull/2149/
+
+# 0.30.0 [2021-07-12]
 
 - Update dependencies.
 

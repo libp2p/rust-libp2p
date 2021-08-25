@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError, ListenerEvent};
+use crate::transport::{ListenerEvent, Transport, TransportError};
 use crate::Multiaddr;
 use futures::{prelude::*, task::Context, task::Poll};
 use std::{fmt, io, marker::PhantomData, pin::Pin};
@@ -56,7 +56,9 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type Listener = futures::stream::Pending<Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
+    type Listener = futures::stream::Pending<
+        Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>,
+    >;
     type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
     type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
 
@@ -83,29 +85,29 @@ impl fmt::Debug for DummyStream {
 }
 
 impl AsyncRead for DummyStream {
-    fn poll_read(self: Pin<&mut Self>, _: &mut Context<'_>, _: &mut [u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        _: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 }
 
 impl AsyncWrite for DummyStream {
-    fn poll_write(self: Pin<&mut Self>, _: &mut Context<'_>, _: &[u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        _: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 
-    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 }

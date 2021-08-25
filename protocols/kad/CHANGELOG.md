@@ -1,6 +1,35 @@
-# 0.31.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
 - Update dependencies.
+
+- Introduce `KademliaStoreInserts` option, which allows to filter records (see
+  [PR 2163]).
+
+[PR 2163]: https://github.com/libp2p/rust-libp2p/pull/2163
+
+# 0.31.0 [2021-07-12]
+
+- Update dependencies.
+
+- Expose inbound request information (see [PR 2087]). Note:
+  `KademliaEvent::QueryResult` is renamed to
+  `KademliaEvent::OutboundQueryCompleted`.
+
+- Expose whether `KademliaEvent::RoutingUpdated` is triggered with new peer (see
+  [PR 2087]).
+
+- Expose kbucket range on `KademliaEvent::RoutingUpdated` (see [PR 2087]).
+
+- Remove false `debug_assert` on `connected_peers` (see [PR 2120]).
+
+- Return correct number of remaining bootstrap requests (see [PR 2125]).
+
+[PR 2087]: https://github.com/libp2p/rust-libp2p/pull/2087
+[PR 2120]: https://github.com/libp2p/rust-libp2p/pull/2120
+[PR 2125]: https://github.com/libp2p/rust-libp2p/pull/2125
 
 # 0.30.0 [2021-04-13]
 

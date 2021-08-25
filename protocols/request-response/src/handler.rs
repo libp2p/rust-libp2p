@@ -20,36 +20,29 @@
 
 mod protocol;
 
-use crate::{EMPTY_QUEUE_SHRINK_THRESHOLD, RequestId};
 use crate::codec::RequestResponseCodec;
+use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
-pub use protocol::{RequestProtocol, ResponseProtocol, ProtocolSupport};
+pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
-use futures::{
-    channel::oneshot,
-    future::BoxFuture,
-    prelude::*,
-    stream::FuturesUnordered
-};
-use libp2p_core::{
-    upgrade::{UpgradeError, NegotiationError},
-};
+use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
+use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::{
-    SubstreamProtocol,
     protocols_handler::{
-        KeepAlive,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr,
-    }
+        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
+    },
+    SubstreamProtocol,
 };
 use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
-    io,
-    sync::{atomic::{AtomicU64, Ordering}, Arc},
+    fmt, io,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    task::{Context, Poll},
     time::Duration,
-    task::{Context, Poll}
 };
 use wasm_timer::Instant;
 
@@ -78,12 +71,19 @@ where
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
     outbound: VecDeque<RequestProtocol<TCodec>>,
     /// Inbound upgrades waiting for the incoming request.
-    inbound: FuturesUnordered<BoxFuture<'static,
-        Result<
-            ((RequestId, TCodec::Request), oneshot::Sender<TCodec::Response>),
-            oneshot::Canceled
-        >>>,
-    inbound_request_id: Arc<AtomicU64>
+    inbound: FuturesUnordered<
+        BoxFuture<
+            'static,
+            Result<
+                (
+                    (RequestId, TCodec::Request),
+                    oneshot::Sender<TCodec::Response>,
+                ),
+                oneshot::Canceled,
+            >,
+        >,
+    >,
+    inbound_request_id: Arc<AtomicU64>,
 }
 
 impl<TCodec> RequestResponseHandler<TCodec>
@@ -95,7 +95,7 @@ where
         codec: TCodec,
         keep_alive_timeout: Duration,
         substream_timeout: Duration,
-        inbound_request_id: Arc<AtomicU64>
+        inbound_request_id: Arc<AtomicU64>,
     ) -> Self {
         Self {
             inbound_protocols,
@@ -107,28 +107,27 @@ where
             inbound: FuturesUnordered::new(),
             pending_events: VecDeque::new(),
             pending_error: None,
-            inbound_request_id
+            inbound_request_id,
         }
     }
 }
 
 /// The events emitted by the [`RequestResponseHandler`].
 #[doc(hidden)]
-#[derive(Debug)]
 pub enum RequestResponseHandlerEvent<TCodec>
 where
-    TCodec: RequestResponseCodec
+    TCodec: RequestResponseCodec,
 {
     /// A request has been received.
     Request {
         request_id: RequestId,
         request: TCodec::Request,
-        sender: oneshot::Sender<TCodec::Response>
+        sender: oneshot::Sender<TCodec::Response>,
     },
     /// A response has been received.
     Response {
         request_id: RequestId,
-        response: TCodec::Response
+        response: TCodec::Response,
     },
     /// A response to an inbound request has been sent.
     ResponseSent(RequestId),
@@ -145,6 +144,52 @@ where
     InboundTimeout(RequestId),
     /// An inbound request failed to negotiate a mutually supported protocol.
     InboundUnsupportedProtocols(RequestId),
+}
+
+impl<TCodec: RequestResponseCodec> fmt::Debug for RequestResponseHandlerEvent<TCodec> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RequestResponseHandlerEvent::Request {
+                request_id,
+                request: _,
+                sender: _,
+            } => f
+                .debug_struct("RequestResponseHandlerEvent::Request")
+                .field("request_id", request_id)
+                .finish(),
+            RequestResponseHandlerEvent::Response {
+                request_id,
+                response: _,
+            } => f
+                .debug_struct("RequestResponseHandlerEvent::Response")
+                .field("request_id", request_id)
+                .finish(),
+            RequestResponseHandlerEvent::ResponseSent(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::ResponseSent")
+                .field(request_id)
+                .finish(),
+            RequestResponseHandlerEvent::ResponseOmission(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::ResponseOmission")
+                .field(request_id)
+                .finish(),
+            RequestResponseHandlerEvent::OutboundTimeout(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::OutboundTimeout")
+                .field(request_id)
+                .finish(),
+            RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::OutboundUnsupportedProtocols")
+                .field(request_id)
+                .finish(),
+            RequestResponseHandlerEvent::InboundTimeout(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::InboundTimeout")
+                .field(request_id)
+                .finish(),
+            RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => f
+                .debug_tuple("RequestResponseHandlerEvent::InboundUnsupportedProtocols")
+                .field(request_id)
+                .finish(),
+        }
+    }
 }
 
 impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
@@ -181,28 +226,25 @@ where
             codec: self.codec.clone(),
             request_sender: rq_send,
             response_receiver: rs_recv,
-            request_id
+            request_id,
         };
 
         // The handler waits for the request to come in. It then emits
         // `RequestResponseHandlerEvent::Request` together with a
         // `ResponseChannel`.
-        self.inbound.push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
+        self.inbound
+            .push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
 
         SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        sent: bool,
-        request_id: RequestId
-    ) {
+    fn inject_fully_negotiated_inbound(&mut self, sent: bool, request_id: RequestId) {
         if sent {
-            self.pending_events.push_back(
-                RequestResponseHandlerEvent::ResponseSent(request_id))
+            self.pending_events
+                .push_back(RequestResponseHandlerEvent::ResponseSent(request_id))
         } else {
-            self.pending_events.push_back(
-                RequestResponseHandlerEvent::ResponseOmission(request_id))
+            self.pending_events
+                .push_back(RequestResponseHandlerEvent::ResponseOmission(request_id))
         }
     }
 
@@ -211,9 +253,10 @@ where
         response: TCodec::Response,
         request_id: RequestId,
     ) {
-        self.pending_events.push_back(
-            RequestResponseHandlerEvent::Response {
-                request_id, response
+        self.pending_events
+            .push_back(RequestResponseHandlerEvent::Response {
+                request_id,
+                response,
             });
     }
 
@@ -229,8 +272,8 @@ where
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(
-                    RequestResponseHandlerEvent::OutboundTimeout(info));
+                self.pending_events
+                    .push_back(RequestResponseHandlerEvent::OutboundTimeout(info));
             }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The remote merely doesn't support the protocol(s) we requested.
@@ -239,7 +282,8 @@ where
                 // An event is reported to permit user code to react to the fact that
                 // the remote peer does not support the requested protocol(s).
                 self.pending_events.push_back(
-                    RequestResponseHandlerEvent::OutboundUnsupportedProtocols(info));
+                    RequestResponseHandlerEvent::OutboundUnsupportedProtocols(info),
+                );
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -252,12 +296,12 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         info: RequestId,
-        error: ProtocolsHandlerUpgrErr<io::Error>
+        error: ProtocolsHandlerUpgrErr<io::Error>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(RequestResponseHandlerEvent::InboundTimeout(info))
-            }
+            ProtocolsHandlerUpgrErr::Timeout => self
+                .pending_events
+                .push_back(RequestResponseHandlerEvent::InboundTimeout(info)),
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The local peer merely doesn't support the protocol(s) requested.
                 // This is no reason to close the connection, which may
@@ -265,7 +309,8 @@ where
                 // An event is reported to permit user code to react to the fact that
                 // the local peer does not support the requested protocol(s).
                 self.pending_events.push_back(
-                    RequestResponseHandlerEvent::InboundUnsupportedProtocols(info));
+                    RequestResponseHandlerEvent::InboundUnsupportedProtocols(info),
+                );
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -282,18 +327,17 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ProtocolsHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>,
-    > {
+    ) -> Poll<ProtocolsHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
+    {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ProtocolsHandlerEvent::Close(err))
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
         }
 
         // Drain pending events.
         if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(event))
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.pending_events.shrink_to_fit();
         }
@@ -306,8 +350,11 @@ where
                     self.keep_alive = KeepAlive::Yes;
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
                         RequestResponseHandlerEvent::Request {
-                            request_id: id, request: rq, sender: rs_sender
-                        }))
+                            request_id: id,
+                            request: rq,
+                            sender: rs_sender,
+                        },
+                    ));
                 }
                 Err(oneshot::Canceled) => {
                     // The inbound upgrade has errored or timed out reading
@@ -320,12 +367,10 @@ where
         // Emit outbound requests.
         if let Some(request) = self.outbound.pop_front() {
             let info = request.request_id;
-            return Poll::Ready(
-                ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(request, info)
-                        .with_timeout(self.substream_timeout)
-                },
-            )
+            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(request, info)
+                    .with_timeout(self.substream_timeout),
+            });
         }
 
         debug_assert!(self.outbound.is_empty());
@@ -345,4 +390,3 @@ where
         Poll::Pending
     }
 }
-
