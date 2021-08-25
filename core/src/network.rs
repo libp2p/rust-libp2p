@@ -766,6 +766,7 @@ pub enum DialError<THandler> {
         address: Multiaddr,
         handler: THandler,
     },
+    /// The dialing attempt is rejected because the peer being dialed is the local peer.
     LocalPeerId {
         handler: THandler,
     },

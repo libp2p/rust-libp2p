@@ -69,16 +69,20 @@ pub trait NetworkBehaviour: Send + 'static {
 
     /// Creates a new `ProtocolsHandler` for a connection with a peer.
     ///
-    /// Every time an incoming connection is opened, and every time we start dialing a node, this
-    /// method is called.
+    /// Every time an incoming connection is opened, and every time another [`NetworkBehaviour`]
+    /// emitted a dial request, this method is called.
     ///
     /// The returned object is a handler for that specific connection, and will be moved to a
     /// background task dedicated to that connection.
     ///
-    /// The network behaviour (ie. the implementation of this trait) and the handlers it has
-    /// spawned (ie. the objects returned by `new_handler`) can communicate by passing messages.
-    /// Messages sent from the handler to the behaviour are injected with `inject_event`, and
-    /// the behaviour can send a message to the handler by making `poll` return `SendEvent`.
+    /// The network behaviour (ie. the implementation of this trait) and the handlers it has spawned
+    /// (ie. the objects returned by `new_handler`) can communicate by passing messages. Messages
+    /// sent from the handler to the behaviour are injected with [`NetworkBehaviour::inject_event`],
+    /// and the behaviour can send a message to the handler by making [`NetworkBehaviour::poll`]
+    /// return [`NetworkBehaviourAction::SendEvent`].
+    ///
+    /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
+    /// connection closing.
     fn new_handler(&mut self) -> Self::ProtocolsHandler;
 
     /// Addresses that this behaviour is aware of for this specific peer, and that may allow
@@ -275,9 +279,19 @@ pub enum NetworkBehaviourAction<
     GenerateEvent(TOutEvent),
 
     /// Instructs the swarm to dial the given multiaddress optionally including a [`PeerId`].
+    ///
+    /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
+    /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
     DialAddress {
         /// The address to dial.
         address: Multiaddr,
+        /// The handler to be used to handle the connection to the peer.
+        ///
+        /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
+        /// connection closing. Thus it can be used to carry state, which otherwise would have to be
+        /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected
+        /// peer can be included in the handler, and thus directly send on connection success or
+        /// extracted by the [`NetworkBehaviour`] on connection failure.
         handler: THandler,
     },
 
@@ -289,13 +303,20 @@ pub enum NetworkBehaviourAction<
     /// If we were already trying to dial this node, the addresses that are not yet in the queue of
     /// addresses to try are added back to this queue.
     ///
-    /// On success, [`NetworkBehaviour::inject_connected`] is invoked.
+    /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
     /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
     DialPeer {
         /// The peer to try reach.
         peer_id: PeerId,
         /// The condition for initiating a new dialing attempt.
         condition: DialPeerCondition,
+        /// The handler to be used to handle the connection to the peer.
+        ///
+        /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
+        /// connection closing. Thus it can be used to carry state, which otherwise would have to be
+        /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected
+        /// peer can be included in the handler, and thus directly send on connection success or
+        /// extracted by the [`NetworkBehaviour`] on connection failure.
         handler: THandler,
     },
 

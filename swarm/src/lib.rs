@@ -1209,14 +1209,14 @@ pub enum DialError {
     ConnectionLimit(ConnectionLimit),
     /// The address given for dialing is invalid.
     InvalidAddress(Multiaddr),
-    // TODO: Document
+    /// Tried to dial an address but it ended up being unreachaable.
     UnreachableAddr(Multiaddr),
-    // TODO: Document
+    /// The peer being dialed is the local peer and thus the dial was aborted.
     LocalPeerId,
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
-    // TODO: Document
+    /// The provided [`DialPeerCondition`] evaluated to false and thus the dial was aborted.
     DialPeerConditionFalse(DialPeerCondition),
 }
 
