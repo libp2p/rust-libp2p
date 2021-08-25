@@ -270,10 +270,8 @@ where
                                 continue 'poll;
                             }
                             Poll::Ready(None) => {
-                                todo!("Safe to assume that this should never happen?");
-                                // The manager has dropped the task or disappeared; abort.
-                                // TODO: Should we return the handler in this case?
-                                // return Poll::Ready(());
+                                // The manager has disappeared; abort.
+                                return Poll::Ready(());
                             }
                         }
                     }
