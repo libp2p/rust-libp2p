@@ -228,11 +228,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .fields
             .iter()
             .enumerate()
+            // The outmost handler belongs to the last behaviour.
             .rev()
             .filter(|f| !is_ignored(&f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
+                    // Given that the iterator is reversed, this is the innermost handler only.
                     quote! { let handler = handlers }
                 } else {
                     quote! {
@@ -272,11 +274,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .fields
             .iter()
             .enumerate()
+            // The outmost handler belongs to the last behaviour.
             .rev()
             .filter(|f| !is_ignored(&f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
+                    // Given that the iterator is reversed, this is the innermost handler only.
                     quote! { let handler = handlers }
                 } else {
                     quote! {
@@ -285,8 +289,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 };
 
                 let inject = match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_dial_failure(peer_id, handler, error.clone()) },
-                    None => quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error.clone()) },
+                    Some(ref i) => {
+                        quote! { self.#i.inject_dial_failure(peer_id, handler, error.clone()) }
+                    }
+                    None => {
+                        quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error.clone()) }
+                    }
                 };
 
                 quote! {
@@ -516,7 +524,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
         }
 
-        out_handler.unwrap_or(quote! {()}) // TODO: incorrect
+        out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
     };
 
     // The method to use to poll.
@@ -560,7 +568,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
-        let wrapped_handler = {
+        // `DialPeer` and `DialAddress` each provide a handler of the specific
+        // behaviour triggering the event. Though in order for the final handler
+        // to be able to handle protocols of all behaviours, the provided
+        // handler needs to be combined with handlers of all other behaviours.
+        let provided_handler_and_new_handlers = {
             let mut out_handler = None;
 
             for (f_n, f) in data_struct.fields.iter().enumerate() {
@@ -574,7 +586,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 };
 
                 let builder = if field_n == f_n {
-                    quote! { handler }
+                    // The behaviour that triggered the event. Thus, instead of
+                    // creating a new handler, use the provided handler.
+                    quote! { provided_handler }
                 } else {
                     quote! { #f_name.new_handler() }
                 };
@@ -587,7 +601,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            out_handler.unwrap_or(quote! {()}) // TODO: incorrect
+            out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
         };
 
         let generate_event_match_arm = if event_process {
@@ -608,11 +622,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
                     #generate_event_match_arm
-                    std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: #wrapped_handler });
+                    std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, providedhandler }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: #provided_handler_and_new_handlers });
                     }
-                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: #wrapped_handler });
+                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, provided_handler }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: #provided_handler_and_new_handlers });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
