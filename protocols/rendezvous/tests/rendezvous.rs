@@ -22,12 +22,9 @@ pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
 use futures::StreamExt;
-use libp2p::rendezvous::{Namespace, Ttl};
 use libp2p_core::identity;
 use libp2p_core::PeerId;
-use libp2p_rendezvous::{
-    Config, ErrorCode, Event, RegisterError, Registration, Rendezvous, DEFAULT_TTL,
-};
+use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::{Swarm, SwarmEvent};
 
 #[tokio::test]
@@ -35,14 +32,14 @@ async fn given_successful_registration_then_successful_discovery() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = Namespace::from_static("some-namespace");
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
 
     let _ =
         test.alice
             .behaviour_mut()
             .register(namespace.clone(), *test.robert.local_peer_id(), None);
 
-    test.assert_successful_registration(namespace.clone(), DEFAULT_TTL)
+    test.assert_successful_registration(namespace.clone(), rendezvous::DEFAULT_TTL)
         .await;
 
     test.bob.behaviour_mut().discover(
@@ -52,8 +49,12 @@ async fn given_successful_registration_then_successful_discovery() {
         *test.robert.local_peer_id(),
     );
 
-    test.assert_successful_discovery(namespace.clone(), DEFAULT_TTL, *test.alice.local_peer_id())
-        .await;
+    test.assert_successful_discovery(
+        namespace.clone(),
+        rendezvous::DEFAULT_TTL,
+        *test.alice.local_peer_id(),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -61,7 +62,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = Namespace::from_static("some-namespace");
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
 
     let refesh_ttl = 10_000;
 
@@ -70,7 +71,7 @@ async fn given_successful_registration_then_refresh_ttl() {
             .behaviour_mut()
             .register(namespace.clone(), *test.robert.local_peer_id(), None);
 
-    test.assert_successful_registration(namespace.clone(), DEFAULT_TTL)
+    test.assert_successful_registration(namespace.clone(), rendezvous::DEFAULT_TTL)
         .await;
 
     test.bob.behaviour_mut().discover(
@@ -80,8 +81,12 @@ async fn given_successful_registration_then_refresh_ttl() {
         *test.robert.local_peer_id(),
     );
 
-    test.assert_successful_discovery(namespace.clone(), DEFAULT_TTL, *test.alice.local_peer_id())
-        .await;
+    test.assert_successful_discovery(
+        namespace.clone(),
+        rendezvous::DEFAULT_TTL,
+        *test.alice.local_peer_id(),
+    )
+    .await;
 
     test.alice.behaviour_mut().register(
         namespace.clone(),
@@ -108,7 +113,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = Namespace::from_static("some-namespace");
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
 
     test.alice.behaviour_mut().register(
         namespace.clone(),
@@ -118,10 +123,10 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     match await_events_or_timeout(&mut test.robert, &mut test.alice).await {
         (
-            SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
-            SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote {error , ..})),
+            SwarmEvent::Behaviour(rendezvous::Event::PeerNotRegistered { .. }),
+            SwarmEvent::Behaviour(rendezvous::Event::RegisterFailed(rendezvous::RegisterError::Remote {error , ..})),
         ) => {
-            assert_eq!(error, ErrorCode::InvalidTtl);
+            assert_eq!(error, rendezvous::ErrorCode::InvalidTtl);
         }
         (rendezvous_swarm_event, registration_swarm_event) => panic!(
             "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
@@ -148,7 +153,7 @@ async fn discover_allows_for_dial_by_peer_id() {
         }
     });
 
-    let namespace = Namespace::from_static("some-namespace");
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
 
     alice
         .behaviour_mut()
@@ -158,8 +163,8 @@ async fn discover_allows_for_dial_by_peer_id() {
 
     match await_events_or_timeout(&mut alice, &mut bob).await {
         (
-            SwarmEvent::Behaviour(Event::Registered { .. }),
-            SwarmEvent::Behaviour(Event::Discovered { .. }),
+            SwarmEvent::Behaviour(rendezvous::Event::Registered { .. }),
+            SwarmEvent::Behaviour(rendezvous::Event::Discovered { .. }),
         ) => {}
         _ => panic!("bad event combination emitted"),
     };
@@ -196,7 +201,7 @@ async fn eve_cannot_register() {
     let _ = env_logger::try_init();
     let mut test = RendezvousTest::setup().await;
 
-    let namespace = Namespace::from_static("some-namespace");
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
 
     test.eve.behaviour_mut().register(
         namespace.clone(),
@@ -206,10 +211,10 @@ async fn eve_cannot_register() {
 
     match await_events_or_timeout(&mut test.robert, &mut test.eve).await {
         (
-            SwarmEvent::Behaviour(Event::PeerNotRegistered { .. }),
-            SwarmEvent::Behaviour(Event::RegisterFailed(RegisterError::Remote { error: err_code , ..})),
+            SwarmEvent::Behaviour(rendezvous::Event::PeerNotRegistered { .. }),
+            SwarmEvent::Behaviour(rendezvous::Event::RegisterFailed(rendezvous::RegisterError::Remote { error: err_code , ..})),
         ) => {
-            assert_eq!(err_code, ErrorCode::NotAuthorized);
+            assert_eq!(err_code, rendezvous::ErrorCode::NotAuthorized);
         }
         (rendezvous_swarm_event, registration_swarm_event) => panic!(
             "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
@@ -223,21 +228,27 @@ async fn eve_cannot_register() {
 /// In all cases, Alice would like to connect to Bob with Robert acting as a rendezvous point.
 /// Eve is an evil actor that tries to act maliciously.
 struct RendezvousTest {
-    pub alice: Swarm<Rendezvous>,
-    pub bob: Swarm<Rendezvous>,
-    pub eve: Swarm<Rendezvous>,
-    pub robert: Swarm<Rendezvous>,
+    pub alice: Swarm<rendezvous::Behaviour>,
+    pub bob: Swarm<rendezvous::Behaviour>,
+    pub eve: Swarm<rendezvous::Behaviour>,
+    pub robert: Swarm<rendezvous::Behaviour>,
 }
 
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut alice = new_swarm(|_, identity| Rendezvous::new(identity, Config::default()));
+        let mut alice = new_swarm(|_, identity| {
+            rendezvous::Behaviour::new(identity, rendezvous::Config::default())
+        });
         alice.listen_on_random_memory_address().await;
 
-        let mut bob = new_swarm(|_, identity| Rendezvous::new(identity, Config::default()));
+        let mut bob = new_swarm(|_, identity| {
+            rendezvous::Behaviour::new(identity, rendezvous::Config::default())
+        });
         bob.listen_on_random_memory_address().await;
 
-        let mut robert = new_swarm(|_, identity| Rendezvous::new(identity, Config::default()));
+        let mut robert = new_swarm(|_, identity| {
+            rendezvous::Behaviour::new(identity, rendezvous::Config::default())
+        });
         robert.listen_on_random_memory_address().await;
 
         let mut eve = {
@@ -245,7 +256,9 @@ impl RendezvousTest {
             // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
             // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
             let someone_else = identity::Keypair::generate_ed25519();
-            let mut eve = new_swarm(move |_, _| Rendezvous::new(someone_else, Config::default()));
+            let mut eve = new_swarm(move |_, _| {
+                rendezvous::Behaviour::new(someone_else, rendezvous::Config::default())
+            });
             eve.listen_on_random_memory_address().await;
 
             eve
@@ -265,13 +278,13 @@ impl RendezvousTest {
 
     pub async fn assert_successful_registration(
         &mut self,
-        expected_namespace: Namespace,
-        expected_ttl: Ttl,
+        expected_namespace: rendezvous::Namespace,
+        expected_ttl: rendezvous::Ttl,
     ) {
         match await_events_or_timeout(&mut self.robert, &mut self.alice).await {
             (
-                SwarmEvent::Behaviour(Event::PeerRegistered { peer, registration }),
-                SwarmEvent::Behaviour(Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
+                SwarmEvent::Behaviour(rendezvous::Event::PeerRegistered { peer, registration }),
+                SwarmEvent::Behaviour(rendezvous::Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
             ) => {
                 assert_eq!(&peer, self.alice.local_peer_id());
                 assert_eq!(&rendezvous_node, self.robert.local_peer_id());
@@ -288,16 +301,16 @@ impl RendezvousTest {
 
     pub async fn assert_successful_discovery(
         &mut self,
-        expected_namespace: Namespace,
-        expected_ttl: Ttl,
+        expected_namespace: rendezvous::Namespace,
+        expected_ttl: rendezvous::Ttl,
         expected_peer_id: PeerId,
     ) {
         match await_events_or_timeout(&mut self.robert, &mut self.bob).await {
             (
-                SwarmEvent::Behaviour(Event::DiscoverServed { .. }),
-                SwarmEvent::Behaviour(Event::Discovered { registrations, .. }),
+                SwarmEvent::Behaviour(rendezvous::Event::DiscoverServed { .. }),
+                SwarmEvent::Behaviour(rendezvous::Event::Discovered { registrations, .. }),
             ) => match registrations.as_slice() {
-                [Registration {
+                [rendezvous::Registration {
                     namespace,
                     record,
                     ttl,

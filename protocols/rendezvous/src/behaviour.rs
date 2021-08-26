@@ -40,7 +40,7 @@ use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub struct Rendezvous {
+pub struct Behaviour {
     events: VecDeque<NetworkBehaviourAction<handler::InEvent, Event>>,
     registrations: Registrations,
     keypair: Keypair,
@@ -78,7 +78,7 @@ impl Default for Config {
     }
 }
 
-impl Rendezvous {
+impl Behaviour {
     /// Create a new instance of the rendezvous [`NetworkBehaviour`].
     pub fn new(keypair: Keypair, config: Config) -> Self {
         Self {
@@ -201,7 +201,7 @@ pub enum Event {
     RegistrationExpired(Registration),
 }
 
-impl NetworkBehaviour for Rendezvous {
+impl NetworkBehaviour for Behaviour {
     type ProtocolsHandler =
         SubstreamProtocolsHandler<inbound::Stream, outbound::Stream, outbound::OpenInfo>;
     type OutEvent = Event;

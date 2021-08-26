@@ -22,12 +22,10 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::rendezvous::Rendezvous;
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
-use libp2p_rendezvous::Namespace;
 use libp2p_swarm::AddressScore;
 use std::time::Duration;
 
@@ -45,7 +43,7 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            rendezvous: Rendezvous::new(identity.clone(), rendezvous::Config::default()),
+            rendezvous: rendezvous::Behaviour::new(identity.clone(), rendezvous::Config::default()),
             ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
@@ -76,7 +74,7 @@ async fn main() {
             }
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
                 swarm.behaviour_mut().rendezvous.register(
-                    Namespace::from_static("rendezvous"),
+                    rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
                 );
@@ -136,6 +134,6 @@ impl From<PingEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    rendezvous: Rendezvous,
+    rendezvous: rendezvous::Behaviour,
     ping: Ping,
 }

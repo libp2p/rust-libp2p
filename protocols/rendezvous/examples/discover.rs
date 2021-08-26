@@ -23,13 +23,12 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::rendezvous::{Namespace, Rendezvous};
 use libp2p::swarm::Swarm;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{development_transport, rendezvous, Multiaddr};
 use std::time::Duration;
 
-const NAMESPACE: &'static str = "rendezvous";
+const NAMESPACE: &str = "rendezvous";
 
 #[async_std::main]
 async fn main() {
@@ -44,7 +43,7 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            rendezvous: Rendezvous::new(identity.clone(), rendezvous::Config::default()),
+            rendezvous: rendezvous::Behaviour::new(identity.clone(), rendezvous::Config::default()),
             ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
@@ -63,7 +62,7 @@ async fn main() {
                 );
 
                 swarm.behaviour_mut().rendezvous.discover(
-                    Some(Namespace::new(NAMESPACE.to_string()).unwrap()),
+                    Some(rendezvous::Namespace::new(NAMESPACE.to_string()).unwrap()),
                     None,
                     None,
                     rendezvous_point,
@@ -89,7 +88,7 @@ async fn main() {
                         let peer = registration.record.peer_id();
                         log::info!("Discovered peer {} at {}", peer, address);
 
-                        let p2p_suffix = Protocol::P2p(peer.as_ref().clone());
+                        let p2p_suffix = Protocol::P2p(*peer.as_ref());
                         let address_with_p2p =
                             if !address.ends_with(&Multiaddr::empty().with(p2p_suffix.clone())) {
                                 address.clone().with(p2p_suffix)
@@ -136,6 +135,6 @@ impl From<PingEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    rendezvous: Rendezvous,
+    rendezvous: rendezvous::Behaviour,
     ping: Ping,
 }

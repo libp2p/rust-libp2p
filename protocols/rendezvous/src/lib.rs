@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use self::behaviour::{Config, Event, RegisterError, Rendezvous};
+pub use self::behaviour::{Behaviour, Config, Event, RegisterError};
 pub use self::codec::{ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
 
 mod behaviour;

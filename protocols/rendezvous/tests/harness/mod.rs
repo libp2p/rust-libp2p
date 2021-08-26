@@ -20,20 +20,18 @@
 
 use async_trait::async_trait;
 use futures::stream::FusedStream;
-use futures::Future;
 use futures::StreamExt;
 use futures::{future, Stream};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::SelectUpgrade;
-use libp2p::core::{identity, Executor, Multiaddr, PeerId, Transport};
+use libp2p::core::{identity, Multiaddr, PeerId, Transport};
 use libp2p::mplex::MplexConfig;
 use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
 use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
 use std::fmt::Debug;
-use std::pin::Pin;
 use std::time::Duration;
 
 pub fn new_swarm<B, F>(behaviour_fn: F) -> Swarm<B>
