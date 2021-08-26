@@ -230,7 +230,7 @@ impl Encoder for RendezvousCodec {
             .encode(&mut buf)
             .expect("Buffer has sufficient capacity");
 
-        // length prefix the protobuf message, ensuring the max limit is not hit
+        // Length prefix the protobuf message, ensuring the max limit is not hit
         self.length_codec.encode(Bytes::from(buf), dst)?;
 
         Ok(())

@@ -427,6 +427,7 @@ fn handle_inbound_event(
         }
     }
 }
+
 fn handle_outbound_event(
     event: outbound::OutEvent,
     peer_id: PeerId,
