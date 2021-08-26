@@ -158,6 +158,9 @@ impl<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
     }
 }
 
+/// Poll all substreams within the given HashMap.
+///
+/// This is defined as a separate function because we call it with two different fields stored within [`SubstreamProtocolsHandler`].
 fn poll_substreams<TId, TSubstream, TError, TOutEvent>(
     substreams: &mut HashMap<TId, TSubstream>,
     cx: &mut Context<'_>,
