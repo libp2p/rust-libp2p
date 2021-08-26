@@ -518,15 +518,10 @@ where
     // Ensure the address to dial encapsulates the `p2p` protocol for the
     // targeted peer, so that the transport has a "fully qualified" address
     // to work with.
-    let addr = match p2p_addr(opts.peer, opts.address) {
-        Ok(address) => address,
-        Err(address) => {
-            return Err(DialError::InvalidAddress {
-                address,
-                handler: opts.handler,
-            })
-        }
-    };
+    let addr = p2p_addr(opts.peer, opts.address).map_err(|address| DialError::InvalidAddress {
+        address,
+        handler: opts.handler,
+    })?;
 
     let result = match transport.dial(addr.clone()) {
         Ok(fut) => {

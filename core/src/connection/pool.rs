@@ -494,7 +494,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                             id,
                             endpoint,
                             error,
-                            handler: handler,
+                            handler,
                             peer,
                             pool: self,
                         });

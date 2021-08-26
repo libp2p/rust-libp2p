@@ -433,7 +433,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     }
 
     /// Sends a close command to the associated background task,
-    /// thus initiating a graceful active close of the connectione
+    /// thus initiating a graceful active close of the connection.
     ///
     /// Has no effect if the connection is already closing.
     ///
