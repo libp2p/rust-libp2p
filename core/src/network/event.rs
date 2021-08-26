@@ -178,9 +178,9 @@ pub enum DialAttemptsRemaining<THandler> {
     None(THandler),
 }
 
-impl<THandler> From<&DialAttemptsRemaining<THandler>> for u32 {
-    fn from(attempts_remaining: &DialAttemptsRemaining<THandler>) -> Self {
-        match attempts_remaining {
+impl<THandler> DialAttemptsRemaining<THandler> {
+    fn get_attempts(&self) -> u32 {
+        match self {
             DialAttemptsRemaining::Some(attempts) => (*attempts).into(),
             DialAttemptsRemaining::None(_) => 0,
         }
@@ -268,7 +268,7 @@ where
                 error,
             } => f
                 .debug_struct("DialError")
-                .field("attempts_remaining", &Into::<u32>::into(attempts_remaining))
+                .field("attempts_remaining", &attempts_remaining.get_attempts())
                 .field("peer_id", peer_id)
                 .field("multiaddr", multiaddr)
                 .field("error", error)
