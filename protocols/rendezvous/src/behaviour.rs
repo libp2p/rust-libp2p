@@ -39,7 +39,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use uuid::Uuid;
 
 pub struct Rendezvous {
     events: VecDeque<NetworkBehaviourAction<handler::InEvent, Event>>,
@@ -482,11 +481,11 @@ fn handle_outbound_event(
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
-struct RegistrationId(Uuid);
+struct RegistrationId(u64);
 
 impl RegistrationId {
     fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self(rand::random())
     }
 }
 
