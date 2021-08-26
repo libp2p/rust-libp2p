@@ -79,6 +79,7 @@ impl Default for Config {
 }
 
 impl Rendezvous {
+    /// Create a new instance of the rendezvous [`NetworkBehaviour`].
     pub fn new(keypair: Keypair, config: Config) -> Self {
         Self {
             events: Default::default(),
@@ -89,11 +90,16 @@ impl Rendezvous {
         }
     }
 
+    /// Register our external addresses in the given namespace with the given rendezvous peer.
+    ///
+    /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
+    /// by other [`NetworkBehaviour`]s via [`NetworkBehaviourAction::ReportObservedAddr`].
     pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
         self.pending_register_requests
             .push((namespace, rendezvous_node, ttl));
     }
 
+    /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -105,6 +111,13 @@ impl Rendezvous {
             });
     }
 
+    /// Discover other peers at a given rendezvous peer.
+    ///
+    /// If desired, the registrations can be filtered by a namespace.
+    /// If no namespace is given, peers from all namespaces will be returned.
+    /// A successfully discovery returns a cookie within [`Event::Discovered`].
+    /// Such a cookie can be used to only fetch the _delta_ of registrations since
+    /// the cookie was acquired.
     pub fn discover(
         &mut self,
         ns: Option<Namespace>,
