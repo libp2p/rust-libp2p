@@ -36,16 +36,6 @@ use std::fmt::Debug;
 use std::pin::Pin;
 use std::time::Duration;
 
-/// An adaptor struct for libp2p that spawns futures into the current
-/// thread-local runtime.
-struct GlobalSpawnTokioExecutor;
-
-impl Executor for GlobalSpawnTokioExecutor {
-    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        let _ = tokio::spawn(future);
-    }
-}
-
 pub fn new_swarm<B, F>(behaviour_fn: F) -> Swarm<B>
 where
     B: NetworkBehaviour,
@@ -73,7 +63,9 @@ where
         .boxed();
 
     SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
-        .executor(Box::new(GlobalSpawnTokioExecutor))
+        .executor(Box::new(|future| {
+            let _ = tokio::spawn(future);
+        }))
         .build()
 }
 
