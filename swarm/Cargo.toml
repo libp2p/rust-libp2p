@@ -20,7 +20,6 @@ wasm-timer = "0.2"
 void = "1"
 
 [dev-dependencies]
-libp2p-mplex = { path = "../muxers/mplex" }
-libp2p-noise = { path = "../transports/noise" }
+libp2p = { path = "../", default-features = false, features = ["yamux", "plaintext"] }
 quickcheck = "0.9.0"
 rand = "0.7.2"

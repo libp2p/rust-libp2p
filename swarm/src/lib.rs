@@ -1326,8 +1326,9 @@ mod tests {
     use crate::protocols_handler::DummyProtocolsHandler;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::{executor, future};
-    use libp2p_core::{identity, multiaddr, transport, upgrade};
-    use libp2p_noise as noise;
+    use libp2p::core::{identity, multiaddr, transport, upgrade};
+    use libp2p::plaintext;
+    use libp2p::yamux;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -1343,17 +1344,16 @@ mod tests {
         O: Send + 'static,
     {
         let id_keys = identity::Keypair::generate_ed25519();
-        let pubkey = id_keys.public();
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&id_keys)
-            .unwrap();
+        let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(libp2p_mplex::MplexConfig::new())
+            .authenticate(plaintext::PlainText2Config {
+                local_public_key: local_public_key.clone(),
+            })
+            .multiplex(yamux::YamuxConfig::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        SwarmBuilder::new(transport, behaviour, pubkey.into()).build()
+        SwarmBuilder::new(transport, behaviour, local_public_key.into()).build()
     }
 
     fn swarms_connected<TBehaviour>(
@@ -1704,4 +1704,9 @@ mod tests {
             }
         }))
     }
+
+    /// [`NetworkBehaviourAction::DialAddress`] and [`NetworkBehaviourAction::DialPeer`] require a
+    /// handler. This handler can be used to carry state. See corresponding doc comments.
+    #[test]
+    fn use_handler_to_carry_state() {}
 }
