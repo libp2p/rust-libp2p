@@ -166,14 +166,12 @@ where
 {
     /// Creates a new configuration for a TCP/IP transport:
     ///
-    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_.
-    ///     See [`GenTcpConfig::nodelay`].
-    ///   * Reuse of listening ports is _disabled_.
-    ///     See [`GenTcpConfig::port_reuse`].
-    ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies.
-    ///     See [`GenTcpConfig::ttl`].
-    ///   * The size of the listen backlog for new listening sockets is `1024`.
-    ///     See [`GenTcpConfig::listen_backlog`].
+    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_. See [`GenTcpConfig::nodelay`].
+    ///   * Reuse of listening ports is _disabled_. See [`GenTcpConfig::port_reuse`].
+    ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies. See
+    ///     [`GenTcpConfig::ttl`].
+    ///   * The size of the listen backlog for new listening sockets is `1024`. See
+    ///     [`GenTcpConfig::listen_backlog`].
     pub fn new() -> Self {
         Self {
             ttl: None,

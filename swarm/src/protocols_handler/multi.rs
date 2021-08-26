@@ -294,7 +294,8 @@ where
             return Poll::Pending;
         }
 
-        // Not always polling handlers in the same order should give anyone the chance to make progress.
+        // Not always polling handlers in the same order should give anyone the chance to make
+        // progress.
         let pos = rand::thread_rng().gen_range(0, self.handlers.len());
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {

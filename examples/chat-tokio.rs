@@ -31,7 +31,7 @@
 //! Alternatively, to run with the minimal set of features and crates:
 //!
 //! ```sh
-//!cargo run --example chat-tokio \\
+//! cargo run --example chat-tokio \\
 //!    --no-default-features \\
 //!    --features="floodsub mplex noise tcp-tokio mdns"
 //! ```

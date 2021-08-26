@@ -70,14 +70,12 @@ mod singleton;
 ///
 /// The state of a muxer, as exposed by this API, is the following:
 ///
-/// - A connection to the remote. The `poll_event`, `flush_all` and `close` methods operate
-///   on this.
+/// - A connection to the remote. The `poll_event`, `flush_all` and `close` methods operate on this.
 /// - A list of substreams that are open. The `poll_outbound`, `read_substream`, `write_substream`,
 ///   `flush_substream`, `shutdown_substream` and `destroy_substream` methods allow controlling
 ///   these entries.
 /// - A list of outbound substreams being opened. The `open_outbound`, `poll_outbound` and
 ///   `destroy_outbound` methods allow controlling these entries.
-///
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream;

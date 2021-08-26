@@ -51,7 +51,6 @@
 //! The [`ProtocolsHandler`] trait defines how each active connection to a
 //! remote should behave: how to handle incoming substreams, which protocols
 //! are supported, when to open a new outbound substream, etc.
-//!
 
 mod behaviour;
 mod registry;
@@ -163,8 +162,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     /// generated for this connection.
     IncomingConnection {
         /// Local connection address.
-        /// This address has been earlier reported with a [`NewListenAddr`](SwarmEvent::NewListenAddr)
-        /// event.
+        /// This address has been earlier reported with a
+        /// [`NewListenAddr`](SwarmEvent::NewListenAddr) event.
         local_addr: Multiaddr,
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
@@ -175,15 +174,16 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     /// the connection unexpectedly closed.
     IncomingConnectionError {
         /// Local connection address.
-        /// This address has been earlier reported with a [`NewListenAddr`](SwarmEvent::NewListenAddr)
-        /// event.
+        /// This address has been earlier reported with a
+        /// [`NewListenAddr`](SwarmEvent::NewListenAddr) event.
         local_addr: Multiaddr,
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
         error: PendingConnectionError<io::Error>,
     },
-    /// We connected to a peer, but we immediately closed the connection because that peer is banned.
+    /// We connected to a peer, but we immediately closed the connection because that peer is
+    /// banned.
     BannedPeer {
         /// Identity of the banned peer.
         peer_id: PeerId,

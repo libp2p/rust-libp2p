@@ -59,8 +59,10 @@ pub struct NegotiatedComplete<TInner> {
 
 impl<TInner> Future for NegotiatedComplete<TInner>
 where
-    // `Unpin` is required not because of implementation details but because we produce the
-    // `Negotiated` as the output of the future.
+    // `Unpin` is required not because of
+    // implementation details but because we produce
+    // the `Negotiated` as the output of the
+    // future.
     TInner: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = Result<Negotiated<TInner>, NegotiationError>;

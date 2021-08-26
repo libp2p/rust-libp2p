@@ -57,7 +57,8 @@ impl MdnsPacket {
                         .iter()
                         .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
                     {
-                        // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+                        // TODO: what if multiple questions, one with SERVICE_NAME and one with
+                        // META_QUERY_SERVICE?
                         let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
                             from,
                             query_id: packet.header.id,

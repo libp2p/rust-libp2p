@@ -110,8 +110,10 @@ enum State<R, N> {
 
 impl<R, N> Future for ListenerSelectFuture<R, N>
 where
-    // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
-    // It also makes the implementation considerably easier to write.
+    // The Unpin bound here is required because we
+    // produce a `Negotiated<R>` as the output.
+    // It also makes the implementation considerably
+    // easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     N: AsRef<[u8]> + Clone,
 {

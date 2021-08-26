@@ -107,14 +107,13 @@ where
     ///
     /// A connection may close if
     ///
-    ///   * it encounters an error, which includes the connection being
-    ///     closed by the remote. In this case `error` is `Some`.
-    ///   * it was actively closed by [`EstablishedConnection::start_close`],
-    ///     i.e. a successful, orderly close. In this case `error` is `None`.
-    ///   * it was actively closed by [`super::peer::ConnectedPeer::disconnect`] or
-    ///     [`super::peer::DialingPeer::disconnect`], i.e. dropped without an
+    ///   * it encounters an error, which includes the connection being closed by the remote. In
+    ///     this case `error` is `Some`.
+    ///   * it was actively closed by [`EstablishedConnection::start_close`], i.e. a successful,
     ///     orderly close. In this case `error` is `None`.
-    ///
+    ///   * it was actively closed by [`super::peer::ConnectedPeer::disconnect`] or
+    ///     [`super::peer::DialingPeer::disconnect`], i.e. dropped without an orderly close. In
+    ///     this case `error` is `None`.
     ConnectionClosed {
         /// The ID of the connection that encountered an error.
         id: ConnectionId,

@@ -128,7 +128,7 @@ impl<T: Clone> RelayTransport<T> {
     ///     RelayConfig::default(),
     ///     inner_transport,
     /// );
-    ///```
+    /// ```
     pub(crate) fn new(t: T) -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
         let (to_behaviour, from_transport) = mpsc::channel(0);
 

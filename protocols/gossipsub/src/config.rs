@@ -29,8 +29,8 @@ use crate::types::{FastMessageId, GossipsubMessage, MessageId, RawGossipsubMessa
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
 pub enum ValidationMode {
-    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and to
-    /// be present as well as the sequence number. All messages must have valid signatures.
+    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and
+    /// to be present as well as the sequence number. All messages must have valid signatures.
     ///
     /// NOTE: This setting will reject messages from nodes using
     /// [`crate::behaviour::MessageAuthenticity::Anonymous`] and all messages that do not have
@@ -99,7 +99,8 @@ impl GossipsubConfig {
     /// `/<prefix>/<supported-versions>`. As gossipsub supports version 1.0 and 1.1, there are two
     /// protocol id's supported.
     ///
-    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
+    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and
+    /// `/meshsub/1.0.0`, negotiated in that order.
     pub fn protocol_id_prefix(&self) -> &Cow<'static, str> {
         &self.protocol_id_prefix
     }
@@ -133,8 +134,8 @@ impl GossipsubConfig {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
-    ///  chosen randomly (D_score in the spec, default is 4).
+    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder
+    /// are  chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&self) -> usize {
         self.retain_scores
     }
@@ -416,7 +417,8 @@ impl Default for GossipsubConfigBuilder {
                 fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
-                prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
+                prune_peers: 0, /* NOTE: Increasing this currently has little effect until Signed
+                                 * records are implemented. */
                 prune_backoff: Duration::from_secs(60),
                 backoff_slack: 1,
                 flood_publish: true,
@@ -482,8 +484,8 @@ impl GossipsubConfigBuilder {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the remainder are
-    /// chosen randomly (D_score in the spec, default is 4).
+    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the
+    /// remainder are chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&mut self, retain_scores: usize) -> &mut Self {
         self.config.retain_scores = retain_scores;
         self

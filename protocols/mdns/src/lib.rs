@@ -28,7 +28,6 @@
 //!
 //! This crate provides the `Mdns` struct which implements the `NetworkBehaviour` trait. This
 //! struct will automatically discover other libp2p nodes on the local network.
-//!
 use lazy_static::lazy_static;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 

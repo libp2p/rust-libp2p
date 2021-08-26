@@ -65,13 +65,10 @@ impl PingConfig {
     /// These settings have the following effect:
     ///
     ///   * A ping is sent every 15 seconds on a healthy connection.
-    ///   * Every ping sent must yield a response within 20 seconds in order to
-    ///     be successful.
-    ///   * A single ping failure is sufficient for the connection to be subject
-    ///     to being closed.
-    ///   * The connection may be closed at any time as far as the ping protocol
-    ///     is concerned, i.e. the ping protocol itself does not keep the
-    ///     connection alive.
+    ///   * Every ping sent must yield a response within 20 seconds in order to be successful.
+    ///   * A single ping failure is sufficient for the connection to be subject to being closed.
+    ///   * The connection may be closed at any time as far as the ping protocol is concerned, i.e.
+    ///     the ping protocol itself does not keep the connection alive.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),

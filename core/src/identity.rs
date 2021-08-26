@@ -59,7 +59,6 @@ use crate::{keys_proto, PeerId};
 /// let mut bytes = std::fs::read("private.pk8").unwrap();
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
-///
 #[derive(Clone)]
 pub enum Keypair {
     /// An Ed25519 keypair.

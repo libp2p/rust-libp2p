@@ -324,8 +324,8 @@ where
             RequestResponseEvent<TCodec::Request, TCodec::Response>,
         >,
     >,
-    /// The currently connected peers, their pending outbound and inbound responses and their known,
-    /// reachable addresses, if any.
+    /// The currently connected peers, their pending outbound and inbound responses and their
+    /// known, reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
     addresses: HashMap<PeerId, SmallVec<[Multiaddr; 6]>>,

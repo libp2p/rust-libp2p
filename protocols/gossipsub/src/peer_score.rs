@@ -91,8 +91,9 @@ impl Default for PeerStats {
 }
 
 impl PeerStats {
-    /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied parameters score the
-    /// topic, inserts the default stats and returns a reference to those. If neither apply, returns None.
+    /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied
+    /// parameters score the topic, inserts the default stats and returns a reference to those.
+    /// If neither apply, returns None.
     pub fn stats_or_default_mut(
         &mut self,
         topic_hash: TopicHash,
@@ -274,12 +275,14 @@ impl PeerScore {
                 }
 
                 // P3b:
-                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so this detracts.
+                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so
+                // this detracts.
                 let p3b = topic_stats.mesh_failure_penalty;
                 topic_score += p3b * topic_params.mesh_failure_penalty_weight;
 
                 // P4: invalid messages
-                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
+                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so
+                // this detracts.
                 let p4 =
                     topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
                 topic_score += p4 * topic_params.invalid_message_deliveries_weight;
@@ -368,8 +371,8 @@ impl PeerScore {
                 }
 
                 // we don't decay retained scores, as the peer is not active.
-                // this way the peer cannot reset a negative score by simply disconnecting and reconnecting,
-                // unless the retention period has elapsed.
+                // this way the peer cannot reset a negative score by simply disconnecting and
+                // reconnecting, unless the retention period has elapsed.
                 // similarly, a well behaved peer does not lose its score by getting disconnected.
                 return true;
             }
@@ -593,7 +596,8 @@ impl PeerScore {
         }
     }
 
-    /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
+    /// Similar to `reject_message` except does not require the message id or reason for an invalid
+    /// message.
     pub fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
         debug!(
             "Message from {} rejected because of ValidationError or SelfOrigin",
@@ -636,8 +640,8 @@ impl PeerScore {
             }
 
             if let RejectReason::ValidationIgnored = reason {
-                // we were explicitly instructed by the validator to ignore the message but not penalize
-                // the peer
+                // we were explicitly instructed by the validator to ignore the message but not
+                // penalize the peer
                 record.status = DeliveryStatus::Ignored;
                 record.peers.clear();
                 return;
@@ -836,8 +840,9 @@ impl PeerScore {
                         .get(topic_hash)
                         .expect("Topic must exist if there are known topic_stats");
 
-                    // check against the mesh delivery window -- if the validated time is passed as 0, then
-                    // the message was received before we finished validation and thus falls within the mesh
+                    // check against the mesh delivery window -- if the validated time is passed as
+                    // 0, then the message was received before we finished
+                    // validation and thus falls within the mesh
                     // delivery window.
                     let mut falls_in_mesh_deliver_window = true;
                     if let Some(validated_time) = validated_time {

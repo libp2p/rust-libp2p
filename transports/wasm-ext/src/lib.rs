@@ -30,7 +30,6 @@
 //!
 //! Call `new()` with a JavaScript object that implements the interface described in the `ffi`
 //! module.
-//!
 
 use futures::{future::Ready, prelude::*};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};

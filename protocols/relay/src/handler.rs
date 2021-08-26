@@ -83,7 +83,8 @@ impl IntoProtocolsHandler for RelayHandlerProto {
 ///   handler will automatically notify the source whether the request was accepted or denied.
 pub struct RelayHandler {
     config: RelayHandlerConfig,
-    /// Specifies whether the handled connection is used to listen for incoming relayed connections.
+    /// Specifies whether the handled connection is used to listen for incoming relayed
+    /// connections.
     used_for_listening: bool,
     remote_address: Multiaddr,
     remote_peer_id: PeerId,
@@ -111,11 +112,11 @@ pub struct RelayHandler {
     /// [`Connection`](protocol::Connection) to the
     /// [`RelayTransport`](crate::RelayTransport).
     ///
-    /// For each substream to the peer of this handler, there is a future in here that resolves once
-    /// the given substream is dropped.
+    /// For each substream to the peer of this handler, there is a future in here that resolves
+    /// once the given substream is dropped.
     ///
-    /// Once all substreams are dropped and this handler has no other work, [`KeepAlive::Until`] can
-    /// be set, allowing the connection to be closed eventually.
+    /// Once all substreams are dropped and this handler has no other work, [`KeepAlive::Until`]
+    /// can be set, allowing the connection to be closed eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
@@ -659,8 +660,9 @@ impl ProtocolsHandler for RelayHandler {
                                                 )),
                                             ));
                                     }
-                                    // With either status below there is no reason to stay connected.
-                                    // Thus terminate the connection.
+                                    // With either status below there is no reason to stay
+                                    // connected. Thus terminate
+                                    // the connection.
                                     circuit_relay::Status::StopDstAddrTooLong
                                     | circuit_relay::Status::StopDstMultiaddrInvalid
                                     | circuit_relay::Status::MalformedMessage => {

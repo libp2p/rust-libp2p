@@ -1842,8 +1842,9 @@ where
                     // if it is the least recently connected peer, currently disconnected
                     // and is unreachable in the context of another peer pending insertion
                     // into the same bucket. This is handled transparently by the
-                    // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
-                    // within `Kademlia::poll`.
+                    // `KBucketsTable` and takes effect through
+                    // `KBucketsTable::take_applied_pending` within `Kademlia::
+                    // poll`.
                     debug!(
                         "Last remaining address '{}' of peer '{}' is unreachable: {}.",
                         addr, peer_id, err
@@ -2325,7 +2326,8 @@ pub enum KademliaEvent {
         record: Record,
     },
 
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaStoreInserts::FilterBoth`] is enabled.
+    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering
+    /// [`KademliaStoreInserts::FilterBoth`] is enabled.
     ///
     /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
     InboundAddProviderRequest { record: ProviderRecord },

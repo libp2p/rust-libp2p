@@ -302,13 +302,11 @@ where
     /// reading and writing immediately. The remote is informed
     /// based on the current state of the substream:
     ///
-    /// * If the substream was open, a `Reset` frame is sent at
-    ///   the next opportunity.
-    /// * If the substream was half-closed, i.e. a `Close` frame
-    ///   has already been sent, nothing further happens.
-    /// * If the substream was half-closed by the remote, i.e.
-    ///   a `Close` frame has already been received, a `Close`
-    ///   frame is sent at the next opportunity.
+    /// * If the substream was open, a `Reset` frame is sent at the next opportunity.
+    /// * If the substream was half-closed, i.e. a `Close` frame has already been sent, nothing
+    ///   further happens.
+    /// * If the substream was half-closed by the remote, i.e. a `Close` frame has already been
+    ///   received, a `Close` frame is sent at the next opportunity.
     ///
     /// If the multiplexed stream is closed or encountered
     /// an error earlier, or there is no known substream with

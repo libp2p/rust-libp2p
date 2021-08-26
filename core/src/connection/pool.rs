@@ -83,13 +83,11 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTransErr> {
     ///
     /// A connection may close if
     ///
-    ///   * it encounters an error, which includes the connection being
-    ///     closed by the remote. In this case `error` is `Some`.
-    ///   * it was actively closed by [`EstablishedConnection::start_close`],
-    ///     i.e. a successful, orderly close.
-    ///   * it was actively closed by [`Pool::disconnect`], i.e.
-    ///     dropped without an orderly close.
-    ///
+    ///   * it encounters an error, which includes the connection being closed by the remote. In
+    ///     this case `error` is `Some`.
+    ///   * it was actively closed by [`EstablishedConnection::start_close`], i.e. a successful,
+    ///     orderly close.
+    ///   * it was actively closed by [`Pool::disconnect`], i.e. dropped without an orderly close.
     ConnectionClosed {
         id: ConnectionId,
         /// Information about the connection that errored.

@@ -55,7 +55,6 @@
 //!             connection or substream. However if you use the recommended `Swarm` or
 //!             `ProtocolsHandler` APIs, the upgrade is automatically handled for you and you don't
 //!             need to use these methods.
-//!
 
 mod apply;
 mod denied;
@@ -117,7 +116,6 @@ pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError
 ///     }
 /// }
 /// ```
-///
 pub trait ProtocolName {
     /// The protocol name as bytes. Transmitted on the network.
     ///

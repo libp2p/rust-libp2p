@@ -464,7 +464,8 @@ fn test_score_mesh_message_deliveries_decay() {
     }
 
     let score_a = peer_score.score(&peer_id_a);
-    // the penalty is the difference between the threshold and the (decayed) mesh deliveries, squared.
+    // the penalty is the difference between the threshold and the (decayed) mesh deliveries,
+    // squared.
     let deficit = topic_params.mesh_message_deliveries_threshold - decayed_delivery_count;
     let penalty = deficit * deficit;
     let expected =

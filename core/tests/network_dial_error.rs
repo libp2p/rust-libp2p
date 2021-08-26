@@ -94,7 +94,8 @@ fn dial_self() {
     //
     // - The incoming connection notification (before we know the incoming peer ID).
     // - The connection error for the dialing endpoint (once we've determined that it's our own ID).
-    // - The connection error for the listening endpoint (once we've determined that it's our own ID).
+    // - The connection error for the listening endpoint (once we've determined that it's our own
+    //   ID).
     //
     // The last two can happen in any order.
 

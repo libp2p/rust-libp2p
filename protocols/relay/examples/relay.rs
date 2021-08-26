@@ -24,34 +24,44 @@
 //! relay client listening via the relay server and (3) a dialing relay client
 //! dialing the listening relay client via the relay server.
 //!
-//! 1. To start the relay server, run `cargo run --example=relay --package=libp2p-relay --mode relay --secret-key-seed 1 --address /ip4/<ip address>/tcp/<port>`.
-//!    The `-secret-key-seed` helps create a static peer id using the given number argument as  a seed.
-//!    The mode specifies whether the node should run as a relay server, a listening client or a dialing client.
-//!    The address specifies a static address. Usually it will be some loop back address such as `/ip4/0.0.0.0/tcp/4444`.
-//!    Example:
-//!    `cargo run --example=relay --package=libp2p-relay -- --mode relay --secret-key-seed 1 --address /ip4/0.0.0.0/tcp/4444`
-//!    `cargo run --example=relay --package=libp2p-relay -- --mode relay --secret-key-seed 1 --address /ip6/::/tcp/4444`
+//! 1. To start the relay server, run `cargo run --example=relay --package=libp2p-relay --mode relay
+//! --secret-key-seed 1 --address /ip4/<ip address>/tcp/<port>`.    The `-secret-key-seed` helps
+//! create a static peer id using the given number argument as  a seed.    The mode specifies
+//! whether the node should run as a relay server, a listening client or a dialing client.
+//!    The address specifies a static address. Usually it will be some loop back address such as
+//! `/ip4/0.0.0.0/tcp/4444`.    Example:
+//!    `cargo run --example=relay --package=libp2p-relay -- --mode relay --secret-key-seed 1
+//! --address /ip4/0.0.0.0/tcp/4444`    `cargo run --example=relay --package=libp2p-relay -- --mode
+//! relay --secret-key-seed 1 --address /ip6/::/tcp/4444`
 //!
-//! 2. To start the listening relay client run `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2 --address
-//! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit` in a second terminal where:
+//! 2. To start the listening relay client run `cargo run --example=relay --package=libp2p-relay --
+//! --mode client-listen --secret-key-seed 2 --address <addr-relay-server>/p2p/
+//! <peer-id-relay-server>/p2p-circuit` in a second terminal where:
 //!
 //!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
 //!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
 //!
 //!    Example:
-//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2 --address /ip4/127.0.0.1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit`
-//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2 --address /ip6/::1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit`
+//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-listen --secret-key-seed 2
+//! --address /ip4/127.0.0.1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/
+//! p2p-circuit`    `cargo run --example=relay --package=libp2p-relay -- --mode client-listen
+//! --secret-key-seed 2 --address
+//! /ip6/::1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit`
 //!
-//! 3. To start the dialing relay client run `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address
-//! <addr-relay-server>/p2p/<peer-id-relay-server>/p2p-circuit/p2p/<peer-id-listening-relay-client>` in
-//! a third terminal where:
+//! 3. To start the dialing relay client run `cargo run --example=relay --package=libp2p-relay --
+//! --mode client-dial --secret-key-seed 3 --address <addr-relay-server>/p2p/<peer-id-relay-server>/
+//! p2p-circuit/p2p/<peer-id-listening-relay-client>` in a third terminal where:
 //!
 //!   - `<addr-relay-server>` is replaced by one of the listening addresses of the relay server.
 //!   - `<peer-id-relay-server>` is replaced by the peer id of the relay server.
 //!   - `<peer-id-listening-relay-client>` is replaced by the peer id of the listening relay client.
 //!    Example:
-//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address /ip4/127.0.0.1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3`
-//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address /ip6/::1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3`
+//!    `cargo run --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3
+//! --address /ip4/127.0.0.1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/
+//! p2p-circuit/p2p/12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3`    `cargo run
+//! --example=relay --package=libp2p-relay -- --mode client-dial --secret-key-seed 3 --address
+//! /ip6/::1/tcp/4444/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X/p2p-circuit/p2p/
+//! 12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3`
 //!
 //! In the third terminal you will see the dialing relay client to receive pings
 //! from both the relay server AND from the listening relay client relayed via

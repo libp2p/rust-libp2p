@@ -51,7 +51,6 @@ use std::iter;
 ///         }), cp, upgrade::Version::V1)
 ///     });
 /// ```
-///
 pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
 where
     // Note: these bounds are there in order to help the compiler infer types

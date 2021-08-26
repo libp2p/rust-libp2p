@@ -75,7 +75,8 @@ fn poll_flush_buf<W: AsyncWrite>(
                     // we made progress, so try again
                     written += n;
                 } else {
-                    // we got Ok but got no progress whatsoever, so bail out so we don't spin writing 0 bytes.
+                    // we got Ok but got no progress whatsoever, so bail out so we don't spin
+                    // writing 0 bytes.
                     ret = Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "Failed to write buffered data",

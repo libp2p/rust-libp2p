@@ -65,7 +65,8 @@ pub trait OutboundUpgradeSend: UpgradeInfoSend {
     /// Equivalent to [`OutboundUpgrade::Future`](upgrade::OutboundUpgrade::Future).
     type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
 
-    /// Equivalent to [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
+    /// Equivalent to
+    /// [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
     fn upgrade_outbound(self, socket: NegotiatedSubstream, info: Self::Info) -> Self::Future;
 }
 

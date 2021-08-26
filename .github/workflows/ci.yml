@@ -202,4 +202,4 @@ jobs:
         components: rustfmt
 
     - name: Check formatting
-      run: cargo fmt -- --check
+      run: cargo check-custom-fmt

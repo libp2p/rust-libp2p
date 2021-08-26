@@ -217,7 +217,8 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     dst_swarm.listen_on(dst_addr.clone()).unwrap();
-    // Instruct destination node to listen for incoming relayed connections from unknown relay nodes.
+    // Instruct destination node to listen for incoming relayed connections from unknown relay
+    // nodes.
     dst_swarm.listen_on(Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, dst_swarm);
 
@@ -777,9 +778,9 @@ fn inactive_connection_timeout() {
             e => panic!("{:?}", e),
         }
 
-        // Relay should notice connection between Source Node and B to be idle. It should then close the
-        // relayed connection and eventually also close the connection to Source Node given that no
-        // connections are being relayed on the connection.
+        // Relay should notice connection between Source Node and B to be idle. It should then close
+        // the relayed connection and eventually also close the connection to Source Node
+        // given that no connections are being relayed on the connection.
         loop {
             match src_swarm.select_next_some().await {
                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
@@ -1087,7 +1088,8 @@ fn yield_incoming_connection_through_correct_listener() {
         }
     });
 
-    // Instruct destination node to listen for incoming relayed connections from unknown relay nodes.
+    // Instruct destination node to listen for incoming relayed connections from unknown relay
+    // nodes.
     dst_swarm.listen_on(Protocol::P2pCircuit.into()).unwrap();
     // Wait for destination node to report new listen address.
     pool.run_until(async {

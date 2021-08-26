@@ -20,8 +20,8 @@
 
 //! A basic chat application with logs demonstrating libp2p and the gossipsub protocol.
 //!
-//! Using two terminal windows, start two instances. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. Close with Ctrl-c.
+//! Using two terminal windows, start two instances. Type a message in either terminal and hit
+//! return: the message is sent and printed in the other terminal. Close with Ctrl-c.
 //!
 //! You can of course open more terminal windows and add more participants.
 //! Dialing any of the other peers will propagate the new participant to all
@@ -89,7 +89,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
-            .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+            .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message
+            // signing)
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
             // same content will be propagated.
             .build()

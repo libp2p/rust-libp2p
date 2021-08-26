@@ -35,12 +35,11 @@ use std::{cmp::Ordering, collections::VecDeque, num::NonZeroUsize};
 ///
 ///   * An address's score is increased by a given amount whenever it is
 ///     [(re-)added](Addresses::add) to the collection.
-///   * An address's score is decreased by the same amount used when it
-///     was added when the least-recently seen addition is (as per the
-///     limited history) for this address in the context of [`Addresses::add`].
-///   * If an address's score reaches 0 in the context of [`Addresses::add`],
-///     it is removed from the collection.
-///
+///   * An address's score is decreased by the same amount used when it was added when the
+///     least-recently seen addition is (as per the limited history) for this address in the context
+///     of [`Addresses::add`].
+///   * If an address's score reaches 0 in the context of [`Addresses::add`], it is removed from the
+///     collection.
 #[derive(Debug, Clone)]
 pub struct Addresses {
     /// The ranked sequence of addresses, from highest to lowest score.

@@ -178,9 +178,9 @@ pub enum GossipsubSubscriptionAction {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PeerInfo {
     pub peer_id: Option<PeerId>,
-    //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
-    // https://github.com/libp2p/specs/pull/217)
-    //pub signed_peer_record: ?,
+    /*TODO add this when RFC: Signed Address Records got added to the spec (see pull request
+     * https://github.com/libp2p/specs/pull/217)
+     *pub signed_peer_record: ?, */
 }
 
 /// A Control message received by the gossipsub system.
@@ -193,7 +193,8 @@ pub enum GossipsubControlAction {
         /// A list of known message ids (peer_id + sequence _number) as a string.
         message_ids: Vec<MessageId>,
     },
-    /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
+    /// The node requests specific message ids (peer_id + sequence _number) - IWant control
+    /// message.
     IWant {
         /// A list of known message ids (peer_id + sequence _number) as a string.
         message_ids: Vec<MessageId>,

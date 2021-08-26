@@ -28,8 +28,8 @@ use std::{fmt::Debug, task::Context, task::Poll};
 pub trait ConnectionHandler {
     /// The inbound type of events used to notify the handler through the `Network`.
     ///
-    /// See also [`EstablishedConnection::notify_handler`](super::EstablishedConnection::notify_handler)
-    /// and [`ConnectionHandler::inject_event`].
+    /// See also [`EstablishedConnection::notify_handler`](super::EstablishedConnection::
+    /// notify_handler) and [`ConnectionHandler::inject_event`].
     type InEvent: Debug + Send + 'static;
     /// The outbound type of events that the handler emits to the `Network`
     /// through [`ConnectionHandler::poll`].

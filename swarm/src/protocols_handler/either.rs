@@ -34,8 +34,8 @@ pub enum IntoEitherHandler<L, R> {
     Right(R),
 }
 
-/// Implementation of a [`IntoProtocolsHandler`] that represents either of two [`IntoProtocolsHandler`]
-/// implementations.
+/// Implementation of a [`IntoProtocolsHandler`] that represents either of two
+/// [`IntoProtocolsHandler`] implementations.
 impl<L, R> IntoProtocolsHandler for IntoEitherHandler<L, R>
 where
     L: IntoProtocolsHandler,

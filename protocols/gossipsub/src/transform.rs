@@ -43,7 +43,8 @@ pub trait DataTransform {
     ) -> Result<GossipsubMessage, std::io::Error>;
 
     /// Takes the data to be published (a topic and associated data) transforms the data. The
-    /// transformed data will then be used to create a [`crate::RawGossipsubMessage`] to be sent to peers.
+    /// transformed data will then be used to create a [`crate::RawGossipsubMessage`] to be sent to
+    /// peers.
     fn outbound_transform(
         &self,
         topic: &TopicHash,

@@ -69,10 +69,11 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// Communication with a remote over a set of protocols is initiated in one of two ways:
 ///
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
-///      [`ProtocolsHandler::poll()`] must return an [`ProtocolsHandlerEvent::OutboundSubstreamRequest`],
-///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
-///      protocol(s). Upon success, [`ProtocolsHandler::inject_fully_negotiated_outbound`]
-///      is called with the final output of the upgrade.
+///      [`ProtocolsHandler::poll()`] must return an
+/// [`ProtocolsHandlerEvent::OutboundSubstreamRequest`],      providing an instance of
+/// [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the      protocol(s). Upon
+/// success, [`ProtocolsHandler::inject_fully_negotiated_outbound`]      is called with the final
+/// output of the upgrade.
 ///
 ///   2. Listening by accepting a new inbound substream. When a new inbound substream
 ///      is created on a connection, [`ProtocolsHandler::listen_protocol`] is called
@@ -139,14 +140,16 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Notifies the handler of a change in the address of the remote.
     fn inject_address_change(&mut self, _new_address: &Multiaddr) {}
 
-    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
+    /// Indicates to the handler that upgrading an outbound substream to the given protocol has
+    /// failed.
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     );
 
-    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
+    /// Indicates to the handler that upgrading an inbound substream to the given protocol has
+    /// failed.
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,

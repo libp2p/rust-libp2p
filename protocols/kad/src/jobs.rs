@@ -41,11 +41,10 @@
 //!
 //! This module implements two periodic jobs:
 //!
-//!   * [`PutRecordJob`]: For (re-)publication and (re-)replication of
-//!     regular (value-)records.
+//!   * [`PutRecordJob`]: For (re-)publication and (re-)replication of regular (value-)records.
 //!
-//!   * [`AddProviderJob`]: For (re-)publication of provider records.
-//!     Provider records currently have no separate replication mechanism.
+//!   * [`AddProviderJob`]: For (re-)publication of provider records. Provider records currently
+//!     have no separate replication mechanism.
 //!
 //! A periodic job is driven like a `Future` or `Stream` by `poll`ing it.
 //! Once a job starts running it emits records to send to the `k` closest

@@ -150,8 +150,9 @@ enum SeqState<R, N> {
 
 impl<R, I> Future for DialerSelectSeq<R, I>
 where
-    // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
-    // It also makes the implementation considerably easier to write.
+    // The Unpin bound here is required because we produce a
+    // `Negotiated<R>` as the output. It also makes the
+    // implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
     I::Item: AsRef<[u8]>,
@@ -289,8 +290,9 @@ enum ParState<R, N> {
 
 impl<R, I> Future for DialerSelectPar<R, I>
 where
-    // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
-    // It also makes the implementation considerably easier to write.
+    // The Unpin bound here is required because we produce a
+    // `Negotiated<R>` as the output. It also makes the
+    // implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
     I::Item: AsRef<[u8]>,

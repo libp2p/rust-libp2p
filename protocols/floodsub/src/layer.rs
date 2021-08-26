@@ -194,7 +194,8 @@ impl Floodsub {
         self.publish_many_inner(topic, data, true)
     }
 
-    /// Publishes a message with multiple topics to the network, even if we're not subscribed to any of the topics.
+    /// Publishes a message with multiple topics to the network, even if we're not subscribed to any
+    /// of the topics.
     pub fn publish_many_any(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,

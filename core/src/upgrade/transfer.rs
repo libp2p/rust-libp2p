@@ -25,7 +25,8 @@ use std::{error, fmt, io};
 
 // TODO: these methods could be on an Ext trait to AsyncWrite
 
-/// Writes a message to the given socket with a length prefix appended to it. Also flushes the socket.
+/// Writes a message to the given socket with a length prefix appended to it. Also flushes the
+/// socket.
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what [`read_length_prefixed`] expects.
@@ -44,7 +45,6 @@ pub async fn write_length_prefixed(
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what `read_one` expects.
-///
 #[deprecated(
     since = "0.29.0",
     note = "Use `write_length_prefixed` instead. You will need to manually close the stream using `socket.close().await`."
@@ -126,8 +126,8 @@ pub async fn read_varint(socket: &mut (impl AsyncRead + Unpin)) -> Result<usize,
                     "overflow in variable-length integer",
                 ));
             }
-            // TODO: why do we have a `__Nonexhaustive` variant in the error? I don't know how to process it
-            // Err(unsigned_varint::decode::Error::Insufficient) => {}
+            // TODO: why do we have a `__Nonexhaustive` variant in the error? I don't know how to
+            // process it Err(unsigned_varint::decode::Error::Insufficient) => {}
             Err(_) => {}
         }
     }

@@ -85,7 +85,6 @@
 //!     // You can now use `_io` to communicate with the remote.
 //! });
 //! ```
-//!
 
 mod dialer_select;
 mod length_delimited;
@@ -137,8 +136,8 @@ pub enum Version {
     /// [1]: https://github.com/multiformats/go-multistream/issues/20
     /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
     V1Lazy,
-    // Draft: https://github.com/libp2p/specs/pull/95
-    // V2,
+    /* Draft: https://github.com/libp2p/specs/pull/95
+     * V2, */
 }
 
 impl Default for Version {

@@ -45,8 +45,7 @@
 //!
 //! ## Architectural properties
 //!
-//! - Clean clonable async/await interface ([`Client`]) to interact with the
-//!   network layer.
+//! - Clean clonable async/await interface ([`Client`]) to interact with the network layer.
 //!
 //! - Single task driving the network layer, no locks required.
 //!
@@ -69,9 +68,9 @@
 //!
 //!    ```
 //!    cargo run --example file-sharing -- \
-//!              --peer /ip4/127.0.0.1/tcp/40837/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X \
-//!              get \
-//!              --name <name-for-others-to-find-your-file>
+//!              --peer
+//! /ip4/127.0.0.1/tcp/40837/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X \             
+//! get \              --name <name-for-others-to-find-your-file>
 //!    ```
 //!
 //! Note: The client does not need to be directly connected to the providing
@@ -224,8 +223,8 @@ mod network {
 
     /// Creates the network components, namely:
     ///
-    /// - The network client to interact with the network layer from anywhere
-    ///   within your application.
+    /// - The network client to interact with the network layer from anywhere within your
+    ///   application.
     ///
     /// - The network event stream, e.g. for incoming requests.
     ///

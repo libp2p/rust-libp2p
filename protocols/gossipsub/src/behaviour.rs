@@ -171,8 +171,9 @@ impl From<MessageAuthenticity> for PublishConfig {
                 let public_key = keypair.public();
                 let key_enc = public_key.to_protobuf_encoding();
                 let key = if key_enc.len() <= 42 {
-                    // The public key can be inlined in [`rpc_proto::Message::from`], so we don't include it
-                    // specifically in the [`rpc_proto::Message::key`] field.
+                    // The public key can be inlined in [`rpc_proto::Message::from`], so we don't
+                    // include it specifically in the
+                    // [`rpc_proto::Message::key`] field.
                     None
                 } else {
                     // Include the protobuf encoding of the public key in the message.
@@ -1308,15 +1309,16 @@ where
                         topic = {}]",
                             peer_id, score, topic_hash
                         );
-                        // we do send them PRUNE however, because it's a matter of protocol correctness
+                        // we do send them PRUNE however, because it's a matter of protocol
+                        // correctness
                         to_prune_topics.insert(topic_hash.clone());
                         // but we won't PX to them
                         do_px = false;
                         continue;
                     }
 
-                    // check mesh upper bound and only allow graft if the upper bound is not reached or
-                    // if it is an outbound peer
+                    // check mesh upper bound and only allow graft if the upper bound is not reached
+                    // or if it is an outbound peer
                     if peers.len() >= self.config.mesh_n_high()
                         && !self.outbound_peers.contains(peer_id)
                     {
@@ -2927,8 +2929,8 @@ where
             // Diverging from the go implementation we only want to consider a peer as outbound peer
             // if its first connection is outbound. To check if this connection is the first we
             // check if the peer isn't connected yet. This only works because the
-            // `inject_connection_established` event for the first connection gets called immediately
-            // before `inject_connected` gets called.
+            // `inject_connection_established` event for the first connection gets called
+            // immediately before `inject_connected` gets called.
             if !self.peer_topics.contains_key(peer_id) && !self.px_peers.contains(peer_id) {
                 // The first connection is outbound and it is not a peer from peer exchange => mark
                 // it as outbound peer
@@ -3129,7 +3131,8 @@ where
                 }
 
                 // Handle control messages
-                // group some control messages, this minimises SendEvents (code is simplified to handle each event at a time however)
+                // group some control messages, this minimises SendEvents (code is simplified to
+                // handle each event at a time however)
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
