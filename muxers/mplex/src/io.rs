@@ -1104,7 +1104,6 @@ mod tests {
     use async_std::task;
     use asynchronous_codec::{Decoder, Encoder};
     use bytes::BytesMut;
-    use futures::prelude::*;
     use quickcheck::*;
     use rand::prelude::*;
     use std::collections::HashSet;
