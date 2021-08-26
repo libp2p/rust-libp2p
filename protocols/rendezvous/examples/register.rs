@@ -64,8 +64,8 @@ async fn main() {
 
     while let Some(event) = swarm.next().await {
         match event {
-            SwarmEvent::NewListenAddr(addr) => {
-                log::info!("Listening on {}", addr);
+            SwarmEvent::NewListenAddr { address, .. } => {
+                log::info!("Listening on {}", address);
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,

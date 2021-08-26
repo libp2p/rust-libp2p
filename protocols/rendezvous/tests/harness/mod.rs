@@ -179,15 +179,16 @@ where
     }
 
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr {
-        let multiaddr = get_rand_memory_address();
-
-        self.listen_on(multiaddr.clone()).unwrap();
+        let memory_addr_listener_id = self.listen_on(get_rand_memory_address()).unwrap();
 
         // block until we are actually listening
-        loop {
+        let multiaddr = loop {
             match self.select_next_some().await {
-                SwarmEvent::NewListenAddr(addr) if addr == multiaddr => {
-                    break;
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == memory_addr_listener_id => {
+                    break address;
                 }
                 other => {
                     log::debug!(
@@ -196,7 +197,7 @@ where
                     );
                 }
             }
-        }
+        };
 
         // Memory addresses are externally reachable because they all share the same memory-space.
         self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
