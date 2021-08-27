@@ -22,6 +22,8 @@ use crate::codec;
 use crate::codec::Message;
 use void::Void;
 
+const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
+
 pub mod inbound;
 pub mod outbound;
 
@@ -38,6 +40,9 @@ pub enum Error {
     UnexpectedEndOfStream,
 }
 
-pub type InEvent = crate::substream_handler::InEvent<outbound::OpenInfo, inbound::InEvent, Void>;
-pub type OutEvent =
-    crate::substream_handler::OutEvent<inbound::OutEvent, outbound::OutEvent, Error, Error>;
+pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
+pub type OutboundOutEvent =
+    crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
+
+pub type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
+pub type InboundOutEvent = crate::substream_handler::OutEvent<inbound::OutEvent, Void, Error, Void>;

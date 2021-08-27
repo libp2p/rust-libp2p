@@ -18,10 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use self::behaviour::{Behaviour, Config, Event, RegisterError};
 pub use self::codec::{ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
 
-mod behaviour;
 mod codec;
 mod handler;
 mod substream_handler;
@@ -40,3 +38,6 @@ pub const MIN_TTL: Ttl = 60 * 60 * 2;
 ///
 /// <https://github.com/libp2p/specs/tree/master/rendezvous#recommendations-for-rendezvous-points-configurations>.
 pub const MAX_TTL: Ttl = 60 * 60 * 72;
+
+pub mod client;
+pub mod server;

@@ -43,7 +43,7 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            rendezvous: rendezvous::Behaviour::new(identity.clone(), rendezvous::Config::default()),
+            rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
@@ -79,7 +79,7 @@ async fn main() {
                 );
                 return;
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::Discovered {
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::client::Event::Discovered {
                 registrations,
                 ..
             })) => {
@@ -115,12 +115,12 @@ async fn main() {
 
 #[derive(Debug)]
 enum MyEvent {
-    Rendezvous(rendezvous::Event),
+    Rendezvous(rendezvous::client::Event),
     Ping(PingEvent),
 }
 
-impl From<rendezvous::Event> for MyEvent {
-    fn from(event: rendezvous::Event) -> Self {
+impl From<rendezvous::client::Event> for MyEvent {
+    fn from(event: rendezvous::client::Event) -> Self {
         MyEvent::Rendezvous(event)
     }
 }
@@ -135,6 +135,6 @@ impl From<PingEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    rendezvous: rendezvous::Behaviour,
+    rendezvous: rendezvous::client::Behaviour,
     ping: Ping,
 }

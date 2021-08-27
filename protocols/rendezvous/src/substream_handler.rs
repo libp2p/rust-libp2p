@@ -25,10 +25,9 @@
 //!
 //! At the moment, this module is an implementation detail of the rendezvous protocol but the intent is for it to be provided as a generic module that is accessible to other protocols as well.
 
-use futures::future::{BoxFuture, Fuse, FusedFuture};
+use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
-use libp2p_core::upgrade::FromFnUpgrade;
-use libp2p_core::Endpoint;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -36,7 +35,7 @@ use libp2p_swarm::{
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
-use std::future::{Future, Ready};
+use std::future::Future;
 use std::hash::Hash;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
@@ -49,6 +48,8 @@ pub trait SubstreamHandler: Sized {
     type Error;
     type OpenInfo;
 
+    fn upgrade(open_info: Self::OpenInfo)
+        -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo>;
     fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self;
     fn inject_event(self, event: Self::InEvent) -> Self;
     fn advance(self, cx: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error>;
@@ -125,15 +126,55 @@ impl fmt::Display for OutboundSubstreamId {
     }
 }
 
-type ProtocolUpgradeFn =
-    Box<dyn Fn(NegotiatedSubstream, Endpoint) -> Ready<Result<NegotiatedSubstream, Void>> + Send>;
-type Protocol = FromFnUpgrade<&'static [u8], ProtocolUpgradeFn>;
+pub struct PassthroughProtocol {
+    ident: Option<&'static [u8]>,
+}
+
+impl PassthroughProtocol {
+    pub fn new(ident: &'static [u8]) -> Self {
+        Self { ident: Some(ident) }
+    }
+}
+
+impl UpgradeInfo for PassthroughProtocol {
+    type Info = &'static [u8];
+    type InfoIter = std::option::IntoIter<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        self.ident.into_iter()
+    }
+}
+
+impl<C: Send + 'static> InboundUpgrade<C> for PassthroughProtocol {
+    type Output = C;
+    type Error = Void;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+        match self.ident {
+            Some(_) => future::ready(Ok(socket)).boxed(),
+            None => future::pending().boxed(),
+        }
+    }
+}
+
+impl<C: Send + 'static> OutboundUpgrade<C> for PassthroughProtocol {
+    type Output = C;
+    type Error = Void;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+        match self.ident {
+            Some(_) => future::ready(Ok(socket)).boxed(),
+            None => future::pending().boxed(),
+        }
+    }
+}
 
 /// An implementation of [`ProtocolsHandler`] that delegates to individual [`SubstreamHandler`]s.
 pub struct SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo> {
     inbound_substreams: HashMap<InboundSubstreamId, TInboundSubstream>,
     outbound_substreams: HashMap<OutboundSubstreamId, TOutboundSubstream>,
-    protocol: &'static [u8],
     next_inbound_substream_id: InboundSubstreamId,
     next_outbound_substream_id: OutboundSubstreamId,
 
@@ -145,11 +186,40 @@ pub struct SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOut
 impl<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
     SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
 {
-    pub fn new(protocol: &'static [u8], initial_keep_alive: Duration) -> Self {
+    pub fn new(initial_keep_alive: Duration) -> Self {
         Self {
             inbound_substreams: Default::default(),
             outbound_substreams: Default::default(),
-            protocol,
+            next_inbound_substream_id: InboundSubstreamId(0),
+            next_outbound_substream_id: OutboundSubstreamId(0),
+            new_substreams: Default::default(),
+            initial_keep_alive_deadline: Instant::now() + initial_keep_alive,
+        }
+    }
+}
+
+impl<TOutboundSubstream, TOutboundOpenInfo>
+    SubstreamProtocolsHandler<void::Void, TOutboundSubstream, TOutboundOpenInfo>
+{
+    pub fn new_outbound_only(initial_keep_alive: Duration) -> Self {
+        Self {
+            inbound_substreams: Default::default(),
+            outbound_substreams: Default::default(),
+            next_inbound_substream_id: InboundSubstreamId(0),
+            next_outbound_substream_id: OutboundSubstreamId(0),
+            new_substreams: Default::default(),
+            initial_keep_alive_deadline: Instant::now() + initial_keep_alive,
+        }
+    }
+}
+
+impl<TInboundSubstream, TOutboundOpenInfo>
+    SubstreamProtocolsHandler<TInboundSubstream, void::Void, TOutboundOpenInfo>
+{
+    pub fn new_inbound_only(initial_keep_alive: Duration) -> Self {
+        Self {
+            inbound_substreams: Default::default(),
+            outbound_substreams: Default::default(),
             next_inbound_substream_id: InboundSubstreamId(0),
             next_outbound_substream_id: OutboundSubstreamId(0),
             new_substreams: Default::default(),
@@ -286,19 +356,13 @@ where
     type InEvent = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
     type OutEvent = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
     type Error = Void;
-    type InboundProtocol = Protocol;
-    type OutboundProtocol = Protocol;
+    type InboundProtocol = PassthroughProtocol;
+    type OutboundProtocol = PassthroughProtocol;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = TOutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(
-            libp2p_core::upgrade::from_fn(
-                self.protocol,
-                Box::new(|socket, _| std::future::ready(Ok(socket))),
-            ),
-            (),
-        )
+        TInboundSubstreamHandler::upgrade(())
     }
 
     fn inject_fully_negotiated_inbound(
@@ -391,13 +455,7 @@ where
     > {
         if let Some(open_info) = self.new_substreams.pop_front() {
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(
-                    libp2p_core::upgrade::from_fn(
-                        self.protocol,
-                        Box::new(|socket, _| std::future::ready(Ok(socket))),
-                    ),
-                    open_info,
-                ),
+                protocol: TOutboundSubstreamHandler::upgrade(open_info),
             });
         }
 
@@ -464,5 +522,30 @@ impl<TOutEvent, TError> FutureSubstream<TOutEvent, TError> {
             Poll::Ready(Err(error)) => Err(error),
             Poll::Pending => Ok(Next::Pending { next_state: self }),
         }
+    }
+}
+
+impl SubstreamHandler for void::Void {
+    type InEvent = void::Void;
+    type OutEvent = void::Void;
+    type Error = void::Void;
+    type OpenInfo = ();
+
+    fn new(_: NegotiatedSubstream, _: Self::OpenInfo) -> Self {
+        unreachable!("we should never yield a substream")
+    }
+
+    fn inject_event(self, event: Self::InEvent) -> Self {
+        void::unreachable(event)
+    }
+
+    fn advance(self, _: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error> {
+        void::unreachable(self)
+    }
+
+    fn upgrade(
+        open_info: Self::OpenInfo,
+    ) -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo> {
+        SubstreamProtocol::new(PassthroughProtocol { ident: None }, open_info)
     }
 }

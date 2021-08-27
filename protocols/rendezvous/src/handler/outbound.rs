@@ -20,11 +20,12 @@
 
 use crate::codec::{Cookie, Message, NewRegistration, RendezvousCodec};
 use crate::handler::Error;
-use crate::substream_handler::{FutureSubstream, Next, SubstreamHandler};
+use crate::handler::PROTOCOL_IDENT;
+use crate::substream_handler::{FutureSubstream, Next, PassthroughProtocol, SubstreamHandler};
 use crate::{ErrorCode, Namespace, Registration, Ttl};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, TryFutureExt, TryStreamExt};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::{NegotiatedSubstream, SubstreamProtocol};
 use std::task::Context;
 use void::Void;
 
@@ -35,6 +36,12 @@ impl SubstreamHandler for Stream {
     type OutEvent = OutEvent;
     type Error = Error;
     type OpenInfo = OpenInfo;
+
+    fn upgrade(
+        open_info: Self::OpenInfo,
+    ) -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo> {
+        SubstreamProtocol::new(PassthroughProtocol::new(PROTOCOL_IDENT), open_info)
+    }
 
     fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self {
         let mut stream = Framed::new(substream, RendezvousCodec::default());

@@ -22,10 +22,11 @@ use crate::codec::{
     Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec, Ttl,
 };
 use crate::handler::Error;
-use crate::substream_handler::{Next, SubstreamHandler};
+use crate::handler::PROTOCOL_IDENT;
+use crate::substream_handler::{Next, PassthroughProtocol, SubstreamHandler};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::{NegotiatedSubstream, SubstreamProtocol};
 use std::fmt;
 use std::task::{Context, Poll};
 
@@ -82,6 +83,12 @@ impl SubstreamHandler for Stream {
     type OutEvent = OutEvent;
     type Error = Error;
     type OpenInfo = ();
+
+    fn upgrade(
+        open_info: Self::OpenInfo,
+    ) -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo> {
+        SubstreamProtocol::new(PassthroughProtocol::new(PROTOCOL_IDENT), open_info)
+    }
 
     fn new(substream: NegotiatedSubstream, _: Self::OpenInfo) -> Self {
         Stream::PendingRead(Framed::new(substream, RendezvousCodec::default()))

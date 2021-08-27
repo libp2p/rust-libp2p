@@ -37,7 +37,7 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            rendezvous: rendezvous::Behaviour::new(identity.clone(), rendezvous::Config::default()),
+            rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
             ping: Ping::default(),
         },
         PeerId::from(identity.public()),
@@ -57,20 +57,21 @@ async fn main() {
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 log::info!("Disconnected from {}", peer_id);
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::PeerRegistered {
-                peer,
-                registration,
-            })) => {
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(
+                rendezvous::server::Event::PeerRegistered { peer, registration },
+            )) => {
                 log::info!(
                     "Peer {} registered for namespace '{}'",
                     peer,
                     registration.namespace
                 );
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::Event::DiscoverServed {
-                enquirer,
-                registrations,
-            })) => {
+            SwarmEvent::Behaviour(MyEvent::Rendezvous(
+                rendezvous::server::Event::DiscoverServed {
+                    enquirer,
+                    registrations,
+                },
+            )) => {
                 log::info!(
                     "Served peer {} with {} registrations",
                     enquirer,
@@ -86,12 +87,12 @@ async fn main() {
 
 #[derive(Debug)]
 enum MyEvent {
-    Rendezvous(rendezvous::Event),
+    Rendezvous(rendezvous::server::Event),
     Ping(PingEvent),
 }
 
-impl From<rendezvous::Event> for MyEvent {
-    fn from(event: rendezvous::Event) -> Self {
+impl From<rendezvous::server::Event> for MyEvent {
+    fn from(event: rendezvous::server::Event) -> Self {
         MyEvent::Rendezvous(event)
     }
 }
@@ -106,6 +107,6 @@ impl From<PingEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    rendezvous: rendezvous::Behaviour,
+    rendezvous: rendezvous::server::Behaviour,
     ping: Ping,
 }
