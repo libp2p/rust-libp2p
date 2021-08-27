@@ -66,6 +66,7 @@ pub mod upgrade;
 
 pub use connection::{Connected, ConnectedPoint, Endpoint};
 pub use identity::PublicKey;
+pub use instant::{Duration, Instant};
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;

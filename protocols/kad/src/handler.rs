@@ -27,7 +27,7 @@ use futures::prelude::*;
 use libp2p_core::{
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade},
-    ConnectedPoint, PeerId,
+    ConnectedPoint, Instant, PeerId,
 };
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -37,7 +37,6 @@ use log::trace;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
-use wasm_timer::Instant;
 
 /// A prototype from which [`KademliaHandler`]s can be constructed.
 pub struct KademliaHandlerProto<T> {

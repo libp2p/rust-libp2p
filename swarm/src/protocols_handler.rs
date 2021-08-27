@@ -48,9 +48,8 @@ mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Instant, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
-use wasm_timer::Instant;
 
 pub use dummy::DummyProtocolsHandler;
 pub use map_in::MapInEvent;

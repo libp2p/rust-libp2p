@@ -33,12 +33,11 @@ use bytes::BytesMut;
 use codec::UviBytes;
 use futures::prelude::*;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Instant, Multiaddr, PeerId};
 use prost::Message;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
-use wasm_timer::Instant;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";

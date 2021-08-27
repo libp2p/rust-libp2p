@@ -30,9 +30,8 @@ use crate::kbucket::{Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
-use libp2p_core::PeerId;
+use libp2p_core::{Instant, PeerId};
 use std::{num::NonZeroUsize, time::Duration};
-use wasm_timer::Instant;
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///

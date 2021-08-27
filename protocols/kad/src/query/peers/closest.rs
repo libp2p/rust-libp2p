@@ -22,10 +22,9 @@ use super::*;
 
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
-use libp2p_core::PeerId;
+use libp2p_core::{Instant, PeerId};
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
-use wasm_timer::Instant;
 
 pub mod disjoint;
 

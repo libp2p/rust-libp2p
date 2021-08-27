@@ -40,7 +40,7 @@ use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
-    ConnectedPoint, Multiaddr, PeerId,
+    ConnectedPoint, Instant, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     DialError, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
@@ -54,7 +54,6 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
 use std::{borrow::Cow, error, time::Duration};
-use wasm_timer::Instant;
 
 pub use crate::query::QueryStats;
 

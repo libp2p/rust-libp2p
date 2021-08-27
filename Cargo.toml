@@ -53,7 +53,7 @@ rendezvous = ["libp2p-rendezvous"]
 tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
 uds = ["libp2p-uds"]
-wasm-bindgen = ["parking_lot/wasm-bindgen"]
+wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "parking_lot/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
 websocket = ["libp2p-websocket"]
@@ -67,6 +67,9 @@ all-features = true
 atomic = "0.5.0"
 bytes = "1"
 futures = "0.3.1"
+futures-timer = "3.0.2"
+getrandom = "0.2.3"
+instant = "0.1.10"
 lazy_static = "1.2"
 libp2p-core = { version = "0.30.0", path = "core",  default-features = false }
 libp2p-floodsub = { version = "0.31.0", path = "protocols/floodsub", optional = true }
@@ -91,7 +94,6 @@ multiaddr = { version = "0.13.0" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
 smallvec = "1.6.1"
-wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.30.0", path = "transports/deflate", optional = true }
@@ -141,3 +143,6 @@ members = [
 [[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
+
+[patch.crates-io]
+instant = { git = "https://github.com/wngr/instant" }

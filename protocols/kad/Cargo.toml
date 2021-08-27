@@ -11,19 +11,19 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 arrayvec = "0.5.1"
+asynchronous-codec = "0.6"
 bytes = "1"
 either = "1.5"
 fnv = "1.0"
-asynchronous-codec = "0.6"
 futures = "0.3.1"
-log = "0.4"
+futures-timer = "3.0.2"
 libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
+log = "0.4"
 prost = "0.8"
 rand = "0.7.2"
 sha2 = "0.9.1"
 smallvec = "1.6.1"
-wasm-timer = "0.2"
 uint = "0.9"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1.0"

@@ -27,7 +27,7 @@ use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint, Instant, Multiaddr, PeerId};
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -36,7 +36,6 @@ use log::warn;
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use wasm_timer::Instant;
 
 pub struct RelayHandlerConfig {
     pub connection_idle_timeout: Duration,
