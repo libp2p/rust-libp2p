@@ -1287,3 +1287,62 @@ fn network_behaviour_inject_address_change() {
         kademlia.addresses_of_peer(&remote_peer_id),
     );
 }
+
+#[test]
+fn client_mode() {
+    // Approach 1:
+    // create two peers: client and server
+    let client_peerid = PeerId::random();
+    let server_peerid = PeerId::random();
+
+    // create client kademlia config.
+    let mut client_config = KademliaConfig::default();
+    client_config.set_mode(Mode::Client);
+
+    let mut client_kademlia = Kademlia::with_config(
+        client_peerid.clone(),
+        MemoryStore::new(client_peerid.clone()),
+        client_config,
+    );
+
+    let mut server_kademlia = Kademlia::new(
+        server_peerid.clone(),
+        MemoryStore::new(server_peerid.clone()),
+    );
+
+    let connection_id = ConnectionId::new(1);
+    let client_addr: Multiaddr = Protocol::Memory(1).into();
+
+    let endpoint = ConnectedPoint::Dialer {
+        address: client_addr.clone(),
+    };
+
+    // Mimick a connection being established.
+    server_kademlia.inject_connection_established(
+        &client_peerid.clone(),
+        &connection_id,
+        &endpoint,
+    );
+    server_kademlia.inject_connected(&client_peerid.clone());
+
+    // At this point the remote is not yet known to support the
+    // configured protocol name, so the peer is not yet in the
+    // local routing table and hence no addresses are known.
+    assert!(server_kademlia
+        .addresses_of_peer(&client_peerid.clone())
+        .is_empty());
+
+    // Mimick the connection handler confirming the protocol for
+    // the test connection, so that the peer is added to the routing table.
+    server_kademlia.inject_event(
+        client_peerid.clone(),
+        connection_id.clone(),
+        KademliaHandlerEvent::ProtocolConfirmed { endpoint },
+    );
+
+    // Since the client node is in Client mode, even after protocol negotiation
+    // it should not be present in the routing table.
+    assert!(server_kademlia
+        .addresses_of_peer(&client_peerid.clone())
+        .is_empty());
+}
