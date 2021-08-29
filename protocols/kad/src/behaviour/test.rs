@@ -1290,59 +1290,52 @@ fn network_behaviour_inject_address_change() {
 
 #[test]
 fn client_mode() {
-    // Approach 1:
-    // create two peers: client and server
-    let client_peerid = PeerId::random();
-    let server_peerid = PeerId::random();
+    let mut cfg = KademliaConfig::default();
+    cfg.set_mode(Mode::Client);
 
-    // create client kademlia config.
-    let mut client_config = KademliaConfig::default();
-    client_config.set_mode(Mode::Client);
+    // Create a server and client peer.
+    let client_swarm = build_node_with_config(cfg);
+    let server_swarm = build_node_with_config(KademliaConfig::default());
 
-    let mut client_kademlia = Kademlia::with_config(
-        client_peerid.clone(),
-        MemoryStore::new(client_peerid.clone()),
-        client_config,
-    );
+    let mut swarms = Vec::new();
+    swarms.push(client_swarm.1);
+    swarms.push(server_swarm.1);
 
-    let mut server_kademlia = Kademlia::new(
-        server_peerid.clone(),
-        MemoryStore::new(server_peerid.clone()),
-    );
+    let swarm_ids: Vec<_> = swarms
+        .iter()
+        .map(|swarm| swarm.local_peer_id())
+        .cloned()
+        .collect();
 
-    let connection_id = ConnectionId::new(1);
-    let client_addr: Multiaddr = Protocol::Memory(1).into();
+    block_on(poll_fn(move |ctx| {
+        for swarm in swarms.iter_mut() {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(_) => {
+                        if swarm.local_peer_id() == &swarm_ids[0] {
+                            // Check if the server peer doesn't have the client peer.
+                            assert!(swarm
+                                .behaviour_mut()
+                                .addresses_of_peer(&swarm_ids[1])
+                                .is_empty());
 
-    let endpoint = ConnectedPoint::Dialer {
-        address: client_addr.clone(),
-    };
+                            return Poll::Ready(());
+                        }
 
-    // Mimick a connection being established.
-    server_kademlia.inject_connection_established(
-        &client_peerid.clone(),
-        &connection_id,
-        &endpoint,
-    );
-    server_kademlia.inject_connected(&client_peerid.clone());
+                        if swarm.local_peer_id() == &swarm_ids[1] {
+                            // Check if the client peer has the server peer.
+                            assert!(!swarm
+                                .behaviour_mut()
+                                .addresses_of_peer(&swarm_ids[0])
+                                .is_empty());
 
-    // At this point the remote is not yet known to support the
-    // configured protocol name, so the peer is not yet in the
-    // local routing table and hence no addresses are known.
-    assert!(server_kademlia
-        .addresses_of_peer(&client_peerid.clone())
-        .is_empty());
-
-    // Mimick the connection handler confirming the protocol for
-    // the test connection, so that the peer is added to the routing table.
-    server_kademlia.inject_event(
-        client_peerid.clone(),
-        connection_id.clone(),
-        KademliaHandlerEvent::ProtocolConfirmed { endpoint },
-    );
-
-    // Since the client node is in Client mode, even after protocol negotiation
-    // it should not be present in the routing table.
-    assert!(server_kademlia
-        .addresses_of_peer(&client_peerid.clone())
-        .is_empty());
+                            return Poll::Ready(());
+                        }
+                    }
+                    Poll::Pending => break,
+                }
+            }
+        }
+        Poll::Pending
+    }));
 }
