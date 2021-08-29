@@ -1301,6 +1301,10 @@ fn client_mode() {
     swarms.push(client_swarm.1);
     swarms.push(server_swarm.1);
 
+    let mut swarm_addrs = Vec::new();
+    swarm_addrs.push(client_swarm.0);
+    swarm_addrs.push(server_swarm.0);
+
     let swarm_ids: Vec<_> = swarms
         .iter()
         .map(|swarm| swarm.local_peer_id())
@@ -1308,11 +1312,28 @@ fn client_mode() {
         .collect();
 
     block_on(poll_fn(move |ctx| {
+        // flags to make sure both peers are listening
+        let mut client_listening = false;
+        let mut server_listening = false;
+
         for swarm in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::NewListenAddr {
+                        listener_id: _,
+                        address,
+                    })) => {
+                        if address == swarm_addrs[0] {
+                            client_listening = true;
+                            return Poll::Ready(());
+                        }
+                        if address == swarm_addrs[1] {
+                            server_listening = true;
+                            return Poll::Ready(());
+                        }
+                    }
                     Poll::Ready(_) => {
-                        if swarm.local_peer_id() == &swarm_ids[0] {
+                        if swarm.local_peer_id() == &swarm_ids[0] && client_listening == true {
                             let bucket = swarm.behaviour_mut().kbucket(swarm_ids[1].clone());
                             assert!(bucket.is_some());
                             // Check if the client peer has the server peer.
@@ -1327,7 +1348,7 @@ fn client_mode() {
                             return Poll::Ready(());
                         }
 
-                        if swarm.local_peer_id() == &swarm_ids[1] {
+                        if swarm.local_peer_id() == &swarm_ids[1] && server_listening == true {
                             let bucket =
                                 swarm.behaviour_mut().kbucket(swarm_ids[0].clone()).unwrap();
                             // Check if the server peer doesn't have the client peer.
@@ -1345,6 +1366,8 @@ fn client_mode() {
                 }
             }
         }
+        assert!(client_listening);
+        assert!(server_listening);
         Poll::Pending
     }));
 }
