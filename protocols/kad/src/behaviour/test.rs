@@ -1295,7 +1295,7 @@ fn client_mode() {
 
     // Create a server and client peer.
     let client_swarm = build_node_with_config(cfg);
-    let server_swarm = build_node_with_config(KademliaConfig::default());
+    let server_swarm = build_node();
 
     let mut swarms = Vec::new();
     swarms.push(client_swarm.1);
@@ -1313,21 +1313,30 @@ fn client_mode() {
                 match swarm.poll_next_unpin(ctx) {
                     Poll::Ready(_) => {
                         if swarm.local_peer_id() == &swarm_ids[0] {
-                            // Check if the server peer doesn't have the client peer.
-                            assert!(swarm
-                                .behaviour_mut()
-                                .addresses_of_peer(&swarm_ids[1])
-                                .is_empty());
+                            let bucket = swarm.behaviour_mut().kbucket(swarm_ids[1].clone());
+                            assert!(bucket.is_some());
+                            // Check if the client peer has the server peer.
+                            assert!(
+                                bucket
+                                    .unwrap()
+                                    .iter()
+                                    .any(|p| p.node.key.preimage() == &swarm_ids[1]),
+                                "The client peer does not have the server node"
+                            );
 
                             return Poll::Ready(());
                         }
 
                         if swarm.local_peer_id() == &swarm_ids[1] {
-                            // Check if the client peer has the server peer.
-                            assert!(!swarm
-                                .behaviour_mut()
-                                .addresses_of_peer(&swarm_ids[0])
-                                .is_empty());
+                            let bucket =
+                                swarm.behaviour_mut().kbucket(swarm_ids[0].clone()).unwrap();
+                            // Check if the server peer doesn't have the client peer.
+                            assert!(
+                                bucket
+                                    .iter()
+                                    .all(|p| p.node.key.preimage() != &swarm_ids[0]),
+                                "The server peer has the client node"
+                            );
 
                             return Poll::Ready(());
                         }
