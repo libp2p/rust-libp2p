@@ -69,7 +69,10 @@ where
 #[derive(Debug)]
 pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s).
-    Transport(TransportError<TTransErr>),
+    //
+    // TODO: Using a Vec here is not ideal. On an incoming listen connection only a single error can
+    // occur.
+    Transport(Vec<TransportError<TTransErr>>),
 
     /// Pending connection attempt has been aborted.
     Aborted,
@@ -92,7 +95,9 @@ where
             PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {}", err),
             PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
             PendingConnectionError::Transport(err) => {
-                write!(f, "Pending connection: Transport error: {}", err)
+                // TODO: Resurect
+                // write!(f, "Pending connection: Transport error: {}", err)
+                Ok(())
             }
             PendingConnectionError::InvalidPeerId => {
                 write!(f, "Pending connection: Invalid peer ID.")
@@ -108,7 +113,8 @@ where
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             PendingConnectionError::IO(err) => Some(err),
-            PendingConnectionError::Transport(err) => Some(err),
+            // TODO: Should we return the first of all transport errors? Or implement std::error::Error for Vec<TTransErr>?
+            PendingConnectionError::Transport(err) => None,
             PendingConnectionError::InvalidPeerId => None,
             PendingConnectionError::Aborted => None,
         }

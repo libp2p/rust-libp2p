@@ -131,13 +131,10 @@ where
     /// A dialing attempt to an address of a peer failed.
     DialError {
         /// The number of remaining dialing attempts.
-        attempts_remaining: DialAttemptsRemaining<THandler>,
+        handler: THandler,
 
         /// Id of the peer we were trying to dial.
         peer_id: PeerId,
-
-        /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
 
         /// The error that happened.
         error: PendingConnectionError<TTrans::Error>,
@@ -171,20 +168,6 @@ where
         /// Old endpoint of this connection.
         old_endpoint: ConnectedPoint,
     },
-}
-
-pub enum DialAttemptsRemaining<THandler> {
-    Some(NonZeroU32),
-    None(THandler),
-}
-
-impl<THandler> DialAttemptsRemaining<THandler> {
-    pub fn get_attempts(&self) -> u32 {
-        match self {
-            DialAttemptsRemaining::Some(attempts) => (*attempts).into(),
-            DialAttemptsRemaining::None(_) => 0,
-        }
-    }
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug
@@ -262,15 +245,12 @@ where
                 .field("error", error)
                 .finish(),
             NetworkEvent::DialError {
-                attempts_remaining,
+                handler: _,
                 peer_id,
-                multiaddr,
                 error,
             } => f
                 .debug_struct("DialError")
-                .field("attempts_remaining", &attempts_remaining.get_attempts())
                 .field("peer_id", peer_id)
-                .field("multiaddr", multiaddr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::UnknownPeerDialError {

@@ -21,7 +21,7 @@
 mod util;
 
 use futures::{future::poll_fn, ready};
-use libp2p_core::multiaddr::{multiaddr, Multiaddr};
+use libp2p_core::multiaddr::{multiaddr, Multiaddr, Protocol};
 use libp2p_core::{
     connection::ConnectionError,
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
@@ -39,18 +39,20 @@ fn max_outgoing() {
     let cfg = NetworkConfig::default().with_connection_limits(limits);
     let mut network = test_network(cfg);
 
+    let addr: Multiaddr = "/ip6/::1/tcp/1234".parse().unwrap();
+
     let target = PeerId::random();
     for _ in 0..outgoing_limit {
         network
             .peer(target.clone())
-            .dial(Multiaddr::empty(), Vec::new(), TestHandler())
+            .dial(vec![addr.clone()], TestHandler())
             .ok()
             .expect("Unexpected connection limit.");
     }
 
     match network
         .peer(target.clone())
-        .dial(Multiaddr::empty(), Vec::new(), TestHandler())
+        .dial(vec![addr.clone()], TestHandler())
         .expect_err("Unexpected dialing success.")
     {
         DialError::ConnectionLimit { limit, handler: _ } => {

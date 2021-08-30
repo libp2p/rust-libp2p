@@ -146,17 +146,6 @@ where
         }
     }
 
-    fn inject_addr_reach_failure(
-        &mut self,
-        peer_id: Option<&PeerId>,
-        addr: &Multiaddr,
-        error: &dyn error::Error,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_addr_reach_failure(peer_id, addr, error)
-        }
-    }
-
     fn inject_dial_failure(
         &mut self,
         peer_id: &PeerId,

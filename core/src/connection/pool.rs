@@ -27,7 +27,7 @@ use crate::{
     },
     muxing::StreamMuxer,
     network::DialError,
-    ConnectedPoint, PeerId,
+    ConnectedPoint, Multiaddr, PeerId,
 };
 use either::Either;
 use fnv::FnvHashMap;
@@ -225,6 +225,9 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
+        // TODO: This is a hack. Fix.
+        let send_back_addr = info.send_back_addr.clone();
+        let future = future.map_ok(|(peer_id, muxer)| (peer_id, send_back_addr, muxer));
         self.counters.check_max_pending_incoming()?;
         let endpoint = info.to_connected_point();
         Ok(self.add_pending(future, handler, endpoint, None))
@@ -239,10 +242,10 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         &mut self,
         future: TFut,
         handler: THandler,
-        info: OutgoingInfo<'_>,
+        expected_peer_id: Option<PeerId>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
-        TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
+        TFut: Future<Output = Result<(PeerId, Multiaddr, TMuxer), PendingConnectionError<TTransErr>>>
             + Send
             + 'static,
         THandler: IntoConnectionHandler + Send + 'static,
@@ -255,8 +258,8 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
             return Err(DialError::ConnectionLimit { limit, handler });
         };
-        let endpoint = info.to_connected_point();
-        Ok(self.add_pending(future, handler, endpoint, info.peer_id.cloned()))
+        let endpoint = ConnectedPoint::Dialer { address: todo!() };
+        Ok(self.add_pending(future, handler, endpoint, expected_peer_id))
     }
 
     /// Adds a pending connection to the pool in the form of a
@@ -269,7 +272,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         peer: Option<PeerId>,
     ) -> ConnectionId
     where
-        TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
+        TFut: Future<Output = Result<(PeerId, Multiaddr, TMuxer), PendingConnectionError<TTransErr>>>
             + Send
             + 'static,
         THandler: IntoConnectionHandler + Send + 'static,
@@ -287,7 +290,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
             let endpoint = endpoint.clone();
             let expected_peer = peer;
             let local_id = self.local_id;
-            move |(peer_id, muxer)| {
+            move |(peer_id, addr, muxer)| {
                 if let Some(peer) = expected_peer {
                     if peer != peer_id {
                         return future::err(PendingConnectionError::InvalidPeerId);

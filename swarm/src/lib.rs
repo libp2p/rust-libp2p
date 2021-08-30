@@ -714,8 +714,9 @@ where
                     error,
                     attempts_remaining,
                 }) => {
-                    this.behaviour
-                        .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
+                    // TODO: Remove
+                    // this.behaviour
+                    //     .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
 
                     let num_remaining: u32;
                     match attempts_remaining {
@@ -752,8 +753,9 @@ where
                         multiaddr,
                         error
                     );
-                    this.behaviour
-                        .inject_addr_reach_failure(None, &multiaddr, &error);
+                    // TODO: Remove
+                    // this.behaviour
+                    //     .inject_addr_reach_failure(None, &multiaddr, &error);
                     return Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr {
                         address: multiaddr,
                         error,

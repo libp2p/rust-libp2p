@@ -151,17 +151,19 @@ pub trait NetworkBehaviour: Send + 'static {
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     );
 
-    /// Indicates to the behaviour that we tried to reach an address, but failed.
-    ///
-    /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
-    /// last address to attempt for the given node, then `inject_dial_failure` is called afterwards.
-    fn inject_addr_reach_failure(
-        &mut self,
-        _peer_id: Option<&PeerId>,
-        _addr: &Multiaddr,
-        _error: &dyn error::Error,
-    ) {
-    }
+    // TODO: Remove
+    //
+    // /// Indicates to the behaviour that we tried to reach an address, but failed.
+    // ///
+    // /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
+    // /// last address to attempt for the given node, then `inject_dial_failure` is called afterwards.
+    // fn inject_addr_reach_failure(
+    //     &mut self,
+    //     _peer_id: Option<&PeerId>,
+    //     _addr: &Multiaddr,
+    //     _error: &dyn error::Error,
+    // ) {
+    // }
 
     /// Indicates to the behaviour that we tried to dial all the addresses known for a node, but
     /// failed.
