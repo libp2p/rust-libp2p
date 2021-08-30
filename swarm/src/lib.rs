@@ -1704,9 +1704,4 @@ mod tests {
             }
         }))
     }
-
-    /// [`NetworkBehaviourAction::DialAddress`] and [`NetworkBehaviourAction::DialPeer`] require a
-    /// handler. This handler can be used to carry state. See corresponding doc comments.
-    #[test]
-    fn use_handler_to_carry_state() {}
 }
