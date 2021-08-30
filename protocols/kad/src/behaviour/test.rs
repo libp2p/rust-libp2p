@@ -1307,11 +1307,11 @@ fn client_mode() {
         .collect();
 
     swarms[0].1.dial_addr(addrs[1].clone()).unwrap();
-    swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
+    // swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
 
     block_on(poll_fn(move |ctx| {
-        let mut client_check = false;
-        let mut server_check = false;
+        let mut is_server_present = false;
+        let mut is_client_absent = false;
 
         for (_, swarm) in swarms.iter_mut() {
             loop {
@@ -1322,13 +1322,13 @@ fn client_mode() {
                     }))) => {
                         // Check if the server peer is present in the client peer's routing table.
                         if swarm.local_peer_id().clone() == peers[0] {
-                            server_check = peer == peers[1];
+                            is_server_present = peer == peers[1];
                         }
                     }
                     Poll::Ready(_) => {
                         // Check if the client peer is NOT present in the server peer's routing table.
                         if swarm.local_peer_id().clone() == peers[1] {
-                            client_check = swarm.behaviour_mut().kbucket(peers[0]).is_none();
+                            is_client_absent = swarm.behaviour_mut().kbucket(peers[0]).is_none();
                         }
                     }
                     Poll::Pending => break,
@@ -1337,11 +1337,11 @@ fn client_mode() {
         }
 
         assert!(
-            server_check,
+            is_server_present,
             "The client peer does not have the server peer in its routing table."
         );
         assert!(
-            client_check,
+            is_client_absent,
             "The server peer has the client peer in its routing table."
         );
         Poll::Pending
