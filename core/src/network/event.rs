@@ -179,7 +179,7 @@ pub enum DialAttemptsRemaining<THandler> {
 }
 
 impl<THandler> DialAttemptsRemaining<THandler> {
-    fn get_attempts(&self) -> u32 {
+    pub fn get_attempts(&self) -> u32 {
         match self {
             DialAttemptsRemaining::Some(attempts) => (*attempts).into(),
             DialAttemptsRemaining::None(_) => 0,
