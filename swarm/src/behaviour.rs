@@ -313,7 +313,7 @@ pub enum NetworkBehaviourAction<
     /// can be included in the handler, and thus directly send on connection success or extracted by
     /// the [`NetworkBehaviour`] on connection failure.
     ///
-    /// Example showcasing usage of handler to carry state:
+    /// # Example
     ///
     /// ```rust
     /// # use futures::executor::block_on;
