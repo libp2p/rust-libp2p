@@ -1295,79 +1295,55 @@ fn client_mode() {
 
     // Create a server and client peer.
     let client_swarm = build_node_with_config(cfg);
-    let server_swarm = build_node();
+    let server_swarm = build_node_with_config(KademliaConfig::default());
 
-    let mut swarms = Vec::new();
-    swarms.push(client_swarm.1);
-    swarms.push(server_swarm.1);
+    let mut swarms = vec![client_swarm, server_swarm];
 
-    let mut swarm_addrs = Vec::new();
-    swarm_addrs.push(client_swarm.0);
-    swarm_addrs.push(server_swarm.0);
-
-    let swarm_ids: Vec<_> = swarms
+    // Collect addresses and peer IDs.
+    let addrs: Vec<_> = swarms.iter().map(|(addr, _)| addr.clone()).collect();
+    let peers: Vec<_> = swarms
         .iter()
-        .map(|swarm| swarm.local_peer_id())
-        .cloned()
+        .map(|(_, swarm)| swarm.local_peer_id().clone())
         .collect();
 
-    block_on(poll_fn(move |ctx| {
-        // flags to make sure both peers are listening
-        let mut client_listening = false;
-        let mut server_listening = false;
+    swarms[0].1.dial_addr(addrs[1].clone()).unwrap();
+    swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
 
-        for swarm in swarms.iter_mut() {
+    block_on(poll_fn(move |ctx| {
+        let mut client_check = false;
+        let mut server_check = false;
+
+        for (_, swarm) in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::NewListenAddr {
-                        listener_id: _,
-                        address,
-                    })) => {
-                        if address == swarm_addrs[0] {
-                            client_listening = true;
-                            return Poll::Ready(());
-                        }
-                        if address == swarm_addrs[1] {
-                            server_listening = true;
-                            return Poll::Ready(());
+                    Poll::Ready(Some(SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated {
+                        peer,
+                        ..
+                    }))) => {
+                        // Check if the server peer is present in the client peer's routing table.
+                        if swarm.local_peer_id().clone() == peers[0] {
+                            server_check = peer == peers[1];
                         }
                     }
                     Poll::Ready(_) => {
-                        if swarm.local_peer_id() == &swarm_ids[0] && client_listening == true {
-                            let bucket = swarm.behaviour_mut().kbucket(swarm_ids[1].clone());
-                            assert!(bucket.is_some());
-                            // Check if the client peer has the server peer.
-                            assert!(
-                                bucket
-                                    .unwrap()
-                                    .iter()
-                                    .any(|p| p.node.key.preimage() == &swarm_ids[1]),
-                                "The client peer does not have the server node"
-                            );
-
-                            return Poll::Ready(());
-                        }
-
-                        if swarm.local_peer_id() == &swarm_ids[1] && server_listening == true {
-                            let bucket =
-                                swarm.behaviour_mut().kbucket(swarm_ids[0].clone()).unwrap();
-                            // Check if the server peer doesn't have the client peer.
-                            assert!(
-                                bucket
-                                    .iter()
-                                    .all(|p| p.node.key.preimage() != &swarm_ids[0]),
-                                "The server peer has the client node"
-                            );
-
-                            return Poll::Ready(());
+                        // Check if the client peer is NOT present in the server peer's routing table.
+                        if swarm.local_peer_id().clone() == peers[1] {
+                            client_check = swarm.behaviour_mut().kbucket(peers[0]).is_none();
                         }
                     }
                     Poll::Pending => break,
                 }
             }
         }
-        assert!(client_listening);
-        assert!(server_listening);
+
+        assert!(
+            server_check,
+            "The client peer does not have the server peer in its routing table."
+        );
+        assert!(
+            client_check,
+            "The server peer has the client peer in its routing table."
+        );
         Poll::Pending
-    }));
+    }))
 }
