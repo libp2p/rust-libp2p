@@ -539,13 +539,6 @@ where
             .push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
         // Just because another peer is sending us Kademlia requests, doesn't necessarily
         // mean that it will answer the Kademlia requests that we send to it.
-        // Thus, Commenting this code out for now.
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
-            // Upon the first successfully negotiated substream, we know that the
-            // remote is configured with the same protocol name and we want
-            // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
-        }
     }
 
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
