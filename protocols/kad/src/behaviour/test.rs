@@ -1307,9 +1307,10 @@ fn client_mode() {
         .collect();
 
     swarms[0].1.dial_addr(addrs[1].clone()).unwrap();
-    // swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
+    swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
 
     block_on(poll_fn(move |ctx| {
+        // Flag variables to store the result of various checks.
         let mut is_server_present = false;
         let mut is_client_absent = false;
 
@@ -1324,18 +1325,21 @@ fn client_mode() {
                         if swarm.local_peer_id().clone() == peers[0] {
                             is_server_present = peer == peers[1];
                         }
+                        return Poll::Ready(());
                     }
                     Poll::Ready(_) => {
                         // Check if the client peer is NOT present in the server peer's routing table.
                         if swarm.local_peer_id().clone() == peers[1] {
                             is_client_absent = swarm.behaviour_mut().kbucket(peers[0]).is_none();
                         }
+                        return Poll::Ready(());
                     }
                     Poll::Pending => break,
                 }
             }
         }
-
+        // The assert statements are present outside the match block, to make sure that all the
+        // necessary events occur.
         assert!(
             is_server_present,
             "The client peer does not have the server peer in its routing table."
