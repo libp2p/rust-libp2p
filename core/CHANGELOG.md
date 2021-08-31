@@ -22,11 +22,19 @@
 
 - Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
 
+- Report `ConnectionLimit` error through `ConnectionError` and thus through
+  `NetworkEvent::ConnectionClosed` instead of previously through
+  `PendingConnectionError` and thus `NetworkEvent::{IncomingConnectionError,
+  DialError}` (see [PR 2191]).
+
+- Report abortion of pending connection through `DialError`,
+  `UnknownPeerDialError` or `IncomingConnectionError` (see [PR 2191]).
 
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
 [PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 [PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
 
 # 0.29.0 [2021-07-12]

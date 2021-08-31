@@ -287,12 +287,7 @@ impl NetworkBehaviour for Mdns {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyProtocolsHandler>> {
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
             let socket = self.recv_socket.get_ref();
             match event {

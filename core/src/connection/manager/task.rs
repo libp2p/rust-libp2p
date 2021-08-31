@@ -23,8 +23,8 @@ use crate::{
     connection::{
         self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Close, Connected, Connection, ConnectionError, ConnectionHandler, IntoConnectionHandler,
-        PendingConnectionError, Substream,
+        Close, Connected, Connection, ConnectionError, ConnectionHandler, ConnectionLimit,
+        IntoConnectionHandler, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     Multiaddr,
@@ -43,7 +43,7 @@ pub enum Command<T> {
     NotifyHandler(T),
     /// Gracefully close the connection (active close) before
     /// terminating the task.
-    Close,
+    Close(Option<ConnectionLimit>),
 }
 
 /// Events that a task can emit to its manager.
@@ -71,6 +71,7 @@ pub enum Event<H: IntoConnectionHandler, TE> {
     Closed {
         id: TaskId,
         error: Option<ConnectionError<THandlerError<H>>>,
+        handler: H::Handler,
     },
 }
 
@@ -159,7 +160,11 @@ where
     },
 
     /// The connection is closing (active close).
-    Closing(Close<M>),
+    Closing {
+        closing_muxer: Close<M>,
+        handler: H::Handler,
+        error: Option<ConnectionLimit>,
+    },
 
     /// The task is terminating with a final event for the `Manager`.
     Terminating(Event<H, E>),
@@ -204,7 +209,16 @@ where
                         Poll::Pending => {}
                         Poll::Ready(None) => {
                             // The manager has dropped the task; abort.
-                            return Poll::Ready(());
+                            // Don't accept any further commands and terminate the
+                            // task with a final event.
+                            this.commands.get_mut().close();
+                            let event = Event::Failed {
+                                id,
+                                handler,
+                                error: PendingConnectionError::Aborted,
+                            };
+                            this.state = State::Terminating(event);
+                            continue 'poll;
                         }
                         Poll::Ready(Some(_)) => {
                             panic!("Task received command while the connection is pending.")
@@ -243,15 +257,20 @@ where
                             Poll::Ready(Some(Command::NotifyHandler(event))) => {
                                 connection.inject_event(event)
                             }
-                            Poll::Ready(Some(Command::Close)) => {
+                            Poll::Ready(Some(Command::Close(error))) => {
                                 // Don't accept any further commands.
                                 this.commands.get_mut().close();
                                 // Discard the event, if any, and start a graceful close.
-                                this.state = State::Closing(connection.close());
+                                let (handler, closing_muxer) = connection.close();
+                                this.state = State::Closing {
+                                    handler,
+                                    closing_muxer,
+                                    error,
+                                };
                                 continue 'poll;
                             }
                             Poll::Ready(None) => {
-                                // The manager has dropped the task or disappeared; abort.
+                                // The manager has disappeared; abort.
                                 return Poll::Ready(());
                             }
                         }
@@ -306,10 +325,12 @@ where
                             Poll::Ready(Err(error)) => {
                                 // Don't accept any further commands.
                                 this.commands.get_mut().close();
+                                let (handler, _closing_muxer) = connection.close();
                                 // Terminate the task with the error, dropping the connection.
                                 let event = Event::Closed {
                                     id,
                                     error: Some(error),
+                                    handler,
                                 };
                                 this.state = State::Terminating(event);
                             }
@@ -317,13 +338,18 @@ where
                     }
                 }
 
-                State::Closing(mut closing) => {
+                State::Closing {
+                    handler,
+                    error,
+                    mut closing_muxer,
+                } => {
                     // Try to gracefully close the connection.
-                    match closing.poll_unpin(cx) {
+                    match closing_muxer.poll_unpin(cx) {
                         Poll::Ready(Ok(())) => {
                             let event = Event::Closed {
                                 id: this.id,
-                                error: None,
+                                error: error.map(|limit| ConnectionError::ConnectionLimit(limit)),
+                                handler,
                             };
                             this.state = State::Terminating(event);
                         }
@@ -331,11 +357,16 @@ where
                             let event = Event::Closed {
                                 id: this.id,
                                 error: Some(ConnectionError::IO(e)),
+                                handler,
                             };
                             this.state = State::Terminating(event);
                         }
                         Poll::Pending => {
-                            this.state = State::Closing(closing);
+                            this.state = State::Closing {
+                                handler,
+                                error,
+                                closing_muxer,
+                            };
                             return Poll::Pending;
                         }
                     }
