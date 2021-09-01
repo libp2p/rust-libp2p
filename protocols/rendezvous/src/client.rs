@@ -183,10 +183,6 @@ impl NetworkBehaviour for Behaviour {
             .collect()
     }
 
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
     fn inject_event(
         &mut self,
         peer_id: PeerId,
