@@ -29,9 +29,7 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
-use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
-};
+use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
@@ -39,7 +37,9 @@ use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<NetworkBehaviourAction<handler::InboundInEvent, Event>>,
+    events: VecDeque<
+        NetworkBehaviourAction<Event, SubstreamProtocolsHandler<inbound::Stream, Void, ()>>,
+    >,
     registrations: Registrations,
 }
 
@@ -144,12 +144,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                 Event::RegistrationExpired(registration),
@@ -170,7 +165,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<handler::InboundInEvent, Event>> {
+) -> Vec<NetworkBehaviourAction<Event, SubstreamProtocolsHandler<inbound::Stream, Void, ()>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

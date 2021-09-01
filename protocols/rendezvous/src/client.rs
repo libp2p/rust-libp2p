@@ -31,16 +31,19 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{Multiaddr, PeerId, PeerRecord};
-use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
-};
+use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 pub struct Behaviour {
-    events: VecDeque<NetworkBehaviourAction<handler::OutboundInEvent, Event>>,
+    events: VecDeque<
+        NetworkBehaviourAction<
+            Event,
+            SubstreamProtocolsHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
+        >,
+    >,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 
@@ -208,12 +211,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         poll_params: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -270,7 +268,12 @@ fn handle_outbound_event(
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<NetworkBehaviourAction<handler::OutboundInEvent, Event>> {
+) -> Vec<
+    NetworkBehaviourAction<
+        Event,
+        SubstreamProtocolsHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
+    >,
+> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
