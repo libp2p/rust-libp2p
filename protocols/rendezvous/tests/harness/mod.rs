@@ -99,6 +99,19 @@ where
     .expect("network behaviours to emit an event within 10 seconds")
 }
 
+#[macro_export]
+macro_rules! assert_behaviour_events {
+    ($swarm1: ident: $pat1: pat, $swarm2: ident: $pat2: pat, || $body: block) => {
+        match await_events_or_timeout(&mut $swarm1, &mut $swarm2).await {
+            (
+                libp2p::swarm::SwarmEvent::Behaviour($pat1),
+                libp2p::swarm::SwarmEvent::Behaviour($pat2),
+            ) => $body,
+            _ => panic!("Unexpected combination of events emitted, check logs for details"),
+        }
+    };
+}
+
 /// An extension trait for [`Swarm`] that makes it easier to set up a network of [`Swarm`]s for tests.
 #[async_trait]
 pub trait SwarmExt {
@@ -110,6 +123,9 @@ pub trait SwarmExt {
 
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
+
+    /// Spawns the given [`Swarm`] into a runtime, polling it endlessly.
+    fn spawn_into_runtime(self);
 }
 
 #[async_trait]
@@ -193,5 +209,13 @@ where
         self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
 
         multiaddr
+    }
+
+    fn spawn_into_runtime(mut self) {
+        tokio::spawn(async move {
+            loop {
+                self.next().await;
+            }
+        });
     }
 }

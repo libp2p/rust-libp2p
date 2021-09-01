@@ -18,158 +18,165 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[macro_use]
 pub mod harness;
 
 use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
+use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
-use libp2p_core::PeerId;
 use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::DialError;
 use libp2p_swarm::{Swarm, SwarmEvent};
+use std::convert::TryInto;
 use std::time::Duration;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
     let _ = env_logger::try_init();
-    let mut test = RendezvousTest::setup().await;
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice, mut bob], mut robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
-    let _ =
-        test.alice
-            .behaviour_mut()
-            .register(namespace.clone(), *test.robert.local_peer_id(), None);
+    let _ = alice
+        .behaviour_mut()
+        .register(namespace.clone(), *robert.local_peer_id(), None);
 
-    test.assert_successful_registration(namespace.clone(), rendezvous::DEFAULT_TTL)
-        .await;
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace },
+        robert: rendezvous::server::Event::PeerRegistered { peer, registration },
+        || {
+            assert_eq!(&peer, alice.local_peer_id());
+            assert_eq!(&rendezvous_node, robert.local_peer_id());
+            assert_eq!(registration.namespace, namespace);
+            assert_eq!(register_node_namespace, namespace);
+            assert_eq!(ttl, rendezvous::DEFAULT_TTL);
+        }
+    };
 
-    test.bob.behaviour_mut().discover(
-        Some(namespace.clone()),
-        None,
-        None,
-        *test.robert.local_peer_id(),
-    );
+    bob.behaviour_mut()
+        .discover(Some(namespace.clone()), None, None, *robert.local_peer_id());
 
-    test.assert_successful_discovery(
-        namespace.clone(),
-        rendezvous::DEFAULT_TTL,
-        *test.alice.local_peer_id(),
-    )
-    .await;
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { registrations, .. },
+        robert: rendezvous::server::Event::DiscoverServed { .. },
+        || {
+            match registrations.as_slice() {
+                [rendezvous::Registration {
+                    namespace: registered_namespace,
+                    record,
+                    ttl,
+                }] => {
+                    assert_eq!(*ttl, rendezvous::DEFAULT_TTL);
+                    assert_eq!(record.peer_id(), *alice.local_peer_id());
+                    assert_eq!(*registered_namespace, namespace);
+                }
+                _ => panic!("Expected exactly one registration to be returned from discover"),
+            }
+        }
+    };
 }
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_ttl() {
     let _ = env_logger::try_init();
-    let mut test = RendezvousTest::setup().await;
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice, mut bob], mut robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
-    let refesh_ttl = 10_000;
+    let roberts_peer_id = *robert.local_peer_id();
+    let refresh_ttl = 10_000;
 
-    let _ =
-        test.alice
-            .behaviour_mut()
-            .register(namespace.clone(), *test.robert.local_peer_id(), None);
+    let _ = alice
+        .behaviour_mut()
+        .register(namespace.clone(), roberts_peer_id, None);
 
-    test.assert_successful_registration(namespace.clone(), rendezvous::DEFAULT_TTL)
-        .await;
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { .. },
+        robert: rendezvous::server::Event::PeerRegistered { .. },
+        || { }
+    };
 
-    test.bob.behaviour_mut().discover(
-        Some(namespace.clone()),
-        None,
-        None,
-        *test.robert.local_peer_id(),
-    );
+    bob.behaviour_mut()
+        .discover(Some(namespace.clone()), None, None, roberts_peer_id);
 
-    test.assert_successful_discovery(
-        namespace.clone(),
-        rendezvous::DEFAULT_TTL,
-        *test.alice.local_peer_id(),
-    )
-    .await;
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { .. },
+        robert: rendezvous::server::Event::DiscoverServed { .. },
+        || { }
+    };
 
-    test.alice.behaviour_mut().register(
-        namespace.clone(),
-        *test.robert.local_peer_id(),
-        Some(refesh_ttl),
-    );
+    alice
+        .behaviour_mut()
+        .register(namespace.clone(), roberts_peer_id, Some(refresh_ttl));
 
-    test.assert_successful_registration(namespace.clone(), refesh_ttl)
-        .await;
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { ttl, .. },
+        robert: rendezvous::server::Event::PeerRegistered { .. },
+        || {
+            assert_eq!(ttl, refresh_ttl);
+        }
+    };
 
-    test.bob.behaviour_mut().discover(
-        Some(namespace.clone()),
-        None,
-        None,
-        *test.robert.local_peer_id(),
-    );
+    bob.behaviour_mut()
+        .discover(Some(namespace.clone()), None, None, *robert.local_peer_id());
 
-    test.assert_successful_discovery(namespace.clone(), refesh_ttl, *test.alice.local_peer_id())
-        .await;
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { registrations, .. },
+        robert: rendezvous::server::Event::DiscoverServed { .. },
+        || {
+            match registrations.as_slice() {
+                [rendezvous::Registration { ttl, .. }] => {
+                    assert_eq!(*ttl, refresh_ttl);
+                }
+                _ => panic!("Expected exactly one registration to be returned from discover"),
+            }
+        }
+    };
 }
 
 #[tokio::test]
 async fn given_invalid_ttl_then_unsuccessful_registration() {
     let _ = env_logger::try_init();
-    let mut test = RendezvousTest::setup().await;
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice], mut robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
-    test.alice.behaviour_mut().register(
+    alice.behaviour_mut().register(
         namespace.clone(),
-        *test.robert.local_peer_id(),
+        *robert.local_peer_id(),
         Some(100_000_000),
     );
 
-    match await_events_or_timeout(&mut test.robert, &mut test.alice).await {
-        (
-            SwarmEvent::Behaviour(rendezvous::server::Event::PeerNotRegistered { .. }),
-            SwarmEvent::Behaviour(rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {error , ..})),
-        ) => {
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {error , ..}),
+        robert: rendezvous::server::Event::PeerNotRegistered { .. },
+        || {
             assert_eq!(error, rendezvous::ErrorCode::InvalidTtl);
         }
-        (rendezvous_swarm_event, registration_swarm_event) => panic!(
-            "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
-            rendezvous_swarm_event, registration_swarm_event
-        ),
-    }
+    };
 }
 
 #[tokio::test]
 async fn discover_allows_for_dial_by_peer_id() {
     let _ = env_logger::try_init();
-    let RendezvousTest {
-        mut alice,
-        mut bob,
-        mut robert,
-        charlie: _charlie,
-        ..
-    } = RendezvousTest::setup().await;
-    let roberts_peer_id = *robert.local_peer_id();
-
-    // poll rendezvous point continuously
-    tokio::spawn(async move {
-        loop {
-            robert.next().await;
-        }
-    });
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice, mut bob], robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default()).await;
+
+    let roberts_peer_id = *robert.local_peer_id();
+    robert.spawn_into_runtime();
 
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None);
     bob.behaviour_mut()
-        .discover(Some(namespace), None, None, roberts_peer_id);
+        .discover(Some(namespace.clone()), None, None, roberts_peer_id);
 
-    match await_events_or_timeout(&mut alice, &mut bob).await {
-        (
-            SwarmEvent::Behaviour(rendezvous::client::Event::Registered { .. }),
-            SwarmEvent::Behaviour(rendezvous::client::Event::Discovered { .. }),
-        ) => {}
-        _ => panic!("bad event combination emitted"),
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { .. },
+        bob: rendezvous::client::Event::Discovered { .. },
+        || { }
     };
 
     let alices_peer_id = *alice.local_peer_id();
@@ -202,93 +209,67 @@ async fn discover_allows_for_dial_by_peer_id() {
 #[tokio::test]
 async fn eve_cannot_register() {
     let _ = env_logger::try_init();
-    let mut test = RendezvousTest::setup().await;
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let mut robert = new_server(rendezvous::server::Config::default()).await;
+    let mut eve = new_impersonating_client().await;
+    eve.block_on_connection(&mut robert).await;
 
-    test.eve.behaviour_mut().register(
-        namespace.clone(),
-        *test.robert.local_peer_id(),
-        Some(100_000),
-    );
+    eve.behaviour_mut()
+        .register(namespace.clone(), *robert.local_peer_id(), None);
 
-    match await_events_or_timeout(&mut test.robert, &mut test.eve).await {
-        (
-            SwarmEvent::Behaviour(rendezvous::server::Event::PeerNotRegistered { .. }),
-            SwarmEvent::Behaviour(rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote { error: err_code , ..})),
-        ) => {
+    assert_behaviour_events! {
+        eve: rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote { error: err_code , ..}),
+        robert: rendezvous::server::Event::PeerNotRegistered { .. },
+        || {
             assert_eq!(err_code, rendezvous::ErrorCode::NotAuthorized);
         }
-        (rendezvous_swarm_event, registration_swarm_event) => panic!(
-            "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
-            rendezvous_swarm_event, registration_swarm_event
-        ),
-    }
+    };
 }
 
 // test if charlie can operate as client and server simultaneously
 #[tokio::test]
 async fn can_combine_client_and_server() {
     let _ = env_logger::try_init();
-    let mut test = RendezvousTest::setup().await;
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice], mut robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default()).await;
+    let mut charlie = new_combined_node().await;
+    charlie.block_on_connection(&mut robert).await;
+    alice.block_on_connection(&mut charlie).await;
 
-    test.charlie.behaviour_mut().client.register(
-        namespace.clone(),
-        *test.robert.local_peer_id(),
-        None,
-    );
-
-    match await_events_or_timeout(&mut test.robert, &mut test.charlie).await {
-        (
-            SwarmEvent::Behaviour(rendezvous::server::Event::PeerRegistered { .. }),
-            SwarmEvent::Behaviour(CombinedEvent::Client(rendezvous::client::Event::Registered { .. })),
-        ) => {
-        }
-        (rendezvous_swarm_event, registration_swarm_event) => panic!(
-            "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
-            rendezvous_swarm_event, registration_swarm_event
-        ),
-    }
-
-    test.alice
+    charlie
         .behaviour_mut()
-        .register(namespace, *test.charlie.local_peer_id(), None);
+        .client
+        .register(namespace.clone(), *robert.local_peer_id(), None);
 
-    match await_events_or_timeout(&mut test.alice, &mut test.charlie).await {
-        (
-            SwarmEvent::Behaviour(rendezvous::client::Event::Registered { .. }),
-            SwarmEvent::Behaviour(CombinedEvent::Server(rendezvous::server::Event::PeerRegistered { .. })),
-        ) => {
-        }
-        (rendezvous_swarm_event, registration_swarm_event) => panic!(
-            "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
-            rendezvous_swarm_event, registration_swarm_event
-        ),
-    }
+    assert_behaviour_events! {
+        charlie: CombinedEvent::Client(rendezvous::client::Event::Registered { .. }),
+        robert: rendezvous::server::Event::PeerRegistered { .. },
+        || { }
+    };
+
+    alice
+        .behaviour_mut()
+        .register(namespace, *charlie.local_peer_id(), None);
+
+    assert_behaviour_events! {
+        charlie: CombinedEvent::Server(rendezvous::server::Event::PeerRegistered { .. }),
+        alice: rendezvous::client::Event::Registered { .. },
+        || { }
+    };
 }
 
 #[tokio::test]
 async fn registration_on_clients_expire() {
     let _ = env_logger::try_init();
-    let RendezvousTest {
-        mut alice,
-        mut bob,
-        mut robert,
-        charlie: _charlie,
-        ..
-    } = RendezvousTest::setup().await;
-    let roberts_peer_id = *robert.local_peer_id();
-
-    // poll rendezvous point continuously
-    tokio::spawn(async move {
-        loop {
-            robert.next().await;
-        }
-    });
-
     let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice, mut bob], robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default().with_min_ttl(1))
+            .await;
+
+    let roberts_peer_id = *robert.local_peer_id();
+    robert.spawn_into_runtime();
+
     let registration_ttl = 3;
 
     alice
@@ -297,12 +278,10 @@ async fn registration_on_clients_expire() {
     bob.behaviour_mut()
         .discover(Some(namespace), None, None, roberts_peer_id);
 
-    match await_events_or_timeout(&mut alice, &mut bob).await {
-        (
-            SwarmEvent::Behaviour(rendezvous::client::Event::Registered { .. }),
-            SwarmEvent::Behaviour(rendezvous::client::Event::Discovered { .. }),
-        ) => {}
-        _ => panic!("bad event combination emitted"),
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { .. },
+        bob: rendezvous::client::Event::Discovered { .. },
+        || { }
     };
 
     tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
@@ -317,16 +296,30 @@ async fn registration_on_clients_expire() {
     assert!(matches!(error, DialError::NoAddresses));
 }
 
-/// Holds a network of nodes that is used to test certain rendezvous functionality.
-///
-/// In all cases, Alice would like to connect to Bob with Robert acting as a rendezvous point.
-/// Eve is an evil actor that tries to act maliciously.
-struct RendezvousTest {
-    pub alice: Swarm<rendezvous::client::Behaviour>,
-    pub bob: Swarm<rendezvous::client::Behaviour>,
-    pub charlie: Swarm<CombinedBehaviour>,
-    pub eve: Swarm<rendezvous::client::Behaviour>,
-    pub robert: Swarm<rendezvous::server::Behaviour>,
+async fn new_server_with_connected_clients<const N: usize>(
+    config: rendezvous::server::Config,
+) -> (
+    [Swarm<rendezvous::client::Behaviour>; N],
+    Swarm<rendezvous::server::Behaviour>,
+) {
+    let mut server = new_server(config).await;
+
+    let mut clients: [Swarm<_>; N] = match (0usize..N)
+        .map(|_| new_client())
+        .collect::<FuturesUnordered<_>>()
+        .collect::<Vec<_>>()
+        .await
+        .try_into()
+    {
+        Ok(clients) => clients,
+        Err(_) => panic!("Vec is of size N"),
+    };
+
+    for client in &mut clients {
+        client.block_on_connection(&mut server).await;
+    }
+
+    (clients, server)
 }
 
 async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
@@ -337,9 +330,7 @@ async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
 }
 
 async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::server::Behaviour> {
-    let mut server = new_swarm(|_, _| {
-        rendezvous::server::Behaviour::new(config)
-    });
+    let mut server = new_swarm(|_, _| rendezvous::server::Behaviour::new(config));
 
     server.listen_on_random_memory_address().await;
 
@@ -365,80 +356,6 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
     eve.listen_on_random_memory_address().await;
 
     eve
-}
-
-impl RendezvousTest {
-    pub async fn setup() -> Self {
-        let mut alice = new_client().await;
-        let mut bob = new_client().await;
-        let mut robert = new_server(rendezvous::server::Config::default().with_min_ttl(2)).await;
-        let mut charlie = new_combined_node().await;
-
-        alice.block_on_connection(&mut robert).await;
-        bob.block_on_connection(&mut robert).await;
-        charlie.block_on_connection(&mut robert).await;
-        eve.block_on_connection(&mut robert).await;
-        alice.block_on_connection(&mut charlie).await;
-
-        Self {
-            alice,
-            bob,
-            charlie,
-            eve,
-            robert,
-        }
-    }
-
-    pub async fn assert_successful_registration(
-        &mut self,
-        expected_namespace: rendezvous::Namespace,
-        expected_ttl: rendezvous::Ttl,
-    ) {
-        match await_events_or_timeout(&mut self.robert, &mut self.alice).await {
-            (
-                SwarmEvent::Behaviour(rendezvous::server::Event::PeerRegistered { peer, registration }),
-                SwarmEvent::Behaviour(rendezvous::client::Event::Registered { rendezvous_node, ttl, namespace: register_node_namespace }),
-            ) => {
-                assert_eq!(&peer, self.alice.local_peer_id());
-                assert_eq!(&rendezvous_node, self.robert.local_peer_id());
-                assert_eq!(registration.namespace, expected_namespace);
-                assert_eq!(register_node_namespace, expected_namespace);
-                assert_eq!(ttl, expected_ttl);
-            }
-            (rendezvous_swarm_event, registration_swarm_event) => panic!(
-                "Received unexpected event, rendezvous swarm emitted {:?} and registration swarm emitted {:?}",
-                rendezvous_swarm_event, registration_swarm_event
-            ),
-        }
-    }
-
-    pub async fn assert_successful_discovery(
-        &mut self,
-        expected_namespace: rendezvous::Namespace,
-        expected_ttl: rendezvous::Ttl,
-        expected_peer_id: PeerId,
-    ) {
-        match await_events_or_timeout(&mut self.robert, &mut self.bob).await {
-            (
-                SwarmEvent::Behaviour(rendezvous::server::Event::DiscoverServed { .. }),
-                SwarmEvent::Behaviour(rendezvous::client::Event::Discovered {
-                    registrations, ..
-                }),
-            ) => match registrations.as_slice() {
-                [rendezvous::Registration {
-                    namespace,
-                    record,
-                    ttl,
-                }] => {
-                    assert_eq!(*ttl, expected_ttl);
-                    assert_eq!(record.peer_id(), expected_peer_id);
-                    assert_eq!(*namespace, expected_namespace);
-                }
-                _ => panic!("Expected exactly one registration to be returned from discover"),
-            },
-            (e1, e2) => panic!("Unexpected events {:?} {:?}", e1, e2),
-        }
-    }
 }
 
 #[derive(libp2p::NetworkBehaviour)]
