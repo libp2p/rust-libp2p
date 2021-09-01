@@ -329,37 +329,50 @@ struct RendezvousTest {
     pub robert: Swarm<rendezvous::server::Behaviour>,
 }
 
+async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
+    let mut client = new_swarm(|_, identity| rendezvous::client::Behaviour::new(identity));
+    client.listen_on_random_memory_address().await; // we need to listen otherwise we don't have addresses to register
+
+    client
+}
+
+async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::server::Behaviour> {
+    let mut server = new_swarm(|_, _| {
+        rendezvous::server::Behaviour::new(config)
+    });
+
+    server.listen_on_random_memory_address().await;
+
+    server
+}
+
+async fn new_combined_node() -> Swarm<CombinedBehaviour> {
+    let mut node = new_swarm(|_, identity| CombinedBehaviour {
+        client: rendezvous::client::Behaviour::new(identity),
+        server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
+    });
+    node.listen_on_random_memory_address().await;
+
+    node
+}
+
+async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
+    // In reality, if Eve were to try and fake someones identity, she would obviously only know the public key.
+    // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
+    // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
+    let someone_else = identity::Keypair::generate_ed25519();
+    let mut eve = new_swarm(move |_, _| rendezvous::client::Behaviour::new(someone_else));
+    eve.listen_on_random_memory_address().await;
+
+    eve
+}
+
 impl RendezvousTest {
     pub async fn setup() -> Self {
-        let mut alice = new_swarm(|_, identity| rendezvous::client::Behaviour::new(identity));
-        alice.listen_on_random_memory_address().await;
-
-        let mut bob = new_swarm(|_, identity| rendezvous::client::Behaviour::new(identity));
-        bob.listen_on_random_memory_address().await;
-
-        let mut robert = new_swarm(|_, _| {
-            rendezvous::server::Behaviour::new(
-                rendezvous::server::Config::default().with_min_ttl(2),
-            )
-        });
-        robert.listen_on_random_memory_address().await;
-
-        let mut eve = {
-            // In reality, if Eve were to try and fake someones identity, she would obviously only know the public key.
-            // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
-            // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
-            let someone_else = identity::Keypair::generate_ed25519();
-            let mut eve = new_swarm(move |_, _| rendezvous::client::Behaviour::new(someone_else));
-            eve.listen_on_random_memory_address().await;
-
-            eve
-        };
-
-        let mut charlie = new_swarm(|_, identity| CombinedBehaviour {
-            client: rendezvous::client::Behaviour::new(identity),
-            server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-        });
-        charlie.listen_on_random_memory_address().await;
+        let mut alice = new_client().await;
+        let mut bob = new_client().await;
+        let mut robert = new_server(rendezvous::server::Config::default().with_min_ttl(2)).await;
+        let mut charlie = new_combined_node().await;
 
         alice.block_on_connection(&mut robert).await;
         bob.block_on_connection(&mut robert).await;
