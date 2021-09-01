@@ -23,6 +23,10 @@ use crate::handler;
 use crate::handler::outbound;
 use crate::handler::outbound::OpenInfo;
 use crate::substream_handler::SubstreamProtocolsHandler;
+use futures::future::BoxFuture;
+use futures::future::FutureExt;
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
@@ -31,6 +35,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use std::collections::{HashMap, VecDeque};
+use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -43,6 +48,9 @@ pub struct Behaviour {
     ///
     /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::addresses_of_peer`].
     discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
+
+    /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.
+    expiring_registrations: FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
 }
 
 impl Behaviour {
@@ -53,6 +61,9 @@ impl Behaviour {
             keypair,
             pending_register_requests: vec![],
             discovered_peers: Default::default(),
+            expiring_registrations: FuturesUnordered::from_iter(vec![
+                futures::future::pending().boxed()
+            ]),
         }
     }
 
@@ -143,6 +154,8 @@ pub enum Event {
     },
     /// We failed to register with the contained rendezvous node.
     RegisterFailed(RegisterError),
+    /// The connection details we learned from this node expired.
+    Expired { peer: PeerId },
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -172,9 +185,12 @@ impl NetworkBehaviour for Behaviour {
     fn inject_event(&mut self, peer_id: PeerId, _: ConnectionId, event: handler::OutboundOutEvent) {
         let new_events = match event {
             handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
-            handler::OutboundOutEvent::OutboundEvent { message, .. } => {
-                handle_outbound_event(message, peer_id, &mut self.discovered_peers)
-            }
+            handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
+                message,
+                peer_id,
+                &mut self.discovered_peers,
+                &mut self.expiring_registrations,
+            ),
             handler::OutboundOutEvent::InboundError { .. } => {
                 // TODO: log errors and close connection?
                 vec![]
@@ -190,7 +206,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
         poll_params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
@@ -236,6 +252,15 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(action);
         }
 
+        if let Some(expired_registration) =
+            futures::ready!(self.expiring_registrations.poll_next_unpin(cx))
+        {
+            self.discovered_peers.remove(&expired_registration);
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(Event::Expired {
+                peer: expired_registration.0,
+            }));
+        }
+
         Poll::Pending
     }
 }
@@ -244,6 +269,7 @@ fn handle_outbound_event(
     event: outbound::OutEvent,
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
+    expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
 ) -> Vec<NetworkBehaviourAction<handler::OutboundInEvent, Event>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
@@ -273,6 +299,16 @@ fn handle_outbound_event(
                 let addresses = registration.record.addresses().to_vec();
 
                 ((peer_id, namespace), addresses)
+            }));
+            expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
+                async move {
+                    // if the timer errors we consider it expired
+                    let _ =
+                        wasm_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
+
+                    (registration.record.peer_id(), registration.namespace)
+                }
+                .boxed()
             }));
 
             vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {

@@ -25,7 +25,9 @@ use futures::StreamExt;
 use libp2p_core::identity;
 use libp2p_core::PeerId;
 use libp2p_rendezvous as rendezvous;
+use libp2p_swarm::DialError;
 use libp2p_swarm::{Swarm, SwarmEvent};
+use std::time::Duration;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
@@ -267,6 +269,54 @@ async fn can_combine_client_and_server() {
     }
 }
 
+#[tokio::test]
+async fn registration_on_clients_expire() {
+    let _ = env_logger::try_init();
+    let RendezvousTest {
+        mut alice,
+        mut bob,
+        mut robert,
+        charlie: _charlie,
+        ..
+    } = RendezvousTest::setup().await;
+    let roberts_peer_id = *robert.local_peer_id();
+
+    // poll rendezvous point continuously
+    tokio::spawn(async move {
+        loop {
+            robert.next().await;
+        }
+    });
+
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let registration_ttl = 3;
+
+    alice
+        .behaviour_mut()
+        .register(namespace.clone(), roberts_peer_id, Some(registration_ttl));
+    bob.behaviour_mut()
+        .discover(Some(namespace), None, None, roberts_peer_id);
+
+    match await_events_or_timeout(&mut alice, &mut bob).await {
+        (
+            SwarmEvent::Behaviour(rendezvous::client::Event::Registered { .. }),
+            SwarmEvent::Behaviour(rendezvous::client::Event::Discovered { .. }),
+        ) => {}
+        _ => panic!("bad event combination emitted"),
+    };
+
+    tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
+
+    let event = bob.select_next_some().await;
+    let error = bob.dial(alice.local_peer_id()).unwrap_err();
+
+    assert!(matches!(
+        event,
+        SwarmEvent::Behaviour(rendezvous::client::Event::Expired { .. })
+    ));
+    assert!(matches!(error, DialError::NoAddresses));
+}
+
 /// Holds a network of nodes that is used to test certain rendezvous functionality.
 ///
 /// In all cases, Alice would like to connect to Bob with Robert acting as a rendezvous point.
@@ -288,7 +338,9 @@ impl RendezvousTest {
         bob.listen_on_random_memory_address().await;
 
         let mut robert = new_swarm(|_, _| {
-            rendezvous::server::Behaviour::new(rendezvous::server::Config::default())
+            rendezvous::server::Behaviour::new(
+                rendezvous::server::Config::default().with_min_ttl(2),
+            )
         });
         robert.listen_on_random_memory_address().await;
 
