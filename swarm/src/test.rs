@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     ProtocolsHandler,
 };
 use libp2p_core::{
@@ -45,7 +45,7 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<NetworkBehaviourAction<THandler::InEvent, TOutEvent>>,
+    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
@@ -84,7 +84,7 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<THandler::InEvent, Self::OutEvent>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 }
@@ -202,10 +202,16 @@ where
         self.inner.inject_disconnected(peer);
     }
 
-    fn inject_connection_closed(&mut self, p: &PeerId, c: &ConnectionId, e: &ConnectedPoint) {
+    fn inject_connection_closed(
+        &mut self,
+        p: &PeerId,
+        c: &ConnectionId,
+        e: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
         self.inject_connection_closed
             .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_closed(p, c, e);
+        self.inner.inject_connection_closed(p, c, e, handler);
     }
 
     fn inject_event(
@@ -228,9 +234,14 @@ where
         self.inner.inject_addr_reach_failure(p, a, e);
     }
 
-    fn inject_dial_failure(&mut self, p: &PeerId) {
+    fn inject_dial_failure(
+        &mut self,
+        p: &PeerId,
+        handler: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
         self.inject_dial_failure.push(p.clone());
-        self.inner.inject_dial_failure(p);
+        self.inner.inject_dial_failure(p, handler, error);
     }
 
     fn inject_new_listener(&mut self, id: ListenerId) {
@@ -268,12 +279,11 @@ where
         self.inner.inject_listener_closed(l, r);
     }
 
-    fn poll(&mut self, cx: &mut Context, args: &mut impl PollParameters) ->
-        Poll<NetworkBehaviourAction<
-            <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
-            Self::OutEvent
-        >>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context,
+        args: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

@@ -29,6 +29,10 @@ pub enum ConnectionError<THandlerErr> {
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
 
+    /// The connection was dropped because the connection limit
+    /// for a peer has been reached.
+    ConnectionLimit(ConnectionLimit),
+
     /// The connection handler produced an error.
     Handler(THandlerErr),
 }
@@ -41,6 +45,9 @@ where
         match self {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {}", err),
             ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {}", err),
+            ConnectionError::ConnectionLimit(l) => {
+                write!(f, "Connection error: Connection limit: {}.", l)
+            }
         }
     }
 }
@@ -53,6 +60,7 @@ where
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::Handler(err) => Some(err),
+            ConnectionError::ConnectionLimit(..) => None,
         }
     }
 }
@@ -63,13 +71,12 @@ pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s).
     Transport(TransportError<TTransErr>),
 
+    /// Pending connection attempt has been aborted.
+    Aborted,
+
     /// The peer identity obtained on the connection did not
     /// match the one that was expected or is otherwise invalid.
     InvalidPeerId,
-
-    /// The connection was dropped because the connection limit
-    /// for a peer has been reached.
-    ConnectionLimit(ConnectionLimit),
 
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
@@ -83,14 +90,12 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {}", err),
+            PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
             PendingConnectionError::Transport(err) => {
                 write!(f, "Pending connection: Transport error: {}", err)
             }
             PendingConnectionError::InvalidPeerId => {
                 write!(f, "Pending connection: Invalid peer ID.")
-            }
-            PendingConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {}.", l)
             }
         }
     }
@@ -105,7 +110,7 @@ where
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(err) => Some(err),
             PendingConnectionError::InvalidPeerId => None,
-            PendingConnectionError::ConnectionLimit(..) => None,
+            PendingConnectionError::Aborted => None,
         }
     }
 }

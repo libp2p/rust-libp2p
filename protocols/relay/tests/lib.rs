@@ -1147,11 +1147,12 @@ enum CombinedEvent {
 }
 
 impl CombinedBehaviour {
-    fn poll<TEv>(
+    fn poll(
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<TEv, CombinedEvent>> {
+    ) -> Poll<NetworkBehaviourAction<CombinedEvent, <Self as NetworkBehaviour>::ProtocolsHandler>>
+    {
         if !self.events.is_empty() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(self.events.remove(0)));
         }

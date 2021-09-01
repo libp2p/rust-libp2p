@@ -24,7 +24,8 @@ use crate::protocols_handler::{
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{
-    NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters,
+    DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
+    PollParameters,
 };
 use either::Either;
 use libp2p_core::{
@@ -113,9 +114,12 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_closed(peer_id, connection, endpoint)
+            if let Some(handler) = handler.inner {
+                inner.inject_connection_closed(peer_id, connection, endpoint, handler)
+            }
         }
     }
 
@@ -153,9 +157,29 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: &PeerId,
+        handler: Self::ProtocolsHandler,
+        error: DialError,
+    ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_dial_failure(peer_id)
+            if let Some(handler) = handler.inner {
+                inner.inject_dial_failure(peer_id, handler, error)
+            }
+        }
+    }
+
+    fn inject_listen_failure(
+        &mut self,
+        local_addr: &Multiaddr,
+        send_back_addr: &Multiaddr,
+        handler: Self::ProtocolsHandler,
+    ) {
+        if let Some(inner) = self.inner.as_mut() {
+            if let Some(handler) = handler.inner {
+                inner.inject_listen_failure(local_addr, send_back_addr, handler)
+            }
         }
     }
 
@@ -201,11 +225,15 @@ where
         }
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(cx, params)
+            inner
+                .poll(cx, params)
+                .map(|action| action.map_handler(|h| ToggleIntoProtoHandler { inner: Some(h) }))
         } else {
             Poll::Pending
         }

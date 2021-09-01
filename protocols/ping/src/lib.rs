@@ -49,7 +49,6 @@ pub use handler::{PingConfig, PingFailure, PingResult, PingSuccess};
 use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use std::{collections::VecDeque, task::Context, task::Poll};
-use void::Void;
 
 /// `Ping` is a [`NetworkBehaviour`] that responds to inbound pings and
 /// periodically sends outbound pings on every established connection.
@@ -103,7 +102,7 @@ impl NetworkBehaviour for Ping {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Void, PingEvent>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(e) = self.events.pop_back() {
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
