@@ -25,9 +25,6 @@ sha2 = "0.9"
 rand = "0.8"
 wasm-timer = "0.2"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-uuid = { version = "0.8", features = ["wasm-bindgen"] }
-
 [dev-dependencies]
 libp2p = { path = "../.." }
 rand = "0.8"
@@ -35,6 +32,9 @@ async-std = { version = "1", features = ["attributes"] }
 env_logger = "0.8"
 async-trait = "0.1"
 tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] } # TODO: REMOVE FOR PRODUCTION USE
+
+[features]
+wasm-bindgen = ["uuid/wasm-bindgen"]
 
 [build-dependencies]
 prost-build = "0.7"
