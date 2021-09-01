@@ -31,7 +31,9 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{Multiaddr, PeerId, PeerRecord};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
+use libp2p_swarm::{
+    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+};
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
@@ -185,7 +187,12 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_disconnected(&mut self, _: &PeerId) {}
 
-    fn inject_event(&mut self, peer_id: PeerId, _: ConnectionId, event: handler::OutboundOutEvent) {
+    fn inject_event(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        event: handler::OutboundOutEvent,
+    ) {
         let new_events = match event {
             handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
             handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
@@ -194,13 +201,14 @@ impl NetworkBehaviour for Behaviour {
                 &mut self.discovered_peers,
                 &mut self.expiring_registrations,
             ),
-            handler::OutboundOutEvent::InboundError { .. } => {
-                // TODO: log errors and close connection?
-                vec![]
-            }
-            handler::OutboundOutEvent::OutboundError { .. } => {
-                // TODO: log errors and close connection?
-                vec![]
+            handler::OutboundOutEvent::InboundError { error, .. } => void::unreachable(error),
+            handler::OutboundOutEvent::OutboundError { error, .. } => {
+                log::warn!("Connection with peer {} failed: {}", peer_id, error);
+
+                vec![NetworkBehaviourAction::CloseConnection {
+                    peer_id,
+                    connection: CloseConnection::One(connection_id),
+                }]
             }
         };
 

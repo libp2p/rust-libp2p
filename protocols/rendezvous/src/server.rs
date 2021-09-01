@@ -29,7 +29,9 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
+use libp2p_swarm::{
+    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
@@ -127,14 +129,15 @@ impl NetworkBehaviour for Behaviour {
                 handle_inbound_event(message, peer_id, connection, id, &mut self.registrations)
             }
             handler::InboundOutEvent::OutboundEvent { message, .. } => void::unreachable(message),
-            handler::InboundOutEvent::InboundError { .. } => {
-                // TODO: log errors and close connection?
-                vec![]
+            handler::InboundOutEvent::InboundError { error, .. } => {
+                log::warn!("Connection with peer {} failed: {}", peer_id, error);
+
+                vec![NetworkBehaviourAction::CloseConnection {
+                    peer_id,
+                    connection: CloseConnection::One(connection),
+                }]
             }
-            handler::InboundOutEvent::OutboundError { .. } => {
-                // TODO: log errors and close connection?
-                vec![]
-            }
+            handler::InboundOutEvent::OutboundError { error, .. } => void::unreachable(error),
         };
 
         self.events.extend(new_events);
