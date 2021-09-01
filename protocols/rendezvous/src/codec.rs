@@ -21,10 +21,10 @@
 use crate::DEFAULT_TTL;
 use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
+use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use unsigned_varint::codec::UviBytes;
-use uuid::Uuid;
 
 pub type Ttl = u64;
 
@@ -95,7 +95,7 @@ pub struct NamespaceTooLong;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct Cookie {
-    id: Uuid,
+    id: u64,
     namespace: Option<Namespace>,
 }
 
@@ -105,7 +105,7 @@ impl Cookie {
     /// This cookie will only be valid for subsequent DISCOVER requests targeting the same namespace.
     pub fn for_namespace(namespace: Namespace) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: rand::thread_rng().next_u64(),
             namespace: Some(namespace),
         }
     }
@@ -113,16 +113,17 @@ impl Cookie {
     /// Construct a new [`Cookie`] for a DISCOVER request that inquires about all namespaces.
     pub fn for_all_namespaces() -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: rand::random(),
             namespace: None,
         }
     }
 
     pub fn into_wire_encoding(self) -> Vec<u8> {
+        let id_bytes = self.id.to_be_bytes();
         let namespace = self.namespace.map(|ns| ns.0).unwrap_or_default();
 
-        let mut buffer = Vec::with_capacity(16 + namespace.len());
-        buffer.extend_from_slice(self.id.as_bytes());
+        let mut buffer = Vec::with_capacity(id_bytes.len() + namespace.len());
+        buffer.extend_from_slice(&id_bytes);
         buffer.extend_from_slice(namespace.as_bytes());
 
         buffer
@@ -130,11 +131,11 @@ impl Cookie {
 
     pub fn from_wire_encoding(mut bytes: Vec<u8>) -> Result<Self, InvalidCookie> {
         // check length early to avoid panic during slicing
-        if bytes.len() < 16 {
+        if bytes.len() < 8 {
             return Err(InvalidCookie);
         }
 
-        let namespace = bytes.split_off(16);
+        let namespace = bytes.split_off(8);
         let namespace = if namespace.is_empty() {
             None
         } else {
@@ -144,13 +145,10 @@ impl Cookie {
             )
         };
 
-        let bytes = <[u8; 16]>::try_from(bytes).map_err(|_| InvalidCookie)?;
-        let uuid = Uuid::from_bytes(bytes);
+        let bytes = <[u8; 8]>::try_from(bytes).map_err(|_| InvalidCookie)?;
+        let id = u64::from_be_bytes(bytes);
 
-        Ok(Self {
-            id: uuid,
-            namespace,
-        })
+        Ok(Self { id, namespace })
     }
 
     pub fn namespace(&self) -> Option<&Namespace> {
@@ -619,6 +617,6 @@ mod tests {
 
         let bytes = cookie.into_wire_encoding();
 
-        assert_eq!(bytes.len(), 16 + 3)
+        assert_eq!(bytes.len(), 8 + 3)
     }
 }

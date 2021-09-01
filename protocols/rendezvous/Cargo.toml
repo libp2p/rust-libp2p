@@ -19,7 +19,6 @@ log = "0.4"
 futures = { version = "0.3", default-features = false, features = ["std"] }
 thiserror = "1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-uuid = { version = "0.8", features = ["v4"] }
 bimap = "0.6.1"
 sha2 = "0.9"
 rand = "0.8"
@@ -32,9 +31,6 @@ async-std = { version = "1", features = ["attributes"] }
 env_logger = "0.8"
 async-trait = "0.1"
 tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] } # TODO: REMOVE FOR PRODUCTION USE
-
-[features]
-wasm-bindgen = ["uuid/wasm-bindgen"]
 
 [build-dependencies]
 prost-build = "0.7"
