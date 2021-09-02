@@ -284,12 +284,12 @@ pub enum NetworkBehaviourAction<
     /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
     /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
     ///
-    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
-    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
-    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
-    /// can be included in the handler, and thus directly send on connection success or extracted by
-    /// the [`NetworkBehaviour`] on connection failure. See [`NetworkBehaviourAction::DialPeer`] for
-    /// example.
+    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection
+    /// failure and connection closing. Thus it can be used to carry state, which otherwise
+    /// would have to be tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to
+    /// an unconnected peer can be included in the handler, and thus directly send on
+    /// connection success or extracted by the [`NetworkBehaviour`] on connection failure. See
+    /// [`NetworkBehaviourAction::DialPeer`] for example.
     DialAddress {
         /// The address to dial.
         address: Multiaddr,
@@ -308,11 +308,11 @@ pub enum NetworkBehaviourAction<
     /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
     /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
     ///
-    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
-    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
-    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
-    /// can be included in the handler, and thus directly send on connection success or extracted by
-    /// the [`NetworkBehaviour`] on connection failure.
+    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection
+    /// failure and connection closing. Thus it can be used to carry state, which otherwise
+    /// would have to be tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to
+    /// an unconnected peer can be included in the handler, and thus directly send on
+    /// connection success or extracted by the [`NetworkBehaviour`] on connection failure.
     ///
     /// # Example
     ///
