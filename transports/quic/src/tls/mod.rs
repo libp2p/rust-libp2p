@@ -52,7 +52,7 @@ pub fn make_client_config(
     keypair: &libp2p_core::identity::Keypair,
     remote_peer_id: PeerId,
 ) -> Result<rustls::ClientConfig, ConfigError> {
-    let cert = certificate::make_cert(&keypair)?;
+    let cert = certificate::make_cert(keypair)?;
     let private_key = cert.serialize_private_key_der();
     let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);

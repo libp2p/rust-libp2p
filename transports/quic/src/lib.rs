@@ -10,45 +10,30 @@ pub use crate::crypto::Crypto;
 pub use crate::crypto::NoiseCrypto;
 #[cfg(feature = "tls")]
 pub use crate::crypto::TlsCrypto;
+pub use crate::crypto::ToLibp2p;
 pub use crate::muxer::{QuicMuxer, QuicMuxerError};
 pub use crate::transport::{QuicDial, QuicTransport};
-pub use ed25519_dalek::{Keypair, PublicKey, SecretKey};
 #[cfg(feature = "noise")]
 pub use quinn_noise::{KeyLog, KeyLogFile};
 pub use quinn_proto::{ConfigError, ConnectError, ConnectionError, TransportConfig};
 
 use libp2p_core::transport::TransportError;
-use libp2p_core::{identity, Multiaddr, PeerId};
+use libp2p_core::Multiaddr;
 use quinn_proto::crypto::Session;
 use thiserror::Error;
 
-pub fn generate_keypair() -> Keypair {
-    Keypair::generate(&mut rand_core::OsRng {})
-}
-
 /// Quic configuration.
 pub struct QuicConfig<C: Crypto> {
-    pub keypair: Keypair,
+    pub keypair: C::Keypair,
     pub psk: Option<[u8; 32]>,
     pub transport: TransportConfig,
     pub keylogger: Option<C::Keylogger>,
 }
 
-impl<C: Crypto> Default for QuicConfig<C> {
-    fn default() -> Self {
-        Self {
-            keypair: Keypair::generate(&mut rand_core::OsRng {}),
-            psk: None,
-            transport: TransportConfig::default(),
-            keylogger: None,
-        }
-    }
-}
-
 impl<C: Crypto> std::fmt::Debug for QuicConfig<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("QuicConfig")
-            .field("keypair", &self.keypair.public)
+            .field("keypair", &self.keypair.to_public())
             .field("psk", &self.psk)
             .field("transport", &self.transport)
             .finish()
@@ -62,10 +47,12 @@ where
     <C::Session as Session>::PacketKey: Unpin,
 {
     /// Creates a new config from a keypair.
-    pub fn new(keypair: Keypair) -> Self {
+    pub fn new(keypair: C::Keypair) -> Self {
         Self {
             keypair,
-            ..Default::default()
+            psk: None,
+            transport: TransportConfig::default(),
+            keylogger: None,
         }
     }
 
@@ -96,36 +83,4 @@ pub enum QuicError {
     Io(#[from] std::io::Error),
     #[error("a `StreamMuxerEvent` was generated before the handshake was complete.")]
     UpgradeError,
-}
-
-pub trait ToLibp2p {
-    fn to_keypair(&self) -> identity::Keypair;
-    fn to_public(&self) -> identity::PublicKey;
-    fn to_peer_id(&self) -> PeerId {
-        self.to_public().to_peer_id()
-    }
-}
-
-impl ToLibp2p for Keypair {
-    fn to_keypair(&self) -> identity::Keypair {
-        let mut secret_key = self.secret.to_bytes();
-        let secret_key = identity::ed25519::SecretKey::from_bytes(&mut secret_key).unwrap();
-        identity::Keypair::Ed25519(secret_key.into())
-    }
-
-    fn to_public(&self) -> identity::PublicKey {
-        self.public.to_public()
-    }
-}
-
-impl ToLibp2p for PublicKey {
-    fn to_keypair(&self) -> identity::Keypair {
-        panic!("wtf?");
-    }
-
-    fn to_public(&self) -> identity::PublicKey {
-        let public_key = self.to_bytes();
-        let public_key = identity::ed25519::PublicKey::decode(&public_key[..]).unwrap();
-        identity::PublicKey::Ed25519(public_key)
-    }
 }

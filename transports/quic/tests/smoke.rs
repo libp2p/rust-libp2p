@@ -10,10 +10,19 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p_quic::{Crypto, Keypair, QuicConfig, ToLibp2p};
+use libp2p_quic::{Crypto, QuicConfig, ToLibp2p};
 use quinn_proto::crypto::Session;
 use rand::RngCore;
 use std::{io, iter};
+
+#[cfg(feature = "noise")]
+fn generate_noise_keypair() -> ed25519_dalek::Keypair {
+    ed25519_dalek::Keypair::generate(&mut rand_core::OsRng {})
+}
+#[cfg(feature = "tls")]
+fn generate_tls_keypair() -> libp2p::identity::Keypair {
+    libp2p::identity::Keypair::generate_ed25519()
+}
 
 #[cfg(feature = "noise")]
 #[async_std::test]
@@ -27,13 +36,33 @@ async fn smoke_tls() -> Result<()> {
     smoke::<libp2p_quic::TlsCrypto>().await
 }
 
-async fn create_swarm<C: Crypto>(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
+trait GenerateKeypair: Crypto {
+    fn generate_keypair() -> Self::Keypair;
+}
+
+#[cfg(feature = "noise")]
+impl GenerateKeypair for libp2p_quic::NoiseCrypto {
+    fn generate_keypair() -> Self::Keypair {
+        generate_noise_keypair()
+    }
+}
+
+#[cfg(feature = "tls")]
+impl GenerateKeypair for libp2p_quic::TlsCrypto {
+    fn generate_keypair() -> Self::Keypair {
+        generate_tls_keypair()
+    }
+}
+
+async fn create_swarm<C: Crypto + GenerateKeypair>(
+    keylog: bool,
+) -> Result<Swarm<RequestResponse<PingCodec>>>
 where
     <C::Session as Session>::ClientConfig: Send + Unpin,
     <C::Session as Session>::HeaderKey: Unpin,
     <C::Session as Session>::PacketKey: Unpin,
 {
-    let keypair = Keypair::generate(&mut rand_core::OsRng {});
+    let keypair = C::generate_keypair();
     let peer_id = keypair.to_peer_id();
     let mut transport = QuicConfig::<C>::new(keypair);
     if keylog {
@@ -51,7 +80,7 @@ where
     Ok(Swarm::new(transport, behaviour, peer_id))
 }
 
-async fn smoke<C: Crypto>() -> Result<()>
+async fn smoke<C: Crypto + GenerateKeypair>() -> Result<()>
 where
     <C::Session as Session>::ClientConfig: Send + Unpin,
     <C::Session as Session>::HeaderKey: Unpin,
@@ -276,7 +305,7 @@ async fn dial_failure_noise() -> Result<()> {
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
-    let keypair = Keypair::generate(&mut rand_core::OsRng {});
+    let keypair = libp2p_quic::NoiseCrypto::generate_keypair();
     let fake_peer_id = keypair.to_peer_id();
 
     let mut addr = match a.next().await {
@@ -323,7 +352,7 @@ async fn dial_failure_tls() -> Result<()> {
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
-    let keypair = Keypair::generate(&mut rand_core::OsRng {});
+    let keypair = libp2p_quic::TlsCrypto::generate_keypair();
     let fake_peer_id = keypair.to_peer_id();
 
     let mut addr = match a.next().await {
@@ -356,6 +385,7 @@ async fn dial_failure_tls() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
+    assert!(a.next().await.is_some()); // ConnectionClosed
     assert!(a.next().now_or_never().is_none());
 
     Ok(())

@@ -33,7 +33,7 @@ static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECD
 /// certificate extension containing the public key of the given keypair.
 pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::ConfigError> {
     // Keypair used to sign the certificate.
-    let certif_keypair = rcgen::KeyPair::generate(&LIBP2P_SIGNATURE_ALGORITHM)?;
+    let certif_keypair = rcgen::KeyPair::generate(LIBP2P_SIGNATURE_ALGORITHM)?;
 
     // The libp2p-specific extension to the certificate contains a signature of the public key
     // of the certificate using the libp2p private key.
@@ -59,7 +59,7 @@ pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::
         };
 
         let mut ext = rcgen::CustomExtension::from_oid_content(LIBP2P_OID, extension_content);
-        ext.set_criticality(false);
+        ext.set_criticality(true);
         ext
     };
 
@@ -67,7 +67,7 @@ pub(crate) fn make_cert(keypair: &Keypair) -> Result<rcgen::Certificate, super::
         let mut params = rcgen::CertificateParams::new(vec![]);
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(libp2p_extension);
-        params.alg = &LIBP2P_SIGNATURE_ALGORITHM;
+        params.alg = LIBP2P_SIGNATURE_ALGORITHM;
         params.key_pair = Some(certif_keypair);
         rcgen::Certificate::from_params(params)?
     };

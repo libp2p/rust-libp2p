@@ -82,7 +82,7 @@ impl<C: Crypto> QuicMuxer<C> {
     pub fn peer_id(&self) -> Option<PeerId> {
         let inner = self.inner.lock();
         let session = inner.connection.crypto_session();
-        C::peer_id(&session)
+        C::peer_id(session)
     }
 
     pub fn local_addr(&self) -> Multiaddr {
@@ -305,7 +305,7 @@ impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
                 waker.wake();
             }
         }
-        let substream = inner.substreams.get_mut(&id).unwrap();
+        let substream = inner.substreams.get_mut(id).unwrap();
         if pending && bytes == 0 {
             substream.read_waker = Some(cx.waker().clone());
             Poll::Pending
