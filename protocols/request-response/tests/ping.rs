@@ -39,6 +39,7 @@ use std::{io, iter};
 
 #[test]
 fn is_response_outbound() {
+    let _ = env_logger::try_init();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 

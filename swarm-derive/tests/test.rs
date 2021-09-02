@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p_swarm_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -149,11 +149,16 @@ fn custom_polling() {
     }
 
     impl Foo {
-        fn foo<T>(
+        fn foo(
             &mut self,
             _: &mut std::task::Context,
             _: &mut impl libp2p::swarm::PollParameters,
-        ) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, ()>> {
+        ) -> std::task::Poll<
+            libp2p::swarm::NetworkBehaviourAction<
+                <Self as NetworkBehaviour>::OutEvent,
+                <Self as NetworkBehaviour>::ProtocolsHandler,
+            >,
+        > {
             std::task::Poll::Pending
         }
     }
@@ -207,11 +212,16 @@ fn custom_event_and_polling() {
     }
 
     impl Foo {
-        fn foo<T>(
+        fn foo(
             &mut self,
             _: &mut std::task::Context,
             _: &mut impl libp2p::swarm::PollParameters,
-        ) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, String>> {
+        ) -> std::task::Poll<
+            libp2p::swarm::NetworkBehaviourAction<
+                <Self as NetworkBehaviour>::OutEvent,
+                <Self as NetworkBehaviour>::ProtocolsHandler,
+            >,
+        > {
             std::task::Poll::Pending
         }
     }

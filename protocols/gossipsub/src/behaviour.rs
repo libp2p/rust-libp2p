@@ -41,8 +41,8 @@ use libp2p_core::{
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    ProtocolsHandler,
+    DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 
 use crate::backoff::BackoffStorage;
@@ -194,7 +194,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 }
 
 type GossipsubNetworkBehaviourAction =
-    NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>;
+    NetworkBehaviourAction<GossipsubEvent, GossipsubHandler, Arc<GossipsubHandlerIn>>;
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
@@ -426,8 +426,8 @@ where
 
 impl<D, F> Gossipsub<D, F>
 where
-    D: DataTransform,
-    F: TopicSubscriptionFilter,
+    D: DataTransform + Send + 'static,
+    F: TopicSubscriptionFilter + Send + 'static,
 {
     /// Lists the hashes of the topics we are currently subscribed to.
     pub fn topics(&self) -> impl Iterator<Item = &TopicHash> {
@@ -1044,9 +1044,11 @@ where
         if !self.peer_topics.contains_key(peer_id) {
             // Connect to peer
             debug!("Connecting to explicit peer {:?}", peer_id);
+            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::DialPeer {
                 peer_id: *peer_id,
                 condition: DialPeerCondition::Disconnected,
+                handler,
             });
         }
     }
@@ -1495,9 +1497,11 @@ where
                 self.px_peers.insert(peer_id);
 
                 // dial peer
+                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::DialPeer {
                     peer_id,
                     condition: DialPeerCondition::Disconnected,
+                    handler,
                 });
             }
         }
@@ -2971,6 +2975,7 @@ where
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         // Remove IP from peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
@@ -3172,47 +3177,12 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(match event {
-                NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    handler,
-                    event: send_event,
-                } => {
-                    // clone send event reference if others references are present
-                    let event = Arc::try_unwrap(send_event).unwrap_or_else(|e| (*e).clone());
-                    NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        event,
-                        handler,
-                    }
-                }
-                NetworkBehaviourAction::GenerateEvent(e) => {
-                    NetworkBehaviourAction::GenerateEvent(e)
-                }
-                NetworkBehaviourAction::DialAddress { address } => {
-                    NetworkBehaviourAction::DialAddress { address }
-                }
-                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
-                    NetworkBehaviourAction::DialPeer { peer_id, condition }
-                }
-                NetworkBehaviourAction::ReportObservedAddr { address, score } => {
-                    NetworkBehaviourAction::ReportObservedAddr { address, score }
-                }
-                NetworkBehaviourAction::CloseConnection {
-                    peer_id,
-                    connection,
-                } => NetworkBehaviourAction::CloseConnection {
-                    peer_id,
-                    connection,
-                },
-            });
+            return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
+                // clone send event reference if others references are present
+                Arc::try_unwrap(e).unwrap_or_else(|e| (*e).clone())
+            }));
         }
 
         // update scores
@@ -3399,7 +3369,7 @@ impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
             .field("config", &self.config)
-            .field("events", &self.events)
+            .field("events", &self.events.len())
             .field("control_pool", &self.control_pool)
             .field("publish_config", &self.publish_config)
             .field("topic_peers", &self.topic_peers)
