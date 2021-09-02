@@ -71,7 +71,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Whether or not we require the `NetworkBehaviourEventProcess` trait to be implemented.
     let event_process = {
-        let mut event_process = true; // Default to true for backwards compatibility
+        let mut event_process = false;
 
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
