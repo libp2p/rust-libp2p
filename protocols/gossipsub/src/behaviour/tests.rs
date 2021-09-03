@@ -67,7 +67,7 @@ mod tests {
         F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         pub fn create_network(self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
-            let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
+            let keypair = libp2p_core::identity::Keypair::generate_ed25519();
             // create a gossipsub struct
             let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
                 MessageAuthenticity::Signed(keypair),
@@ -747,7 +747,7 @@ mod tests {
 
         // check that our subscriptions are sent to each of the peers
         // collect all the SendEvents
-        let send_events: Vec<&NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>> = gs
+        let send_events: Vec<_> = gs
             .events
             .iter()
             .filter(|e| match e {
@@ -1336,13 +1336,14 @@ mod tests {
         //add peer as explicit peer
         gs.add_explicit_peer(&peer);
 
-        let dial_events: Vec<&NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>> = gs
+        let dial_events: Vec<_> = gs
             .events
             .iter()
             .filter(|e| match e {
                 NetworkBehaviourAction::DialPeer {
                     peer_id,
                     condition: DialPeerCondition::Disconnected,
+                    handler: _,
                 } => peer_id == &peer,
                 _ => false,
             })
@@ -1388,6 +1389,7 @@ mod tests {
                     NetworkBehaviourAction::DialPeer {
                         peer_id,
                         condition: DialPeerCondition::Disconnected,
+                        handler: _,
                     } => peer_id == peer,
                     _ => false,
                 })
@@ -1406,6 +1408,7 @@ mod tests {
                     NetworkBehaviourAction::DialPeer {
                         peer_id,
                         condition: DialPeerCondition::Disconnected,
+                        handler: _,
                     } => peer_id == peer,
                     _ => false,
                 })
@@ -1819,6 +1822,7 @@ mod tests {
                 NetworkBehaviourAction::DialPeer {
                     peer_id,
                     condition: DialPeerCondition::Disconnected,
+                    handler: _,
                 } => Some(peer_id.clone()),
                 _ => None,
             })

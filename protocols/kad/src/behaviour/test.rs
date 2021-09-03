@@ -488,7 +488,7 @@ fn get_record_not_found() {
 /// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(records: Vec<Record>, seed: Seed) {
+    fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
@@ -499,6 +499,10 @@ fn put_record() {
         config.set_replication_factor(replication_factor);
         if rng.gen() {
             config.disjoint_query_paths(true);
+        }
+
+        if filter_records {
+            config.set_record_filtering(KademliaStoreInserts::FilterBoth);
         }
 
         let mut swarms = {
@@ -596,6 +600,22 @@ fn put_record() {
                                 }
                             }
                         }
+                        Poll::Ready(Some(SwarmEvent::Behaviour(
+                            KademliaEvent::InboundPutRecordRequest { record, .. },
+                        ))) => {
+                            assert_ne!(
+                                swarm.behaviour().record_filtering,
+                                KademliaStoreInserts::Unfiltered
+                            );
+                            if !drop_records {
+                                // Accept the record
+                                swarm
+                                    .behaviour_mut()
+                                    .store_mut()
+                                    .put(record)
+                                    .expect("record is stored");
+                            }
+                        }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
                         e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
@@ -650,21 +670,29 @@ fn put_record() {
                     })
                     .collect::<HashSet<_>>();
 
-                assert_eq!(actual.len(), replication_factor.get());
+                if swarms[0].behaviour().record_filtering != KademliaStoreInserts::Unfiltered
+                    && drop_records
+                {
+                    assert_eq!(actual.len(), 0);
+                } else {
+                    assert_eq!(actual.len(), replication_factor.get());
 
-                let actual_not_expected = actual.difference(&expected).collect::<Vec<&PeerId>>();
-                assert!(
-                    actual_not_expected.is_empty(),
-                    "Did not expect records to be stored on nodes {:?}.",
-                    actual_not_expected,
-                );
+                    let actual_not_expected =
+                        actual.difference(&expected).collect::<Vec<&PeerId>>();
+                    assert!(
+                        actual_not_expected.is_empty(),
+                        "Did not expect records to be stored on nodes {:?}.",
+                        actual_not_expected,
+                    );
 
-                let expected_not_actual = expected.difference(&actual).collect::<Vec<&PeerId>>();
-                assert!(
-                    expected_not_actual.is_empty(),
-                    "Expected record to be stored on nodes {:?}.",
-                    expected_not_actual,
-                );
+                    let expected_not_actual =
+                        expected.difference(&actual).collect::<Vec<&PeerId>>();
+                    assert!(
+                        expected_not_actual.is_empty(),
+                        "Expected record to be stored on nodes {:?}.",
+                        expected_not_actual,
+                    );
+                }
             }
 
             if republished {
@@ -692,7 +720,9 @@ fn put_record() {
         }))
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_, _) -> _)
+    QuickCheck::new()
+        .tests(4)
+        .quickcheck(prop as fn(_, _, _, _) -> _)
 }
 
 #[test]

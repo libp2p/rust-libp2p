@@ -230,7 +230,7 @@ enum PendingConnectionError {
     InvalidPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
-    ConnectionLimit,
+    Aborted,
     Io,
 }
 
@@ -248,8 +248,8 @@ impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>
             libp2p_core::connection::PendingConnectionError::Transport(
                 libp2p_core::transport::TransportError::Other(_),
             ) => PendingConnectionError::TransportErrorOther,
-            libp2p_core::connection::PendingConnectionError::ConnectionLimit(_) => {
-                PendingConnectionError::ConnectionLimit
+            libp2p_core::connection::PendingConnectionError::Aborted => {
+                PendingConnectionError::Aborted
             }
             libp2p_core::connection::PendingConnectionError::IO(_) => PendingConnectionError::Io,
         }

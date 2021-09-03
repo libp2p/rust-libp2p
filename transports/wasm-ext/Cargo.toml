@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures = "0.3.1"
 js-sys = "0.3.50"
-libp2p-core = { version = "0.30.0", path = "../../core" }
+libp2p-core = { version = "0.30.0", path = "../../core", default-features = false  }
 parity-send-wrapper = "0.1.0"
 wasm-bindgen = "0.2.42"
 wasm-bindgen-futures = "0.4.4"
