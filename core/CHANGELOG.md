@@ -31,9 +31,10 @@
   `UnknownPeerDialError` or `IncomingConnectionError` (see [PR 2191]).
 
 - Remove deprecated functions `upgrade::write_one`, `upgrade::write_with_len_prefix`
-  and `upgrade::read_one`.
+  and `upgrade::read_one` (see [PR 2213]).
 
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+[PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
 [PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
