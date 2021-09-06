@@ -174,7 +174,7 @@ fn parse_certificate(
         .iterate(&mut |oid, critical, extension| {
             match oid {
                 super::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
-                super::LIBP2P_OID_BYTES if critical == true => {
+                super::LIBP2P_OID_BYTES => {
                     libp2p_extension = Some(parse_libp2p_extension(extension)?)
                 }
                 _ if critical => return Err(Error::UnsupportedCriticalExtension),
