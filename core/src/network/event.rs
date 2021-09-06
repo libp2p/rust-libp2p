@@ -86,10 +86,10 @@ where
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
     IncomingConnectionError {
-        /// Local connection address.
-        local_addr: Multiaddr,
-        /// Address used to send back data to the remote.
-        send_back_addr: Multiaddr,
+        // /// Local connection address.
+        // local_addr: Multiaddr,
+        // /// Address used to send back data to the remote.
+        // send_back_addr: Multiaddr,
         /// The error that happened.
         error: PendingConnectionError<TTrans::Error>,
         handler: THandler,
@@ -143,7 +143,7 @@ where
     /// Failed to reach a peer that we were trying to dial.
     UnknownPeerDialError {
         /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
+        // multiaddr: Multiaddr,
 
         /// The error that happened.
         error: PendingConnectionError<TTrans::Error>,
@@ -219,14 +219,14 @@ where
                 .field("send_back_addr", &connection.send_back_addr)
                 .finish(),
             NetworkEvent::IncomingConnectionError {
-                local_addr,
-                send_back_addr,
+                // local_addr,
+                // send_back_addr,
                 error,
                 handler: _,
             } => f
                 .debug_struct("IncomingConnectionError")
-                .field("local_addr", local_addr)
-                .field("send_back_addr", send_back_addr)
+                // .field("local_addr", local_addr)
+                // .field("send_back_addr", send_back_addr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::ConnectionEstablished { connection, .. } => f
@@ -254,10 +254,12 @@ where
                 .field("error", error)
                 .finish(),
             NetworkEvent::UnknownPeerDialError {
-                multiaddr, error, ..
+                // multiaddr,
+                error,
+                ..
             } => f
                 .debug_struct("UnknownPeerDialError")
-                .field("multiaddr", multiaddr)
+                // .field("multiaddr", multiaddr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::ConnectionEvent { connection, event } => f

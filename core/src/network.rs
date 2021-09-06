@@ -31,9 +31,9 @@ use crate::{
         handler::{THandlerInEvent, THandlerOutEvent},
         manager::ManagerConfig,
         pool::{Pool, PoolEvent},
-        ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo, IntoConnectionHandler,
-        ListenerId, ListenersEvent, ListenersStream, OutgoingInfo, PendingConnectionError,
-        Substream,
+        ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint, IncomingInfo,
+        IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, OutgoingInfo,
+        PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
@@ -235,7 +235,8 @@ where
             PendingConnectionError::Transport(
                 e.into_iter().map(|e| TransportError::Other(e)).collect(),
             )
-        });
+        })
+        .map_ok(|(peer_id, address, muxer)| (peer_id, ConnectedPoint::Dialer { address }, muxer));
 
         self.pool.add_outgoing(fut, handler, None)
 
@@ -264,21 +265,21 @@ where
         }
     }
 
-    /// Returns an iterator for information on all pending incoming connections.
-    pub fn incoming_info(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
-        self.pool.iter_pending_incoming()
-    }
+    // /// Returns an iterator for information on all pending incoming connections.
+    // pub fn incoming_info(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
+    //     self.pool.iter_pending_incoming()
+    // }
 
-    /// Returns the list of addresses we're currently dialing without knowing the `PeerId` of.
-    pub fn unknown_dials(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.pool.iter_pending_outgoing().filter_map(|info| {
-            if info.peer_id.is_none() {
-                Some(info.address)
-            } else {
-                None
-            }
-        })
-    }
+    // /// Returns the list of addresses we're currently dialing without knowing the `PeerId` of.
+    // pub fn unknown_dials(&self) -> impl Iterator<Item = &Multiaddr> {
+    //     self.pool.iter_pending_outgoing().filter_map(|info| {
+    //         if info.peer_id.is_none() {
+    //             Some(info.address)
+    //         } else {
+    //             None
+    //         }
+    //     })
+    // }
 
     /// Returns a list of all connected peers, i.e. peers to whom the `Network`
     /// has at least one established connection.
@@ -537,7 +538,8 @@ where
             PendingConnectionError::Transport(
                 e.into_iter().map(|e| TransportError::Other(e)).collect(),
             )
-        });
+        })
+        .map_ok(|(peer_id, address, muxer)| (peer_id, ConnectedPoint::Dialer { address }, muxer));
 
     let result = pool.add_outgoing(fut, opts.handler, Some(opts.peer));
 
@@ -575,7 +577,7 @@ where
 fn on_connection_failed<'a, TTrans, THandler>(
     dialing: &mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
     id: ConnectionId,
-    endpoint: ConnectedPoint,
+    endpoint: Endpoint,
     error: PendingConnectionError<TTrans::Error>,
     handler: THandler,
 ) -> NetworkEvent<'a, TTrans, THandlerInEvent<THandler>, THandlerOutEvent<THandler>, THandler>
@@ -601,20 +603,8 @@ where
     } else {
         // A pending incoming connection or outgoing connection to an unknown peer failed.
         match endpoint {
-            ConnectedPoint::Dialer { address } => NetworkEvent::UnknownPeerDialError {
-                multiaddr: address,
-                error,
-                handler,
-            },
-            ConnectedPoint::Listener {
-                local_addr,
-                send_back_addr,
-            } => NetworkEvent::IncomingConnectionError {
-                local_addr,
-                send_back_addr,
-                error,
-                handler,
-            },
+            Endpoint::Dialer => NetworkEvent::UnknownPeerDialError { error, handler },
+            Endpoint::Listener => NetworkEvent::IncomingConnectionError { error, handler },
         }
     }
 }

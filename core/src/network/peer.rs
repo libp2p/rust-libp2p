@@ -493,13 +493,13 @@ impl<'a, TInEvent> DialingAttempt<'a, TInEvent> {
         self.attempts.key()
     }
 
-    /// Returns the remote address of the current connection attempt.
-    pub fn address(&self) -> &Multiaddr {
-        match self.inner.endpoint() {
-            ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { .. } => unreachable!("by definition of a `DialingAttempt`."),
-        }
-    }
+    // /// Returns the remote address of the current connection attempt.
+    // pub fn address(&self) -> &Multiaddr {
+    //     match self.inner.endpoint() {
+    //         ConnectedPoint::Dialer { address } => address,
+    //         ConnectedPoint::Listener { .. } => unreachable!("by definition of a `DialingAttempt`."),
+    //     }
+    // }
 
     /// Aborts the dialing attempt.
     ///
