@@ -33,7 +33,7 @@ use crate::{
         pool::{Pool, PoolEvent},
         ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint, IncomingInfo,
         IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, OutgoingInfo,
-        PendingConnectionError, Substream,
+        PendingConnectionError, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
@@ -577,7 +577,7 @@ where
 fn on_connection_failed<'a, TTrans, THandler>(
     dialing: &mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
     id: ConnectionId,
-    endpoint: Endpoint,
+    endpoint: PendingPoint,
     error: PendingConnectionError<TTrans::Error>,
     handler: THandler,
 ) -> NetworkEvent<'a, TTrans, THandlerInEvent<THandler>, THandlerOutEvent<THandler>, THandler>
@@ -603,8 +603,16 @@ where
     } else {
         // A pending incoming connection or outgoing connection to an unknown peer failed.
         match endpoint {
-            Endpoint::Dialer => NetworkEvent::UnknownPeerDialError { error, handler },
-            Endpoint::Listener => NetworkEvent::IncomingConnectionError { error, handler },
+            PendingPoint::Dialer => NetworkEvent::UnknownPeerDialError { error, handler },
+            PendingPoint::Listener {
+                send_back_addr,
+                local_addr,
+            } => NetworkEvent::IncomingConnectionError {
+                error,
+                handler,
+                send_back_addr,
+                local_addr,
+            },
         }
     }
 }

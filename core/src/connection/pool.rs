@@ -23,7 +23,8 @@ use crate::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
         manager::{self, Manager, ManagerConfig},
         Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint,
-        IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, Substream,
+        IncomingInfo, IntoConnectionHandler, OutgoingInfo, PendingConnectionError, PendingPoint,
+        Substream,
     },
     muxing::StreamMuxer,
     network::DialError,
@@ -53,7 +54,7 @@ pub struct Pool<THandler: IntoConnectionHandler, TTransErr> {
     established: FnvHashMap<PeerId, FnvHashMap<ConnectionId, ConnectedPoint>>,
 
     /// The pending connections that are currently being negotiated.
-    pending: FnvHashMap<ConnectionId, (Endpoint, Option<PeerId>)>,
+    pending: FnvHashMap<ConnectionId, (PendingPoint, Option<PeerId>)>,
 }
 
 impl<THandler: IntoConnectionHandler, TTransErr> fmt::Debug for Pool<THandler, TTransErr> {
@@ -104,7 +105,7 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTransErr> {
         /// The ID of the failed connection.
         id: ConnectionId,
         /// The local endpoint of the failed connection.
-        endpoint: Endpoint,
+        endpoint: PendingPoint,
         /// The error that occurred.
         error: PendingConnectionError<TTransErr>,
         /// The handler that was supposed to handle the connection,
@@ -226,11 +227,11 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         TMuxer::OutboundSubstream: Send + 'static,
     {
         // TODO: This is a hack. Fix.
-        let endpoint = info.to_connected_point();
+        let endpoint = info.clone().to_connected_point();
         let future = future.map_ok(|(peer_id, muxer)| (peer_id, endpoint, muxer));
         // TODO: We loose the handler here.
         self.counters.check_max_pending_incoming()?;
-        Ok(self.add_pending(future, handler, Endpoint::Listener, None))
+        Ok(self.add_pending(future, handler, info.to_pending_point(), None))
     }
 
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
@@ -262,7 +263,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
             return Err(DialError::ConnectionLimit { limit, handler });
         };
-        Ok(self.add_pending(future, handler, Endpoint::Dialer, expected_peer_id))
+        Ok(self.add_pending(future, handler, PendingPoint::Dialer, expected_peer_id))
     }
 
     /// Adds a pending connection to the pool in the form of a
@@ -271,7 +272,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         &mut self,
         future: TFut,
         handler: THandler,
-        endpoint: Endpoint,
+        endpoint: PendingPoint,
         peer: Option<PeerId>,
     ) -> ConnectionId
     where
@@ -313,7 +314,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         });
 
         let id = self.manager.add_pending(future, handler);
-        self.counters.inc_pending(endpoint);
+        self.counters.inc_pending(&endpoint);
         self.pending.insert(id, (endpoint, peer));
         id
     }
@@ -357,7 +358,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
         id: ConnectionId,
     ) -> Option<PendingConnection<'_, THandlerInEvent<THandler>>> {
         match self.pending.get(&id) {
-            Some((Endpoint::Dialer, _peer)) => match self.manager.entry(id) {
+            Some((PendingPoint::Dialer, _peer)) => match self.manager.entry(id) {
                 Some(manager::Entry::Pending(entry)) => Some(PendingConnection {
                     entry,
                     pending: &mut self.pending,
@@ -468,10 +469,10 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
     /// with associated endpoints and expected peer IDs in the pool.
     pub fn iter_pending_info(
         &self,
-    ) -> impl Iterator<Item = (&ConnectionId, Endpoint, &Option<PeerId>)> + '_ {
+    ) -> impl Iterator<Item = (&ConnectionId, &PendingPoint, &Option<PeerId>)> + '_ {
         self.pending
             .iter()
-            .map(|(id, (endpoint, info))| (id, *endpoint, info))
+            .map(|(id, (endpoint, info))| (id, endpoint, info))
     }
 
     /// Returns an iterator over all connected peers, i.e. those that have
@@ -498,7 +499,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
             match item {
                 manager::Event::PendingConnectionError { id, error, handler } => {
                     if let Some((endpoint, peer)) = self.pending.remove(&id) {
-                        self.counters.dec_pending(endpoint);
+                        self.counters.dec_pending(&endpoint);
                         return Poll::Ready(PoolEvent::PendingConnectionError {
                             id,
                             endpoint,
@@ -539,10 +540,10 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
                 manager::Event::ConnectionEstablished { entry } => {
                     let id = entry.id();
                     if let Some((endpoint, peer)) = self.pending.remove(&id) {
-                        self.counters.dec_pending(endpoint);
+                        self.counters.dec_pending(&endpoint);
 
                         // Check general established connection limit.
-                        if let Err(e) = self.counters.check_max_established(endpoint) {
+                        if let Err(e) = self.counters.check_max_established(&endpoint) {
                             entry.start_close(Some(e));
                             continue;
                         }
@@ -638,7 +639,7 @@ pub enum PoolConnection<'a, TInEvent> {
 /// A pending connection in a pool.
 pub struct PendingConnection<'a, TInEvent> {
     entry: manager::PendingEntry<'a, TInEvent>,
-    pending: &'a mut FnvHashMap<ConnectionId, (Endpoint, Option<PeerId>)>,
+    pending: &'a mut FnvHashMap<ConnectionId, (PendingPoint, Option<PeerId>)>,
     counters: &'a mut ConnectionCounters,
 }
 
@@ -658,8 +659,9 @@ impl<TInEvent> PendingConnection<'_, TInEvent> {
     }
 
     /// Returns information about this endpoint of the connection.
-    pub fn endpoint(&self) -> Endpoint {
-        self.pending
+    pub fn endpoint(&self) -> &PendingPoint {
+        &self
+            .pending
             .get(&self.entry.id())
             .expect("`entry` is a pending entry")
             .0
@@ -672,7 +674,7 @@ impl<TInEvent> PendingConnection<'_, TInEvent> {
             .remove(&self.entry.id())
             .expect("`entry` is a pending entry")
             .0;
-        self.counters.dec_pending(endpoint);
+        self.counters.dec_pending(&endpoint);
         self.entry.abort();
     }
 }
@@ -867,23 +869,23 @@ impl ConnectionCounters {
         self.established_outgoing + self.established_incoming
     }
 
-    fn inc_pending(&mut self, endpoint: Endpoint) {
+    fn inc_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            Endpoint::Dialer => {
+            PendingPoint::Dialer => {
                 self.pending_outgoing += 1;
             }
-            Endpoint::Listener => {
+            PendingPoint::Listener { .. } => {
                 self.pending_incoming += 1;
             }
         }
     }
 
-    fn dec_pending(&mut self, endpoint: Endpoint) {
+    fn dec_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            Endpoint::Dialer => {
+            PendingPoint::Dialer => {
                 self.pending_outgoing -= 1;
             }
-            Endpoint::Listener => {
+            PendingPoint::Listener { .. } => {
                 self.pending_incoming -= 1;
             }
         }
@@ -919,16 +921,16 @@ impl ConnectionCounters {
         Self::check(self.pending_incoming, self.limits.max_pending_incoming)
     }
 
-    fn check_max_established(&self, endpoint: Endpoint) -> Result<(), ConnectionLimit> {
+    fn check_max_established(&self, endpoint: &PendingPoint) -> Result<(), ConnectionLimit> {
         // Check total connection limit.
         Self::check(self.num_established(), self.limits.max_established_total)?;
         // Check incoming/outgoing connection limits
         match endpoint {
-            Endpoint::Dialer => Self::check(
+            PendingPoint::Dialer => Self::check(
                 self.established_outgoing,
                 self.limits.max_established_outgoing,
             ),
-            Endpoint::Listener => Self::check(
+            PendingPoint::Listener { .. } => Self::check(
                 self.established_incoming,
                 self.limits.max_established_incoming,
             ),

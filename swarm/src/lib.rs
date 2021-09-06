@@ -82,8 +82,8 @@ use libp2p_core::{
     },
     muxing::StreamMuxerBox,
     network::{
-        self, peer::ConnectedPeer, ConnectionLimits, DialAttemptsRemaining, Network, NetworkConfig,
-        NetworkEvent, NetworkInfo,
+        self, peer::ConnectedPeer, ConnectionLimits, Network, NetworkConfig, NetworkEvent,
+        NetworkInfo,
     },
     transport::{self, TransportError},
     upgrade::ProtocolName,
@@ -372,22 +372,20 @@ where
             .behaviour
             .addresses_of_peer(peer_id)
             .into_iter()
-            .filter(|a| !self_listening.contains(a));
+            .filter(|a| !self_listening.contains(a))
+            .peekable();
 
-        let first = match addrs.next() {
-            Some(first) => first,
-            None => {
-                let error = DialError::NoAddresses;
-                self.behaviour
-                    .inject_dial_failure(peer_id, handler, error.clone());
-                return Err(error);
-            }
+        if addrs.peek().is_none() {
+            let error = DialError::NoAddresses;
+            self.behaviour
+                .inject_dial_failure(peer_id, handler, error.clone());
+            return Err(error);
         };
 
         let handler = handler
             .into_node_handler_builder()
             .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-        match self.network.peer(*peer_id).dial(first, addrs, handler) {
+        match self.network.peer(*peer_id).dial(addrs, handler) {
             Ok(_connection_id) => Ok(()),
             Err(error) => {
                 let (error, handler) = DialError::from_network_dial_error(error);

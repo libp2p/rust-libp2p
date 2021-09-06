@@ -86,10 +86,10 @@ where
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
     IncomingConnectionError {
-        // /// Local connection address.
-        // local_addr: Multiaddr,
-        // /// Address used to send back data to the remote.
-        // send_back_addr: Multiaddr,
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
         /// The error that happened.
         error: PendingConnectionError<TTrans::Error>,
         handler: THandler,
@@ -219,14 +219,14 @@ where
                 .field("send_back_addr", &connection.send_back_addr)
                 .finish(),
             NetworkEvent::IncomingConnectionError {
-                // local_addr,
-                // send_back_addr,
+                local_addr,
+                send_back_addr,
                 error,
                 handler: _,
             } => f
                 .debug_struct("IncomingConnectionError")
-                // .field("local_addr", local_addr)
-                // .field("send_back_addr", send_back_addr)
+                .field("local_addr", local_addr)
+                .field("send_back_addr", send_back_addr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::ConnectionEstablished { connection, .. } => f
