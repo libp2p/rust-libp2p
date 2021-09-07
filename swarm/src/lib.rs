@@ -206,7 +206,9 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     /// to reach.
     UnknownPeerUnreachableAddr {
         /// Address that we failed to reach.
-        address: Multiaddr,
+        //
+        // TODO: Are the addresses that failed contained in the error now?
+        // address: Multiaddr,
         /// Error that has been encountered.
         error: PendingConnectionError<io::Error>,
     },
@@ -708,56 +710,39 @@ where
                 }
                 Poll::Ready(NetworkEvent::DialError {
                     peer_id,
-                    multiaddr,
                     error,
-                    attempts_remaining,
+                    handler,
                 }) => {
                     // TODO: Remove
                     // this.behaviour
                     //     .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
 
-                    let num_remaining: u32;
-                    match attempts_remaining {
-                        DialAttemptsRemaining::Some(n) => {
-                            num_remaining = n.into();
-                        }
-                        DialAttemptsRemaining::None(handler) => {
-                            num_remaining = 0;
-                            this.behaviour.inject_dial_failure(
-                                &peer_id,
-                                handler.into_protocols_handler(),
-                                DialError::UnreachableAddr(multiaddr.clone()),
-                            );
-                        }
-                    }
-
-                    log::debug!(
-                        "Connection attempt to {:?} via {:?} failed with {:?}. Attempts remaining: {}.",
-                        peer_id, multiaddr, error, num_remaining,
+                    this.behaviour.inject_dial_failure(
+                        &peer_id,
+                        handler.into_protocols_handler(),
+                        DialError::UnreachableAddr(todo!()),
                     );
 
-                    return Poll::Ready(SwarmEvent::UnreachableAddr {
+                    log::debug!(
+                        "Connection attempt to {:?} failed with {:?}.",
                         peer_id,
-                        address: multiaddr,
                         error,
-                        attempts_remaining: num_remaining,
-                    });
-                }
-                Poll::Ready(NetworkEvent::UnknownPeerDialError {
-                    multiaddr, error, ..
-                }) => {
-                    log::debug!(
-                        "Connection attempt to address {:?} of unknown peer failed with {:?}",
-                        multiaddr,
-                        error
                     );
+
+                    todo!()
+                    // return Poll::Ready(SwarmEvent::UnreachableAddr {
+                    //     peer_id,
+                    //     address: multiaddr,
+                    //     error,
+                    //     attempts_remaining: num_remaining,
+                    // });
+                }
+                Poll::Ready(NetworkEvent::UnknownPeerDialError { error, .. }) => {
+                    log::debug!("Connection attempt to unknown peer failed with {:?}", error);
                     // TODO: Remove
                     // this.behaviour
                     //     .inject_addr_reach_failure(None, &multiaddr, &error);
-                    return Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr {
-                        address: multiaddr,
-                        error,
-                    });
+                    return Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr { error });
                 }
             }
 
@@ -826,24 +811,26 @@ where
                             return Poll::Ready(SwarmEvent::Dialing(peer_id));
                         }
                     } else {
-                        // Even if the condition for a _new_ dialing attempt is not met,
-                        // we always add any potentially new addresses of the peer to an
-                        // ongoing dialing attempt, if there is one.
-                        log::trace!(
-                            "Condition for new dialing attempt to {:?} not met: {:?}",
-                            peer_id,
-                            condition
-                        );
-                        let self_listening = &this.listened_addrs;
-                        if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
-                            let addrs = this.behaviour.addresses_of_peer(peer.id());
-                            let mut attempt = peer.some_attempt();
-                            for a in addrs {
-                                if !self_listening.contains(&a) {
-                                    attempt.add_address(a);
-                                }
-                            }
-                        }
+                        // TODO: Make sure this behaviour is removed from all other doc comments as well.
+                        //
+                        // // Even if the condition for a _new_ dialing attempt is not met,
+                        // // we always add any potentially new addresses of the peer to an
+                        // // ongoing dialing attempt, if there is one.
+                        // log::trace!(
+                        //     "Condition for new dialing attempt to {:?} not met: {:?}",
+                        //     peer_id,
+                        //     condition
+                        // );
+                        // let self_listening = &this.listened_addrs;
+                        // if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
+                        //     let addrs = this.behaviour.addresses_of_peer(peer.id());
+                        //     let mut attempt = peer.some_attempt();
+                        //     for a in addrs {
+                        //         if !self_listening.contains(&a) {
+                        //             attempt.add_address(a);
+                        //         }
+                        //     }
+                        // }
 
                         this.behaviour.inject_dial_failure(
                             &peer_id,

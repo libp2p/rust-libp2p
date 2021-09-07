@@ -72,6 +72,7 @@ pub enum PendingConnectionError<TTransErr> {
     //
     // TODO: Using a Vec here is not ideal. On an incoming listen connection only a single error can
     // occur.
+    // How about splitting into PendingIncomingConnectionError and PendingOutgoingConnectionError?
     Transport(Vec<TransportError<TTransErr>>),
 
     /// Pending connection attempt has been aborted.

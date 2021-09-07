@@ -64,6 +64,7 @@ impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
+                // TODO: What about self.errors? Sure we should loose these?
                 Some(Ok(output)) => return Poll::Ready(Ok(output)),
                 Some(Err(e)) => {
                     self.errors.push(e);
