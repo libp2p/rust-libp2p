@@ -1,4 +1,4 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
+// Copyright 2021 COMIT Network.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,14 +18,31 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-fn main() {
-    prost_build::compile_protos(
-        &[
-            "src/keys.proto",
-            "src/envelope.proto",
-            "src/peer_record.proto",
-        ],
-        &["src"],
-    )
-    .unwrap();
+use crate::codec;
+use crate::codec::Message;
+use void::Void;
+
+const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
+
+pub mod inbound;
+pub mod outbound;
+
+/// Errors that can occur while interacting with a substream.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Reading message {0:?} at this stage is a protocol violation")]
+    BadMessage(Message),
+    #[error("Failed to write message to substream")]
+    WriteMessage(#[source] codec::Error),
+    #[error("Failed to read message from substream")]
+    ReadMessage(#[source] codec::Error),
+    #[error("Substream ended unexpectedly mid-protocol")]
+    UnexpectedEndOfStream,
 }
+
+pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
+pub type OutboundOutEvent =
+    crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
+
+pub type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
+pub type InboundOutEvent = crate::substream_handler::OutEvent<inbound::OutEvent, Void, Error, Void>;
