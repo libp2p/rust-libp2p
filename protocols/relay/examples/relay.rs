@@ -60,13 +60,12 @@
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::dns::DnsConfig;
-use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{core::upgrade, identity::ed25519};
+use libp2p::{core::upgrade, identity::ed25519, ping};
 use libp2p::{identity, NetworkBehaviour, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};
@@ -99,8 +98,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let behaviour = Behaviour {
         relay: relay_behaviour,
-        ping: Ping::new(
-            PingConfig::new()
+        ping: ping::Behaviour::new(
+            ping::Config::new()
                 .with_keep_alive(true)
                 .with_interval(Duration::from_secs(1)),
         ),
@@ -213,18 +212,18 @@ fn get_client_listen_address(opt: &Opt) -> String {
 #[behaviour(out_event = "Event", event_process = false)]
 struct Behaviour {
     relay: Relay,
-    ping: Ping,
+    ping: ping::Behaviour,
 }
 
 #[derive(Debug)]
 enum Event {
     Relay(()),
-    Ping(PingEvent),
+    Ping(ping::Event),
 }
 
-impl From<PingEvent> for Event {
-    fn from(e: PingEvent) -> Self {
-        Event::Ping(e)
+impl From<ping::Event> for Event {
+    fn from(v: ping::Event) -> Self {
+        Self::Ping(v)
     }
 }
 

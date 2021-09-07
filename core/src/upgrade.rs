@@ -69,8 +69,6 @@ mod transfer;
 
 use futures::future::Future;
 
-#[allow(deprecated)]
-pub use self::transfer::ReadOneError;
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
