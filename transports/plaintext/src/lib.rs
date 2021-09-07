@@ -41,10 +41,10 @@ mod structs_proto {
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
 ///
-/// > **Note**: Given that `PlainText1Config` has no notion of exchanging peer identity information
-/// it is not compatible > with the `libp2p_core::transport::upgrade::Builder` pattern. See
-/// > [`PlainText2Config`](struct.PlainText2Config.html) if compatibility is needed. Even though not
-/// compatible with the > Builder pattern one can still do an upgrade *manually*:
+/// Given that `PlainText1Config` has no notion of exchanging peer identity information it is not
+/// compatible with the `libp2p_core::transport::upgrade::Builder` pattern. See
+/// [`PlainText2Config`](struct.PlainText2Config.html) if compatibility is needed. Even though not
+/// compatible with the Builder pattern one can still do an upgrade *manually*:
 ///
 /// ```
 /// # use libp2p_core::transport::{ Transport, memory::MemoryTransport };
