@@ -115,28 +115,29 @@ pub struct PeerScoreParams {
     /// P5: Application-specific peer scoring
     pub app_specific_weight: f64,
 
-    ///  P6: IP-colocation factor.
-    ///  The parameter has an associated counter which counts the number of peers with the same IP.
-    ///  If the number of peers in the same IP exceeds `ip_colocation_factor_threshold, then the
-    /// value  is the square of the difference, ie `(peers_in_same_ip -
-    /// ip_colocation_threshold)^2`.  If the number of peers in the same IP is less than the
-    /// threshold, then the value is 0.  The weight of the parameter MUST be negative, unless
-    /// you want to disable for testing.  Note: In order to simulate many IPs in a manageable
-    /// manner when testing, you can set the weight to 0        thus disabling the IP
-    /// colocation penalty.
+    /// P6: IP-colocation factor.
+    /// The parameter has an associated counter which counts the number of peers with the same IP.
+    /// If the number of peers in the same IP exceeds `ip_colocation_factor_threshold, then the
+    /// value is the square of the difference, ie `(peers_in_same_ip -ip_colocation_threshold)^2`.
+    /// If the number of peers in the same IP is less than the threshold, then the value is 0.  The
+    /// weight of the parameter MUST be negative, unless you want to disable for testing.
+    ///
+    /// Note: In order to simulate many IPs in a manageable manner when testing, you can set the
+    /// weight to 0 thus disabling the IP colocation penalty.
     pub ip_colocation_factor_weight: f64,
     pub ip_colocation_factor_threshold: f64,
     pub ip_colocation_factor_whitelist: HashSet<IpAddr>,
 
-    ///  P7: behavioural pattern penalties.
-    ///  This parameter has an associated counter which tracks misbehaviour as detected by the
-    ///  router. The router currently applies penalties for the following behaviors:
-    ///  - attempting to re-graft before the prune backoff time has elapsed.
-    ///  - not following up in IWANT requests for messages advertised with IHAVE.
+    /// P7: behavioural pattern penalties.
+    /// This parameter has an associated counter which tracks misbehaviour as detected by the
+    /// router. The router currently applies penalties for the following behaviors:
     ///
-    ///  The value of the parameter is the square of the counter over the threshold, which decays
-    ///  with BehaviourPenaltyDecay.
-    ///  The weight of the parameter MUST be negative (or zero to disable).
+    /// - attempting to re-graft before the prune backoff time has elapsed.
+    /// - not following up in IWANT requests for messages advertised with IHAVE.
+    ///
+    /// The value of the parameter is the square of the counter over the threshold, which decays
+    /// with BehaviourPenaltyDecay. The weight of the parameter MUST be negative (or zero to
+    /// disable).
     pub behaviour_penalty_weight: f64,
     pub behaviour_penalty_threshold: f64,
     pub behaviour_penalty_decay: f64,
@@ -231,37 +232,36 @@ pub struct TopicScoreParams {
     /// The weight of the topic.
     pub topic_weight: f64,
 
-    ///  P1: time in the mesh
-    ///  This is the time the peer has been grafted in the mesh.
-    ///  The value of of the parameter is the `time/time_in_mesh_quantum`, capped by
-    /// `time_in_mesh_cap`  The weight of the parameter must be positive (or zero to disable).
+    /// P1: time in the mesh
+    /// This is the time the peer has been grafted in the mesh. The value of of the parameter is
+    /// the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`  The weight of the parameter
+    /// must be positive (or zero to disable).
     pub time_in_mesh_weight: f64,
     pub time_in_mesh_quantum: Duration,
     pub time_in_mesh_cap: f64,
 
-    ///  P2: first message deliveries
-    ///  This is the number of message deliveries in the topic.
-    ///  The value of the parameter is a counter, decaying with `first_message_deliveries_decay`,
-    /// and capped  by `first_message_deliveries_cap`.
-    ///  The weight of the parameter MUST be positive (or zero to disable).
+    /// P2: first message deliveries
+    /// This is the number of message deliveries in the topic. The value of the parameter is a
+    /// counter, decaying with `first_message_deliveries_decay`, and capped  by
+    /// `first_message_deliveries_cap`. The weight of the parameter MUST be positive (or zero to
+    /// disable).
     pub first_message_deliveries_weight: f64,
     pub first_message_deliveries_decay: f64,
     pub first_message_deliveries_cap: f64,
 
-    ///  P3: mesh message deliveries
-    ///  This is the number of message deliveries in the mesh, within the
-    ///  `mesh_message_deliveries_window` of message validation; deliveries during validation also
-    ///  count and are retroactively applied when validation succeeds.
-    ///  This window accounts for the minimum time before a hostile mesh peer trying to game the
-    ///  score could replay back a valid message we just sent them.
-    ///  It effectively tracks first and near-first deliveries, ie a message seen from a mesh peer
-    ///  before we have forwarded it to them.
-    ///  The parameter has an associated counter, decaying with `mesh_message_deliveries_decay`.
-    ///  If the counter exceeds the threshold, its value is 0.
-    ///  If the counter is below the `mesh_message_deliveries_threshold`, the value is the square
-    /// of  the deficit, ie (`message_deliveries_threshold - counter)^2`
-    ///  The penalty is only activated after `mesh_message_deliveries_activation` time in the mesh.
-    ///  The weight of the parameter MUST be negative (or zero to disable).
+    /// P3: mesh message deliveries
+    /// This is the number of message deliveries in the mesh, within the
+    /// `mesh_message_deliveries_window` of message validation; deliveries during validation also
+    /// count and are retroactively applied when validation succeeds. This window accounts for the
+    /// minimum time before a hostile mesh peer trying to game the score could replay back a valid
+    /// message we just sent them. It effectively tracks first and near-first deliveries, ie a
+    /// message seen from a mesh peer before we have forwarded it to them. The parameter has an
+    /// associated counter, decaying with `mesh_message_deliveries_decay`. If the counter exceeds
+    /// the threshold, its value is 0. If the counter is below the
+    /// `mesh_message_deliveries_threshold`, the value is the square of the deficit, ie
+    /// (`message_deliveries_threshold - counter)^2`. The penalty is only activated after
+    /// `mesh_message_deliveries_activation` time in the mesh. The weight of the parameter MUST be
+    /// negative (or zero to disable).
     pub mesh_message_deliveries_weight: f64,
     pub mesh_message_deliveries_decay: f64,
     pub mesh_message_deliveries_cap: f64,
@@ -269,18 +269,17 @@ pub struct TopicScoreParams {
     pub mesh_message_deliveries_window: Duration,
     pub mesh_message_deliveries_activation: Duration,
 
-    ///  P3b: sticky mesh propagation failures
-    ///  This is a sticky penalty that applies when a peer gets pruned from the mesh with an active
-    ///  mesh message delivery penalty.
-    ///  The weight of the parameter MUST be negative (or zero to disable)
+    /// P3b: sticky mesh propagation failures
+    /// This is a sticky penalty that applies when a peer gets pruned from the mesh with an active
+    /// mesh message delivery penalty. The weight of the parameter MUST be negative (or zero to
+    /// disable).
     pub mesh_failure_penalty_weight: f64,
     pub mesh_failure_penalty_decay: f64,
 
-    ///  P4: invalid messages
-    ///  This is the number of invalid messages in the topic.
-    ///  The value of the parameter is the square of the counter, decaying with
-    ///  `invalid_message_deliveries_decay`.
-    ///  The weight of the parameter MUST be negative (or zero to disable).
+    /// P4: invalid messages
+    /// This is the number of invalid messages in the topic. The value of the parameter is the
+    /// square of the counter, decaying with `invalid_message_deliveries_decay`. The weight of the
+    /// parameter MUST be negative (or zero to disable).
     pub invalid_message_deliveries_weight: f64,
     pub invalid_message_deliveries_decay: f64,
 }
