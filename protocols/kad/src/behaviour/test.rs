@@ -1336,7 +1336,9 @@ fn client_mode() {
         .map(|(_, swarm)| swarm.local_peer_id().clone())
         .collect();
 
+    // Client dials server.
     swarms[0].1.dial_addr(addrs[1].clone()).unwrap();
+    // Server dials client for redundancy.
     swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
 
     block_on(poll_fn(move |ctx| {
@@ -1358,6 +1360,10 @@ fn client_mode() {
                         return Poll::Ready(());
                     }
                     Poll::Ready(_) => {
+                        // NOTE:
+                        // This check is not good enough, but it doesn't necessarily gurantee that
+                        // the server doesn't have the client in its routing table (and, never will).
+
                         // Check if the client peer is NOT present in the server peer's routing table.
                         if swarm.local_peer_id().clone() == peers[1] {
                             is_client_absent = swarm.behaviour_mut().kbucket(peers[0]).is_none();
