@@ -33,8 +33,8 @@
 - Remove deprecated functions `upgrade::write_one`, `upgrade::write_with_len_prefix`
   and `upgrade::read_one` (see [PR 2213]).
 
-- Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003].
-  See [PR 2107].
+- Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003]
+  (see [PR 2107).
 
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
