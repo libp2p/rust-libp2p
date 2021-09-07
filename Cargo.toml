@@ -25,6 +25,7 @@ default = [
     "pnet",
     "relay",
     "request-response",
+    "rendezvous",
     "secp256k1",
     "tcp-async-io",
     "uds",
@@ -48,6 +49,7 @@ plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
 relay = ["libp2p-relay"]
 request-response = ["libp2p-request-response"]
+rendezvous = ["libp2p-rendezvous"]
 tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
 uds = ["libp2p-uds"]
@@ -78,6 +80,7 @@ libp2p-ping = { version = "0.31.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.30.0", path = "transports/plaintext", optional = true }
 libp2p-pnet = { version = "0.22.0", path = "transports/pnet", optional = true }
 libp2p-relay = { version = "0.4.0", path = "protocols/relay", optional = true }
+libp2p-rendezvous = { version = "0.1.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.13.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.31.0", path = "swarm" }
 libp2p-swarm-derive = { version = "0.25.0", path = "swarm-derive" }
@@ -115,6 +118,7 @@ members = [
     "muxers/yamux",
     "protocols/floodsub",
     "protocols/gossipsub",
+    "protocols/rendezvous",
     "protocols/identify",
     "protocols/kad",
     "protocols/mdns",

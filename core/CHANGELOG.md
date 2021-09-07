@@ -33,6 +33,9 @@
 - Remove deprecated functions `upgrade::write_one`, `upgrade::write_with_len_prefix`
   and `upgrade::read_one` (see [PR 2213]).
 
+- Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003]
+  (see [PR 2107]).
+
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
@@ -40,6 +43,9 @@
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 [PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
+[PR 2107]: https://github.com/libp2p/rust-libp2p/pull/2107
+[RFC0002]: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+[RFC0003]: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md
 
 # 0.29.0 [2021-07-12]
 
