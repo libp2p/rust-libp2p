@@ -1327,63 +1327,74 @@ fn client_mode() {
     let client_swarm = build_node_with_config(cfg);
     let server_swarm = build_node_with_config(KademliaConfig::default());
 
-    let mut swarms = vec![client_swarm, server_swarm];
+    let mut swarms = vec![server_swarm, client_swarm];
 
     // Collect addresses and peer IDs.
     let addrs: Vec<_> = swarms.iter().map(|(addr, _)| addr.clone()).collect();
-    let peers: Vec<_> = swarms
+    let _peers: Vec<_> = swarms
         .iter()
         .map(|(_, swarm)| swarm.local_peer_id().clone())
         .collect();
 
     // Client dials server.
-    swarms[0].1.dial_addr(addrs[1].clone()).unwrap();
-    // Server dials client for redundancy.
-    swarms[1].1.dial_addr(addrs[0].clone()).unwrap();
+    swarms[1].1.dial_addr(addrs[1].clone()).unwrap();
+
+    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+
+    // Put a record in the server node.
+    swarms[0]
+        .1
+        .behaviour_mut()
+        .put_record(record.clone(), Quorum::One);
+
+    // Now the client node is trying to get the same record.
+    swarms[1]
+        .1
+        .behaviour_mut()
+        .get_record(&record.key, Quorum::One);
 
     block_on(poll_fn(move |ctx| {
-        // Flag variables to store the result of various checks.
-        let mut is_server_present = false;
-        let mut is_client_absent = false;
-
         for (_, swarm) in swarms.iter_mut() {
+            let mut check1 = false;
+            let mut check2 = false;
+
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated {
-                        peer,
-                        ..
-                    }))) => {
-                        // Check if the server peer is present in the client peer's routing table.
-                        if swarm.local_peer_id().clone() == peers[0] {
-                            is_server_present = peer == peers[1];
+                    Poll::Ready(Some(SwarmEvent::Behaviour(
+                        KademliaEvent::OutboundQueryCompleted { result, .. },
+                    ))) => match result {
+                        QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
+                            assert_eq!(key, record.key.clone());
+                            check2 = true;
                         }
-                        return Poll::Ready(());
-                    }
-                    Poll::Ready(_) => {
-                        // NOTE:
-                        // This check is not good enough, but it doesn't necessarily gurantee that
-                        // the server doesn't have the client in its routing table (and, never will).
-
-                        // Check if the client peer is NOT present in the server peer's routing table.
-                        if swarm.local_peer_id().clone() == peers[1] {
-                            is_client_absent = swarm.behaviour_mut().kbucket(peers[0]).is_none();
+                        QueryResult::PutRecord(Err(e)) => panic!("Put record failed: {:#?}", e),
+                        QueryResult::GetRecord(Ok(GetRecordOk { records, .. })) => {
+                            if check1 && check2 {
+                                assert_eq!(records.first().unwrap().record, record);
+                                return Poll::Ready(());
+                            }
                         }
-                        return Poll::Ready(());
+                        QueryResult::GetRecord(Err(e)) => panic!("Get record failed: {:#?}", e),
+                        _ => {}
+                    },
+                    // This is just here for redundancy. I don't think it actually does, anything.
+                    Poll::Ready(Some(SwarmEvent::Behaviour(
+                        KademliaEvent::InboundPutRecordRequest { record, .. },
+                    ))) => {
+                        swarm
+                            .behaviour_mut()
+                            .store_mut()
+                            .put(record)
+                            .expect("record is stored");
+                        check1 = true;
                     }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                     Poll::Pending => break,
                 }
             }
         }
-        // The assert statements are present outside the match block, to make sure that all the
-        // necessary events occur.
-        assert!(
-            is_server_present,
-            "The client peer does not have the server peer in its routing table."
-        );
-        assert!(
-            is_client_absent,
-            "The server peer has the client peer in its routing table."
-        );
         Poll::Pending
     }))
 }
