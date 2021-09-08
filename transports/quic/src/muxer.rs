@@ -1,7 +1,6 @@
 use crate::crypto::Crypto;
 use crate::endpoint::ConnectionChannel;
 use async_io::Timer;
-use fnv::FnvHashMap;
 use futures::prelude::*;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::{Multiaddr, PeerId};
@@ -11,7 +10,7 @@ use quinn_proto::{
     ConnectionError, Dir, Event, FinishError, ReadError, ReadableError, StreamEvent, StreamId,
     VarInt, WriteError,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
@@ -43,7 +42,7 @@ struct QuicMuxerInner<C: Crypto> {
     /// Connection timer.
     timer: Option<Timer>,
     /// State of all open substreams.
-    substreams: FnvHashMap<StreamId, SubstreamState>,
+    substreams: HashMap<StreamId, SubstreamState>,
     /// Pending substreams.
     pending_substreams: VecDeque<Waker>,
     /// Close waker.

@@ -1,7 +1,6 @@
 use crate::crypto::{Crypto, CryptoConfig};
 use crate::muxer::QuicMuxer;
 use crate::{QuicConfig, QuicError};
-use fnv::FnvHashMap;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use quinn_proto::crypto::Session;
@@ -9,7 +8,7 @@ use quinn_proto::generic::{ClientConfig, ServerConfig};
 use quinn_proto::{
     ConnectionEvent, ConnectionHandle, DatagramEvent, EcnCodepoint, EndpointEvent, Transmit,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::IoSliceMut;
 use std::mem::MaybeUninit;
 use std::net::SocketAddr;
@@ -230,7 +229,7 @@ struct Endpoint<C: Crypto> {
     endpoint: QuinnEndpoint<C::Session>,
     socket: UdpSocket,
     crypto_config: Arc<CryptoConfig<C>>,
-    connections: FnvHashMap<ConnectionHandle, mpsc::Sender<ConnectionEvent>>,
+    connections: HashMap<ConnectionHandle, mpsc::Sender<ConnectionEvent>>,
     outgoing: VecDeque<udp_socket::Transmit>,
     recv_buf: Box<[u8]>,
     incoming_slot: Option<QuicMuxer<C>>,
@@ -391,8 +390,8 @@ where
         }
 
         while !me.outgoing.is_empty() {
-            me.outgoing.make_contiguous();
-            match me.socket.poll_send(cx, me.outgoing.as_slices().0) {
+            let transmits: &[_] = me.outgoing.make_contiguous();
+            match me.socket.poll_send(cx, transmits) {
                 Poll::Ready(Ok(n)) => {
                     me.outgoing.drain(..n);
                 }
