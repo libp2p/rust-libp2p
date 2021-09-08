@@ -115,7 +115,7 @@ impl Metrics {
         );
 
         let query_result_duration =
-            Family::new_with_constructor(|| Histogram::new(exponential_buckets(0.001, 2.0, 12)));
+            Family::new_with_constructor(|| Histogram::new(exponential_buckets(0.1, 2.0, 10)));
         sub_registry.register_with_unit(
             "query_result_duration",
             "Duration of a Kademlia query.",
