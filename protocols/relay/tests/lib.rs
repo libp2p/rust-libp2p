@@ -31,7 +31,7 @@ use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
 use libp2p_core::{identity, upgrade, PeerId};
 use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
-use libp2p_ping::{Ping, PingConfig, PingEvent};
+use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::KeepAlive;
@@ -174,7 +174,7 @@ fn src_connect_to_dst_listening_via_relay() {
             // Source Node waiting for Ping from Destination Node via Relay.
             loop {
                 match src_swarm.select_next_some().await {
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                         peer,
                         result: Ok(_),
                     })) => {
@@ -249,7 +249,7 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
         // Source Node waiting for Ping from Destination Node via Relay.
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                     peer,
                     result: Ok(_),
                 })) => {
@@ -337,7 +337,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
         // Source Node waiting for Ping from Destination Node via Relay.
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                     peer,
                     result: Ok(_),
                 })) => {
@@ -690,7 +690,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
             // Source Node waiting for Ping from Destination Node via Relay.
             loop {
                 match src_swarm.select_next_some().await {
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                         peer,
                         result: Ok(_),
                     })) => {
@@ -1019,7 +1019,7 @@ fn yield_incoming_connection_through_correct_listener() {
                     if address == relay_1_addr_incl_circuit
                         || address == relay_2_addr_incl_circuit
                         || address == dst_addr => {}
-                SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                     peer,
                     result: Ok(_),
                 })) => {
@@ -1132,7 +1132,7 @@ fn yield_incoming_connection_through_correct_listener() {
 #[behaviour(out_event = "CombinedEvent", poll_method = "poll")]
 struct CombinedBehaviour {
     relay: Relay,
-    ping: Ping,
+    ping: ping::Behaviour,
     kad: Kademlia<MemoryStore>,
     identify: Identify,
 
@@ -1143,7 +1143,7 @@ struct CombinedBehaviour {
 #[derive(Debug)]
 enum CombinedEvent {
     Kad(KademliaEvent),
-    Ping(PingEvent),
+    Ping(ping::Event),
 }
 
 impl CombinedBehaviour {
@@ -1161,8 +1161,8 @@ impl CombinedBehaviour {
     }
 }
 
-impl NetworkBehaviourEventProcess<PingEvent> for CombinedBehaviour {
-    fn inject_event(&mut self, event: PingEvent) {
+impl NetworkBehaviourEventProcess<ping::Event> for CombinedBehaviour {
+    fn inject_event(&mut self, event: ping::Event) {
         self.events.push(CombinedEvent::Ping(event));
     }
 }
@@ -1288,7 +1288,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
 
     let combined_behaviour = CombinedBehaviour {
         relay: relay_behaviour,
-        ping: Ping::new(PingConfig::new().with_interval(Duration::from_millis(100))),
+        ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_millis(100))),
         kad: Kademlia::new(
             local_peer_id.clone(),
             MemoryStore::new(local_peer_id.clone()),

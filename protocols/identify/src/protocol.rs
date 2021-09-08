@@ -258,7 +258,7 @@ fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<IdentifyInfo, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{channel::oneshot, prelude::*};
+    use futures::channel::oneshot;
     use libp2p_core::{
         identity,
         upgrade::{self, apply_inbound, apply_outbound},

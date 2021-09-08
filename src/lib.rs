@@ -104,6 +104,10 @@ pub use libp2p_pnet as pnet;
 #[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
 #[doc(inline)]
 pub use libp2p_relay as relay;
+#[cfg(feature = "rendezvous")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rendezvous")))]
+#[doc(inline)]
+pub use libp2p_rendezvous as rendezvous;
 #[cfg(feature = "request-response")]
 #[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
 #[doc(inline)]
