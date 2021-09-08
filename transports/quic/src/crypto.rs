@@ -23,7 +23,6 @@ impl CloneKeypair for ed25519_dalek::Keypair {
 }
 
 pub trait ToLibp2p {
-    fn to_keypair(&self) -> libp2p_core::identity::Keypair;
     fn to_public(&self) -> libp2p_core::identity::PublicKey;
     fn to_peer_id(&self) -> PeerId {
         self.to_public().to_peer_id()
@@ -32,13 +31,6 @@ pub trait ToLibp2p {
 
 #[cfg(feature = "noise")]
 impl ToLibp2p for ed25519_dalek::Keypair {
-    fn to_keypair(&self) -> libp2p_core::identity::Keypair {
-        let mut secret_key = self.secret.to_bytes();
-        let secret_key =
-            libp2p_core::identity::ed25519::SecretKey::from_bytes(&mut secret_key).unwrap();
-        libp2p_core::identity::Keypair::Ed25519(secret_key.into())
-    }
-
     fn to_public(&self) -> libp2p_core::identity::PublicKey {
         self.public.to_public()
     }
@@ -46,10 +38,6 @@ impl ToLibp2p for ed25519_dalek::Keypair {
 
 #[cfg(feature = "noise")]
 impl ToLibp2p for ed25519_dalek::PublicKey {
-    fn to_keypair(&self) -> libp2p_core::identity::Keypair {
-        panic!("wtf?");
-    }
-
     fn to_public(&self) -> libp2p_core::identity::PublicKey {
         let public_key = self.to_bytes();
         let public_key =
@@ -60,10 +48,6 @@ impl ToLibp2p for ed25519_dalek::PublicKey {
 
 #[cfg(feature = "tls")]
 impl ToLibp2p for libp2p_core::identity::Keypair {
-    fn to_keypair(&self) -> libp2p_core::identity::Keypair {
-        self.clone()
-    }
-
     fn to_public(&self) -> libp2p_core::identity::PublicKey {
         self.public()
     }
