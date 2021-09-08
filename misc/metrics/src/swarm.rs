@@ -166,20 +166,15 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     })
                     .inc();
             }
+            libp2p_swarm::SwarmEvent::OutgoingConnectionError { .. } => {
+                todo!()
+                // self.swarm
+                //     .dial_unreachable_addr
+                //     .get_or_create(&vec![("peer".into(), "known".into())])
+                //     .inc();
+            }
             libp2p_swarm::SwarmEvent::BannedPeer { .. } => {
                 self.swarm.connected_to_banned_peer.inc();
-            }
-            libp2p_swarm::SwarmEvent::UnreachableAddr { .. } => {
-                self.swarm
-                    .dial_unreachable_addr
-                    .get_or_create(&vec![("peer".into(), "known".into())])
-                    .inc();
-            }
-            libp2p_swarm::SwarmEvent::UnknownPeerUnreachableAddr { .. } => {
-                self.swarm
-                    .dial_unreachable_addr
-                    .get_or_create(&vec![("peer".into(), "unknown".into())])
-                    .inc();
             }
             libp2p_swarm::SwarmEvent::NewListenAddr { .. } => {
                 self.swarm.new_listen_addr.inc();
@@ -242,16 +237,17 @@ impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>
             libp2p_core::connection::PendingConnectionError::InvalidPeerId => {
                 PendingConnectionError::InvalidPeerId
             }
-            libp2p_core::connection::PendingConnectionError::Transport(
-                libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
-            ) => PendingConnectionError::TransportErrorMultiaddrNotSupported,
-            libp2p_core::connection::PendingConnectionError::Transport(
-                libp2p_core::transport::TransportError::Other(_),
-            ) => PendingConnectionError::TransportErrorOther,
+            // libp2p_core::connection::PendingConnectionError::Transport(
+            //     libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
+            // ) => PendingConnectionError::TransportErrorMultiaddrNotSupported,
+            // libp2p_core::connection::PendingConnectionError::Transport(
+            //     libp2p_core::transport::TransportError::Other(_),
+            // ) => PendingConnectionError::TransportErrorOther,
             libp2p_core::connection::PendingConnectionError::Aborted => {
                 PendingConnectionError::Aborted
             }
             libp2p_core::connection::PendingConnectionError::IO(_) => PendingConnectionError::Io,
+            _ => todo!(),
         }
     }
 }

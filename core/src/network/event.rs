@@ -140,6 +140,7 @@ where
         error: PendingConnectionError<TTrans::Error>,
     },
 
+    // TODO: How about merging this into [`DialError`]?
     /// Failed to reach a peer that we were trying to dial.
     UnknownPeerDialError {
         /// The multiaddr we failed to reach.

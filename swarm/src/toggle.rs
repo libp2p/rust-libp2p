@@ -150,7 +150,7 @@ where
         &mut self,
         peer_id: &PeerId,
         handler: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             if let Some(handler) = handler.inner {

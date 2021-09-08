@@ -21,8 +21,8 @@ use std::{
 };
 
 pub(crate) struct ConcurrentDial<TMuxer, TError> {
-    dials: FuturesUnordered<BoxFuture<'static, Result<(PeerId, Multiaddr, TMuxer), TError>>>,
-    errors: Vec<TError>,
+    dials: FuturesUnordered<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
+    errors: Vec<(Multiaddr, TransportError<TError>)>,
 }
 
 impl<TMuxer, TError> Unpin for ConcurrentDial<TMuxer, TError> {}
@@ -38,36 +38,32 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
         TTrans::Dial: Send + 'static,
         TError: std::fmt::Debug,
     {
-        Self {
-            dials: addresses
-                .into_iter()
-                .map(|a| p2p_addr(peer, a).unwrap())
-                .map(|a| {
-                    let a_clone = a.clone();
-                    transport
-                        .clone()
-                        // TODO: address could as well be derived from transport.
-                        .map(|(peer_id, muxer), _| (peer_id, a_clone, muxer))
-                        .dial(a)
-                        .unwrap()
-                        .boxed()
-                })
-                .collect(),
-            errors: vec![],
+        let dials = FuturesUnordered::default();
+        let mut errors = vec![];
+
+        for address in addresses.into_iter().map(|a| p2p_addr(peer, a).unwrap()) {
+            match transport.clone().dial(address.clone()) {
+                Ok(fut) => dials.push(fut.map(|r| (address, r)).boxed()),
+                Err(err) => errors.push((address, err)),
+            }
         }
+
+        Self { dials, errors }
     }
 }
 
 impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
-    type Output = Result<(PeerId, Multiaddr, TMuxer), Vec<TError>>;
+    type Output = Result<(PeerId, Multiaddr, TMuxer), Vec<(Multiaddr, TransportError<TError>)>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
                 // TODO: What about self.errors? Sure we should loose these?
-                Some(Ok(output)) => return Poll::Ready(Ok(output)),
-                Some(Err(e)) => {
-                    self.errors.push(e);
+                Some((addr, Ok((peer_id, muxer)))) => {
+                    return Poll::Ready(Ok((peer_id, addr, muxer)))
+                }
+                Some((addr, Err(e))) => {
+                    self.errors.push((addr, TransportError::Other(e)));
                     if self.dials.is_empty() {
                         return Poll::Ready(Err(std::mem::replace(&mut self.errors, vec![])));
                     }

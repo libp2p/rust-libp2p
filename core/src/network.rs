@@ -231,11 +231,7 @@ where
             None,
             vec![address.clone()],
         )
-        .map_err(|e| {
-            PendingConnectionError::Transport(
-                e.into_iter().map(|e| TransportError::Other(e)).collect(),
-            )
-        })
+        .map_err(|e| PendingConnectionError::TransportDial(e))
         .map_ok(|(peer_id, address, muxer)| (peer_id, ConnectedPoint::Dialer { address }, muxer));
 
         self.pool.add_outgoing(fut, handler, None)
@@ -333,7 +329,7 @@ where
     {
         let upgrade = connection
             .upgrade
-            .map_err(|err| PendingConnectionError::Transport(vec![TransportError::Other(err)]));
+            .map_err(|err| PendingConnectionError::TransportListen(TransportError::Other(err)));
         let info = IncomingInfo {
             local_addr: &connection.local_addr,
             send_back_addr: &connection.send_back_addr,
@@ -534,11 +530,7 @@ where
     // };
 
     let fut = concurrent_dial::ConcurrentDial::new(transport, Some(opts.peer), opts.addresses)
-        .map_err(|e| {
-            PendingConnectionError::Transport(
-                e.into_iter().map(|e| TransportError::Other(e)).collect(),
-            )
-        })
+        .map_err(|e| PendingConnectionError::TransportDial(e))
         .map_ok(|(peer_id, address, muxer)| (peer_id, ConnectedPoint::Dialer { address }, muxer));
 
     let result = pool.add_outgoing(fut, opts.handler, Some(opts.peer));
@@ -702,6 +694,8 @@ impl NetworkConfig {
 }
 
 /// Possible (synchronous) errors when dialing a peer.
+//
+// TODO: How about ImidiateDialError?
 #[derive(Clone)]
 pub enum DialError<THandler> {
     /// The dialing attempt is rejected because of a connection limit.
@@ -709,12 +703,13 @@ pub enum DialError<THandler> {
         limit: ConnectionLimit,
         handler: THandler,
     },
-    /// The address being dialed is invalid, e.g. if it refers to a different
-    /// remote peer than the one being dialed.
-    InvalidAddress {
-        address: Multiaddr,
-        handler: THandler,
-    },
+    // /// The address being dialed is invalid, e.g. if it refers to a different
+    // /// remote peer than the one being dialed.
+    // // TODO: Still needed?
+    // InvalidAddress {
+    //     address: Multiaddr,
+    //     handler: THandler,
+    // },
     /// The dialing attempt is rejected because the peer being dialed is the local peer.
     LocalPeerId { handler: THandler },
 }
@@ -726,13 +721,13 @@ impl<THandler> fmt::Debug for DialError<THandler> {
                 .debug_struct("DialError::ConnectionLimit")
                 .field("limit", limit)
                 .finish(),
-            DialError::InvalidAddress {
-                address,
-                handler: _,
-            } => f
-                .debug_struct("DialError::InvalidAddress")
-                .field("address", address)
-                .finish(),
+            // DialError::InvalidAddress {
+            //     address,
+            //     handler: _,
+            // } => f
+            //     .debug_struct("DialError::InvalidAddress")
+            //     .field("address", address)
+            //     .finish(),
             DialError::LocalPeerId { handler: _ } => {
                 f.debug_struct("DialError::LocalPeerId").finish()
             }

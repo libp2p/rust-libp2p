@@ -20,6 +20,7 @@
 
 use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
+use crate::Multiaddr;
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -68,12 +69,13 @@ where
 /// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
 pub enum PendingConnectionError<TTransErr> {
+    // TODO: Not ideal that a dial could potentially emit a TransportListen error
+    // TODO: Could as well rename this to TransportConcurrent
+    // TODO: In some cases the multiaddr is included twice now. E.g. MultiaddrUnsupported.
+    TransportDial(Vec<(Multiaddr, TransportError<TTransErr>)>),
+
     /// An error occurred while negotiating the transport protocol(s).
-    //
-    // TODO: Using a Vec here is not ideal. On an incoming listen connection only a single error can
-    // occur.
-    // How about splitting into PendingIncomingConnectionError and PendingOutgoingConnectionError?
-    Transport(Vec<TransportError<TTransErr>>),
+    TransportListen(TransportError<TTransErr>),
 
     /// Pending connection attempt has been aborted.
     Aborted,
@@ -95,10 +97,20 @@ where
         match self {
             PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {}", err),
             PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
-            PendingConnectionError::Transport(err) => {
-                // TODO: Resurect
-                // write!(f, "Pending connection: Transport error: {}", err)
-                Ok(())
+            PendingConnectionError::TransportListen(err) => {
+                write!(
+                    f,
+                    "Pending connection: Transport error on listening connection: {}",
+                    err
+                )
+            }
+            PendingConnectionError::TransportDial(err) => {
+                // write!(
+                //     f,
+                //     "Pending connection: Transport error on dialing connection: {}",
+                //     err
+                // )
+                todo!()
             }
             PendingConnectionError::InvalidPeerId => {
                 write!(f, "Pending connection: Invalid peer ID.")
@@ -115,7 +127,8 @@ where
         match self {
             PendingConnectionError::IO(err) => Some(err),
             // TODO: Should we return the first of all transport errors? Or implement std::error::Error for Vec<TTransErr>?
-            PendingConnectionError::Transport(err) => None,
+            PendingConnectionError::TransportListen(err) => None,
+            PendingConnectionError::TransportDial(err) => None,
             PendingConnectionError::InvalidPeerId => None,
             PendingConnectionError::Aborted => None,
         }

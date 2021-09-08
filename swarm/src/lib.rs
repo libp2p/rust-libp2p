@@ -66,6 +66,7 @@ pub use behaviour::{
     CloseConnection, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction,
     NetworkBehaviourEventProcess, NotifyHandler, PollParameters,
 };
+use log::Level::Error;
 pub use protocols_handler::{
     IntoProtocolsHandler, IntoProtocolsHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerSelect,
@@ -183,34 +184,19 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// The error that happened.
         error: PendingConnectionError<io::Error>,
     },
+    /// Tried to dial an address but it ended up being unreachaable.
+    OutgoingConnectionError {
+        /// If known, [`PeerId`] of the peer we tried to reach.
+        peer_id: Option<PeerId>,
+        /// Error that has been encountered.
+        error: DialError,
+    },
     /// We connected to a peer, but we immediately closed the connection because that peer is banned.
     BannedPeer {
         /// Identity of the banned peer.
         peer_id: PeerId,
         /// Endpoint of the connection that has been closed.
         endpoint: ConnectedPoint,
-    },
-    /// Tried to dial an address but it ended up being unreachaable.
-    UnreachableAddr {
-        /// `PeerId` that we were trying to reach.
-        peer_id: PeerId,
-        /// Address that we failed to reach.
-        address: Multiaddr,
-        /// Error that has been encountered.
-        error: PendingConnectionError<io::Error>,
-        /// Number of remaining connection attempts that are being tried for this peer.
-        attempts_remaining: u32,
-    },
-    /// Tried to dial an address but it ended up being unreachaable.
-    /// Contrary to `UnreachableAddr`, we don't know the identity of the peer that we were trying
-    /// to reach.
-    UnknownPeerUnreachableAddr {
-        /// Address that we failed to reach.
-        //
-        // TODO: Are the addresses that failed contained in the error now?
-        // address: Multiaddr,
-        /// Error that has been encountered.
-        error: PendingConnectionError<io::Error>,
     },
     /// One of our listeners has reported a new local listening address.
     NewListenAddr {
@@ -364,8 +350,7 @@ where
     ) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
             let error = DialError::Banned;
-            self.behaviour
-                .inject_dial_failure(peer_id, handler, error.clone());
+            self.behaviour.inject_dial_failure(peer_id, handler, &error);
             return Err(error);
         }
 
@@ -379,8 +364,7 @@ where
 
         if addrs.peek().is_none() {
             let error = DialError::NoAddresses;
-            self.behaviour
-                .inject_dial_failure(peer_id, handler, error.clone());
+            self.behaviour.inject_dial_failure(peer_id, handler, &error);
             return Err(error);
         };
 
@@ -394,7 +378,7 @@ where
                 self.behaviour.inject_dial_failure(
                     &peer_id,
                     handler.into_protocols_handler(),
-                    error.clone(),
+                    &error,
                 );
                 Err(error)
             }
@@ -717,10 +701,12 @@ where
                     // this.behaviour
                     //     .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
 
+                    let error = error.into();
+
                     this.behaviour.inject_dial_failure(
                         &peer_id,
                         handler.into_protocols_handler(),
-                        DialError::UnreachableAddr(todo!()),
+                        &error,
                     );
 
                     log::debug!(
@@ -729,20 +715,21 @@ where
                         error,
                     );
 
-                    todo!()
-                    // return Poll::Ready(SwarmEvent::UnreachableAddr {
-                    //     peer_id,
-                    //     address: multiaddr,
-                    //     error,
-                    //     attempts_remaining: num_remaining,
-                    // });
+                    return Poll::Ready(SwarmEvent::OutgoingConnectionError {
+                        peer_id: Some(peer_id),
+                        error,
+                    });
                 }
-                Poll::Ready(NetworkEvent::UnknownPeerDialError { error, .. }) => {
+                Poll::Ready(NetworkEvent::UnknownPeerDialError { error, handler }) => {
                     log::debug!("Connection attempt to unknown peer failed with {:?}", error);
-                    // TODO: Remove
+                    let error = error.into();
+                    // TODO: Make sure to give the handler back to the behaviour.
                     // this.behaviour
-                    //     .inject_addr_reach_failure(None, &multiaddr, &error);
-                    return Poll::Ready(SwarmEvent::UnknownPeerUnreachableAddr { error });
+                    //     .inject_dial_failure(None, &multiaddr, &error);
+                    return Poll::Ready(SwarmEvent::OutgoingConnectionError {
+                        peer_id: None,
+                        error: error,
+                    });
                 }
             }
 
@@ -835,8 +822,10 @@ where
                         this.behaviour.inject_dial_failure(
                             &peer_id,
                             handler,
-                            DialError::DialPeerConditionFalse(condition),
+                            &DialError::DialPeerConditionFalse(condition),
                         );
+
+                        // TODO: Should we not emit a swarm event?
                     }
                 }
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler {
@@ -1187,17 +1176,14 @@ where
 }
 
 /// The possible failures of dialing.
-#[derive(Debug, Clone)]
+// TODO: Should we have separate errors for synchronous and asynchronous dial errors?
+#[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
     Banned,
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
-    /// The address given for dialing is invalid.
-    InvalidAddress(Multiaddr),
-    /// Tried to dial an address but it ended up being unreachaable.
-    UnreachableAddr(Multiaddr),
     /// The peer being dialed is the local peer and thus the dial was aborted.
     LocalPeerId,
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
@@ -1205,6 +1191,12 @@ pub enum DialError {
     NoAddresses,
     /// The provided [`DialPeerCondition`] evaluated to false and thus the dial was aborted.
     DialPeerConditionFalse(DialPeerCondition),
+
+    // TODO: Document
+    Aborted,
+    InvalidPeerId,
+    ConnectionIo(io::Error),
+    Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
 
 impl DialError {
@@ -1213,10 +1205,22 @@ impl DialError {
             network::DialError::ConnectionLimit { limit, handler } => {
                 (DialError::ConnectionLimit(limit), handler)
             }
-            network::DialError::InvalidAddress { address, handler } => {
-                (DialError::InvalidAddress(address), handler)
-            }
+            // network::DialError::InvalidAddress { address, handler } => {
+            //     (DialError::InvalidAddress(address), handler)
+            // }
             network::DialError::LocalPeerId { handler } => (DialError::LocalPeerId, handler),
+        }
+    }
+}
+
+impl From<PendingConnectionError<io::Error>> for DialError {
+    fn from(error: PendingConnectionError<io::Error>) -> Self {
+        match error {
+            PendingConnectionError::Aborted => DialError::Aborted,
+            PendingConnectionError::InvalidPeerId => DialError::InvalidPeerId,
+            PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
+            PendingConnectionError::TransportDial(e) => DialError::Transport(e),
+            PendingConnectionError::TransportListen(e) => todo!(),
         }
     }
 }
@@ -1227,8 +1231,8 @@ impl fmt::Display for DialError {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
-            DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
-            DialError::UnreachableAddr(a) => write!(f, "Dial error: unreachable address: {}", a),
+            // DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
+            // DialError::UnreachableAddr(a) => write!(f, "Dial error: unreachable address: {}", a),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
                 write!(
@@ -1237,6 +1241,7 @@ impl fmt::Display for DialError {
                     c
                 )
             }
+            _ => todo!(),
         }
     }
 }
@@ -1245,12 +1250,13 @@ impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
-            DialError::InvalidAddress(_) => None,
-            DialError::UnreachableAddr(_) => None,
+            // DialError::InvalidAddress(_) => None,
+            // TODO: Can we do better?
             DialError::LocalPeerId => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
+            _ => todo!(),
         }
     }
 }

@@ -411,15 +411,6 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn inject_addr_reach_failure(
-        &mut self,
-        _peer_id: Option<&PeerId>,
-        _addr: &Multiaddr,
-        _error: &dyn std::error::Error,
-    ) {
-        // Handled in `inject_dial_failure`.
-    }
-
     fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
     }
 

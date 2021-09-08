@@ -225,7 +225,7 @@ where
         &mut self,
         p: &PeerId,
         handler: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
         self.inject_dial_failure.push(p.clone());
         self.inner.inject_dial_failure(p, handler, error);

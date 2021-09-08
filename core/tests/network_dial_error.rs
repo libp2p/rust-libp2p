@@ -66,7 +66,7 @@ fn deny_incoming_connec() {
         match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
                 peer_id,
-                error: PendingConnectionError::Transport(_),
+                error: PendingConnectionError::TransportDial(_),
                 handler: _,
             }) => {
                 assert_eq!(&peer_id, swarm1.local_peer_id());
@@ -190,7 +190,7 @@ fn multiple_addresses_err() {
                 Poll::Ready(NetworkEvent::DialError {
                     peer_id,
                     // multiaddr,
-                    error: PendingConnectionError::Transport(_),
+                    error: PendingConnectionError::TransportDial(_),
                     handler: _,
                 }) => {
                     assert_eq!(peer_id, target);

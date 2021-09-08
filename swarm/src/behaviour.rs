@@ -174,7 +174,7 @@ pub trait NetworkBehaviour: Send + 'static {
         &mut self,
         _peer_id: &PeerId,
         _handler: Self::ProtocolsHandler,
-        _error: DialError,
+        _error: &DialError,
     ) {
     }
 
@@ -188,6 +188,8 @@ pub trait NetworkBehaviour: Send + 'static {
         _local_addr: &Multiaddr,
         _send_back_addr: &Multiaddr,
         _handler: Self::ProtocolsHandler,
+        // TODO: Should we forward the PendingConnectionError to the inject_listen_failure call as
+        // well?
     ) {
     }
 
@@ -403,7 +405,7 @@ pub enum NetworkBehaviourAction<
     ///         &mut self,
     ///         _: &PeerId,
     ///         handler: Self::ProtocolsHandler,
-    ///         _: DialError,
+    ///         _: &DialError,
     ///     ) {
     ///         // As expected, sending the message failed. But lucky us, we got the handler back, thus
     ///         // the precious message is not lost and we can return it back to the user.

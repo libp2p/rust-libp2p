@@ -253,21 +253,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
     };
 
-    // Build the list of statements to put in the body of `inject_addr_reach_failure()`.
-    let inject_addr_reach_failure_stmts =
-        {
-            data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(&field) {
-                return None;
-            }
-
-            Some(match field.ident {
-                Some(ref i) => quote!{ self.#i.inject_addr_reach_failure(peer_id, addr, error); },
-                None => quote!{ self.#field_n.inject_addr_reach_failure(peer_id, addr, error); },
-            })
-        })
-        };
-
     // Build the list of statements to put in the body of `inject_dial_failure()`.
     let inject_dial_failure_stmts = {
         data_struct
@@ -686,11 +671,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_connection_closed_stmts);*
             }
 
-            fn inject_addr_reach_failure(&mut self, peer_id: Option<&#peer_id>, addr: &#multiaddr, error: &dyn std::error::Error) {
-                #(#inject_addr_reach_failure_stmts);*
-            }
-
-            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler, error: #dial_error) {
+            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler, error: &#dial_error) {
                 #(#inject_dial_failure_stmts);*
             }
 
