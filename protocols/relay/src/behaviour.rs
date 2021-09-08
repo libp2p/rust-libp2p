@@ -306,7 +306,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         peer_id: &PeerId,
         _: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
         if let DialError::DialPeerConditionFalse(
             DialPeerCondition::Disconnected | DialPeerCondition::NotDialing,

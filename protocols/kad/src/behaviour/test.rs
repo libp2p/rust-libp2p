@@ -313,6 +313,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
+    let _ = env_logger::try_init();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 

@@ -223,7 +223,7 @@ impl NetworkBehaviour for Identify {
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
+    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler, _: &DialError) {
         if !self.connected.contains_key(peer_id) {
             self.pending_push.remove(peer_id);
         }

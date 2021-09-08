@@ -38,6 +38,7 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
         TTrans::Dial: Send + 'static,
         TError: std::fmt::Debug,
     {
+        println!("Length of addresses: {}", addresses.len());
         let dials = FuturesUnordered::default();
         let mut errors = vec![];
 
@@ -56,19 +57,21 @@ impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
     type Output = Result<(PeerId, Multiaddr, TMuxer), Vec<(Multiaddr, TransportError<TError>)>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        println!("Lenght of dials: {}", self.dials.len());
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
                 // TODO: What about self.errors? Sure we should loose these?
                 Some((addr, Ok((peer_id, muxer)))) => {
-                    return Poll::Ready(Ok((peer_id, addr, muxer)))
+                    println!("Got a connection");
+                    return Poll::Ready(Ok((peer_id, addr, muxer)));
                 }
                 Some((addr, Err(e))) => {
+                    println!("Got an error");
                     self.errors.push((addr, TransportError::Other(e)));
-                    if self.dials.is_empty() {
-                        return Poll::Ready(Err(std::mem::replace(&mut self.errors, vec![])));
-                    }
                 }
-                None => todo!(),
+                None => {
+                    return Poll::Ready(Err(std::mem::replace(&mut self.errors, vec![])));
+                }
             }
         }
     }
