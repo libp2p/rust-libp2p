@@ -82,11 +82,9 @@ impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
             match ready!(self.dials.poll_next_unpin(cx)) {
                 // TODO: What about self.errors? Sure we should loose these?
                 Some((addr, Ok((peer_id, muxer)))) => {
-                    println!("Got a connection");
                     return Poll::Ready(Ok((peer_id, addr, muxer)));
                 }
                 Some((addr, Err(e))) => {
-                    println!("Got an error");
                     self.errors.push((addr, TransportError::Other(e)));
                 }
                 None => {
