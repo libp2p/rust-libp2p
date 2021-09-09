@@ -63,10 +63,17 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
         let dials = FuturesUnordered::default();
         let mut errors = vec![];
 
-        for address in addresses.into_iter().map(|a| p2p_addr(peer, a).unwrap()) {
-            match transport.clone().dial(address.clone()) {
-                Ok(fut) => dials.push(fut.map(|r| (address, r)).boxed()),
-                Err(err) => errors.push((address, err)),
+        for address in addresses.into_iter().map(|a| p2p_addr(peer, a)) {
+            match address {
+                Ok(address) => match transport.clone().dial(address.clone()) {
+                    Ok(fut) => dials.push(fut.map(|r| (address, r)).boxed()),
+                    Err(err) => errors.push((address, err)),
+                },
+                Err(address) => errors.push((
+                    address.clone(),
+                    // TODO: It is not really the Multiaddr that is not supported.
+                    TransportError::MultiaddrNotSupported(address),
+                )),
             }
         }
 
