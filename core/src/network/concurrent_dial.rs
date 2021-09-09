@@ -40,6 +40,8 @@ use std::{
     task::{Context, Poll},
 };
 
+// TODO: Have a concurrency limit.
+
 pub(crate) struct ConcurrentDial<TMuxer, TError> {
     dials: FuturesUnordered<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
     errors: Vec<(Multiaddr, TransportError<TError>)>,
