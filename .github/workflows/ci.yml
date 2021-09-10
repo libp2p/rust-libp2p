@@ -13,23 +13,13 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.1
+      uses: styfle/cancel-workflow-action@0.9
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - uses: Swatinem/rust-cache@v1
 
     - name: Run tests, with no feature
       run: cargo test --workspace --no-default-features
@@ -47,7 +37,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.1
+      uses: styfle/cancel-workflow-action@0.9
       with:
         access_token: ${{ github.token }}
 
@@ -62,25 +52,13 @@ jobs:
 
     - name: Install a recent version of clang
       run: |
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" >> /etc/apt/sources.list
         apt-get update
-        apt-get install -y clang-10
+        apt-get install -y clang-11
 
     - name: Install CMake
       run: apt-get install -y cmake
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2
-      with:
-        path: target
-        key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - uses: Swatinem/rust-cache@v1
 
     - name: Build on WASM
       # TODO: also run `cargo test`
@@ -95,7 +73,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.1
+      uses: styfle/cancel-workflow-action@0.9
       with:
         access_token: ${{ github.token }}
 
@@ -117,23 +95,13 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.1
+      uses: styfle/cancel-workflow-action@0.9
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - uses: Swatinem/rust-cache@v1
 
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
