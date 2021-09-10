@@ -1327,7 +1327,6 @@ fn client_mode() {
     let mut cfg = KademliaConfig::default();
     cfg.set_mode(Mode::Client);
     let mut client = build_node_with_config(cfg);
-    let client_addr: Multiaddr = Protocol::Memory(random::<u64>()).into();
 
     // Fitler out peer Ids.
     let mut peers: Vec<_> = server_nodes
@@ -1336,13 +1335,9 @@ fn client_mode() {
         .collect();
     peers.push(client.1.local_peer_id().clone());
 
-    println!("server peer: {:?}", peers[0].clone());
-    println!("server peer: {:?}", peers[1].clone());
-    println!("client peer: {:?}", peers[2].clone());
-
     // Filter out MultiAddrs and swarms.
     let mut addrs: Vec<_> = server_nodes.iter().map(|(addr, _)| addr.clone()).collect();
-    addrs.push(client_addr);
+    addrs.push(client.0.clone());
 
     let mut swarms: Vec<_> = server_nodes.iter_mut().map(|(_, swarm)| swarm).collect();
     swarms.push(&mut client.1);
@@ -1357,17 +1352,13 @@ fn client_mode() {
         .put_record(record.clone(), Quorum::One)
         .unwrap();
 
-    // Start listening on the client peer. I'm not sure if we really need this.
-    // swarms[2].listen_on(addrs[2].clone()).unwrap();
     // Dial a server peer from the client peer.
-    swarms[2].dial_addr(addrs[1].clone()).unwrap();
-    swarms[2].dial_addr(addrs[0].clone()).unwrap();
+    swarms[2]
+        .behaviour_mut()
+        .add_address(&peers[1], addrs[1].clone());
 
     // Try to get the same record from the client node.
     swarms[2].behaviour_mut().get_record(&key, Quorum::One);
-
-    let mut get_check = false;
-    let mut put_check = false;
 
     block_on(poll_fn(|ctx| {
         for swarm in &mut swarms {
@@ -1377,33 +1368,32 @@ fn client_mode() {
                         KademliaEvent::OutboundQueryCompleted { result, .. },
                     ))) => match result {
                         QueryResult::PutRecord(result) => match result {
-                            Ok(PutRecordOk { key }) => {
-                                assert_eq!(key, record.key);
-                                put_check = true;
-                                return Poll::Ready(());
+                            Ok(PutRecordOk { .. }) => {
+                                // Check if the server peer is not connected to the client peer.
+                                assert!(swarm
+                                    .behaviour_mut()
+                                    .connected_peers
+                                    .iter()
+                                    .any(|p| *p != peers[2]));
                             }
                             Err(e) => panic!("PUT operation failed: {:?}", e),
                         },
-                        QueryResult::GetRecord(result) => {
-                            if put_check {
-                                continue;
+                        QueryResult::GetRecord(result) => match result {
+                            Ok(GetRecordOk { .. }) => {
+                                // Check if the client peer is connected to the server peer.
+                                assert!(swarm
+                                    .behaviour_mut()
+                                    .connected_peers
+                                    .iter()
+                                    .any(|p| (*p == peers[0] || *p == peers[1])));
+
+                                return Poll::Ready(());
                             }
-                            match result {
-                                Ok(GetRecordOk { records, .. }) => {
-                                    assert_eq!(records.first().unwrap().record, record);
-                                    get_check = true;
-                                    return Poll::Ready(());
-                                }
-                                Err(e) => panic!("GET operation failed: {:?}", e),
-                            }
-                        }
+                            Err(e) => panic!("GET operation failed: {:?}", e),
+                        },
                         _ => {}
                     },
-                    Poll::Ready(Some(e)) => println!(
-                        "Source: {:?}, Kademlia Event: {:?}",
-                        swarm.local_peer_id().clone(),
-                        e
-                    ),
+                    Poll::Ready(Some(_)) => {}
                     e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                     Poll::Pending => break,
                 }
@@ -1411,7 +1401,4 @@ fn client_mode() {
         }
         Poll::Pending
     }));
-
-    assert!(put_check);
-    assert!(get_check);
 }
