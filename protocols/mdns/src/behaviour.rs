@@ -226,7 +226,7 @@ impl Mdns {
 
                     let mut addrs: Vec<Multiaddr> = Vec::new();
                     for addr in peer.addresses() {
-                        if let Some(new_addr) = address_translation(&addr, &observed) {
+                        if let Some(new_addr) = address_translation(addr, &observed) {
                             addrs.push(new_addr.clone())
                         }
                         addrs.push(addr.clone())

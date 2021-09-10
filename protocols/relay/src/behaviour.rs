@@ -296,7 +296,7 @@ impl NetworkBehaviour for Relay {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: *peer_id,
                         handler: NotifyHandler::Any,
-                        event: event,
+                        event,
                     });
             }
         }
@@ -640,7 +640,7 @@ impl NetworkBehaviour for Relay {
                     dst_peer_id,
                     send_back,
                 })) => {
-                    if let Some(_) = self.connected_peers.get(&relay_peer_id) {
+                    if self.connected_peers.get(&relay_peer_id).is_some() {
                         // In case we are already listening via the relay,
                         // prefer the primary connection.
                         let handler = self
