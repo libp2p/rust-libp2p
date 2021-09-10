@@ -1,6 +1,43 @@
-# 0.26.0 [unreleased]
+# 0.31.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+# 0.30.0 [2021-07-12]
+
+- Update dependencies.
+
+# 0.29.0 [2021-03-17]
 
 - Update `libp2p-core`.
+
+- Permit dialing `/p2p` addresses.
+
+# 0.28.0 [2021-01-12]
+
+- Update dependencies.
+
+# 0.27.0 [2020-12-17]
+
+- Update `libp2p-core`.
+
+# 0.26.3 [2020-12-10]
+
+- Update `async-tls`.
+
+# 0.26.2 [2020-12-09]
+
+- Update minimum patch version for `async-tls`.
+
+# 0.26.1 [2020-12-07]
+
+- Update `rustls`.
+
+# 0.26.0 [2020-11-25]
+
+- Update dependencies.
 
 # 0.25.0 [2020-11-09]
 

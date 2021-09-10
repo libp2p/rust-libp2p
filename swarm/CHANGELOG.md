@@ -1,6 +1,158 @@
-# 0.25.0 [unreleased]
+# 0.31.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Provide default implementations for all functions of `NetworkBehaviour`,
+  except for `new_handler`, `inject_event` and `poll`.
+  This should make it easier to create new implementations. See [PR 2150].
+
+- Remove `Swarm` type alias and rename `ExpandedSwarm` to `Swarm`. Reduce direct
+  trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
+  through associated types on `TBehaviour`. See [PR 2182].
+
+- Require `ProtocolsHandler::{InEvent,OutEvent,Error}` to implement `Debug` (see
+  [PR 2183]).
+
+- Implement `ProtocolsHandler` on `either::Either`representing either of two
+  `ProtocolsHandler` implementations (see [PR 2192]).
+
+- Require implementation to provide handler in
+  `NetworkBehaviourAction::DialPeer` and `NetworkBehaviourAction::DialAddress`.
+  Note that the handler is returned to the `NetworkBehaviour` on connection
+  failure and connection closing. Thus it can be used to carry state, which
+  otherwise would have to be tracked in the `NetworkBehaviour` itself. E.g. a
+  message destined to an unconnected peer can be included in the handler, and
+  thus directly send on connection success or extracted by the
+  `NetworkBehaviour` on connection failure (see [PR 2191]).
+
+- Include handler in `NetworkBehaviour::inject_dial_failure`,
+  `NetworkBehaviour::inject_connection_closed`,
+  `NetworkBehaviour::inject_listen_failure` (see [PR 2191]).
+
+- Include error in `NetworkBehaviour::inject_dial_failure` and call
+  `NetworkBehaviour::inject_dial_failure` on `DialPeerCondition` evaluating to
+  false. To emulate the previous behaviour, return early within
+  `inject_dial_failure` on `DialError::DialPeerConditionFalse`. See [PR 2191].
+
+- Make `NetworkBehaviourAction` generic over `NetworkBehaviour::OutEvent` and
+  `NetworkBehaviour::ProtocolsHandler`. In most cases, change your generic type
+  parameters to `NetworkBehaviourAction<Self::OutEvent,
+  Self::ProtocolsHandler>`. See [PR 2191].
+
+[PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
+[PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+
+# 0.30.0 [2021-07-12]
+
+- Update dependencies.
+
+- Drive `ExpandedSwarm` via `Stream` trait only.
+
+  - Change `Stream` implementation of `ExpandedSwarm` to return all
+    `SwarmEvents` instead of only the `NetworkBehaviour`'s events.
+
+  - Remove `ExpandedSwarm::next_event`. Users can use `<ExpandedSwarm as
+    StreamExt>::next` instead.
+
+  - Remove `ExpandedSwarm::next`. Users can use `<ExpandedSwarm as
+    StreamExt>::filter_map` instead.
+
+  See [PR 2100] for details.
+
+- Add `ExpandedSwarm::disconnect_peer_id` and
+  `NetworkBehaviourAction::CloseConnection` to close connections to a specific
+  peer via an `ExpandedSwarm` or `NetworkBehaviour`. See [PR 2110] for details.
+
+- Expose the `ListenerId` in `SwarmEvent`s that are associated with a listener.
+
+  See [PR 2123] for details.
+
+[PR 2100]: https://github.com/libp2p/rust-libp2p/pull/2100
+[PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
+[PR 2123]: https://github.com/libp2p/rust-libp2p/pull/2123
+
+# 0.29.0 [2021-04-13]
+
+- Remove `Deref` and `DerefMut` implementations previously dereferencing to the
+  `NetworkBehaviour` on `Swarm`. Instead one can access the `NetworkBehaviour`
+  via `Swarm::behaviour` and `Swarm::behaviour_mut`. Methods on `Swarm` can now
+  be accessed directly, e.g. via `my_swarm.local_peer_id()`. You may use the
+  command below to transform fully qualified method calls on `Swarm` to simple
+  method calls [PR 1995](https://github.com/libp2p/rust-libp2p/pull/1995).
+
+  ``` bash
+  # Go from e.g. `Swarm::local_peer_id(&my_swarm)` to `my_swarm.local_peer_id()`.
+  grep -RiIl --include \*.rs --exclude-dir target . --exclude-dir .git | xargs sed -i "s/\(libp2p::\)*Swarm::\([a-z_]*\)(&mut \([a-z_0-9]*\), /\3.\2(/g"
+  ```
+
+- Extend `NetworkBehaviour` callbacks, more concretely introducing new `fn
+  inject_new_listener` and `fn inject_expired_external_addr` and have `fn
+  inject_{new,expired}_listen_addr` provide a `ListenerId` [PR
+  2011](https://github.com/libp2p/rust-libp2p/pull/2011).
+
+# 0.28.0 [2021-03-17]
+
+- New error variant `DialError::InvalidAddress`
+
+- `Swarm::dial_addr()` now returns a `DialError` on error.
+
+- Remove the option for a substream-specific multistream select protocol override.
+  The override at this granularity is no longer deemed useful, in particular because
+  it can usually not be configured for existing protocols like `libp2p-kad` and others.
+  There is a `Swarm`-scoped configuration for this version available since
+  [1858](https://github.com/libp2p/rust-libp2p/pull/1858).
+
+# 0.27.2 [2021-02-04]
+
+- Have `ToggleProtoHandler` ignore listen upgrade errors when disabled.
+  [PR 1945](https://github.com/libp2p/rust-libp2p/pull/1945/files).
+
+# 0.27.1 [2021-01-27]
+
+- Make `OneShotHandler`s `max_dial_negotiate` limit configurable.
+  [PR 1936](https://github.com/libp2p/rust-libp2p/pull/1936).
+
+- Fix handling of DialPeerCondition::Always.
+  [PR 1937](https://github.com/libp2p/rust-libp2p/pull/1937).
+
+# 0.27.0 [2021-01-12]
+
+- Update dependencies.
+
+# 0.26.0 [2020-12-17]
 
 - Update `libp2p-core`.
+
+- Remove `NotifyHandler::All` thus removing the requirement for events send from
+  a `NetworkBehaviour` to a `ProtocolsHandler` to be `Clone`.
+  [PR 1880](https://github.com/libp2p/rust-libp2p/pull/1880).
+
+# 0.25.1 [2020-11-26]
+
+- Add `ExpandedSwarm::is_connected`.
+  [PR 1862](https://github.com/libp2p/rust-libp2p/pull/1862).
+
+# 0.25.0 [2020-11-25]
+
+- Permit a configuration override for the substream upgrade protocol
+  to use for all (outbound) substreams.
+  [PR 1858](https://github.com/libp2p/rust-libp2p/pull/1858).
+
+- Changed parameters for connection limits from `usize` to `u32`.
+  Connection limits are now configured via `SwarmBuilder::connection_limits()`.
+
+- Update `libp2p-core`.
+
+- Expose configurable scores for external addresses, as well as
+  the ability to remove them and to add addresses that are
+  retained "forever" (or until explicitly removed).
+  [PR 1842](https://github.com/libp2p/rust-libp2p/pull/1842).
 
 # 0.24.0 [2020-11-09]
 

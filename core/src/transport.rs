@@ -94,7 +94,9 @@ pub trait Transport {
     ///
     /// If this stream produces an error, it is considered fatal and the listener is killed. It
     /// is possible to report non-fatal errors by producing a [`ListenerEvent::Error`].
-    type Listener: Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
+    type Listener: Stream<
+        Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>,
+    >;
 
     /// A pending [`Output`](Transport::Output) for an inbound connection,
     /// obtained from the [`Listener`](Transport::Listener) stream.
@@ -128,6 +130,11 @@ pub trait Transport {
     where
         Self: Sized;
 
+    /// Performs a transport-specific mapping of an address `observed` by
+    /// a remote onto a local `listen` address to yield an address for
+    /// the local node that may be reachable for other peers.
+    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where
@@ -144,7 +151,7 @@ pub trait Transport {
     fn map<F, O>(self, f: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
+        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone,
     {
         map::Map::new(self, f)
     }
@@ -153,7 +160,7 @@ pub trait Transport {
     fn map_err<F, E>(self, f: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> E + Clone
+        F: FnOnce(Self::Error) -> E + Clone,
     {
         map_err::MapErr::new(self, f)
     }
@@ -167,7 +174,7 @@ pub trait Transport {
     where
         Self: Sized,
         U: Transport,
-        <U as Transport>::Error: 'static
+        <U as Transport>::Error: 'static,
     {
         OrTransport::new(self, other)
     }
@@ -184,7 +191,7 @@ pub trait Transport {
         Self: Sized,
         C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
         F: TryFuture<Ok = O>,
-        <F as TryFuture>::Error: Error + 'static
+        <F as TryFuture>::Error: Error + 'static,
     {
         and_then::AndThen::new(self, f)
     }
@@ -194,7 +201,7 @@ pub trait Transport {
     fn upgrade(self, version: upgrade::Version) -> upgrade::Builder<Self>
     where
         Self: Sized,
-        Self::Error: 'static
+        Self::Error: 'static,
     {
         upgrade::Builder::new(self, version)
     }
@@ -217,7 +224,7 @@ pub enum ListenerEvent<TUpgr, TErr> {
         /// The local address which produced this upgrade.
         local_addr: Multiaddr,
         /// The remote address which produced this upgrade.
-        remote_addr: Multiaddr
+        remote_addr: Multiaddr,
     },
     /// A [`Multiaddr`] is no longer used for listening.
     AddressExpired(Multiaddr),
@@ -234,9 +241,15 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     /// based the the function's result.
     pub fn map<U>(self, f: impl FnOnce(TUpgr) -> U) -> ListenerEvent<U, TErr> {
         match self {
-            ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
-                ListenerEvent::Upgrade { upgrade: f(upgrade), local_addr, remote_addr }
-            }
+            ListenerEvent::Upgrade {
+                upgrade,
+                local_addr,
+                remote_addr,
+            } => ListenerEvent::Upgrade {
+                upgrade: f(upgrade),
+                local_addr,
+                remote_addr,
+            },
             ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
             ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
             ListenerEvent::Error(e) => ListenerEvent::Error(e),
@@ -248,8 +261,15 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     /// function's result.
     pub fn map_err<U>(self, f: impl FnOnce(TErr) -> U) -> ListenerEvent<TUpgr, U> {
         match self {
-            ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } =>
-                ListenerEvent::Upgrade { upgrade, local_addr, remote_addr },
+            ListenerEvent::Upgrade {
+                upgrade,
+                local_addr,
+                remote_addr,
+            } => ListenerEvent::Upgrade {
+                upgrade,
+                local_addr,
+                remote_addr,
+            },
             ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
             ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
             ListenerEvent::Error(e) => ListenerEvent::Error(f(e)),
@@ -258,11 +278,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
 
     /// Returns `true` if this is an `Upgrade` listener event.
     pub fn is_upgrade(&self) -> bool {
-        if let ListenerEvent::Upgrade {..} = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ListenerEvent::Upgrade { .. })
     }
 
     /// Try to turn this listener event into upgrade parts.
@@ -270,7 +286,12 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     /// Returns `None` if the event is not actually an upgrade,
     /// otherwise the upgrade and the remote address.
     pub fn into_upgrade(self) -> Option<(TUpgr, Multiaddr)> {
-        if let ListenerEvent::Upgrade { upgrade, remote_addr, .. } = self {
+        if let ListenerEvent::Upgrade {
+            upgrade,
+            remote_addr,
+            ..
+        } = self
+        {
             Some((upgrade, remote_addr))
         } else {
             None
@@ -279,11 +300,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
 
     /// Returns `true` if this is a `NewAddress` listener event.
     pub fn is_new_address(&self) -> bool {
-        if let ListenerEvent::NewAddress(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ListenerEvent::NewAddress(_))
     }
 
     /// Try to turn this listener event into the `NewAddress` part.
@@ -300,11 +317,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
 
     /// Returns `true` if this is an `AddressExpired` listener event.
     pub fn is_address_expired(&self) -> bool {
-        if let ListenerEvent::AddressExpired(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ListenerEvent::AddressExpired(_))
     }
 
     /// Try to turn this listener event into the `AddressExpired` part.
@@ -321,11 +334,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
 
     /// Returns `true` if this is an `Error` listener event.
     pub fn is_error(&self) -> bool {
-        if let ListenerEvent::Error(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ListenerEvent::Error(_))
     }
 
     /// Try to turn this listener event into the `Error` part.
@@ -358,25 +367,31 @@ impl<TErr> TransportError<TErr> {
     /// Applies a function to the the error in [`TransportError::Other`].
     pub fn map<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {
         match self {
-            TransportError::MultiaddrNotSupported(addr) => TransportError::MultiaddrNotSupported(addr),
+            TransportError::MultiaddrNotSupported(addr) => {
+                TransportError::MultiaddrNotSupported(addr)
+            }
             TransportError::Other(err) => TransportError::Other(map(err)),
         }
     }
 }
 
 impl<TErr> fmt::Display for TransportError<TErr>
-where TErr: fmt::Display,
+where
+    TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TransportError::MultiaddrNotSupported(addr) => write!(f, "Multiaddr is not supported: {}", addr),
+            TransportError::MultiaddrNotSupported(addr) => {
+                write!(f, "Multiaddr is not supported: {}", addr)
+            }
             TransportError::Other(err) => write!(f, "{}", err),
         }
     }
 }
 
 impl<TErr> Error for TransportError<TErr>
-where TErr: Error + 'static,
+where
+    TErr: Error + 'static,
 {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {

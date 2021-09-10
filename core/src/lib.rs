@@ -23,20 +23,28 @@
 //! The main concepts of libp2p-core are:
 //!
 //! - A [`PeerId`] is a unique global identifier for a node on the network.
-//!   Each node must have a different `PeerId`. Normally, a `PeerId` is the
+//!   Each node must have a different [`PeerId`]. Normally, a [`PeerId`] is the
 //!   hash of the public key used to negotiate encryption on the
 //!   communication channel, thereby guaranteeing that they cannot be spoofed.
 //! - The [`Transport`] trait defines how to reach a remote node or listen for
-//!   incoming remote connections. See the `transport` module.
+//!   incoming remote connections. See the [`transport`] module.
 //! - The [`StreamMuxer`] trait is implemented on structs that hold a connection
 //!   to a remote and can subdivide this connection into multiple substreams.
-//!   See the `muxing` module.
+//!   See the [`muxing`] module.
 //! - The [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] traits
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
 
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
+}
+
+mod envelope_proto {
+    include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
+}
+
+mod peer_record_proto {
+    include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
 }
 
 /// Multi-address re-export.
@@ -51,19 +59,23 @@ pub mod either;
 pub mod identity;
 pub mod muxing;
 pub mod network;
+pub mod peer_record;
+pub mod signed_envelope;
 pub mod transport;
 pub mod upgrade;
 
+pub use connection::{Connected, ConnectedPoint, Endpoint};
+pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;
-pub use peer_id::PeerId;
-pub use identity::PublicKey;
-pub use transport::Transport;
-pub use translation::address_translation;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
-pub use connection::{Connected, Endpoint, ConnectedPoint};
 pub use network::Network;
+pub use peer_id::PeerId;
+pub use peer_record::PeerRecord;
+pub use signed_envelope::SignedEnvelope;
+pub use translation::address_translation;
+pub use transport::Transport;
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
 use std::{future::Future, pin::Pin};
 

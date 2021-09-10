@@ -1,6 +1,131 @@
-# 0.25.0 [unreleased]
+# 0.30.0 [unreleased]
+
+- Add `ConnectionLimit::with_max_established` (see [PR 2137]).
+
+- Add `Keypair::to_protobuf_encoding` (see [PR 2142]).
+
+- Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
+
+- Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
+
+- Change `PeerId::from_public_key(PublicKey)` to `PeerId::from_public_key(&PublicKey)` (see [PR 2145]).
+
+- Add `From<&PublicKey> for PeerId` (see [PR 2145]).
+
+- Remove `TInEvent` and `TOutEvent` trait paramters on most public types.
+  `TInEvent` and `TOutEvent` are implied through `THandler` and thus
+  superflucious. Both are removed in favor of a derivation through `THandler`
+  (see [PR 2183]).
+
+- Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
+  (see [PR 2183]).
+
+- Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
+
+- Report `ConnectionLimit` error through `ConnectionError` and thus through
+  `NetworkEvent::ConnectionClosed` instead of previously through
+  `PendingConnectionError` and thus `NetworkEvent::{IncomingConnectionError,
+  DialError}` (see [PR 2191]).
+
+- Report abortion of pending connection through `DialError`,
+  `UnknownPeerDialError` or `IncomingConnectionError` (see [PR 2191]).
+
+- Remove deprecated functions `upgrade::write_one`, `upgrade::write_with_len_prefix`
+  and `upgrade::read_one` (see [PR 2213]).
+
+- Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003]
+  (see [PR 2107]).
+
+[PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+[PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
+[PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
+[PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+[PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
+[PR 2107]: https://github.com/libp2p/rust-libp2p/pull/2107
+[RFC0002]: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+[RFC0003]: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md
+
+# 0.29.0 [2021-07-12]
+
+- Switch from `parity-multiaddr` to upstream `multiaddr`.
+
+- Update dependencies.
+
+- Implement `Keypair::from_protobuf_encoding` for ed25519 keys (see [PR 2090]).
+
+- Deprecate `upgrade::write_one`.
+  Deprecate `upgrade::write_with_len_prefix`.
+  Deprecate `upgrade::read_one`.
+  Introduce `upgrade::read_length_prefixed` and `upgrade::write_length_prefixed`.
+  See [PR 2111](https://github.com/libp2p/rust-libp2p/pull/2111).
+
+[PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090
+
+# 0.28.3 [2021-04-26]
+
+- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
+
+# 0.28.2 [2021-04-13]
+
+- Update dependencies.
+
+# 0.28.1 [2021-03-17]
+
+- Update `paritytech-multiaddr` to `>=v0.11.2`.
+
+# 0.28.0 [2021-03-17]
+
+- `Network::dial()` understands `/p2p` addresses and `Transport::dial`
+  gets a "fully qualified" `/p2p` address when dialing a specific peer,
+  whether through the `Network::peer()` API or via `Network::dial()`
+  with a `/p2p` address.
+
+- `Network::dial()` and `network::Peer::dial()` return a `DialError`
+  on error.
+
+- Shorten and unify `Debug` impls of public keys.
+
+# 0.27.1 [2021-02-15]
+
+- Update dependencies.
+
+# 0.27.0 [2021-01-12]
+
+- (Re)add `Transport::address_translation` to permit transport-specific
+  translations of observed addresses onto listening addresses.
+  [PR 1887](https://github.com/libp2p/rust-libp2p/pull/1887)
+
+- Update dependencies.
+
+# 0.26.0 [2020-12-17]
+
+- Make `PeerId` be `Copy`, including small `PeerId` API changes.
+  [PR 1874](https://github.com/libp2p/rust-libp2p/pull/1874/).
+
+# 0.25.2 [2020-12-02]
+
+- Require `multistream-select-0.9.1`.
+
+# 0.25.1 [2020-11-25]
+
+- Add missing multiaddr upgrade.
+
+# 0.25.0 [2020-11-25]
+
+- The `NetworkConfig` API is now a builder that moves `self`.
+  [PR 1848](https://github.com/libp2p/rust-libp2p/pull/1848/).
+
+- New configurable connection limits for established connections and
+  dedicated connection counters. Removed the connection limit dedicated
+  to outgoing pending connection _per peer_. Connection limits are now
+  represented by `u32` intead of `usize` types.
+  [PR 1848](https://github.com/libp2p/rust-libp2p/pull/1848/).
 
 - Update `multihash`.
+
+- Update `multistream-select`.
 
 # 0.24.0 [2020-11-09]
 

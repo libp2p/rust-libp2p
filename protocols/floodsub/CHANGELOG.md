@@ -1,4 +1,38 @@
-# 0.25.0 [unreleased]
+# 0.31.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+# 0.30.0 [2021-07-12]
+
+- Update dependencies.
+
+- Change `FloodsubDecodeError::ReadError` from a `upgrade::ReadOneError` to
+  `std::io::Error`. See [PR 2111].
+
+[PR 2111]: https://github.com/libp2p/rust-libp2p/pull/2111
+
+# 0.29.0 [2021-04-13]
+
+- Update `libp2p-swarm`.
+
+# 0.28.0 [2021-03-17]
+
+- Update `libp2p-swarm`.
+
+- Update dependencies.
+
+# 0.27.0 [2021-01-12]
+
+- Update dependencies.
+
+# 0.26.0 [2020-12-17]
+
+- Update `libp2p-swarm` and `libp2p-core`.
+
+# 0.25.0 [2020-11-25]
 
 - Update `libp2p-swarm` and `libp2p-core`.
 

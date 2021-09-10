@@ -25,7 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
+//! cargo run --example chat-tokio --features="tcp-tokio mdns"
 //! ```
 //!
 //! Alternatively, to run with the minimal set of features and crates:
@@ -33,26 +33,24 @@
 //! ```sh
 //!cargo run --example chat-tokio \\
 //!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
+//!    --features="floodsub mplex noise tcp-tokio mdns"
 //! ```
 
-use futures::prelude::*;
+use futures::StreamExt;
 use libp2p::{
+    core::upgrade,
+    floodsub::{self, Floodsub, FloodsubEvent},
+    identity,
+    mdns::{Mdns, MdnsEvent},
+    mplex,
+    noise,
+    swarm::{NetworkBehaviourEventProcess, SwarmBuilder, SwarmEvent},
+    // `TokioTcpConfig` is available through the `tcp-tokio` feature.
+    tcp::TokioTcpConfig,
     Multiaddr,
     NetworkBehaviour,
     PeerId,
-    Swarm,
     Transport,
-    core::upgrade,
-    identity,
-    floodsub::{self, Floodsub, FloodsubEvent},
-    // `TokioMdns` is available through the `mdns-tokio` feature.
-    mdns::{TokioMdns, MdnsEvent},
-    mplex,
-    noise,
-    swarm::{NetworkBehaviourEventProcess, SwarmBuilder},
-    // `TokioTcpConfig` is available through the `tcp-tokio` feature.
-    tcp::TokioTcpConfig,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
@@ -74,7 +72,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
-    let transport = TokioTcpConfig::new().nodelay(true)
+    let transport = TokioTcpConfig::new()
+        .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
@@ -90,14 +89,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: TokioMdns,
+        mdns: Mdns,
     }
 
     impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+                println!(
+                    "Received: '{:?}' from {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    message.source
+                );
             }
         }
     }
@@ -106,23 +109,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) =>
+                MdnsEvent::Discovered(list) => {
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                MdnsEvent::Expired(list) =>
+                }
+                MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
+                }
             }
         }
     }
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = TokioMdns::new()?;
+        let mdns = Mdns::new(Default::default()).await?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(peer_id.clone()),
             mdns,
@@ -133,14 +138,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         SwarmBuilder::new(transport, behaviour, peer_id)
             // We want the connection background tasks to be spawned
             // onto the tokio runtime.
-            .executor(Box::new(|fut| { tokio::spawn(fut); }))
+            .executor(Box::new(|fut| {
+                tokio::spawn(fut);
+            }))
             .build()
     };
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
-        Swarm::dial_addr(&mut swarm, addr)?;
+        swarm.dial_addr(addr)?;
         println!("Dialed {:?}", to_dial)
     }
 
@@ -148,27 +155,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    let mut listening = false;
     loop {
-        let to_publish = {
-            tokio::select! {
-                line = stdin.try_next() => Some((floodsub_topic.clone(), line?.expect("Stdin closed"))),
-                event = swarm.next() => {
-                    println!("New Event: {:?}", event);
-                    None
-                }
+        tokio::select! {
+            line = stdin.next_line() => {
+                let line = line?.expect("stdin closed");
+                swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.as_bytes());
             }
-        };
-        if let Some((topic, line)) = to_publish {
-            swarm.floodsub.publish(topic, line.as_bytes());
-        }
-        if !listening {
-            for addr in Swarm::listeners(&swarm) {
-                println!("Listening on {:?}", addr);
-                listening = true;
+            event = swarm.select_next_some() => {
+                if let SwarmEvent::NewListenAddr { address, .. } = event {
+                    println!("Listening on {:?}", address);
+                }
             }
         }
     }

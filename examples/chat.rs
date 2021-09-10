@@ -30,15 +30,15 @@
 //!
 //! # If they don't automatically connect
 //!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
+//! If the nodes don't automatically connect, take note of the listening addresses of the first
+//! instance and start the second with one of the addresses as the first argument. In the first
+//! terminal window, run:
 //!
 //! ```sh
 //! cargo run --example chat
 //! ```
 //!
-//! It will print the PeerId and the listening address, e.g. `Listening on
+//! It will print the PeerId and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
@@ -52,18 +52,19 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    Multiaddr,
-    PeerId,
-    Swarm,
-    NetworkBehaviour,
-    identity,
     floodsub::{self, Floodsub, FloodsubEvent},
-    mdns::{Mdns, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    identity,
+    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId
@@ -72,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key)?;
+    let transport = libp2p::development_transport(local_key).await?;
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");
@@ -96,7 +97,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+                println!(
+                    "Received: '{:?}' from {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    message.source
+                );
             }
         }
     }
@@ -105,25 +110,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) =>
+                MdnsEvent::Discovered(list) => {
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                MdnsEvent::Expired(list) =>
+                }
+                MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
+                }
             }
         }
     }
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = Mdns::new()?;
+        let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(local_peer_id.clone()),
+            floodsub: Floodsub::new(local_peer_id),
             mdns,
             ignored_member: false,
         };
@@ -135,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
-        Swarm::dial_addr(&mut swarm, addr)?;
+        swarm.dial_addr(addr)?;
         println!("Dialed {:?}", to_dial)
     }
 
@@ -143,31 +150,29 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.floodsub.publish(floodsub_topic.clone(), line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm
+                    .behaviour_mut()
+                    .floodsub
+                    .publish(floodsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break
+                Poll::Pending => break,
             }
         }
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
-                        }
+                Poll::Ready(Some(event)) => {
+                    if let SwarmEvent::NewListenAddr { address, .. } = event {
+                        println!("Listening on {:?}", address);
                     }
-                    break
                 }
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending

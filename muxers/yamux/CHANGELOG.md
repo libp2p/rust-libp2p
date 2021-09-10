@@ -1,4 +1,39 @@
-# 0.28.0 [unreleased]
+# 0.34.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Implement `From<io::Error> for YamuxError` instead of `Into`.
+  [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)
+
+# 0.33.0 [2021-07-12]
+
+- Update dependencies.
+
+# 0.32.0 [2021-04-13]
+
+- Update to `yamux` `v0.9.0` [PR
+  1960](https://github.com/libp2p/rust-libp2p/pull/1960).
+
+# 0.31.0 [2021-03-17]
+
+- Update `libp2p-core`.
+
+# 0.30.1 [2021-02-17]
+
+- Update `yamux` to `0.8.1`.
+
+# 0.30.0 [2021-01-12]
+
+- Update dependencies.
+
+# 0.29.0 [2020-12-17]
+
+- Update `libp2p-core`.
+
+# 0.28.0 [2020-11-25]
 
 - Update `libp2p-core`.
 

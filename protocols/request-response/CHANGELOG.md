@@ -1,4 +1,68 @@
-# 0.6.0 [unreleased]
+# 0.13.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Manually implement `Debug` for `RequestResponseHandlerEvent` and
+  `RequestProtocol`. See [PR 2183].
+
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+
+# 0.12.0 [2021-07-12]
+
+- Update dependencies.
+
+# 0.11.0 [2021-04-13]
+
+- Update `libp2p-swarm`.
+- Implement `std::error::Error` for `InboundFailure` and `OutboundFailure` [PR
+  2033](https://github.com/libp2p/rust-libp2p/pull/2033).
+
+# 0.10.0 [2021-03-17]
+
+- Update `libp2p-swarm`.
+
+- Close stream even when no response has been sent.
+  [PR 1987](https://github.com/libp2p/rust-libp2p/pull/1987).
+
+- Update dependencies.
+
+# 0.9.1 [2021-02-15]
+
+- Make `is_pending_outbound` return true on pending connection.
+  [PR 1928](https://github.com/libp2p/rust-libp2p/pull/1928).
+
+- Update dependencies.
+
+# 0.9.0 [2021-01-12]
+
+- Update dependencies.
+
+- Re-export `throttled`-specific response channel. [PR
+  1902](https://github.com/libp2p/rust-libp2p/pull/1902).
+
+# 0.8.0 [2020-12-17]
+
+- Update `libp2p-swarm` and `libp2p-core`.
+
+- Emit `InboundFailure::ConnectionClosed` for inbound requests that failed due
+  to the underlying connection closing.
+  [PR 1886](https://github.com/libp2p/rust-libp2p/pull/1886).
+
+- Derive Clone for `InboundFailure` and `Outbound}Failure`.
+  [PR 1891](https://github.com/libp2p/rust-libp2p/pull/1891)
+
+# 0.7.0 [2020-12-08]
+
+- Refine emitted events for inbound requests, introducing
+  the `ResponseSent` event and the `ResponseOmission`
+  inbound failures. This effectively removes previous
+  support for one-way protocols without responses.
+  [PR 1867](https://github.com/libp2p/rust-libp2p/pull/1867).
+
+# 0.6.0 [2020-11-25]
 
 - Update `libp2p-swarm` and `libp2p-core`.
 
@@ -35,4 +99,3 @@ https://github.com/libp2p/rust-libp2p/pull/1606).
 # 0.1.0
 
 - Initial release.
-

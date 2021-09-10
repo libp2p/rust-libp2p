@@ -28,6 +28,7 @@ pub struct Addresses {
     addrs: SmallVec<[Multiaddr; 6]>,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Addresses {
     /// Creates a new list of addresses.
     pub fn new(addr: Multiaddr) -> Addresses {
@@ -64,9 +65,9 @@ impl Addresses {
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
-    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(),()> {
+    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(), ()> {
         if self.addrs.len() == 1 {
-            return Err(())
+            return Err(());
         }
 
         if let Some(pos) = self.addrs.iter().position(|a| a == addr) {
@@ -99,7 +100,7 @@ impl Addresses {
     pub fn replace(&mut self, old: &Multiaddr, new: &Multiaddr) -> bool {
         if let Some(a) = self.addrs.iter_mut().find(|a| *a == old) {
             *a = new.clone();
-            return true
+            return true;
         }
 
         false
@@ -108,8 +109,6 @@ impl Addresses {
 
 impl fmt::Debug for Addresses {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list()
-            .entries(self.addrs.iter())
-            .finish()
+        f.debug_list().entries(self.addrs.iter()).finish()
     }
 }
