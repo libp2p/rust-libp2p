@@ -27,8 +27,8 @@ pub struct Metrics {
     connections_incoming: Counter,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
-    connections_established: Family<ConnectionEstablishedLabeles, Counter>,
-    connections_closed: Counter,
+    connections_established: Family<ConnectionEstablishedLabels, Counter>,
+    connections_closed: Family<ConnectionClosedLabels, Counter>,
 
     new_listen_addr: Counter,
     expired_listen_addr: Counter,
@@ -115,7 +115,7 @@ impl Metrics {
             Box::new(connections_established.clone()),
         );
 
-        let connections_closed = Counter::default();
+        let connections_closed = Family::default();
         sub_registry.register(
             "connections_closed",
             "Number of connections closed",
@@ -147,13 +147,18 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, .. } => {
                 self.swarm
                     .connections_established
-                    .get_or_create(&ConnectionEstablishedLabeles {
+                    .get_or_create(&ConnectionEstablishedLabels {
                         role: endpoint.into(),
                     })
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::ConnectionClosed { .. } => {
-                self.swarm.connections_closed.inc();
+            libp2p_swarm::SwarmEvent::ConnectionClosed { endpoint, .. } => {
+                self.swarm
+                    .connections_closed
+                    .get_or_create(&ConnectionClosedLabels {
+                        role: endpoint.into(),
+                    })
+                    .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { .. } => {
                 self.swarm.connections_incoming.inc();
@@ -201,7 +206,12 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
-struct ConnectionEstablishedLabeles {
+struct ConnectionEstablishedLabels {
+    role: Role,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct ConnectionClosedLabels {
     role: Role,
 }
 
