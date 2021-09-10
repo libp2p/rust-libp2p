@@ -1336,6 +1336,10 @@ fn client_mode() {
         .collect();
     peers.push(client.1.local_peer_id().clone());
 
+    println!("server peer: {:?}", peers[0].clone());
+    println!("server peer: {:?}", peers[1].clone());
+    println!("client peer: {:?}", peers[2].clone());
+
     // Filter out MultiAddrs and swarms.
     let mut addrs: Vec<_> = server_nodes.iter().map(|(addr, _)| addr.clone()).collect();
     addrs.push(client_addr);
@@ -1343,58 +1347,63 @@ fn client_mode() {
     let mut swarms: Vec<_> = server_nodes.iter_mut().map(|(_, swarm)| swarm).collect();
     swarms.push(&mut client.1);
 
-    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+    let key = "123".to_string();
+    let key = Key::new(&key);
+    let record = Record::new(key.clone(), vec![4, 5, 6]);
+
     // Put a record from a server peer.
     swarms[0]
         .behaviour_mut()
         .put_record(record.clone(), Quorum::One)
         .unwrap();
 
-    // Try to get the same record from the client node.
-    swarms[2]
-        .behaviour_mut()
-        .get_record(&record.key, Quorum::One);
-
     // Start listening on the client peer. I'm not sure if we really need this.
-    swarms[2].listen_on(addrs[2].clone()).unwrap();
+    // swarms[2].listen_on(addrs[2].clone()).unwrap();
     // Dial a server peer from the client peer.
     swarms[2].dial_addr(addrs[1].clone()).unwrap();
+    swarms[2].dial_addr(addrs[0].clone()).unwrap();
 
-    // This flag variable will be updated if the client peer's routing table gets updated.
-    let mut check = false;
+    // Try to get the same record from the client node.
+    swarms[2].behaviour_mut().get_record(&key, Quorum::One);
+
+    let mut get_check = false;
+    let mut put_check = false;
 
     block_on(poll_fn(|ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated {
-                        ..
-                    }))) => {
-                        // Check if the client peer's routing table is getting updated.
-                        if swarm.local_peer_id().clone() == peers[2] {
-                            check = true;
-                        }
-                    }
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryCompleted { result, .. },
                     ))) => match result {
                         QueryResult::PutRecord(result) => match result {
                             Ok(PutRecordOk { key }) => {
                                 assert_eq!(key, record.key);
+                                put_check = true;
                                 return Poll::Ready(());
                             }
                             Err(e) => panic!("PUT operation failed: {:?}", e),
                         },
-                        QueryResult::GetRecord(result) => match result {
-                            Ok(GetRecordOk { records, .. }) => {
-                                assert_eq!(records.first().unwrap().record, record);
-                                return Poll::Ready(());
+                        QueryResult::GetRecord(result) => {
+                            if put_check {
+                                continue;
                             }
-                            Err(e) => panic!("GET operation failed: {:?}", e),
-                        },
+                            match result {
+                                Ok(GetRecordOk { records, .. }) => {
+                                    assert_eq!(records.first().unwrap().record, record);
+                                    get_check = true;
+                                    return Poll::Ready(());
+                                }
+                                Err(e) => panic!("GET operation failed: {:?}", e),
+                            }
+                        }
                         _ => {}
                     },
-                    Poll::Ready(Some(_)) => {}
+                    Poll::Ready(Some(e)) => println!(
+                        "Source: {:?}, Kademlia Event: {:?}",
+                        swarm.local_peer_id().clone(),
+                        e
+                    ),
                     e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                     Poll::Pending => break,
                 }
@@ -1403,5 +1412,6 @@ fn client_mode() {
         Poll::Pending
     }));
 
-    assert!(check, "Client peer routing tables were not updated.");
+    assert!(put_check);
+    assert!(get_check);
 }
