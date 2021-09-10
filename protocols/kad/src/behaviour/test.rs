@@ -1372,7 +1372,7 @@ fn client_mode() {
                     }))) => {
                         // Check if the client peer's routing table is getting updated.
                         if swarm.local_peer_id().clone() == peers[2] {
-                            check3 = true;
+                            check = true;
                         }
                     }
                     Poll::Ready(Some(SwarmEvent::Behaviour(
