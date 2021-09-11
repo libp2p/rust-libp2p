@@ -1374,7 +1374,7 @@ fn client_mode() {
                                     .behaviour_mut()
                                     .connected_peers
                                     .iter()
-                                    .any(|p| *p != peers[2]));
+                                    .all(|p| *p != peers[2]));
                             }
                             Err(e) => panic!("PUT operation failed: {:?}", e),
                         },
