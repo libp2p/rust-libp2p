@@ -405,7 +405,7 @@ where
             let mut iovs = MaybeUninit::<[IoSliceMut; BATCH_SIZE]>::uninit();
             fn init_iovs<'a>(
                 iovs: &'a mut MaybeUninit<[IoSliceMut<'a>; BATCH_SIZE]>,
-                recv_buf: &mut [u8],
+                recv_buf: &'a mut [u8],
             ) -> &'a mut [IoSliceMut<'a>] {
                 let chunk_size = recv_buf.len() / BATCH_SIZE;
                 let chunks = recv_buf.chunks_mut(chunk_size);
