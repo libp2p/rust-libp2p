@@ -403,13 +403,10 @@ where
         if me.event_slot.is_none() && me.incoming_slot.is_none() {
             let mut metas = [RecvMeta::default(); BATCH_SIZE];
             let mut iovs = MaybeUninit::<[IoSliceMut; BATCH_SIZE]>::uninit();
-            // SAFETY: safe as long as iovs do not outlive recv_buf
-            // and there exist only one iovs initialized with the given recv_buf.
-            // Also recv_buf should not be moved while there exist initialized iovs.
-            unsafe fn init_iovs<'a, 'b>(
-                iovs: &'b mut MaybeUninit<[IoSliceMut<'b>; BATCH_SIZE]>,
-                recv_buf: &'a mut [u8],
-            ) -> &'b mut [IoSliceMut<'b>] {
+            fn init_iovs<'a>(
+                iovs: &'a mut MaybeUninit<[IoSliceMut<'a>; BATCH_SIZE]>,
+                recv_buf: &mut [u8],
+            ) -> &'a mut [IoSliceMut<'a>] {
                 let chunk_size = recv_buf.len() / BATCH_SIZE;
                 let chunks = recv_buf.chunks_mut(chunk_size);
                 // every iovs elem must be initialized with an according elem from buf chunks
@@ -421,9 +418,13 @@ where
                         .write(IoSliceMut::new(buf));
                 });
 
-                iovs.assume_init_mut()
+                unsafe {
+                    // SAFETY: all elements are initialized
+                    iovs.assume_init_mut()
+                }
             }
-            let iovs = unsafe { init_iovs(&mut iovs, &mut me.recv_buf) };
+            let mut recv_buf = core::mem::replace(&mut me.recv_buf, Vec::new().into_boxed_slice());
+            let iovs = init_iovs(&mut iovs, &mut recv_buf);
             while let Poll::Ready(result) = me.socket.poll_recv(cx, iovs, &mut metas) {
                 let n = match result {
                     Ok(n) => n,
@@ -462,6 +463,7 @@ where
                     }
                 }
             }
+            me.recv_buf = recv_buf;
         }
 
         Poll::Pending
