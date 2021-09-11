@@ -48,7 +48,11 @@ async fn main() {
                 identity.public(),
             )),
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
-            ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
+            ping: Ping::new(
+                PingConfig::new()
+                    .with_interval(Duration::from_secs(1))
+                    .with_keep_alive(true),
+            ),
         },
         PeerId::from(identity.public()),
     );

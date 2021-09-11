@@ -21,11 +21,23 @@
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
+use libp2p::identify::Identify;
+use libp2p::identify::IdentifyConfig;
+use libp2p::identify::IdentifyEvent;
+use libp2p::ping;
 use libp2p::ping::{Ping, PingEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{development_transport, rendezvous};
 
+/// Examples for the rendezvous protocol:
+///
+/// 1. Run the rendezvous server:
+///    RUST_LOG=info cargo run --example rendezvous_point
+/// 2. Register a peer:
+///    RUST_LOG=info cargo run --example register_with_identify
+/// 3. Try to discover the peer from (2):
+///    RUST_LOG=info cargo run --example discover
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -37,8 +49,12 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
+            identify: Identify::new(IdentifyConfig::new(
+                "rendezvous-example/1.0.0".to_string(),
+                identity.public(),
+            )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: Ping::default(),
+            ping: Ping::new(ping::Config::new().with_keep_alive(true)),
         },
         PeerId::from(identity.public()),
     );
@@ -89,6 +105,7 @@ async fn main() {
 enum MyEvent {
     Rendezvous(rendezvous::server::Event),
     Ping(PingEvent),
+    Identify(IdentifyEvent),
 }
 
 impl From<rendezvous::server::Event> for MyEvent {
@@ -103,10 +120,17 @@ impl From<PingEvent> for MyEvent {
     }
 }
 
+impl From<IdentifyEvent> for MyEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        MyEvent::Identify(event)
+    }
+}
+
 #[derive(NetworkBehaviour)]
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
+    identify: Identify,
     rendezvous: rendezvous::server::Behaviour,
     ping: Ping,
 }
