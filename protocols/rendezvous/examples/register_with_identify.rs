@@ -29,7 +29,7 @@ use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
 use std::time::Duration;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     env_logger::init();
 
