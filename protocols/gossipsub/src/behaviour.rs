@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering},
+    cmp::max,
     collections::HashSet,
     collections::VecDeque,
     collections::{BTreeSet, HashMap},
@@ -67,6 +67,12 @@ use std::{cmp::Ordering::Equal, fmt::Debug};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "metrics")]
+use crate::metrics::{
+    topic_metrics::{SlotChurnMetric, SlotMessageMetric, TopicMetrics},
+    InternalMetrics,
+};
 
 /// Determines if published messages should be signed or not.
 ///
@@ -210,6 +216,10 @@ pub struct Gossipsub<
     D: DataTransform = IdentityTransform,
     F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
 > {
+    /// If metrics are enabled, keep track of a set of internal metrics relating to gossipsub.
+    #[cfg(feature = "metrics")]
+    metrics: InternalMetrics,
+
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
@@ -386,6 +396,8 @@ where
         // Set up message publishing parameters.
 
         Ok(Gossipsub {
+            #[cfg(feature = "metrics")]
+            metrics: InternalMetrics::default(),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
@@ -468,6 +480,12 @@ where
         self.peer_score
             .as_ref()
             .map(|(score, ..)| score.score(peer_id))
+    }
+
+    // If metrics are enabled, obtain a shared reference to them.
+    #[cfg(feature = "metrics")]
+    pub fn metrics(&self) -> &InternalMetrics {
+        &self.metrics
     }
 
     /// Subscribe to a topic.
@@ -738,14 +756,55 @@ where
                             "Message not in cache. Ignoring forwarding. Message Id: {}",
                             msg_id
                         );
+
+                        #[cfg(feature = "metrics")]
+                        {
+                            self.metrics.memcache_misses += 1;
+                        }
+
                         return Ok(false);
                     }
                 };
+                #[cfg(feature = "metrics")]
+                let topic = raw_message.topic.clone();
+
                 self.forward_msg(msg_id, raw_message, Some(propagation_source))?;
+
+                // Metrics: Report validation result
+                #[cfg(feature = "metrics")]
+                self.metrics.increment_message_metric(
+                    &topic,
+                    propagation_source,
+                    SlotMessageMetric::MessagesValidated,
+                );
                 return Ok(true);
             }
-            MessageAcceptance::Reject => RejectReason::ValidationFailed,
-            MessageAcceptance::Ignore => RejectReason::ValidationIgnored,
+            MessageAcceptance::Reject => {
+                // Metrics: Report validation result
+                #[cfg(feature = "metrics")]
+                if let Some(raw_message) = self.mcache.get(msg_id) {
+                    // Increment metrics
+                    self.metrics.increment_message_metric(
+                        &raw_message.topic,
+                        propagation_source,
+                        SlotMessageMetric::MessagesRejected,
+                    );
+                }
+                RejectReason::ValidationFailed
+            }
+            MessageAcceptance::Ignore => {
+                // Metrics: Report validation result
+                #[cfg(feature = "metrics")]
+                if let Some(raw_message) = self.mcache.get(msg_id) {
+                    // Increment metrics
+                    self.metrics.increment_message_metric(
+                        &raw_message.topic,
+                        propagation_source,
+                        SlotMessageMetric::MessagesIgnored,
+                    );
+                }
+                RejectReason::ValidationIgnored
+            }
         };
 
         if let Some(raw_message) = self.mcache.remove(msg_id) {
@@ -761,6 +820,12 @@ where
             Ok(true)
         } else {
             warn!("Rejected message not in cache. Message Id: {}", msg_id);
+
+            #[cfg(feature = "metrics")]
+            {
+                self.metrics.memcache_misses += 1;
+            }
+
             Ok(false)
         }
     }
@@ -854,6 +919,22 @@ where
         }
     }
 
+    /// This is just a utility function to verify everything is in order between the
+    /// mesh and the topic_metrics. It's useful for debugging.
+    #[cfg(all(feature = "metrics", debug_assertions))]
+    fn validate_mesh_slots_for_topic(&self, topic: &TopicHash) -> Result<(), String> {
+        match self.metrics.topic_metrics.get(topic) {
+            Some(topic_metrics) => match self.mesh.get(topic) {
+                Some(mesh_peers) => topic_metrics.validate_mesh_slots(mesh_peers),
+                None => Err(format!("metrics_event[{}] no mesh_peers for topic", topic)),
+            },
+            None => Err(format!(
+                "metrics_event[{}]: no topic_metrics for topic",
+                topic
+            )),
+        }
+    }
+
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
         debug!("Running JOIN for topic: {:?}", topic_hash);
@@ -929,6 +1010,10 @@ where
             mesh_peers.extend(new_peers);
         }
 
+        #[cfg(feature = "metrics")]
+        self.metrics
+            .assign_slots_to_peers(topic_hash, added_peers.iter().cloned());
+
         for peer_id in added_peers {
             // Send a GRAFT control message
             debug!("JOIN: Sending Graft message to peer: {:?}", peer_id);
@@ -953,7 +1038,19 @@ where
                 &self.connected_peers,
             );
         }
-        debug!("Completed JOIN for topic: {:?}", topic_hash);
+
+        #[cfg(all(feature = "metrics", debug_assertions))]
+        {
+            let validation_result = self.validate_mesh_slots_for_topic(topic_hash);
+            debug_assert!(
+                validation_result.is_ok(),
+                "metrics_event: validate_mesh_slots_for_topic({}) failed! Err({})",
+                topic_hash,
+                validation_result.err().unwrap()
+            );
+        }
+
+        trace!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
     /// Creates a PRUNE gossipsub action.
@@ -1034,6 +1131,11 @@ where
                     &self.connected_peers,
                 );
             }
+
+            #[cfg(feature = "metrics")]
+            if let Some(topic_metrics) = self.metrics.topic_metrics.get_mut(topic_hash) {
+                topic_metrics.churn_all_slots(SlotChurnMetric::ChurnLeave);
+            }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
     }
@@ -1113,7 +1215,7 @@ where
         debug!("Handling IHAVE for peer: {:?}", peer_id);
 
         // use a hashset to avoid duplicates efficiently
-        let mut iwant_ids = HashSet::new();
+        let mut iwant_ids = HashMap::new();
 
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
@@ -1128,7 +1230,7 @@ where
             for id in ids {
                 if !self.duplicate_cache.contains(&id) {
                     // have not seen this message, request it
-                    iwant_ids.insert(id);
+                    iwant_ids.insert(id, topic.clone());
                 }
             }
         }
@@ -1149,7 +1251,7 @@ where
             );
 
             //ask in random order
-            let mut iwant_ids_vec: Vec<_> = iwant_ids.iter().collect();
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.keys().collect();
             let mut rng = thread_rng();
             iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
 
@@ -1168,6 +1270,20 @@ where
                 "IHAVE: Asking for the following messages from {}: {:?}",
                 peer_id, message_ids
             );
+
+            // Metrics: Add IWANT requests
+            #[cfg(feature = "metrics")]
+            {
+                for id in &message_ids {
+                    if let Some(topic) = iwant_ids.get(id) {
+                        self.metrics
+                            .topic_metrics
+                            .entry(topic.clone())
+                            .or_insert_with(|| TopicMetrics::new(topic.clone()))
+                            .iwant_requests += 1;
+                    }
+                }
+            }
 
             Self::control_pool_add(
                 &mut self.control_pool,
@@ -1330,6 +1446,10 @@ where
                         peer_id, &topic_hash
                     );
                     peers.insert(*peer_id);
+
+                    #[cfg(feature = "metrics")]
+                    self.metrics.assign_slot_if_unassigned(&topic_hash, peer_id);
+
                     // If the peer did not previously exist in any mesh, inform the handler
                     peer_added_to_mesh(
                         *peer_id,
@@ -1392,9 +1512,10 @@ where
         topic_hash: &TopicHash,
         backoff: Option<u64>,
         always_update_backoff: bool,
+        #[cfg(feature = "metrics")] churn_reason: SlotChurnMetric,
     ) {
         let mut update_backoff = always_update_backoff;
-        if let Some(peers) = self.mesh.get_mut(&topic_hash) {
+        if let Some(peers) = self.mesh.get_mut(topic_hash) {
             // remove the peer if it exists in the mesh
             if peers.remove(peer_id) {
                 debug!(
@@ -1418,6 +1539,8 @@ where
                     &mut self.events,
                     &self.connected_peers,
                 );
+                #[cfg(feature = "metrics")]
+                self.metrics.churn_slot(topic_hash, peer_id, churn_reason);
             }
         }
         if update_backoff {
@@ -1441,10 +1564,17 @@ where
         let (below_threshold, score) =
             self.score_below_threshold(peer_id, |pst| pst.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
-            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true);
+            self.remove_peer_from_mesh(
+                peer_id,
+                &topic_hash,
+                backoff,
+                true,
+                #[cfg(feature = "metrics")]
+                SlotChurnMetric::ChurnPrune,
+            );
 
             if self.mesh.contains_key(&topic_hash) {
-                //connect to px peers
+                // connect to px peers
                 if !px.is_empty() {
                     // we ignore PX from peers with insufficient score
                     if below_threshold {
@@ -1597,13 +1727,38 @@ where
         mut raw_message: RawGossipsubMessage,
         propagation_source: &PeerId,
     ) {
+        // Report received message to metrics if we are subscribed to the topic, otherwise
+        // ignore it.
+        #[cfg(feature = "metrics")]
+        if self.mesh.contains_key(&raw_message.topic) {
+            self.metrics.increment_message_metric(
+                &raw_message.topic,
+                propagation_source,
+                SlotMessageMetric::MessagesAll,
+            );
+        }
+
         let fast_message_id = self.config.fast_message_id(&raw_message);
         if let Some(fast_message_id) = fast_message_id.as_ref() {
             if let Some(msg_id) = self.fast_messsage_id_cache.get(fast_message_id) {
                 let msg_id = msg_id.clone();
-                self.message_is_valid(&msg_id, &mut raw_message, propagation_source);
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.duplicated_message(propagation_source, &msg_id, &raw_message.topic);
+                if self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
+                    if let Some((peer_score, ..)) = &mut self.peer_score {
+                        peer_score.duplicated_message(
+                            propagation_source,
+                            &msg_id,
+                            &raw_message.topic,
+                        );
+                    }
+                    // Metrics: Report the duplicate message, for mesh topics
+                    #[cfg(feature = "metrics")]
+                    if self.mesh.contains_key(&raw_message.topic) {
+                        self.metrics.increment_message_metric(
+                            &raw_message.topic,
+                            propagation_source,
+                            SlotMessageMetric::MessagesDuplicates,
+                        );
+                    }
                 }
                 return;
             }
@@ -1646,12 +1801,33 @@ where
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.duplicated_message(propagation_source, &msg_id, &message.topic);
             }
+
+            // Metrics: Report the duplicate message, for mesh topics
+            #[cfg(feature = "metrics")]
+            if self.mesh.contains_key(&raw_message.topic) {
+                // NOTE: Allow overflowing of a usize here
+                self.metrics.increment_message_metric(
+                    &message.topic,
+                    propagation_source,
+                    SlotMessageMetric::MessagesDuplicates,
+                );
+            }
             return;
         }
-        debug!(
+        trace!(
             "Put message {:?} in duplicate_cache and resolve promises",
             msg_id
         );
+
+        // Increment the first message topic, if its in our mesh.
+        #[cfg(feature = "metrics")]
+        if self.mesh.contains_key(&raw_message.topic) {
+            self.metrics.increment_message_metric(
+                &raw_message.topic,
+                propagation_source,
+                SlotMessageMetric::MessagesFirst,
+            );
+        }
 
         // Tells score that message arrived (but is maybe not fully validated yet).
         // Consider the message as delivered for gossip promises.
@@ -1678,6 +1854,11 @@ where
                 "Received message on a topic we are not subscribed to: {:?}",
                 message.topic
             );
+
+            #[cfg(feature = "metrics")]
+            {
+                self.metrics.messages_received_on_invalid_topic += 1;
+            }
             return;
         }
 
@@ -1858,7 +2039,14 @@ where
 
         // remove unsubscribed peers from the mesh if it exists
         for (peer_id, topic_hash) in unsubscribed_peers {
-            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false);
+            self.remove_peer_from_mesh(
+                &peer_id,
+                &topic_hash,
+                None,
+                false,
+                #[cfg(feature = "metrics")]
+                SlotChurnMetric::ChurnUnsubscribed,
+            );
         }
 
         // Potentially inform the handler if we have added this peer to a mesh for the first time.
@@ -1872,6 +2060,12 @@ where
                 &mut self.events,
                 &self.connected_peers,
             );
+        }
+
+        #[cfg(feature = "metrics")]
+        for topic in &topics_to_graft {
+            self.metrics
+                .assign_slot_if_unassigned(topic, propagation_source);
         }
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
@@ -1911,13 +2105,19 @@ where
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             for (peer, count) in gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
+
+                // Metrics: Increment broken promises
+                #[cfg(feature = "metrics")]
+                {
+                    self.metrics.broken_promises += 1;
+                }
             }
         }
     }
 
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
-        debug!("Starting heartbeat");
+        trace!("Starting heartbeat");
 
         self.heartbeat_ticks += 1;
 
@@ -1950,12 +2150,20 @@ where
             _ => 0.0,
         };
 
+        #[cfg(all(debug_assertions, feature = "metrics"))]
+        let mut modified_topics = HashSet::new();
         // maintain the mesh for each topic
         for (topic_hash, peers) in self.mesh.iter_mut() {
             let explicit_peers = &self.explicit_peers;
             let backoffs = &self.backoffs;
             let topic_peers = &self.topic_peers;
             let outbound_peers = &self.outbound_peers;
+            #[cfg(feature = "metrics")]
+            let topic_metrics = self
+                .metrics
+                .topic_metrics
+                .entry(topic_hash.clone())
+                .or_insert_with(|| TopicMetrics::new(topic_hash.clone()));
 
             // drop all peers with negative score, without PX
             // if there is at some point a stable retain method for BTreeSet the following can be
@@ -1964,7 +2172,7 @@ where
                 .iter()
                 .filter(|&p| {
                     if score(p) < 0.0 {
-                        debug!(
+                        trace!(
                             "HEARTBEAT: Prune peer {:?} with negative score [score = {}, topic = \
                              {}]",
                             p,
@@ -1984,6 +2192,12 @@ where
                 .collect();
             for peer in to_remove {
                 peers.remove(&peer);
+
+                // Increment ChurnScore and remove peer from slot
+                #[cfg(feature = "metrics")]
+                topic_metrics.churn_slot(&peer, SlotChurnMetric::ChurnScore);
+                #[cfg(all(debug_assertions, feature = "metrics"))]
+                modified_topics.insert(topic_hash.clone());
             }
 
             // too little peers - add some
@@ -2013,8 +2227,18 @@ where
                     current_topic.push(topic_hash.clone());
                 }
                 // update the mesh
-                debug!("Updating mesh, new mesh: {:?}", peer_list);
-                peers.extend(peer_list);
+                if !peer_list.is_empty() {
+                    trace!("Updating mesh, adding to mesh: {:?}", peer_list);
+
+                    // Metrics: Update mesh peers
+                    #[cfg(feature = "metrics")]
+                    topic_metrics.assign_slots_to_peers(peer_list.iter().cloned());
+                    #[cfg(all(debug_assertions, feature = "metrics"))]
+                    modified_topics.insert(topic_hash.clone());
+
+                    // add the peers
+                    peers.extend(peer_list);
+                }
             }
 
             // too many peers - remove some
@@ -2031,8 +2255,11 @@ where
                 let mut rng = thread_rng();
                 let mut shuffled = peers.iter().cloned().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
-                shuffled
-                    .sort_by(|p1, p2| score(p1).partial_cmp(&score(p2)).unwrap_or(Ordering::Equal));
+                shuffled.sort_by(|p1, p2| {
+                    score(p1)
+                        .partial_cmp(&score(p2))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 // shuffle everything except the last retain_scores many peers (the best ones)
                 shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
 
@@ -2061,6 +2288,11 @@ where
                             outbound -= 1;
                         }
                     }
+                    // Metrics: increment ChurnExcess and vacate slot
+                    #[cfg(feature = "metrics")]
+                    topic_metrics.churn_slot(&peer, SlotChurnMetric::ChurnExcess);
+                    #[cfg(all(debug_assertions, feature = "metrics"))]
+                    modified_topics.insert(topic_hash.clone());
 
                     // remove the peer
                     peers.remove(&peer);
@@ -2095,9 +2327,18 @@ where
                         let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                         current_topic.push(topic_hash.clone());
                     }
-                    // update the mesh
-                    debug!("Updating mesh, new mesh: {:?}", peer_list);
-                    peers.extend(peer_list);
+                    if !peer_list.is_empty() {
+                        // update the mesh
+                        trace!("Updating mesh, adding to mesh: {:?}", peer_list);
+
+                        #[cfg(feature = "metrics")]
+                        topic_metrics.assign_slots_to_peers(peer_list.iter().cloned());
+                        #[cfg(all(debug_assertions, feature = "metrics"))]
+                        modified_topics.insert(topic_hash.clone());
+
+                        // add the peers
+                        peers.extend(peer_list);
+                    }
                 }
             }
 
@@ -2151,12 +2392,23 @@ where
                             let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                             current_topic.push(topic_hash.clone());
                         }
-                        // update the mesh
-                        debug!(
-                            "Opportunistically graft in topic {} with peers {:?}",
-                            topic_hash, peer_list
-                        );
-                        peers.extend(peer_list);
+
+                        if !peer_list.is_empty() {
+                            // update the mesh
+                            debug!(
+                                "Opportunistically graft in topic {} with peers {:?}",
+                                topic_hash, peer_list
+                            );
+
+                            // Metrics: Update mesh peers
+                            #[cfg(feature = "metrics")]
+                            topic_metrics.assign_slots_to_peers(peer_list.iter().cloned());
+                            #[cfg(all(debug_assertions, feature = "metrics"))]
+                            modified_topics.insert(topic_hash.clone());
+
+                            // add the peers
+                            peers.extend(peer_list);
+                        }
                     }
                 }
             }
@@ -2192,7 +2444,7 @@ where
                 match self.peer_topics.get(peer) {
                     Some(topics) => {
                         if !topics.contains(&topic_hash) || score(peer) < publish_threshold {
-                            debug!(
+                            trace!(
                                 "HEARTBEAT: Peer removed from fanout for topic: {:?}",
                                 topic_hash
                             );
@@ -2279,7 +2531,18 @@ where
         // shift the memcache
         self.mcache.shift();
 
-        debug!("Completed Heartbeat");
+        #[cfg(all(feature = "metrics", debug_assertions))]
+        for topic in modified_topics {
+            let validation_result = self.validate_mesh_slots_for_topic(&topic);
+            debug_assert!(
+                validation_result.is_ok(),
+                "metrics_event: validate_mesh_slots_for_topic({}) failed! Err({})",
+                topic,
+                validation_result.err().unwrap()
+            );
+        }
+
+        trace!("Completed Heartbeat");
     }
 
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
@@ -2875,7 +3138,14 @@ where
                 // check the mesh for the topic
                 if let Some(mesh_peers) = self.mesh.get_mut(&topic) {
                     // check if the peer is in the mesh and remove it
-                    mesh_peers.remove(peer_id);
+                    if mesh_peers.contains(peer_id) {
+                        mesh_peers.remove(peer_id);
+
+                        // increment churn_disconnected and vacate slot
+                        #[cfg(feature = "metrics")]
+                        self.metrics
+                            .churn_slot(topic, peer_id, SlotChurnMetric::ChurnDisconnected);
+                    }
                 }
 
                 // remove from topic_peers

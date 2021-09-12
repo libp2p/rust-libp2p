@@ -89,7 +89,7 @@ impl MessageCache {
     }
 
     /// Get a message with `message_id`
-    #[cfg(test)]
+    #[cfg(any(test, feature = "metrics"))]
     pub fn get(&self, message_id: &MessageId) -> Option<&RawGossipsubMessage> {
         self.msgs.get(message_id)
     }

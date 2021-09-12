@@ -125,6 +125,9 @@
 pub mod error;
 pub mod protocol;
 
+#[cfg(feature = "metrics")]
+pub mod metrics;
+
 mod backoff;
 mod behaviour;
 mod config;
@@ -157,5 +160,6 @@ pub use self::types::{
     FastMessageId, GossipsubMessage, GossipsubRpc, MessageAcceptance, MessageId,
     RawGossipsubMessage,
 };
+
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

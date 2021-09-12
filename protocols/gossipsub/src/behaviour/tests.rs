@@ -38,8 +38,48 @@ mod tests {
     use crate::subscription_filter::WhitelistSubscriptionFilter;
     use crate::transform::{DataTransform, IdentityTransform};
     use crate::types::FastMessageId;
+    /* For debug purposes
+    use env_logger::{Builder, Env};
+      // Add this line to relevant tests.
+      Builder::from_env(Env::default().default_filter_or("info")).init();
+    */
+    use libp2p_swarm::AddressRecord;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
+
+    struct FakePollParams {
+        peer_id: PeerId,
+    }
+
+    impl FakePollParams {
+        pub fn new() -> Self {
+            FakePollParams {
+                peer_id: PeerId::random(),
+            }
+        }
+    }
+
+    impl PollParameters for FakePollParams {
+        type SupportedProtocolsIter = std::vec::IntoIter<Vec<u8>>;
+        type ListenedAddressesIter = std::vec::IntoIter<Multiaddr>;
+        type ExternalAddressesIter = std::vec::IntoIter<AddressRecord>;
+
+        fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
+            Vec::new().into_iter()
+        }
+
+        fn listened_addresses(&self) -> Self::ListenedAddressesIter {
+            Vec::new().into_iter()
+        }
+
+        fn external_addresses(&self) -> Self::ExternalAddressesIter {
+            Vec::new().into_iter()
+        }
+
+        fn local_peer_id(&self) -> &PeerId {
+            &self.peer_id
+        }
+    }
 
     #[derive(Default, Builder, Debug)]
     #[builder(default)]
@@ -1321,6 +1361,20 @@ mod tests {
         gs.events.clear();
     }
 
+    // Process current events
+    #[allow(dead_code)]
+    fn process_events<D, F>(gs: &mut Gossipsub<D, F>)
+    where
+        D: Send + 'static + DataTransform,
+        F: Send + 'static + TopicSubscriptionFilter,
+    {
+        let waker = futures::task::noop_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
+        let mut poll_params = FakePollParams::new();
+
+        while !gs.poll(&mut cx, &mut poll_params).is_pending() {}
+    }
+
     #[test]
     // tests that a peer added as explicit peer gets connected to
     fn test_explicit_peer_gets_connected() {
@@ -1934,7 +1988,7 @@ mod tests {
             .heartbeat_interval(Duration::from_millis(100))
             .build()
             .unwrap();
-        //only one peer => mesh too small and will try to regraft as early as possible
+        // only one peer => mesh too small and will try to regraft as early as possible
         let (mut gs, peers, topics) = inject_nodes1()
             .peer_no(1)
             .topics(vec!["test".into()])
@@ -1942,22 +1996,21 @@ mod tests {
             .gs_config(config)
             .create_network();
 
-        //handle prune from peer with backoff of one second
+        // handle prune from peer with backoff of one second
         gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), Some(1))]);
 
-        //forget all events until now
+        // forget all events until now
         flush_events(&mut gs);
-
-        //call heartbeat
+        // call heartbeat
         gs.heartbeat();
 
-        //Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
+        // Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
         for _ in 0..10 {
             sleep(Duration::from_millis(100));
             gs.heartbeat();
         }
 
-        //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+        // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
         // is needed).
         assert_eq!(
             count_control_msgs(&gs, |_, m| match m {
@@ -1984,14 +2037,14 @@ mod tests {
 
     #[test]
     fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without_backoff() {
-        //set default backoff period to 1 second
+        // set default backoff period to 1 second
         let config = GossipsubConfigBuilder::default()
             .prune_backoff(Duration::from_millis(90))
             .backoff_slack(1)
             .heartbeat_interval(Duration::from_millis(100))
             .build()
             .unwrap();
-        //only one peer => mesh too small and will try to regraft as early as possible
+        // only one peer => mesh too small and will try to regraft as early as possible
         let (mut gs, peers, topics) = inject_nodes1()
             .peer_no(1)
             .topics(vec!["test".into()])
@@ -1999,7 +2052,7 @@ mod tests {
             .gs_config(config)
             .create_network();
 
-        //handle prune from peer without a specified backoff
+        // handle prune from peer without a specified backoff
         gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), None)]);
 
         //forget all events until now

@@ -9,6 +9,10 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+
+[features]
+metrics = ["strum", "strum_macros"]
+
 [dependencies]
 libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
 libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
@@ -27,6 +31,9 @@ smallvec = "1.6.1"
 prost = "0.8"
 hex_fmt = "0.3.0"
 regex = "1.4.0"
+# Metrics dependencies
+strum = { version = "0.21", optional = true }
+strum_macros = { version = "0.21", optional = true}
 
 [dev-dependencies]
 async-std = "1.6.3"
