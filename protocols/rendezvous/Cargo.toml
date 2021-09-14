@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
-prost = "0.7"
+prost = "0.8"
 void = "1"
 log = "0.4"
 futures = { version = "0.3", default-features = false, features = ["std"] }
@@ -33,4 +33,4 @@ async-trait = "0.1"
 tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 
 [build-dependencies]
-prost-build = "0.7"
+prost-build = "0.8"
