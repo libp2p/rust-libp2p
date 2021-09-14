@@ -87,6 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // requires the implementations of `NetworkBehaviourEventProcess` for
     // the events of each behaviour.
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct MyBehaviour {
         floodsub: Floodsub,
         mdns: Mdns,
