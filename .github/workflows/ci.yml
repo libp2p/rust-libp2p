@@ -46,7 +46,7 @@ jobs:
     container:
       image: rust
       env:
-        CC: clang-10
+        CC: clang-11
     steps:
 
     - name: Cancel Previous Runs
@@ -75,7 +75,7 @@ jobs:
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
         echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" >> /etc/apt/sources.list
         apt-get update
-        apt-get install -y clang-10
+        apt-get install -y clang-11
 
     - name: Install CMake
       run: apt-get install -y cmake
