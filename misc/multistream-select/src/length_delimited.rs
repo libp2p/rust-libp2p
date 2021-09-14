@@ -125,7 +125,7 @@ impl<R> LengthDelimited<R> {
         let mut this = self.project();
 
         while !this.write_buffer.is_empty() {
-            match this.inner.as_mut().poll_write(cx, &this.write_buffer) {
+            match this.inner.as_mut().poll_write(cx, this.write_buffer) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Ok(0)) => {
                     return Poll::Ready(Err(io::Error::new(
