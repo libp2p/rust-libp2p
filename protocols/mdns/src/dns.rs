@@ -228,11 +228,11 @@ fn query_response_packet(id: u16, peer_id: &[u8], records: &[Vec<u8>], ttl: u32)
 
     // Peer Id.
     append_u16(&mut out, peer_id.len() as u16);
-    out.extend_from_slice(&peer_id);
+    out.extend_from_slice(peer_id);
 
     // The TXT records.
     for record in records {
-        out.extend_from_slice(&record);
+        out.extend_from_slice(record);
     }
 
     out

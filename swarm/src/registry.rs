@@ -285,7 +285,7 @@ impl<'a> Iterator for AddressIter<'a> {
         }
         let item = &self.items[self.offset];
         self.offset += 1;
-        Some(&item)
+        Some(item)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
