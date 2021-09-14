@@ -76,6 +76,10 @@ pub use libp2p_kad as kad;
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(feature = "metrics")]
+#[cfg_attr(docsrs, doc(cfg(feature = "metrics")))]
+#[doc(inline)]
+pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
 #[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
 #[doc(inline)]
@@ -105,6 +109,10 @@ pub use libp2p_quic as quic;
 #[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
 #[doc(inline)]
 pub use libp2p_relay as relay;
+#[cfg(feature = "rendezvous")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rendezvous")))]
+#[doc(inline)]
+pub use libp2p_rendezvous as rendezvous;
 #[cfg(feature = "request-response")]
 #[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
 #[doc(inline)]

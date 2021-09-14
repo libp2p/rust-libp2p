@@ -21,9 +21,9 @@
 use super::{DialError, DialingOpts, Network};
 use crate::{
     connection::{
-        handler::THandlerInEvent, pool::Pool, Connected, ConnectedPoint, Connection,
-        ConnectionHandler, ConnectionId, ConnectionLimit, EstablishedConnection,
-        EstablishedConnectionIter, IntoConnectionHandler, PendingConnection, Substream,
+        handler::THandlerInEvent, pool::Pool, ConnectedPoint, ConnectionHandler, ConnectionId,
+        EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler, PendingConnection,
+        Substream,
     },
     Multiaddr, PeerId, StreamMuxer, Transport,
 };
@@ -163,7 +163,7 @@ where
         address: Multiaddr,
         remaining: I,
         handler: THandler,
-    ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError>
+    ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
     where
         I: IntoIterator<Item = Multiaddr>,
     {
@@ -171,12 +171,7 @@ where
             Peer::Connected(p) => (p.peer_id, p.network),
             Peer::Dialing(p) => (p.peer_id, p.network),
             Peer::Disconnected(p) => (p.peer_id, p.network),
-            Peer::Local => {
-                return Err(DialError::ConnectionLimit(ConnectionLimit {
-                    current: 0,
-                    limit: 0,
-                }))
-            }
+            Peer::Local => return Err(DialError::LocalPeerId { handler }),
         };
 
         let id = network.dial_peer(DialingOpts {
@@ -471,44 +466,6 @@ where
     /// Returns the `DisconnectedPeer` into a `Peer`.
     pub fn into_peer(self) -> Peer<'a, TTrans, THandler> {
         Peer::Disconnected(self)
-    }
-
-    /// Moves the peer into a connected state by supplying an existing
-    /// established connection.
-    ///
-    /// No event is generated for this action.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `connected.peer_id` does not identify the current peer.
-    pub fn set_connected<TMuxer>(
-        self,
-        connected: Connected,
-        connection: Connection<TMuxer, THandler::Handler>,
-    ) -> Result<ConnectedPeer<'a, TTrans, THandler>, ConnectionLimit>
-    where
-        THandler: Send + 'static,
-        TTrans::Error: Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
-        <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-    {
-        if connected.peer_id != self.peer_id {
-            panic!(
-                "Invalid peer ID given: {:?}. Expected: {:?}",
-                connected.peer_id, self.peer_id
-            )
-        }
-
-        self.network
-            .pool
-            .add(connection, connected)
-            .map(move |_id| ConnectedPeer {
-                network: self.network,
-                peer_id: self.peer_id,
-            })
     }
 }
 

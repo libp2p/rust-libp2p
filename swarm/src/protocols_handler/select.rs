@@ -45,6 +45,10 @@ impl<TProto1, TProto2> IntoProtocolsHandlerSelect<TProto1, TProto2> {
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
         IntoProtocolsHandlerSelect { proto1, proto2 }
     }
+
+    pub fn into_inner(self) -> (TProto1, TProto2) {
+        (self.proto1, self.proto2)
+    }
 }
 
 impl<TProto1, TProto2> IntoProtocolsHandler for IntoProtocolsHandlerSelect<TProto1, TProto2>
@@ -86,6 +90,10 @@ impl<TProto1, TProto2> ProtocolsHandlerSelect<TProto1, TProto2> {
     /// Builds a `ProtocolsHandlerSelect`.
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
         ProtocolsHandlerSelect { proto1, proto2 }
+    }
+
+    pub fn into_inner(self) -> (TProto1, TProto2) {
+        (self.proto1, self.proto2)
     }
 }
 

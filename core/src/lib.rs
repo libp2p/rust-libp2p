@@ -39,6 +39,14 @@ mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
 }
 
+mod envelope_proto {
+    include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
+}
+
+mod peer_record_proto {
+    include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
+}
+
 /// Multi-address re-export.
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
@@ -51,6 +59,8 @@ pub mod either;
 pub mod identity;
 pub mod muxing;
 pub mod network;
+pub mod peer_record;
+pub mod signed_envelope;
 pub mod transport;
 pub mod upgrade;
 
@@ -61,6 +71,8 @@ pub use multihash;
 pub use muxing::StreamMuxer;
 pub use network::Network;
 pub use peer_id::PeerId;
+pub use peer_record::PeerRecord;
+pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};

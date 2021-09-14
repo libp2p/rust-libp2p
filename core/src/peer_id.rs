@@ -66,7 +66,7 @@ impl PeerId {
 
     /// Parses a `PeerId` from bytes.
     pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
-        PeerId::from_multihash(Multihash::from_bytes(&data)?)
+        PeerId::from_multihash(Multihash::from_bytes(data)?)
             .map_err(|mh| Error::UnsupportedCode(mh.code()))
     }
 

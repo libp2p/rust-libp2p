@@ -55,7 +55,7 @@ use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    swarm::SwarmEvent,
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
 use std::{
@@ -83,6 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Use the derive to generate delegating NetworkBehaviour impl and require the
     // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "OutEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
         mdns: Mdns,
@@ -93,36 +94,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ignored_member: bool,
     }
 
-    impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
-        // Called when `floodsub` produces an event.
-        fn inject_event(&mut self, message: FloodsubEvent) {
-            if let FloodsubEvent::Message(message) = message {
-                println!(
-                    "Received: '{:?}' from {:?}",
-                    String::from_utf8_lossy(&message.data),
-                    message.source
-                );
-            }
+    #[derive(Debug)]
+    enum OutEvent {
+        Floodsub(FloodsubEvent),
+        Mdns(MdnsEvent),
+    }
+
+    impl From<MdnsEvent> for OutEvent {
+        fn from(v: MdnsEvent) -> Self {
+            Self::Mdns(v)
         }
     }
 
-    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
-        // Called when `mdns` produces an event.
-        fn inject_event(&mut self, event: MdnsEvent) {
-            match event {
-                MdnsEvent::Discovered(list) => {
-                    for (peer, _) in list {
-                        self.floodsub.add_node_to_partial_view(peer);
-                    }
-                }
-                MdnsEvent::Expired(list) => {
-                    for (peer, _) in list {
-                        if !self.mdns.has_node(&peer) {
-                            self.floodsub.remove_node_from_partial_view(&peer);
-                        }
-                    }
-                }
-            }
+    impl From<FloodsubEvent> for OutEvent {
+        fn from(v: FloodsubEvent) -> Self {
+            Self::Floodsub(v)
         }
     }
 
@@ -166,11 +152,41 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => {
-                    if let SwarmEvent::NewListenAddr { address, .. } = event {
-                        println!("Listening on {:?}", address);
+                Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
+                    println!("Listening on {:?}", address);
+                }
+                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Floodsub(
+                    FloodsubEvent::Message(message),
+                )))) => {
+                    println!(
+                        "Received: '{:?}' from {:?}",
+                        String::from_utf8_lossy(&message.data),
+                        message.source
+                    );
+                }
+                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Mdns(
+                    MdnsEvent::Discovered(list),
+                )))) => {
+                    for (peer, _) in list {
+                        swarm
+                            .behaviour_mut()
+                            .floodsub
+                            .add_node_to_partial_view(peer);
                     }
                 }
+                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Mdns(MdnsEvent::Expired(
+                    list,
+                ))))) => {
+                    for (peer, _) in list {
+                        if !swarm.behaviour_mut().mdns.has_node(&peer) {
+                            swarm
+                                .behaviour_mut()
+                                .floodsub
+                                .remove_node_from_partial_view(&peer);
+                        }
+                    }
+                }
+                Poll::Ready(Some(_)) => {}
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => break,
             }

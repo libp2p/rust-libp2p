@@ -65,11 +65,12 @@ fn deny_incoming_connec() {
 
         match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
-                attempts_remaining: 0,
+                attempts_remaining,
                 peer_id,
                 multiaddr,
                 error: PendingConnectionError::Transport(_),
             }) => {
+                assert_eq!(0u32, attempts_remaining.get_attempts());
                 assert_eq!(&peer_id, swarm1.local_peer_id());
                 assert_eq!(
                     multiaddr,
@@ -201,10 +202,10 @@ fn multiple_addresses_err() {
                         .with(Protocol::P2p(target.clone().into()));
                     assert_eq!(multiaddr, expected);
                     if addresses.is_empty() {
-                        assert_eq!(attempts_remaining, 0);
+                        assert_eq!(attempts_remaining.get_attempts(), 0);
                         return Poll::Ready(Ok(()));
                     } else {
-                        assert_eq!(attempts_remaining, addresses.len() as u32);
+                        assert_eq!(attempts_remaining.get_attempts(), addresses.len() as u32);
                     }
                 }
                 Poll::Ready(_) => unreachable!(),

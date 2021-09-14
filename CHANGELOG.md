@@ -16,6 +16,7 @@
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
 - [`libp2p-relay` CHANGELOG](protocols/relay/CHANGELOG.md)
 - [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
+- [`libp2p-rendezvous` CHANGELOG](protocols/rendezvous/CHANGELOG.md)
 
 ## Transport Protocols & Upgrades
 
@@ -36,6 +37,7 @@
 
 ## Utilities
 
+- [`libp2p-metrics` CHANGELOG](misc/metrics/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 
 # `libp2p` facade crate
@@ -66,7 +68,9 @@
 
 - Re-export the `wasm-bindgen` feature from `parking_lot`, so
   `libp2p` users can opt-in to that crate's Wasm support. See [PR 2180].
-  
+
+- Add `libp2p-metrics`.
+
 [PR 2180]: https://github.com/libp2p/rust-libp2p/pull/2180/
 
 ## Version 0.39.1 [2021-07-12]
