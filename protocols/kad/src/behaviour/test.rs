@@ -1370,23 +1370,31 @@ fn client_mode() {
                         QueryResult::PutRecord(result) => match result {
                             Ok(PutRecordOk { .. }) => {
                                 // Check if the server peer is not connected to the client peer.
-                                assert!(swarm
-                                    .behaviour_mut()
-                                    .connected_peers
-                                    .iter()
-                                    .all(|p| *p != peers[2]));
+                                assert!(
+                                    swarm
+                                        .behaviour_mut()
+                                        .connected_peers
+                                        .iter()
+                                        .all(|p| *p != peers[2]),
+                                    "The server peer is connected to the client peer."
+                                );
                             }
                             Err(e) => panic!("PUT operation failed: {:?}", e),
                         },
                         QueryResult::GetRecord(result) => match result {
                             Ok(GetRecordOk { .. }) => {
                                 // Check if the client peer is connected to the server peer.
-                                assert!(swarm
-                                    .behaviour_mut()
-                                    .connected_peers
-                                    .iter()
-                                    .any(|p| (*p == peers[0] || *p == peers[1])));
+                                assert!(
+                                    swarm
+                                        .behaviour_mut()
+                                        .connected_peers
+                                        .iter()
+                                        .any(|p| (*p == peers[0] || *p == peers[1])),
+                                    "The client peer is not connected to the server peers."
+                                );
 
+                                // GetRecord will never be successful unless and until PutRecord is
+                                // successful.
                                 return Poll::Ready(());
                             }
                             Err(e) => panic!("GET operation failed: {:?}", e),
