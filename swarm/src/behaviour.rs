@@ -19,8 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::{ConnectionId, ListenerId}};
+use crate::{AddressRecord, AddressScore, DialError};
+use libp2p_core::{
+    connection::{ConnectionId, ListenerId},
+    ConnectedPoint, Multiaddr, PeerId,
+};
 use std::{error, task::Context, task::Poll};
+
+/// Custom event that can be received by the [`ProtocolsHandler`].
+type THandlerInEvent<THandler> =
+    <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent;
 
 /// A behaviour for the network. Allows customizing the swarm.
 ///
@@ -61,16 +69,20 @@ pub trait NetworkBehaviour: Send + 'static {
 
     /// Creates a new `ProtocolsHandler` for a connection with a peer.
     ///
-    /// Every time an incoming connection is opened, and every time we start dialing a node, this
-    /// method is called.
+    /// Every time an incoming connection is opened, and every time another [`NetworkBehaviour`]
+    /// emitted a dial request, this method is called.
     ///
     /// The returned object is a handler for that specific connection, and will be moved to a
     /// background task dedicated to that connection.
     ///
-    /// The network behaviour (ie. the implementation of this trait) and the handlers it has
-    /// spawned (ie. the objects returned by `new_handler`) can communicate by passing messages.
-    /// Messages sent from the handler to the behaviour are injected with `inject_event`, and
-    /// the behaviour can send a message to the handler by making `poll` return `SendEvent`.
+    /// The network behaviour (ie. the implementation of this trait) and the handlers it has spawned
+    /// (ie. the objects returned by `new_handler`) can communicate by passing messages. Messages
+    /// sent from the handler to the behaviour are injected with [`NetworkBehaviour::inject_event`],
+    /// and the behaviour can send a message to the handler by making [`NetworkBehaviour::poll`]
+    /// return [`NetworkBehaviourAction::NotifyHandler`].
+    ///
+    /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
+    /// connection closing.
     fn new_handler(&mut self) -> Self::ProtocolsHandler;
 
     /// Addresses that this behaviour is aware of for this specific peer, and that may allow
@@ -79,36 +91,43 @@ pub trait NetworkBehaviour: Send + 'static {
     /// The addresses will be tried in the order returned by this function, which means that they
     /// should be ordered by decreasing likelihood of reachability. In other words, the first
     /// address should be the most likely to be reachable.
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr>;
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        vec![]
+    }
 
-    /// Indicates the behaviour that we connected to the node with the given peer id.
+    /// Indicate to the behaviour that we connected to the node with the given peer id.
     ///
     /// This node now has a handler (as spawned by `new_handler`) running in the background.
     ///
-    /// This method is only called when the connection to the peer is
-    /// established, preceded by `inject_connection_established`.
-    fn inject_connected(&mut self, peer_id: &PeerId);
+    /// This method is only called when the first connection to the peer is established, preceded by
+    /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
+    fn inject_connected(&mut self, _: &PeerId) {}
 
-    /// Indicates the behaviour that we disconnected from the node with the given peer id.
+    /// Indicates to the behaviour that we disconnected from the node with the given peer id.
     ///
     /// There is no handler running anymore for this node. Any event that has been sent to it may
     /// or may not have been processed by the handler.
     ///
-    /// This method is only called when the last established connection to the peer
-    /// is closed, preceded by `inject_connection_closed`.
-    fn inject_disconnected(&mut self, peer_id: &PeerId);
+    /// This method is only called when the last established connection to the peer is closed,
+    /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
+    fn inject_disconnected(&mut self, _: &PeerId) {}
 
     /// Informs the behaviour about a newly established connection to a peer.
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint)
-    {}
+    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
 
     /// Informs the behaviour about a closed connection to a peer.
     ///
     /// A call to this method is always paired with an earlier call to
     /// `inject_connection_established` with the same peer ID, connection ID and
     /// endpoint.
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint)
-    {}
+    fn inject_connection_closed(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
+    }
 
     /// Informs the behaviour that the [`ConnectedPoint`] of an existing connection has changed.
     fn inject_address_change(
@@ -116,8 +135,9 @@ pub trait NetworkBehaviour: Send + 'static {
         _: &PeerId,
         _: &ConnectionId,
         _old: &ConnectedPoint,
-        _new: &ConnectedPoint
-    ) {}
+        _new: &ConnectedPoint,
+    ) {
+    }
 
     /// Informs the behaviour about an event generated by the handler dedicated to the peer identified by `peer_id`.
     /// for the behaviour.
@@ -128,14 +148,19 @@ pub trait NetworkBehaviour: Send + 'static {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
+        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     );
 
     /// Indicates to the behaviour that we tried to reach an address, but failed.
     ///
     /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
     /// last address to attempt for the given node, then `inject_dial_failure` is called afterwards.
-    fn inject_addr_reach_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
+    fn inject_addr_reach_failure(
+        &mut self,
+        _peer_id: Option<&PeerId>,
+        _addr: &Multiaddr,
+        _error: &dyn error::Error,
+    ) {
     }
 
     /// Indicates to the behaviour that we tried to dial all the addresses known for a node, but
@@ -143,36 +168,59 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// The `peer_id` is guaranteed to be in a disconnected state. In other words,
     /// `inject_connected` has not been called, or `inject_disconnected` has been called since then.
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
+    fn inject_dial_failure(
+        &mut self,
+        _peer_id: &PeerId,
+        _handler: Self::ProtocolsHandler,
+        _error: DialError,
+    ) {
     }
+
+    /// Indicates to the behaviour that an error happened on an incoming connection during its
+    /// initial handshake.
+    ///
+    /// This can include, for example, an error during the handshake of the encryption layer, or the
+    /// connection unexpectedly closed.
+    fn inject_listen_failure(
+        &mut self,
+        _local_addr: &Multiaddr,
+        _send_back_addr: &Multiaddr,
+        _handler: Self::ProtocolsHandler,
+    ) {
+    }
+
+    /// Indicates to the behaviour that a new listener was created.
+    fn inject_new_listener(&mut self, _id: ListenerId) {}
 
     /// Indicates to the behaviour that we have started listening on a new multiaddr.
-    fn inject_new_listen_addr(&mut self, _addr: &Multiaddr) {
-    }
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {}
 
-    /// Indicates to the behaviour that a new multiaddr we were listening on has expired,
+    /// Indicates to the behaviour that a multiaddr we were listening on has expired,
     /// which means that we are no longer listening in it.
-    fn inject_expired_listen_addr(&mut self, _addr: &Multiaddr) {
-    }
-
-    /// Indicates to the behaviour that we have discovered a new external address for us.
-    fn inject_new_external_addr(&mut self, _addr: &Multiaddr) {
-    }
+    fn inject_expired_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {}
 
     /// A listener experienced an error.
     fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
     }
 
     /// A listener closed.
-    fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {
-    }
+    fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {}
+
+    /// Indicates to the behaviour that we have discovered a new external address for us.
+    fn inject_new_external_addr(&mut self, _addr: &Multiaddr) {}
+
+    /// Indicates to the behaviour that an external address was removed.
+    fn inject_expired_external_addr(&mut self, _addr: &Multiaddr) {}
 
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -182,7 +230,7 @@ pub trait PollParameters {
     /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
     type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
     /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
-    type ExternalAddressesIter: ExactSizeIterator<Item = Multiaddr>;
+    type ExternalAddressesIter: ExactSizeIterator<Item = AddressRecord>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
@@ -217,32 +265,233 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 /// in whose context it is executing.
 ///
 /// [`Swarm`]: super::Swarm
-#[derive(Debug, Clone)]
-pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
+//
+// Note: `TInEvent` is needed to be able to implement
+// [`NetworkBehaviourAction::map_in`], mapping the handler `InEvent` leaving the
+// handler itself untouched.
+#[derive(Debug)]
+pub enum NetworkBehaviourAction<
+    TOutEvent,
+    THandler: IntoProtocolsHandler,
+    TInEvent = THandlerInEvent<THandler>,
+> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
-    /// Instructs the swarm to dial the given multiaddress, with no knowledge of the `PeerId` that
-    /// may be reached.
+    /// Instructs the swarm to dial the given multiaddress optionally including a [`PeerId`].
+    ///
+    /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
+    /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
+    ///
+    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
+    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
+    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
+    /// can be included in the handler, and thus directly send on connection success or extracted by
+    /// the [`NetworkBehaviour`] on connection failure. See [`NetworkBehaviourAction::DialPeer`] for
+    /// example.
     DialAddress {
         /// The address to dial.
         address: Multiaddr,
+        /// The handler to be used to handle the connection to the peer.
+        handler: THandler,
     },
 
     /// Instructs the swarm to dial a known `PeerId`.
     ///
-    /// The `addresses_of_peer` method is called to determine which addresses to attempt to reach.
+    /// The [`NetworkBehaviour::addresses_of_peer`] method is called to determine which addresses to
+    /// attempt to reach.
     ///
     /// If we were already trying to dial this node, the addresses that are not yet in the queue of
     /// addresses to try are added back to this queue.
     ///
-    /// On success, [`NetworkBehaviour::inject_connected`] is invoked.
+    /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
     /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
+    ///
+    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
+    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
+    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
+    /// can be included in the handler, and thus directly send on connection success or extracted by
+    /// the [`NetworkBehaviour`] on connection failure.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use futures::executor::block_on;
+    /// # use futures::stream::StreamExt;
+    /// # use libp2p::core::connection::ConnectionId;
+    /// # use libp2p::core::identity;
+    /// # use libp2p::core::transport::{MemoryTransport, Transport};
+    /// # use libp2p::core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+    /// # use libp2p::core::PeerId;
+    /// # use libp2p::plaintext::PlainText2Config;
+    /// # use libp2p::swarm::{
+    /// #     DialError, DialPeerCondition, IntoProtocolsHandler, KeepAlive, NegotiatedSubstream,
+    /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler,
+    /// #     ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
+    /// # };
+    /// # use libp2p::yamux;
+    /// # use std::collections::VecDeque;
+    /// # use std::task::{Context, Poll};
+    /// # use void::Void;
+    /// #
+    /// # let local_key = identity::Keypair::generate_ed25519();
+    /// # let local_public_key = local_key.public();
+    /// # let local_peer_id = PeerId::from(local_public_key.clone());
+    /// #
+    /// # let transport = MemoryTransport::default()
+    /// #     .upgrade(upgrade::Version::V1)
+    /// #     .authenticate(PlainText2Config { local_public_key })
+    /// #     .multiplex(yamux::YamuxConfig::default())
+    /// #     .boxed();
+    /// #
+    /// # let mut swarm = Swarm::new(transport, MyBehaviour::default(), local_peer_id);
+    /// #
+    /// // Super precious message that we should better not lose.
+    /// let message = PreciousMessage("My precious message".to_string());
+    ///
+    /// // Unfortunately this peer is offline, thus sending our message to it will fail.
+    /// let offline_peer = PeerId::random();
+    ///
+    /// // Let's send it anyways. We should get it back in case connecting to the peer fails.
+    /// swarm.behaviour_mut().send(offline_peer, message);
+    ///
+    /// block_on(async {
+    ///     // As expected, sending failed. But great news, we got our message back.
+    ///     matches!(
+    ///         swarm.next().await.expect("Infinite stream"),
+    ///         SwarmEvent::Behaviour(PreciousMessage(_))
+    ///     );
+    /// });
+    ///
+    /// # #[derive(Default)]
+    /// # struct MyBehaviour {
+    /// #     outbox_to_swarm: VecDeque<NetworkBehaviourAction<PreciousMessage, MyHandler>>,
+    /// # }
+    /// #
+    /// # impl MyBehaviour {
+    /// #     fn send(&mut self, peer_id: PeerId, msg: PreciousMessage) {
+    /// #         self.outbox_to_swarm
+    /// #             .push_back(NetworkBehaviourAction::DialPeer {
+    /// #                 peer_id,
+    /// #                 condition: DialPeerCondition::Always,
+    /// #                 handler: MyHandler { message: Some(msg) },
+    /// #             });
+    /// #     }
+    /// # }
+    /// #
+    /// impl NetworkBehaviour for MyBehaviour {
+    ///     # type ProtocolsHandler = MyHandler;
+    ///     # type OutEvent = PreciousMessage;
+    ///     #
+    ///     # fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    ///     #     MyHandler { message: None }
+    ///     # }
+    ///     #
+    ///     #
+    ///     # fn inject_event(
+    ///     #     &mut self,
+    ///     #     _: PeerId,
+    ///     #     _: ConnectionId,
+    ///     #     _: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+    ///     # ) {
+    ///     #     unreachable!();
+    ///     # }
+    ///     #
+    ///     fn inject_dial_failure(
+    ///         &mut self,
+    ///         _: &PeerId,
+    ///         handler: Self::ProtocolsHandler,
+    ///         _: DialError,
+    ///     ) {
+    ///         // As expected, sending the message failed. But lucky us, we got the handler back, thus
+    ///         // the precious message is not lost and we can return it back to the user.
+    ///         let msg = handler.message.unwrap();
+    ///         self.outbox_to_swarm
+    ///             .push_back(NetworkBehaviourAction::GenerateEvent(msg))
+    ///     }
+    ///     #
+    ///     # fn poll(
+    ///     #     &mut self,
+    ///     #     _: &mut Context<'_>,
+    ///     #     _: &mut impl PollParameters,
+    ///     # ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ///     #     if let Some(action) = self.outbox_to_swarm.pop_front() {
+    ///     #         return Poll::Ready(action);
+    ///     #     }
+    ///     #     Poll::Pending
+    ///     # }
+    /// }
+    ///
+    /// # struct MyHandler {
+    /// #     message: Option<PreciousMessage>,
+    /// # }
+    /// #
+    /// # impl ProtocolsHandler for MyHandler {
+    /// #     type InEvent = Void;
+    /// #     type OutEvent = Void;
+    /// #     type Error = Void;
+    /// #     type InboundProtocol = DeniedUpgrade;
+    /// #     type OutboundProtocol = DeniedUpgrade;
+    /// #     type InboundOpenInfo = ();
+    /// #     type OutboundOpenInfo = Void;
+    /// #
+    /// #     fn listen_protocol(
+    /// #         &self,
+    /// #     ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    /// #         SubstreamProtocol::new(DeniedUpgrade, ())
+    /// #     }
+    /// #
+    /// #     fn inject_fully_negotiated_inbound(
+    /// #         &mut self,
+    /// #         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+    /// #         _: Self::InboundOpenInfo,
+    /// #     ) {
+    /// #     }
+    /// #
+    /// #     fn inject_fully_negotiated_outbound(
+    /// #         &mut self,
+    /// #         _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
+    /// #         _: Self::OutboundOpenInfo,
+    /// #     ) {
+    /// #     }
+    /// #
+    /// #     fn inject_event(&mut self, _event: Self::InEvent) {}
+    /// #
+    /// #     fn inject_dial_upgrade_error(
+    /// #         &mut self,
+    /// #         _: Self::OutboundOpenInfo,
+    /// #         _: ProtocolsHandlerUpgrErr<Void>,
+    /// #     ) {
+    /// #     }
+    /// #
+    /// #     fn connection_keep_alive(&self) -> KeepAlive {
+    /// #         KeepAlive::Yes
+    /// #     }
+    /// #
+    /// #     fn poll(
+    /// #         &mut self,
+    /// #         _: &mut Context<'_>,
+    /// #     ) -> Poll<
+    /// #         ProtocolsHandlerEvent<
+    /// #             Self::OutboundProtocol,
+    /// #             Self::OutboundOpenInfo,
+    /// #             Self::OutEvent,
+    /// #             Self::Error,
+    /// #         >,
+    /// #     > {
+    /// #         todo!("If `Self::message.is_some()` send the message to the remote.")
+    /// #     }
+    /// # }
+    /// # #[derive(Debug, PartialEq, Eq)]
+    /// # struct PreciousMessage(String);
+    /// ```
     DialPeer {
         /// The peer to try reach.
         peer_id: PeerId,
         /// The condition for initiating a new dialing attempt.
         condition: DialPeerCondition,
+        /// The handler to be used to handle the connection to the peer.
+        handler: THandler,
     },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
@@ -263,14 +512,15 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     NotifyHandler {
         /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
-        /// The ID of the connection whose `ProtocolsHandler` to notify.
+        /// The options w.r.t. which connection handler to notify of the event.
         handler: NotifyHandler,
         /// The event to send.
         event: TInEvent,
     },
 
-    /// Informs the `Swarm` about a multi-address observed by a remote for
-    /// the local node.
+    /// Informs the `Swarm` about an address observed by a remote for
+    /// the local node by which the local node is supposedly publicly
+    /// reachable.
     ///
     /// It is advisable to issue `ReportObservedAddr` actions at a fixed frequency
     /// per node. This way address information will be more accurate over time
@@ -278,62 +528,181 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     ReportObservedAddr {
         /// The observed address of the local node.
         address: Multiaddr,
+        /// The score to associate with this observation, i.e.
+        /// an indicator for the trusworthiness of this address
+        /// relative to other observed addresses.
+        score: AddressScore,
+    },
+
+    /// Instructs the `Swarm` to initiate a graceful close of one or all connections
+    /// with the given peer.
+    ///
+    /// Note: Closing a connection via
+    /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
+    /// corresponding [`ProtocolsHandler`].
+    /// Closing a connection via a [`ProtocolsHandler`] can be done
+    /// either in a collaborative manner across [`ProtocolsHandler`]s
+    /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
+    /// [`ProtocolsHandlerEvent::Close`](crate::ProtocolsHandlerEvent::Close).
+    CloseConnection {
+        /// The peer to disconnect.
+        peer_id: PeerId,
+        /// Whether to close a specific or all connections to the given peer.
+        connection: CloseConnection,
     },
 }
 
-impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
+impl<TOutEvent, THandler: IntoProtocolsHandler, TInEventOld>
+    NetworkBehaviourAction<TOutEvent, THandler, TInEventOld>
+{
     /// Map the handler event.
-    pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent> {
+    pub fn map_in<TInEventNew>(
+        self,
+        f: impl FnOnce(TInEventOld) -> TInEventNew,
+    ) -> NetworkBehaviourAction<TOutEvent, THandler, TInEventNew> {
         match self {
-            NetworkBehaviourAction::GenerateEvent(e) =>
-                NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::DialAddress { address } =>
-                NetworkBehaviourAction::DialAddress { address },
-            NetworkBehaviourAction::DialPeer { peer_id, condition } =>
-                NetworkBehaviourAction::DialPeer { peer_id, condition },
-            NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
-                NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    handler,
-                    event: f(event)
-                },
-            NetworkBehaviourAction::ReportObservedAddr { address } =>
-                NetworkBehaviourAction::ReportObservedAddr { address }
-        }
-    }
-
-    /// Map the event the swarm will return.
-    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E> {
-        match self {
-            NetworkBehaviourAction::GenerateEvent(e) =>
-                NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::DialAddress { address } =>
-                NetworkBehaviourAction::DialAddress { address },
-            NetworkBehaviourAction::DialPeer { peer_id, condition } =>
-                NetworkBehaviourAction::DialPeer { peer_id, condition },
-            NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
-                NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
-            NetworkBehaviourAction::ReportObservedAddr { address } =>
-                NetworkBehaviourAction::ReportObservedAddr { address }
+            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
+            NetworkBehaviourAction::DialAddress { address, handler } => {
+                NetworkBehaviourAction::DialAddress { address, handler }
+            }
+            NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            } => NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            },
+            NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            } => NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event: f(event),
+            },
+            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
+            }
+            NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            } => NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            },
         }
     }
 }
 
-/// The options w.r.t. which connection handlers to notify of an event.
+impl<TOutEvent, THandler: IntoProtocolsHandler> NetworkBehaviourAction<TOutEvent, THandler> {
+    /// Map the event the swarm will return.
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, THandler> {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
+            NetworkBehaviourAction::DialAddress { address, handler } => {
+                NetworkBehaviourAction::DialAddress { address, handler }
+            }
+            NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            } => NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            },
+            NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            } => NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            },
+            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
+            }
+            NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            } => NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            },
+        }
+    }
+}
+
+impl<TInEvent, TOutEvent, THandlerOld> NetworkBehaviourAction<TOutEvent, THandlerOld>
+where
+    THandlerOld: IntoProtocolsHandler,
+    <THandlerOld as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent>,
+{
+    /// Map the handler.
+    pub fn map_handler<THandlerNew>(
+        self,
+        f: impl FnOnce(THandlerOld) -> THandlerNew,
+    ) -> NetworkBehaviourAction<TOutEvent, THandlerNew>
+    where
+        THandlerNew: IntoProtocolsHandler,
+        <THandlerNew as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent>,
+    {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
+            NetworkBehaviourAction::DialAddress { address, handler } => {
+                NetworkBehaviourAction::DialAddress {
+                    address,
+                    handler: f(handler),
+                }
+            }
+            NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler,
+            } => NetworkBehaviourAction::DialPeer {
+                peer_id,
+                condition,
+                handler: f(handler),
+            },
+            NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            } => NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            },
+            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
+            }
+            NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            } => NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            },
+        }
+    }
+}
+
+/// The options w.r.t. which connection handler to notify of an event.
 #[derive(Debug, Clone)]
 pub enum NotifyHandler {
     /// Notify a particular connection handler.
     One(ConnectionId),
     /// Notify an arbitrary connection handler.
     Any,
-    /// Notify all connection handlers.
-    All
 }
 
 /// The available conditions under which a new dialing attempt to
 /// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].
 #[derive(Debug, Copy, Clone)]
-#[non_exhaustive]
 pub enum DialPeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
     /// considered disconnected, i.e. there is no established connection
@@ -359,5 +728,20 @@ pub enum DialPeerCondition {
 impl Default for DialPeerCondition {
     fn default() -> Self {
         DialPeerCondition::Disconnected
+    }
+}
+
+/// The options which connections to close.
+#[derive(Debug, Clone)]
+pub enum CloseConnection {
+    /// Disconnect a particular connection.
+    One(ConnectionId),
+    /// Disconnect all connections.
+    All,
+}
+
+impl Default for CloseConnection {
+    fn default() -> Self {
+        CloseConnection::All
     }
 }

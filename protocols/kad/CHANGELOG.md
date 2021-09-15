@@ -1,6 +1,82 @@
-# 0.26.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Update dependencies.
+
+- Introduce `KademliaStoreInserts` option, which allows to filter records (see
+  [PR 2163]).
+
+[PR 2163]: https://github.com/libp2p/rust-libp2p/pull/2163
+
+# 0.31.0 [2021-07-12]
+
+- Update dependencies.
+
+- Expose inbound request information (see [PR 2087]). Note:
+  `KademliaEvent::QueryResult` is renamed to
+  `KademliaEvent::OutboundQueryCompleted`.
+
+- Expose whether `KademliaEvent::RoutingUpdated` is triggered with new peer (see
+  [PR 2087]).
+
+- Expose kbucket range on `KademliaEvent::RoutingUpdated` (see [PR 2087]).
+
+- Remove false `debug_assert` on `connected_peers` (see [PR 2120]).
+
+- Return correct number of remaining bootstrap requests (see [PR 2125]).
+
+[PR 2087]: https://github.com/libp2p/rust-libp2p/pull/2087
+[PR 2120]: https://github.com/libp2p/rust-libp2p/pull/2120
+[PR 2125]: https://github.com/libp2p/rust-libp2p/pull/2125
+
+# 0.30.0 [2021-04-13]
+
+- Update `libp2p-swarm`.
+
+# 0.29.0 [2021-03-17]
+
+- Add `KademliaCaching` and `KademliaConfig::set_caching` to configure
+  whether Kademlia should track, in lookups, the closest nodes to a key
+  that did not return a record, via `GetRecordOk::cache_candidates`.
+  As before, if a lookup used a quorum of 1, these candidates will
+  automatically be sent the found record. Otherwise, with a lookup
+  quorum of > 1, the candidates can be used with `Kademlia::put_record_to`
+  after selecting one of the return records to cache. As is the current
+  behaviour, caching is enabled by default with a `max_peers` of 1, i.e.
+  it only tracks the closest node to the key that did not return a record.
+
+- Add `Kademlia::put_record_to` for storing a record at specific nodes,
+  e.g. for write-back caching after a successful read with quorum > 1.
+
+- Update `libp2p-swarm`.
+
+- Update dependencies.
+
+# 0.28.1 [2021-02-15]
+
+- Update dependencies.
+
+# 0.28.0 [2021-01-12]
+
+- Update dependencies.
+
+# 0.27.1 [2021-01-11]
+
+- Add From impls for `kbucket::Key`.
+  [PR 1909](https://github.com/libp2p/rust-libp2p/pull/1909).
+
+# 0.27.0 [2020-12-17]
 
 - Update `libp2p-core` and `libp2p-swarm`.
+
+# 0.26.0 [2020-11-25]
+
+- Update `libp2p-core` and `libp2p-swarm`.
+
+- Have two `ProviderRecord`s be equal iff their `key` and `provider` fields are
+  equal. [PR 1850](https://github.com/libp2p/rust-libp2p/pull/1850/).
 
 # 0.25.0 [2020-11-09]
 

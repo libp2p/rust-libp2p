@@ -35,9 +35,9 @@
 //! [Identify]: https://github.com/libp2p/specs/tree/master/identify
 //! [`Identify`]: self::Identify
 //! [`IdentifyEvent`]: self::IdentifyEvent
-//! [`IdentifyInfo`]: self::IdentifyEvent
+//! [`IdentifyInfo`]: self::IdentifyInfo
 
-pub use self::identify::{Identify, IdentifyEvent};
+pub use self::identify::{Identify, IdentifyConfig, IdentifyEvent};
 pub use self::protocol::IdentifyInfo;
 
 mod handler;
@@ -47,4 +47,3 @@ mod protocol;
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 }
-

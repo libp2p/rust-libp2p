@@ -28,15 +28,16 @@ use std::{
     time::Duration,
 };
 
+use futures::StreamExt;
 use libp2p_core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade,
-    Multiaddr, Transport,
+    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
 use libp2p_gossipsub::{
-    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic, ValidationMode,
+    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
+    ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {
@@ -48,10 +49,15 @@ impl Future for Graph {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
-            match node.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => return Poll::Ready((addr.clone(), event)),
-                Poll::Ready(None) => panic!("unexpected None when polling nodes"),
-                Poll::Pending => {}
+            loop {
+                match node.poll_next_unpin(cx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => {
+                        return Poll::Ready((addr.clone(), event))
+                    }
+                    Poll::Ready(Some(_)) => {}
+                    Poll::Ready(None) => panic!("unexpected None when polling nodes"),
+                    Poll::Pending => break,
+                }
             }
         }
 
@@ -106,14 +112,10 @@ impl Graph {
     /// `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
-    fn wait_for<F: FnMut(GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
-        let fut = futures::future::poll_fn(move |cx| {
-            match self.poll_unpin(cx) {
-                Poll::Ready((_addr, ev)) if f(ev.clone()) => {
-                    Poll::Ready(())
-                }
-                _ => Poll::Pending,
-            }
+    fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
+        let fut = futures::future::poll_fn(move |cx| match self.poll_unpin(cx) {
+            Poll::Ready((_addr, ev)) if f(&ev) => Poll::Ready(()),
+            _ => Poll::Pending,
         });
 
         let fut = async_std::future::timeout(Duration::from_secs(10), fut);
@@ -153,29 +155,30 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
-    let peer_id = public_key.clone().into_peer_id();
+    let peer_id = public_key.to_peer_id();
 
     // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
     // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let config = GossipsubConfigBuilder::new()
+    let config = GossipsubConfigBuilder::default()
         .heartbeat_initial_delay(Duration::from_millis(100))
         .heartbeat_interval(Duration::from_millis(200))
         .history_length(10)
         .history_gossip(10)
         .validation_mode(ValidationMode::Permissive)
-        .build();
-    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id.clone()), config);
+        .build()
+        .unwrap();
+    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id.clone()), config).unwrap();
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
     let mut addr: Multiaddr = Protocol::Memory(port).into();
-    Swarm::listen_on(&mut swarm, addr.clone()).unwrap();
+    swarm.listen_on(addr.clone()).unwrap();
 
     addr = addr.with(libp2p_core::multiaddr::Protocol::P2p(
-        public_key.into_peer_id().into(),
+        public_key.to_peer_id().into(),
     ));
 
     (addr, swarm)
@@ -186,7 +189,7 @@ fn multi_hop_propagation() {
     let _ = env_logger::try_init();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
-        if num_nodes < 2 || num_nodes > 100 {
+        if num_nodes < 2 || num_nodes > 50 {
             return TestResult::discard();
         }
 
@@ -196,9 +199,9 @@ fn multi_hop_propagation() {
         let number_nodes = graph.nodes.len();
 
         // Subscribe each node to the same topic.
-        let topic = Topic::new("test-net".into());
+        let topic = Topic::new("test-net");
         for (_addr, node) in &mut graph.nodes {
-            node.subscribe(topic.clone());
+            node.behaviour_mut().subscribe(&topic).unwrap();
         }
 
         // Wait for all nodes to be subscribed.
@@ -225,12 +228,16 @@ fn multi_hop_propagation() {
         graph = graph.drain_poll();
 
         // Publish a single message.
-        graph.nodes[0].1.publish(&topic, vec![1, 2, 3]).unwrap();
+        graph.nodes[0]
+            .1
+            .behaviour_mut()
+            .publish(topic, vec![1, 2, 3])
+            .unwrap();
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
         let all_received = graph.wait_for(move |ev| {
-            if let GossipsubEvent::Message(..) = ev {
+            if let GossipsubEvent::Message { .. } = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {
                     return true;
@@ -250,6 +257,6 @@ fn multi_hop_propagation() {
     }
 
     QuickCheck::new()
-        .max_tests(10)
+        .max_tests(5)
         .quickcheck(prop as fn(u8, u64) -> TestResult)
 }

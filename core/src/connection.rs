@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod error;
-mod handler;
+pub(crate) mod handler;
 mod listeners;
 mod substream;
 
@@ -28,15 +28,16 @@ pub(crate) mod pool;
 
 pub use error::{ConnectionError, PendingConnectionError};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
-pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
+pub use listeners::{ListenerId, ListenersEvent, ListenersStream};
 pub use manager::ConnectionId;
-pub use substream::{Substream, SubstreamEndpoint, Close};
+pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
+pub use substream::{Close, Substream, SubstreamEndpoint};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
-use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use std::hash::Hash;
+use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
@@ -54,7 +55,7 @@ impl std::ops::Not for Endpoint {
     fn not(self) -> Self::Output {
         match self {
             Endpoint::Dialer => Endpoint::Listener,
-            Endpoint::Listener => Endpoint::Dialer
+            Endpoint::Listener => Endpoint::Dialer,
         }
     }
 }
@@ -62,20 +63,12 @@ impl std::ops::Not for Endpoint {
 impl Endpoint {
     /// Is this endpoint a dialer?
     pub fn is_dialer(self) -> bool {
-        if let Endpoint::Dialer = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Endpoint::Dialer)
     }
 
     /// Is this endpoint a listener?
     pub fn is_listener(self) -> bool {
-        if let Endpoint::Listener = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Endpoint::Listener)
     }
 }
 
@@ -93,7 +86,7 @@ pub enum ConnectedPoint {
         local_addr: Multiaddr,
         /// Stack of protocols used to send back data to the remote.
         send_back_addr: Multiaddr,
-    }
+    },
 }
 
 impl From<&'_ ConnectedPoint> for Endpoint {
@@ -113,7 +106,7 @@ impl ConnectedPoint {
     pub fn to_endpoint(&self) -> Endpoint {
         match self {
             ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener
+            ConnectedPoint::Listener { .. } => Endpoint::Listener,
         }
     }
 
@@ -121,7 +114,7 @@ impl ConnectedPoint {
     pub fn is_dialer(&self) -> bool {
         match self {
             ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false
+            ConnectedPoint::Listener { .. } => false,
         }
     }
 
@@ -129,7 +122,7 @@ impl ConnectedPoint {
     pub fn is_listener(&self) -> bool {
         match self {
             ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true
+            ConnectedPoint::Listener { .. } => true,
         }
     }
 
@@ -236,17 +229,18 @@ where
         self.handler.inject_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning a
-    /// `Future` that resolves when connection shutdown is complete.
-    pub fn close(self) -> Close<TMuxer> {
-        self.muxing.close().0
+    /// Begins an orderly shutdown of the connection, returning the connection
+    /// handler and a `Future` that resolves when connection shutdown is complete.
+    pub fn close(self) -> (THandler, Close<TMuxer>) {
+        (self.handler, self.muxing.close().0)
     }
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
-    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>>
-    {
+    pub fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
         loop {
             let mut io_pending = false;
 
@@ -254,10 +248,13 @@ where
             // of new substreams.
             match self.muxing.poll(cx) {
                 Poll::Pending => io_pending = true,
-                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
-                    self.handler.inject_substream(substream, SubstreamEndpoint::Listener)
-                }
-                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream { user_data, substream })) => {
+                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => self
+                    .handler
+                    .inject_substream(substream, SubstreamEndpoint::Listener),
+                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream {
+                    user_data,
+                    substream,
+                })) => {
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
@@ -272,7 +269,7 @@ where
             match self.handler.poll(cx) {
                 Poll::Pending => {
                     if io_pending {
-                        return Poll::Pending // Nothing to do
+                        return Poll::Pending; // Nothing to do
                     }
                 }
                 Poll::Ready(Ok(ConnectionHandlerEvent::OutboundSubstreamRequest(user_data))) => {
@@ -317,7 +314,7 @@ impl<'a> OutgoingInfo<'a> {
     /// Builds a `ConnectedPoint` corresponding to the outgoing connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Dialer {
-            address: self.address.clone()
+            address: self.address.clone(),
         }
     }
 }
@@ -326,9 +323,9 @@ impl<'a> OutgoingInfo<'a> {
 #[derive(Debug, Clone)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
-    pub limit: usize,
+    pub limit: u32,
     /// The current number of connections.
-    pub current: usize,
+    pub current: u32,
 }
 
 impl fmt::Display for ConnectionLimit {

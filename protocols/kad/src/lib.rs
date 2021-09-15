@@ -39,48 +39,20 @@ mod dht_proto {
 }
 
 pub use addresses::Addresses;
-pub use behaviour::{Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
-    QueryRef,
-    QueryMut,
-
-    QueryResult,
-    QueryInfo,
+    AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
+    BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
+    GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
+    GetRecordOk, GetRecordResult, InboundRequest, PeerRecord, PutRecordContext, PutRecordError,
+    PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef, QueryResult,
     QueryStats,
-
-    PeerRecord,
-
-    BootstrapResult,
-    BootstrapOk,
-    BootstrapError,
-
-    GetRecordResult,
-    GetRecordOk,
-    GetRecordError,
-
-    PutRecordPhase,
-    PutRecordContext,
-    PutRecordResult,
-    PutRecordOk,
-    PutRecordError,
-
-    GetClosestPeersResult,
-    GetClosestPeersOk,
-    GetClosestPeersError,
-
-    AddProviderPhase,
-    AddProviderContext,
-    AddProviderResult,
-    AddProviderOk,
-    AddProviderError,
-
-    GetProvidersResult,
-    GetProvidersOk,
-    GetProvidersError,
 };
-pub use query::QueryId;
+pub use behaviour::{
+    Kademlia, KademliaCaching, KademliaConfig, KademliaEvent, KademliaStoreInserts, Quorum,
+};
 pub use protocol::KadConnectionType;
-pub use record::{store, Record, ProviderRecord};
+pub use query::QueryId;
+pub use record::{store, ProviderRecord, Record};
 
 use std::num::NonZeroUsize;
 

@@ -1,4 +1,34 @@
-# 0.25.0 [unreleased]
+# 0.30.0 [unreleased]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+- Update dependencies.
+
+# 0.29.0 [2021-07-12]
+
+- Update dependencies.
+
+- Support stream IDs of up to 60 bit length. See [PR 2094] for details.
+
+[PR 2094]: https://github.com/libp2p/rust-libp2p/pull/2094
+
+# 0.28.0 [2021-03-17]
+
+- Update dependencies.
+
+# 0.27.1 [2021-02-15]
+
+- Update dependencies.
+
+# 0.27.0 [2021-01-12]
+
+- Update dependencies.
+
+# 0.26.0 [2020-12-17]
+
+- Update `libp2p-core`.
+
+# 0.25.0 [2020-11-25]
 
 - Update `libp2p-core`.
 

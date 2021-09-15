@@ -20,19 +20,18 @@
 
 //! Secp256k1 keys.
 
-use asn1_der::{FromDerObject, DerObject};
-use rand::RngCore;
-use sha2::{Digest as ShaDigestTrait, Sha256};
-use secp256k1::{Message, Signature};
 use super::error::{DecodingError, SigningError};
-use zeroize::Zeroize;
+use asn1_der::typed::{DerDecodable, Sequence};
 use core::fmt;
+use libsecp256k1::{Message, Signature};
+use sha2::{Digest as ShaDigestTrait, Sha256};
+use zeroize::Zeroize;
 
 /// A Secp256k1 keypair.
 #[derive(Clone)]
 pub struct Keypair {
     secret: SecretKey,
-    public: PublicKey
+    public: PublicKey,
 }
 
 impl Keypair {
@@ -54,14 +53,16 @@ impl Keypair {
 
 impl fmt::Debug for Keypair {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Keypair").field("public", &self.public).finish()
+        f.debug_struct("Keypair")
+            .field("public", &self.public)
+            .finish()
     }
 }
 
 /// Promote a Secp256k1 secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(secret: SecretKey) -> Keypair {
-        let public = PublicKey(secp256k1::PublicKey::from_secret_key(&secret.0));
+        let public = PublicKey(libsecp256k1::PublicKey::from_secret_key(&secret.0));
         Keypair { secret, public }
     }
 }
@@ -75,7 +76,7 @@ impl From<Keypair> for SecretKey {
 
 /// A Secp256k1 secret key.
 #[derive(Clone)]
-pub struct SecretKey(secp256k1::SecretKey);
+pub struct SecretKey(libsecp256k1::SecretKey);
 
 impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -84,47 +85,41 @@ impl fmt::Debug for SecretKey {
 }
 
 impl SecretKey {
-    /// Generate a new Secp256k1 secret key.
+    /// Generate a new random Secp256k1 secret key.
     pub fn generate() -> SecretKey {
-        let mut r = rand::thread_rng();
-        let mut b = [0; secp256k1::util::SECRET_KEY_SIZE];
-        // This is how it is done in `secp256k1::SecretKey::random` which
-        // we do not use here because it uses `rand::Rng` from rand-0.4.
-        loop {
-            r.fill_bytes(&mut b);
-            if let Ok(k) = secp256k1::SecretKey::parse(&b) {
-                return SecretKey(k)
-            }
-        }
+        SecretKey(libsecp256k1::SecretKey::random(&mut rand::thread_rng()))
     }
 
     /// Create a secret key from a byte slice, zeroing the slice on success.
     /// If the bytes do not constitute a valid Secp256k1 secret key, an
     /// error is returned.
+    ///
+    /// Note that the expected binary format is the same as `libsecp256k1`'s.
     pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
-        let secret = secp256k1::SecretKey::parse_slice(&*sk_bytes)
+        let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
             .map_err(|_| DecodingError::new("failed to parse secp256k1 secret key"))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
 
     /// Decode a DER-encoded Secp256k1 secret key in an ECPrivateKey
-    /// structure as defined in [RFC5915].
+    /// structure as defined in [RFC5915], zeroing the input slice on success.
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     pub fn from_der(mut der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         // TODO: Stricter parsing.
         let der_obj = der.as_mut();
-        let obj: Vec<DerObject> = FromDerObject::deserialize((&*der_obj).iter())
+        let obj: Sequence = DerDecodable::decode(der_obj)
             .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey").source(e))?;
-        der_obj.zeroize();
-        let sk_obj = obj.into_iter().nth(1)
-            .ok_or_else(|| DecodingError::new("Not enough elements in DER"))?;
-        let mut sk_bytes: Vec<u8> = FromDerObject::from_der_object(sk_obj)
-            .map_err(DecodingError::new)?;
+        let sk_obj = obj
+            .get(1)
+            .map_err(|e| DecodingError::new("Not enough elements in DER").source(e))?;
+        let mut sk_bytes: Vec<u8> =
+            asn1_der::typed::DerDecodable::load(sk_obj).map_err(DecodingError::new)?;
         let sk = SecretKey::from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
+        der_obj.zeroize();
         Ok(sk)
     }
 
@@ -146,13 +141,27 @@ impl SecretKey {
     pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         let m = Message::parse_slice(msg)
             .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
-        Ok(secp256k1::sign(&m, &self.0).0.serialize_der().as_ref().into())
+        Ok(libsecp256k1::sign(&m, &self.0)
+            .0
+            .serialize_der()
+            .as_ref()
+            .into())
     }
 }
 
 /// A Secp256k1 public key.
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct PublicKey(secp256k1::PublicKey);
+#[derive(PartialEq, Eq, Clone)]
+pub struct PublicKey(libsecp256k1::PublicKey);
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PublicKey(compressed): ")?;
+        for byte in &self.encode() {
+            write!(f, "{:x}", byte)?;
+        }
+        Ok(())
+    }
+}
 
 impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.
@@ -163,7 +172,7 @@ impl PublicKey {
     /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
     pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
         Message::parse_slice(msg)
-            .and_then(|m| Signature::parse_der(sig).map(|s| secp256k1::verify(&m, &s, &self.0)))
+            .and_then(|m| Signature::parse_der(sig).map(|s| libsecp256k1::verify(&m, &s, &self.0)))
             .unwrap_or(false)
     }
 
@@ -181,7 +190,7 @@ impl PublicKey {
     /// Decode a public key from a byte slice in the the format produced
     /// by `encode`.
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        secp256k1::PublicKey::parse_slice(k, Some(secp256k1::PublicKeyFormat::Compressed))
+        libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))
             .map_err(|_| DecodingError::new("failed to parse secp256k1 public key"))
             .map(PublicKey)
     }
