@@ -434,7 +434,7 @@ impl<THandler: IntoConnectionHandler, TTransErr> Pool<THandler, TTransErr> {
     /// Returns an iterator for information on all pending outgoing connections.
     pub fn iter_pending_outgoing(&self) -> impl Iterator<Item = OutgoingInfo<'_>> {
         self.iter_pending_info()
-            .filter_map(|(_, ref endpoint, ref peer_id)| match endpoint {
+            .filter_map(|(_, ref endpoint, peer_id)| match endpoint {
                 ConnectedPoint::Listener { .. } => None,
                 ConnectedPoint::Dialer { address } => Some(OutgoingInfo {
                     address,

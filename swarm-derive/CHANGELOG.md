@@ -2,6 +2,8 @@
 
 - Update to latest `libp2p-swarm` changes (see [PR 2191]).
 
+- Make `event_process = false` the default.
+
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 
 # 0.24.0 [2021-07-12]

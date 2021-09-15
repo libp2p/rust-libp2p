@@ -114,7 +114,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         if this.send_offset == MAX_FRAME_LEN {
             trace!("write: sending {} bytes", MAX_FRAME_LEN);
             ready!(io.as_mut().poll_ready(cx))?;
-            io.as_mut().start_send(&frame_buf)?;
+            io.as_mut().start_send(frame_buf)?;
             this.send_offset = 0;
         }
 
@@ -138,7 +138,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         if this.send_offset > 0 {
             ready!(io.as_mut().poll_ready(cx))?;
             trace!("flush: sending {} bytes", this.send_offset);
-            io.as_mut().start_send(&frame_buf)?;
+            io.as_mut().start_send(frame_buf)?;
             this.send_offset = 0;
         }
 

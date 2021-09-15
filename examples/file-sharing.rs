@@ -582,7 +582,7 @@ mod network {
     }
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = false, out_event = "ComposedEvent")]
+    #[behaviour(out_event = "ComposedEvent")]
     struct ComposedBehaviour {
         request_response: RequestResponse<FileExchangeCodec>,
         kademlia: Kademlia<MemoryStore>,

@@ -36,7 +36,7 @@ jobs:
     container:
       image: rust
       env:
-        CC: clang-10
+        CC: clang-11
     steps:
 
     - name: Cancel Previous Runs

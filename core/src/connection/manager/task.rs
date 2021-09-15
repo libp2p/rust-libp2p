@@ -348,7 +348,7 @@ where
                         Poll::Ready(Ok(())) => {
                             let event = Event::Closed {
                                 id: this.id,
-                                error: error.map(|limit| ConnectionError::ConnectionLimit(limit)),
+                                error: error.map(ConnectionError::ConnectionLimit),
                                 handler,
                             };
                             this.state = State::Terminating(event);

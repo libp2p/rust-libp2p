@@ -157,8 +157,8 @@ enum PublishConfig {
 impl PublishConfig {
     pub fn get_own_id(&self) -> Option<&PeerId> {
         match self {
-            Self::Signing { author, .. } => Some(&author),
-            Self::Author(author) => Some(&author),
+            Self::Signing { author, .. } => Some(author),
+            Self::Author(author) => Some(author),
             _ => None,
         }
     }
@@ -381,7 +381,7 @@ where
 
         // We do not allow configurations where a published message would also be rejected if it
         // were received locally.
-        validate_config(&privacy, &config.validation_mode())?;
+        validate_config(&privacy, config.validation_mode())?;
 
         // Set up message publishing parameters.
 
@@ -990,7 +990,7 @@ where
             get_random_peers(
                 &self.topic_peers,
                 &self.connected_peers,
-                &topic_hash,
+                topic_hash,
                 self.config.prune_peers(),
                 |p| p != peer && !self.score_below_threshold(p, |_| 0.0).0,
             )
@@ -1337,7 +1337,7 @@ where
                         *peer_id,
                         vec![&topic_hash],
                         &self.mesh,
-                        self.peer_topics.get(&peer_id),
+                        self.peer_topics.get(peer_id),
                         &mut self.events,
                         &self.connected_peers,
                     );
@@ -1396,7 +1396,7 @@ where
         always_update_backoff: bool,
     ) {
         let mut update_backoff = always_update_backoff;
-        if let Some(peers) = self.mesh.get_mut(&topic_hash) {
+        if let Some(peers) = self.mesh.get_mut(topic_hash) {
             // remove the peer if it exists in the mesh
             if peers.remove(peer_id) {
                 debug!(
@@ -1416,7 +1416,7 @@ where
                     *peer_id,
                     topic_hash,
                     &self.mesh,
-                    self.peer_topics.get(&peer_id),
+                    self.peer_topics.get(peer_id),
                     &mut self.events,
                     &self.connected_peers,
                 );
@@ -1429,7 +1429,7 @@ where
                 self.config.prune_backoff()
             };
             // is there a backoff specified by the peer? if so obey it.
-            self.backoffs.update_backoff(&topic_hash, peer_id, time);
+            self.backoffs.update_backoff(topic_hash, peer_id, time);
         }
     }
 
@@ -1570,7 +1570,7 @@ where
                 own_id != propagation_source
                     && raw_message.source.as_ref().map_or(false, |s| s == own_id)
             } else {
-                self.published_message_ids.contains(&msg_id)
+                self.published_message_ids.contains(msg_id)
             };
 
         if self_published {
@@ -2176,7 +2176,7 @@ where
                         "HEARTBEAT: Fanout topic removed due to timeout. Topic: {:?}",
                         topic_hash
                     );
-                    fanout.remove(&topic_hash);
+                    fanout.remove(topic_hash);
                     return false;
                 }
                 true
@@ -2195,7 +2195,7 @@ where
                 // is the peer still subscribed to the topic?
                 match self.peer_topics.get(peer) {
                     Some(topics) => {
-                        if !topics.contains(&topic_hash) || score(peer) < publish_threshold {
+                        if !topics.contains(topic_hash) || score(peer) < publish_threshold {
                             debug!(
                                 "HEARTBEAT: Peer removed from fanout for topic: {:?}",
                                 topic_hash
@@ -2291,7 +2291,7 @@ where
     fn emit_gossip(&mut self) {
         let mut rng = thread_rng();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
-            let mut message_ids = self.mcache.get_gossip_message_ids(&topic_hash);
+            let mut message_ids = self.mcache.get_gossip_message_ids(topic_hash);
             if message_ids.is_empty() {
                 return;
             }
@@ -2319,7 +2319,7 @@ where
             let to_msg_peers = get_random_peers_dynamic(
                 &self.topic_peers,
                 &self.connected_peers,
-                &topic_hash,
+                topic_hash,
                 n_map,
                 |peer| {
                     !peers.contains(peer)
@@ -2438,7 +2438,7 @@ where
                     *peer,
                     topic_hash,
                     &self.mesh,
-                    self.peer_topics.get(&peer),
+                    self.peer_topics.get(peer),
                     &mut self.events,
                     &self.connected_peers,
                 );
@@ -2483,7 +2483,7 @@ where
         // add mesh peers
         let topic = &message.topic;
         // mesh
-        if let Some(mesh_peers) = self.mesh.get(&topic) {
+        if let Some(mesh_peers) = self.mesh.get(topic) {
             for peer_id in mesh_peers {
                 if Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref() {
                     recipient_peers.insert(*peer_id);
@@ -2877,13 +2877,13 @@ where
             // remove peer from all mappings
             for topic in topics {
                 // check the mesh for the topic
-                if let Some(mesh_peers) = self.mesh.get_mut(&topic) {
+                if let Some(mesh_peers) = self.mesh.get_mut(topic) {
                     // check if the peer is in the mesh and remove it
                     mesh_peers.remove(peer_id);
                 }
 
                 // remove from topic_peers
-                if let Some(peer_list) = self.topic_peers.get_mut(&topic) {
+                if let Some(peer_list) = self.topic_peers.get_mut(topic) {
                     if !peer_list.remove(peer_id) {
                         // debugging purposes
                         warn!(
@@ -2900,7 +2900,7 @@ where
 
                 // remove from fanout
                 self.fanout
-                    .get_mut(&topic)
+                    .get_mut(topic)
                     .map(|peers| peers.remove(peer_id));
             }
         }
@@ -2943,7 +2943,7 @@ where
         // Add the IP to the peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(endpoint.get_remote_address()) {
-                peer_score.add_ip(&peer_id, ip);
+                peer_score.add_ip(peer_id, ip);
             } else {
                 trace!(
                     "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
@@ -3041,7 +3041,7 @@ where
                 )
             }
             if let Some(ip) = get_ip_addr(endpoint_new.get_remote_address()) {
-                peer_score.add_ip(&peer, ip);
+                peer_score.add_ip(peer, ip);
             } else {
                 trace!(
                     "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
