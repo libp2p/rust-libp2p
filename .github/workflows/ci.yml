@@ -17,9 +17,9 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v1.3.0
 
     - name: Run tests, with no feature
       run: cargo test --workspace --no-default-features
@@ -44,7 +44,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Install Rust wasm32-unknown-emscripten
       uses: actions-rs/toolchain@v1.0.7
@@ -55,7 +55,6 @@ jobs:
 
     - name: Install Rust wasm32-wasi
       uses: actions-rs/toolchain@v1.0.7
-
       with:
         toolchain: stable
         target: wasm32-wasi
@@ -69,7 +68,7 @@ jobs:
     - name: Install CMake
       run: apt-get install -y cmake
 
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v1.3.0
 
     - name: Build on wasm32-unknown-emscripten
       # TODO: also run `cargo test`
@@ -93,7 +92,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
@@ -116,17 +115,7 @@ jobs:
         override: true
         components: clippy
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.6
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2.1.6
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - uses: Swatinem/rust-cache@v1.3.0
 
     - name: Run cargo clippy
       uses: actions-rs/cargo@v1.0.3
@@ -145,9 +134,9 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
 
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v1.3.0
 
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
