@@ -288,6 +288,10 @@ pub struct Gossipsub<
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
     count_sent_iwant: HashMap<PeerId, usize>,
 
+    /// Keeps track of IWANT messages that we are awaiting to send.
+    /// This is used to prevent sending duplicate IWANT messages for the same message.
+    pending_iwant_msgs: HashSet<MessageId>,
+
     /// Short term cache for published messsage ids. This is used for penalizing peers sending
     /// our own messages back if the messages are anonymous or use a random author.
     published_message_ids: DuplicateCache<MessageId>,
@@ -416,6 +420,7 @@ where
             peer_score: None,
             count_received_ihave: HashMap::new(),
             count_sent_iwant: HashMap::new(),
+            pending_iwant_msgs: HashSet::new(),
             connected_peers: HashMap::new(),
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
@@ -1114,10 +1119,10 @@ where
             }
         }
 
-        debug!("Handling IHAVE for peer: {:?}", peer_id);
+        trace!("Handling IHAVE for peer: {:?}", peer_id);
 
         // use a hashset to avoid duplicates efficiently
-        let mut iwant_ids = HashSet::new();
+        let mut iwant_ids = HashMap::new();
 
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
@@ -1130,9 +1135,16 @@ where
             }
 
             for id in ids {
-                if !self.duplicate_cache.contains(&id) {
-                    // have not seen this message, request it
-                    iwant_ids.insert(id);
+                if !self.duplicate_cache.contains(&id) && !self.pending_iwant_msgs.contains(&id) {
+                    if self
+                        .peer_score
+                        .as_ref()
+                        .map(|(_, _, _, promises)| !promises.contains(&id))
+                        .unwrap_or(true)
+                    {
+                        // have not seen this message and are not currently requesting it
+                        iwant_ids.insert(id, topic.clone());
+                    }
                 }
             }
         }
@@ -1152,15 +1164,22 @@ where
                 peer_id
             );
 
-            //ask in random order
-            let mut iwant_ids_vec: Vec<_> = iwant_ids.iter().collect();
+            // Ask in random order
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.keys().collect();
             let mut rng = thread_rng();
             iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
 
             iwant_ids_vec.truncate(iask as usize);
             *iasked += iask;
 
-            let message_ids = iwant_ids_vec.into_iter().cloned().collect::<Vec<_>>();
+            let message_ids = iwant_ids_vec
+                .into_iter()
+                .map(|id| {
+                    // Add all messages to the pending list
+                    self.pending_iwant_msgs.insert(id.clone());
+                    id.clone()
+                })
+                .collect::<Vec<_>>();
             if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
                 gossip_promises.add_promise(
                     *peer_id,
@@ -1168,9 +1187,10 @@ where
                     Instant::now() + self.config.iwant_followup_time(),
                 );
             }
-            debug!(
+            trace!(
                 "IHAVE: Asking for the following messages from {}: {:?}",
-                peer_id, message_ids
+                peer_id,
+                message_ids
             );
 
             Self::control_pool_add(
@@ -1179,7 +1199,7 @@ where
                 GossipsubControlAction::IWant { message_ids },
             );
         }
-        debug!("Completed IHAVE handling for peer: {:?}", peer_id);
+        trace!("Completed IHAVE handling for peer: {:?}", peer_id);
     }
 
     /// Handles an IWANT control message. Checks our cache of messages. If the message exists it is
@@ -2645,6 +2665,9 @@ where
                 error!("Failed to flush control pool. Message too large");
             }
         }
+
+        // This clears all pending IWANT messages
+        self.pending_iwant_msgs.clear();
     }
 
     /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it

@@ -40,6 +40,11 @@ pub(crate) struct GossipPromises {
 }
 
 impl GossipPromises {
+    /// Returns true if the message id exists in the promises.
+    pub fn contains(&self, message: &MessageId) -> bool {
+        self.promises.contains_key(message)
+    }
+
     /// Track a promise to deliver a message from a list of [`MessageId`]s we are requesting.
     pub fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
         // Randomly select a message id
