@@ -8,6 +8,8 @@
 - Manually implement `Debug` for `RequestResponseHandlerEvent` and
   `RequestProtocol`. See [PR 2183].
 
+- Remove `RequestResponse::throttled` and the `throttled` module.
+
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 
 # 0.12.0 [2021-07-12]
