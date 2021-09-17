@@ -23,7 +23,7 @@ mod util;
 use futures::{future::poll_fn, ready};
 use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
-    connection::PendingConnectionError,
+    connection::ConnectionError,
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
     PeerId,
 };
@@ -53,9 +53,9 @@ fn max_outgoing() {
         .dial(Multiaddr::empty(), Vec::new(), TestHandler())
         .expect_err("Unexpected dialing success.")
     {
-        DialError::ConnectionLimit(err) => {
-            assert_eq!(err.current, outgoing_limit);
-            assert_eq!(err.limit, outgoing_limit);
+        DialError::ConnectionLimit { limit, handler: _ } => {
+            assert_eq!(limit.current, outgoing_limit);
+            assert_eq!(limit.limit, outgoing_limit);
         }
         e => panic!("Unexpected error: {:?}", e),
     }
@@ -111,8 +111,8 @@ fn max_established_incoming() {
                 network1.accept(connection, TestHandler()).unwrap();
             }
             NetworkEvent::ConnectionEstablished { .. } => {}
-            NetworkEvent::IncomingConnectionError {
-                error: PendingConnectionError::ConnectionLimit(err),
+            NetworkEvent::ConnectionClosed {
+                error: Some(ConnectionError::ConnectionLimit(err)),
                 ..
             } => {
                 assert_eq!(err.limit, limit);

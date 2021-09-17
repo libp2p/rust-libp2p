@@ -803,16 +803,12 @@ fn advance_substream<TUserData>(
                         true,
                     ),
                     Err(error) => {
-                        let event = if let Some(user_data) = user_data {
-                            Some(ProtocolsHandlerEvent::Custom(
-                                KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
-                                    user_data,
-                                },
-                            ))
-                        } else {
-                            None
-                        };
+                        let event = user_data.map(|user_data| {
+                            ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                                error: KademliaHandlerQueryErr::Io(error),
+                                user_data,
+                            })
+                        });
 
                         (None, event, false)
                     }
@@ -823,16 +819,12 @@ fn advance_substream<TUserData>(
                     false,
                 ),
                 Poll::Ready(Err(error)) => {
-                    let event = if let Some(user_data) = user_data {
-                        Some(ProtocolsHandlerEvent::Custom(
-                            KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(error),
-                                user_data,
-                            },
-                        ))
-                    } else {
-                        None
-                    };
+                    let event = user_data.map(|user_data| {
+                        ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                            error: KademliaHandlerQueryErr::Io(error),
+                            user_data,
+                        })
+                    });
 
                     (None, event, false)
                 }
@@ -857,16 +849,12 @@ fn advance_substream<TUserData>(
                     false,
                 ),
                 Poll::Ready(Err(error)) => {
-                    let event = if let Some(user_data) = user_data {
-                        Some(ProtocolsHandlerEvent::Custom(
-                            KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(error),
-                                user_data,
-                            },
-                        ))
-                    } else {
-                        None
-                    };
+                    let event = user_data.map(|user_data| {
+                        ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                            error: KademliaHandlerQueryErr::Io(error),
+                            user_data,
+                        })
+                    });
 
                     (None, event, false)
                 }

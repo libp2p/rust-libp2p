@@ -58,6 +58,7 @@ enum PeerState {
 }
 
 impl FixedPeersIter {
+    #[allow(clippy::needless_collect)]
     pub fn new<I>(peers: I, parallelism: NonZeroUsize) -> Self
     where
         I: IntoIterator<Item = PeerId>,

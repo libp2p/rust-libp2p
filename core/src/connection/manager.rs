@@ -20,8 +20,8 @@
 
 use super::{
     handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, IntoConnectionHandler,
-    PendingConnectionError, Substream,
+    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionLimit,
+    IntoConnectionHandler, PendingConnectionError, Substream,
 };
 use crate::{muxing::StreamMuxer, Executor};
 use fnv::FnvHashMap;
@@ -192,6 +192,7 @@ pub enum Event<'a, H: IntoConnectionHandler, TE> {
         /// The error that occurred, if any. If `None`, the connection
         /// has been actively closed.
         error: Option<ConnectionError<THandlerError<H>>>,
+        handler: H::Handler,
     },
 
     /// A connection has been established.
@@ -350,7 +351,7 @@ impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
                         new_endpoint: new,
                     }
                 }
-                task::Event::Closed { id, error } => {
+                task::Event::Closed { id, error, handler } => {
                     let id = ConnectionId(id);
                     let task = task.remove();
                     match task.state {
@@ -358,6 +359,7 @@ impl<H: IntoConnectionHandler, TE> Manager<H, TE> {
                             id,
                             connected,
                             error,
+                            handler,
                         },
                         TaskState::Pending => unreachable!(
                             "`Event::Closed` implies (2) occurred on that task and thus (3)."
@@ -437,7 +439,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     ///
     /// When the connection is ultimately closed, [`Event::ConnectionClosed`]
     /// is emitted by [`Manager::poll`].
-    pub fn start_close(mut self) {
+    pub fn start_close(mut self, error: Option<ConnectionLimit>) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
         match self
@@ -445,7 +447,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
             .get_mut()
             .sender
             .clone()
-            .try_send(task::Command::Close)
+            .try_send(task::Command::Close(error))
         {
             Ok(()) => {}
             Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
@@ -455,17 +457,6 @@ impl<'a, I> EstablishedEntry<'a, I> {
     /// Obtains information about the established connection.
     pub fn connected(&self) -> &Connected {
         match &self.task.get().state {
-            TaskState::Established(c) => c,
-            TaskState::Pending => unreachable!("By Entry::new()"),
-        }
-    }
-
-    /// Instantly removes the entry from the manager, dropping
-    /// the command channel to the background task of the connection,
-    /// which will thus drop the connection asap without an orderly
-    /// close or emitting another event.
-    pub fn remove(self) -> Connected {
-        match self.task.remove().state {
             TaskState::Established(c) => c,
             TaskState::Pending => unreachable!("By Entry::new()"),
         }
