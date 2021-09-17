@@ -9,8 +9,10 @@
   `RequestProtocol`. See [PR 2183].
 
 - Remove `RequestResponse::throttled` and the `throttled` module.
+  See [PR 2236].
 
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2236]: https://github.com/libp2p/rust-libp2p/pull/2236
 
 # 0.12.0 [2021-07-12]
 
