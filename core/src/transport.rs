@@ -31,6 +31,7 @@ use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
 
 pub mod and_then;
+pub mod circuit_breaking;
 pub mod choice;
 pub mod dummy;
 pub mod map;
