@@ -1,5 +1,11 @@
 # 0.33.0 [unreleased]
 
+- Adds optional metrics for tracking mesh and peer behaviour.
+  [PR 2235](https://github.com/libp2p/rust-libp2p/pull/2235)
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
