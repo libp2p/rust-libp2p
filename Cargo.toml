@@ -53,7 +53,7 @@ rendezvous = ["libp2p-rendezvous"]
 tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
 uds = ["libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "parking_lot/wasm-bindgen", "getrandom/js"]
+wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "parking_lot/wasm-bindgen", "getrandom/js", "rand/wasm-bindgen" ]
 wasm-ext = ["libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
 websocket = ["libp2p-websocket"]
@@ -65,12 +65,12 @@ all-features = true
 
 [dependencies]
 atomic = "0.5.0"
-bytes = "1"
-futures = "0.3.1"
+bytes = "1.1.0"
+futures = "0.3.17"
 futures-timer = "3.0.2"
 getrandom = "0.2.3"
 instant = "0.1.10"
-lazy_static = "1.2"
+lazy_static = "1.4.0"
 libp2p-core = { version = "0.30.0", path = "core",  default-features = false }
 libp2p-floodsub = { version = "0.31.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.33.0", path = "./protocols/gossipsub", optional = true }
@@ -90,9 +90,10 @@ libp2p-swarm-derive = { version = "0.25.0", path = "swarm-derive" }
 libp2p-uds = { version = "0.30.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.30.0", path = "transports/wasm-ext", default-features = false, optional = true }
 libp2p-yamux = { version = "0.34.0", path = "muxers/yamux", optional = true }
-multiaddr = { version = "0.13.0" }
-parking_lot = "0.11.0"
-pin-project = "1.0.0"
+multiaddr = "0.13.0"
+parking_lot = "0.11.2"
+pin-project = "1.0.8"
+rand = "0.7.3"
 smallvec = "1.6.1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
@@ -103,11 +104,11 @@ libp2p-tcp = { version = "0.30.0", path = "transports/tcp", default-features = f
 libp2p-websocket = { version = "0.31.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
-async-trait = "0.1"
+async-std = { version = "1.10.0", features = ["attributes"] }
+async-trait = "0.1.51"
 env_logger = "0.9.0"
-structopt = "0.3.21"
-tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
+structopt = "0.3.23"
+tokio = { version = "1.12.0", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
 resolver = "2"
