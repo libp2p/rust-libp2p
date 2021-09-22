@@ -11,18 +11,18 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
+bimap = "0.6.1"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+futures-timer = "3.0.2"
 libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
-prost = "0.8"
-void = "1"
 log = "0.4"
-futures = { version = "0.3", default-features = false, features = ["std"] }
+prost = "0.8"
+rand = "0.8"
+sha2 = "0.9"
 thiserror = "1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-bimap = "0.6.1"
-sha2 = "0.9"
-rand = "0.8"
-wasm-timer = "0.2"
+void = "1"
 
 [dev-dependencies]
 libp2p = { path = "../.." }

@@ -146,4 +146,5 @@ name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
 
 [patch.crates-io]
-instant = { git = "https://github.com/wngr/instant" }
+# wait for a new release, see https://github.com/sebcrozet/instant/pull/36
+instant = { git = "https://github.com/sebcrozet/instant" }
