@@ -69,7 +69,7 @@ bytes = "1.1.0"
 futures = "0.3.17"
 futures-timer = "3.0.2"
 getrandom = "0.2.3"
-instant = "0.1.10"
+instant = "0.1.11"
 lazy_static = "1.4.0"
 libp2p-core = { version = "0.30.0", path = "core",  default-features = false }
 libp2p-floodsub = { version = "0.31.0", path = "protocols/floodsub", optional = true }
@@ -144,7 +144,3 @@ members = [
 [[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
-
-[patch.crates-io]
-# wait for a new release, see https://github.com/sebcrozet/instant/pull/36
-instant = { git = "https://github.com/sebcrozet/instant" }
