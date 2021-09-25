@@ -163,6 +163,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct MyBehaviour {
         gossipsub: Gossipsub,
         identify: Identify,

@@ -1129,7 +1129,11 @@ fn yield_incoming_connection_through_correct_listener() {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "CombinedEvent", poll_method = "poll")]
+#[behaviour(
+    out_event = "CombinedEvent",
+    poll_method = "poll",
+    event_process = true
+)]
 struct CombinedBehaviour {
     relay: Relay,
     ping: ping::Behaviour,
@@ -1195,6 +1199,7 @@ impl NetworkBehaviourEventProcess<()> for CombinedBehaviour {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(event_process = true)]
 struct CombinedKeepAliveBehaviour {
     relay: Relay,
     keep_alive: DummyBehaviour,

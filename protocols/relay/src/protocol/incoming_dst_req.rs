@@ -50,10 +50,7 @@ pub struct IncomingDstReq {
 impl IncomingDstReq {
     /// Creates a `IncomingDstReq`.
     pub(crate) fn new(stream: Framed<NegotiatedSubstream, UviBytes>, src: Peer) -> Self {
-        IncomingDstReq {
-            stream: stream,
-            src,
-        }
+        IncomingDstReq { stream, src }
     }
 
     /// Returns the peer id of the source that is being relayed.

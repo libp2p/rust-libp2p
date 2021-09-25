@@ -494,27 +494,15 @@ impl IncomingData {
     }
 
     pub fn is_binary(&self) -> bool {
-        if let IncomingData::Binary(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, IncomingData::Binary(_))
     }
 
     pub fn is_text(&self) -> bool {
-        if let IncomingData::Text(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, IncomingData::Text(_))
     }
 
     pub fn is_pong(&self) -> bool {
-        if let IncomingData::Pong(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, IncomingData::Pong(_))
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
