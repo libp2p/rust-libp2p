@@ -39,8 +39,7 @@ use libp2p::{
     identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
     multiaddr::Protocol,
-    noise,
-    ping::{self, Ping, PingConfig, PingEvent},
+    noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::{NetworkBehaviourEventProcess, SwarmEvent},
     tcp::TcpConfig,
@@ -162,10 +161,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct MyBehaviour {
         gossipsub: Gossipsub,
         identify: Identify,
-        ping: Ping,
+        ping: ping::Behaviour,
     }
 
     impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
@@ -194,14 +194,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
+    impl NetworkBehaviourEventProcess<ping::Event> for MyBehaviour {
         // Called when `ping` produces an event.
-        fn inject_event(&mut self, event: PingEvent) {
-            use ping::handler::{PingFailure, PingSuccess};
+        fn inject_event(&mut self, event: ping::Event) {
             match event {
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Ok(PingSuccess::Ping { rtt }),
+                    result: Result::Ok(ping::Success::Ping { rtt }),
                 } => {
                     println!(
                         "ping: rtt to {} is {} ms",
@@ -209,29 +208,29 @@ fn main() -> Result<(), Box<dyn Error>> {
                         rtt.as_millis()
                     );
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Ok(PingSuccess::Pong),
+                    result: Result::Ok(ping::Success::Pong),
                 } => {
                     println!("ping: pong from {}", peer.to_base58());
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Err(PingFailure::Timeout),
+                    result: Result::Err(ping::Failure::Timeout),
                 } => {
                     println!("ping: timeout to {}", peer.to_base58());
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Err(PingFailure::Unsupported),
+                    result: Result::Err(ping::Failure::Unsupported),
                 } => {
                     println!("ping: {} does not support ping protocol", peer.to_base58());
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Err(PingFailure::Other { error }),
+                    result: Result::Err(ping::Failure::Other { error }),
                 } => {
-                    println!("ping: failure with {}: {}", peer.to_base58(), error);
+                    println!("ping: ping::Failure with {}: {}", peer.to_base58(), error);
                 }
             }
         }
@@ -253,7 +252,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),
-            ping: Ping::new(PingConfig::new()),
+            ping: ping::Behaviour::new(ping::Config::new()),
         };
 
         println!("Subscribing to {:?}", gossipsub_topic);
