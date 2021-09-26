@@ -304,10 +304,10 @@
 //!
 //!     block_on(future::poll_fn(move |cx| loop {
 //!         match swarm.poll_next_unpin(cx) {
-//!             Poll::Ready(Some(event)) => {
-//!                 if let SwarmEvent::NewListenAddr { address, .. }= event {
-//!                     println!("Listening on {:?}", address);
-//!                 }
+//!             Poll::Ready(Some(event)) => match event {
+//!                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+//!                 SwarmEvent::Behaviour(event) => println!("{:?}", event),
+//!                 _ => {}
 //!             },
 //!             Poll::Ready(None) => return Poll::Ready(()),
 //!             Poll::Pending => return Poll::Pending

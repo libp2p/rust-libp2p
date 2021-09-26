@@ -8,8 +8,11 @@
 - Add support for IPv6. To enable set the multicast address
   in `MdnsConfig` to `IPV6_MDNS_MULTICAST_ADDRESS`.
   See [PR 2161] for details.
-  
+
+- Prevent timers from firing at the same time. See [PR 2212] for details.
+
 [PR 2161]: https://github.com/libp2p/rust-libp2p/pull/2161/
+[PR 2212]: https://github.com/libp2p/rust-libp2p/pull/2212/
 
 # 0.31.0 [2021-07-12]
 

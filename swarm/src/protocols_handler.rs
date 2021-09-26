@@ -523,10 +523,7 @@ pub enum KeepAlive {
 impl KeepAlive {
     /// Returns true for `Yes`, false otherwise.
     pub fn is_yes(&self) -> bool {
-        match *self {
-            KeepAlive::Yes => true,
-            _ => false,
-        }
+        matches!(*self, KeepAlive::Yes)
     }
 }
 

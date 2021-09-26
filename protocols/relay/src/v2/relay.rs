@@ -158,7 +158,7 @@ pub struct Relay {
     circuits: CircuitsTracker,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<handler::In, Event>>,
+    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
 }
 
 impl Relay {
@@ -200,6 +200,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
+        _handler: handler::Handler,
     ) {
         self.reservations
             .get_mut(peer)
@@ -535,7 +536,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<handler::In, Self::OutEvent>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(mut event) = self.queued_actions.pop_front() {
             // Set external addresses in [`AcceptReservationReq`].
             if let NetworkBehaviourAction::NotifyHandler {

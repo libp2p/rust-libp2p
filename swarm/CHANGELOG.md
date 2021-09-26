@@ -19,10 +19,34 @@
 - Implement `ProtocolsHandler` on `either::Either`representing either of two
   `ProtocolsHandler` implementations (see [PR 2192]).
 
+- Require implementation to provide handler in
+  `NetworkBehaviourAction::DialPeer` and `NetworkBehaviourAction::DialAddress`.
+  Note that the handler is returned to the `NetworkBehaviour` on connection
+  failure and connection closing. Thus it can be used to carry state, which
+  otherwise would have to be tracked in the `NetworkBehaviour` itself. E.g. a
+  message destined to an unconnected peer can be included in the handler, and
+  thus directly send on connection success or extracted by the
+  `NetworkBehaviour` on connection failure (see [PR 2191]).
+
+- Include handler in `NetworkBehaviour::inject_dial_failure`,
+  `NetworkBehaviour::inject_connection_closed`,
+  `NetworkBehaviour::inject_listen_failure` (see [PR 2191]).
+
+- Include error in `NetworkBehaviour::inject_dial_failure` and call
+  `NetworkBehaviour::inject_dial_failure` on `DialPeerCondition` evaluating to
+  false. To emulate the previous behaviour, return early within
+  `inject_dial_failure` on `DialError::DialPeerConditionFalse`. See [PR 2191].
+
+- Make `NetworkBehaviourAction` generic over `NetworkBehaviour::OutEvent` and
+  `NetworkBehaviour::ProtocolsHandler`. In most cases, change your generic type
+  parameters to `NetworkBehaviourAction<Self::OutEvent,
+  Self::ProtocolsHandler>`. See [PR 2191].
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 [PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 
 # 0.30.0 [2021-07-12]
 

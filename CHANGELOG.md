@@ -16,6 +16,7 @@
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
 - [`libp2p-relay` CHANGELOG](protocols/relay/CHANGELOG.md)
 - [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
+- [`libp2p-rendezvous` CHANGELOG](protocols/rendezvous/CHANGELOG.md)
 
 ## Transport Protocols & Upgrades
 

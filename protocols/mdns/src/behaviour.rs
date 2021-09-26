@@ -153,6 +153,13 @@ impl Mdns {
             Async::new(socket)?
         };
         let if_watch = if_watch::IfWatcher::new().await?;
+        // randomize timer to prevent all converging and firing at the same time.
+        let query_interval = {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let jitter = rng.gen_range(0..100);
+            config.query_interval + Duration::from_millis(jitter)
+        };
         Ok(Self {
             recv_socket,
             send_socket,
@@ -162,9 +169,9 @@ impl Mdns {
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
             events: Default::default(),
-            query_interval: config.query_interval,
+            query_interval,
             ttl: config.ttl,
-            timeout: Timer::interval(config.query_interval),
+            timeout: Timer::interval(query_interval),
             multicast_addr: config.multicast_addr,
         })
     }
@@ -179,10 +186,19 @@ impl Mdns {
         self.discovered_nodes.iter().map(|(p, _, _)| p)
     }
 
+    fn reset_timer(&mut self) {
+        self.timeout.set_interval(self.query_interval);
+    }
+
+    fn fire_timer(&mut self) {
+        self.timeout
+            .set_interval_at(Instant::now(), self.query_interval);
+    }
+
     fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
         match packet {
             MdnsPacket::Query(query) => {
-                self.timeout.set_interval(self.query_interval);
+                self.reset_timer();
                 log::trace!("sending response");
                 for packet in build_query_response(
                     query.query_id(),
@@ -210,7 +226,7 @@ impl Mdns {
 
                     let mut addrs: Vec<Multiaddr> = Vec::new();
                     for addr in peer.addresses() {
-                        if let Some(new_addr) = address_translation(&addr, &observed) {
+                        if let Some(new_addr) = address_translation(addr, &observed) {
                             addrs.push(new_addr.clone())
                         }
                         addrs.push(addr.clone())
@@ -279,20 +295,14 @@ impl NetworkBehaviour for Mdns {
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        self.timeout
-            .set_interval_at(Instant::now(), self.query_interval);
+        self.fire_timer();
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyProtocolsHandler>> {
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
             let socket = self.recv_socket.get_ref();
             match event {
@@ -307,8 +317,7 @@ impl NetworkBehaviour for Mdns {
                                 if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
                                     log::error!("join multicast failed: {}", err);
                                 } else {
-                                    self.timeout
-                                        .set_interval_at(Instant::now(), self.query_interval);
+                                    self.fire_timer();
                                 }
                             }
                         }
@@ -318,8 +327,7 @@ impl NetworkBehaviour for Mdns {
                                 if let Err(err) = socket.join_multicast_v6(&multicast, 0) {
                                     log::error!("join multicast failed: {}", err);
                                 } else {
-                                    self.timeout
-                                        .set_interval_at(Instant::now(), self.query_interval);
+                                    self.fire_timer();
                                 }
                             }
                         }

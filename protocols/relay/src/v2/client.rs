@@ -33,9 +33,9 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId, Transport};
-use libp2p_swarm::NegotiatedSubstream;
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    DialError, DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
 use std::io::{Error, IoSlice};
@@ -78,7 +78,7 @@ pub struct Client {
     rqsts_pending_connection: HashMap<PeerId, Vec<RqstPendingConnection>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<handler::In, Event>>,
+    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
 }
 
 impl Client {
@@ -161,7 +161,12 @@ impl NetworkBehaviour for Client {
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: &PeerId,
+        _handler: handler::Prototype,
+        _error: DialError,
+    ) {
         self.rqsts_pending_connection.remove(peer_id);
     }
 
@@ -172,6 +177,7 @@ impl NetworkBehaviour for Client {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         _: &ConnectedPoint,
+        _handler: handler::Handler,
     ) {
         self.connected_peers.get_mut(peer_id).map(|cs| {
             cs.remove(
@@ -232,7 +238,7 @@ impl NetworkBehaviour for Client {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<handler::In, Self::OutEvent>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.queued_actions.pop_front() {
             return Poll::Ready(event);
         }
@@ -265,9 +271,11 @@ impl NetworkBehaviour for Client {
                                     relay_addr,
                                     to_listener,
                                 });
+                            let handler = self.new_handler();
                             return Poll::Ready(NetworkBehaviourAction::DialPeer {
                                 peer_id: relay_peer_id,
                                 condition: DialPeerCondition::Disconnected,
+                                handler,
                             });
                         }
                     }
@@ -304,9 +312,11 @@ impl NetworkBehaviour for Client {
                                     dst_peer_id,
                                     send_back,
                                 });
+                            let handler = self.new_handler();
                             return Poll::Ready(NetworkBehaviourAction::DialPeer {
                                 peer_id: relay_peer_id,
                                 condition: DialPeerCondition::Disconnected,
+                                handler,
                             });
                         }
                     }
@@ -377,9 +387,7 @@ impl RelayedConnection {
                 };
                 Poll::Ready(Ok(()))
             }
-            Poll::Ready(Err(e)) => {
-                Poll::Ready(Err(e))
-            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => {
                 **self = RelayedConnection::InboundAccepting {
                     accept,
