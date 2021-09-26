@@ -321,7 +321,7 @@ where
     pub fn dial_addr(&mut self, addr: Multiaddr) -> Result<(), DialError> {
         let handler = self.behaviour.new_handler();
         self.dial_addr_with_handler(addr, handler)
-            .map_err(|e| DialError::from_network_dial_error(e))
+            .map_err(DialError::from_network_dial_error)
             .map_err(|(e, _)| e)
     }
 
@@ -376,7 +376,7 @@ where
             Err(error) => {
                 let (error, handler) = DialError::from_network_dial_error(error);
                 self.behaviour.inject_dial_failure(
-                    &peer_id,
+                    peer_id,
                     handler.into_protocols_handler(),
                     &error,
                 );
@@ -1027,7 +1027,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     }
 
     fn local_peer_id(&self) -> &PeerId {
-        &self.local_peer_id
+        self.local_peer_id
     }
 }
 

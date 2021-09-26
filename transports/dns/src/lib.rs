@@ -76,7 +76,7 @@ pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
-const DNSADDR_PREFIX: &'static str = "_dnsaddr.";
+const DNSADDR_PREFIX: &str = "_dnsaddr.";
 
 /// The maximum number of dialing attempts to resolved addresses.
 const MAX_DIAL_ATTEMPTS: usize = 16;

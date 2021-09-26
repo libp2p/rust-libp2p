@@ -71,7 +71,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Whether or not we require the `NetworkBehaviourEventProcess` trait to be implemented.
     let event_process = {
-        let mut event_process = true; // Default to true for backwards compatibility
+        let mut event_process = false;
 
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
@@ -151,7 +151,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
 
@@ -169,7 +169,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
                 Some(match field.ident {
@@ -186,7 +186,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
                 Some(match field.ident {
@@ -199,7 +199,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // Build the list of statements to put in the body of `inject_connection_established()`.
     let inject_connection_established_stmts = {
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(&field) {
+            if is_ignored(field) {
                 return None;
             }
             Some(match field.ident {
@@ -212,7 +212,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // Build the list of statements to put in the body of `inject_address_change()`.
     let inject_address_change_stmts = {
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(&field) {
+            if is_ignored(field) {
                 return None;
             }
             Some(match field.ident {
@@ -230,7 +230,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             // The outmost handler belongs to the last behaviour.
             .rev()
-            .filter(|f| !is_ignored(&f.1))
+            .filter(|f| !is_ignored(f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
@@ -261,7 +261,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             // The outmost handler belongs to the last behaviour.
             .rev()
-            .filter(|f| !is_ignored(&f.1))
+            .filter(|f| !is_ignored(f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
@@ -296,7 +296,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .rev()
-            .filter(|f| !is_ignored(&f.1))
+            .filter(|f| !is_ignored(f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
@@ -326,7 +326,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
 
@@ -344,7 +344,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
 
@@ -362,7 +362,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
 
@@ -380,7 +380,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
 
@@ -398,7 +398,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
 
@@ -416,7 +416,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
                 Some(match field.ident {
@@ -433,7 +433,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .filter_map(move |(field_n, field)| {
-                if is_ignored(&field) {
+                if is_ignored(field) {
                     return None;
                 }
                 Some(match field.ident {
@@ -447,7 +447,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
     // We call `inject_event` on the corresponding child.
-    let inject_node_event_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+    let inject_node_event_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(f.1)).enumerate().map(|(enum_n, (field_n, field))| {
         let mut elem = if enum_n != 0 {
             quote!{ #either_ident::Second(ev) }
         } else {
@@ -468,7 +468,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let protocols_handler_ty = {
         let mut ph_ty = None;
         for field in data_struct.fields.iter() {
-            if is_ignored(&field) {
+            if is_ignored(field) {
                 continue;
             }
             let ty = &field.ty;
@@ -488,7 +488,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         let mut out_handler = None;
 
         for (field_n, field) in data_struct.fields.iter().enumerate() {
-            if is_ignored(&field) {
+            if is_ignored(field) {
                 continue;
             }
 
@@ -538,7 +538,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+    let poll_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(f.1)).enumerate().map(|(enum_n, (field_n, field))| {
         let field_name = match field.ident {
             Some(ref i) => quote!{ self.#i },
             None => quote!{ self.#field_n },
@@ -561,7 +561,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             let mut out_handler = None;
 
             for (f_n, f) in data_struct.fields.iter().enumerate() {
-                if is_ignored(&f) {
+                if is_ignored(f) {
                     continue;
                 }
 

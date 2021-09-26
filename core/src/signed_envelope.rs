@@ -53,7 +53,7 @@ impl SignedEnvelope {
         domain_separation: String,
         expected_payload_type: &[u8],
     ) -> Result<&[u8], ReadPayloadError> {
-        if &self.payload_type != expected_payload_type {
+        if self.payload_type != expected_payload_type {
             return Err(ReadPayloadError::UnexpectedPayloadType {
                 expected: expected_payload_type.to_vec(),
                 got: self.payload_type.clone(),

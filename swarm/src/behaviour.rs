@@ -679,7 +679,7 @@ where
             } => NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
-                event: event,
+                event,
             },
             NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                 NetworkBehaviourAction::ReportObservedAddr { address, score }

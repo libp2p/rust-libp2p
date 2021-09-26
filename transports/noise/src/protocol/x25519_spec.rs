@@ -162,7 +162,7 @@ impl snow::types::Dh for Keypair<X25519Spec> {
 
     fn set(&mut self, sk: &[u8]) {
         let mut secret = [0u8; 32];
-        secret.copy_from_slice(&sk);
+        secret.copy_from_slice(sk);
         self.secret = SecretKey(X25519Spec(secret)); // Copy
         self.public = PublicKey(X25519Spec(x25519(secret, X25519_BASEPOINT_BYTES)));
         secret.zeroize();
