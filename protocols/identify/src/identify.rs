@@ -27,8 +27,9 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
-    AddressScore, DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, ProtocolsHandler, ProtocolsHandlerUpgrErr,
+    AddressScore, DialError, DialPeerCondition, IntoProtocolsHandler, NegotiatedSubstream,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
+    ProtocolsHandlerUpgrErr,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -52,7 +53,7 @@ pub struct Identify {
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<IdentifyPush, IdentifyEvent>>,
+    events: VecDeque<NetworkBehaviourAction<IdentifyEvent, IdentifyHandler>>,
     /// Peers to which an active push with current information about
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
@@ -173,9 +174,11 @@ impl Identify {
         for p in peers {
             if self.pending_push.insert(p) {
                 if !self.connected.contains_key(&p) {
+                    let handler = self.new_handler();
                     self.events.push_back(NetworkBehaviourAction::DialPeer {
                         peer_id: p,
                         condition: DialPeerCondition::Disconnected,
+                        handler,
                     });
                 }
             }
@@ -213,13 +216,14 @@ impl NetworkBehaviour for Identify {
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
         if !self.connected.contains_key(peer_id) {
             self.pending_push.remove(peer_id);
         }
@@ -292,12 +296,7 @@ impl NetworkBehaviour for Identify {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

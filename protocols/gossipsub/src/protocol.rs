@@ -194,7 +194,7 @@ impl GossipsubCodec {
             }
         };
 
-        let source = match PeerId::from_bytes(&from) {
+        let source = match PeerId::from_bytes(from) {
             Ok(v) => v,
             Err(_) => {
                 debug!("Signature verification failed: Invalid Peer Id");
@@ -214,8 +214,8 @@ impl GossipsubCodec {
         // obtained from the inlined source peer_id.
         let public_key = match message
             .key
-            .as_ref()
-            .map(|key| PublicKey::from_protobuf_encoding(&key))
+            .as_deref()
+            .map(PublicKey::from_protobuf_encoding)
         {
             Some(Ok(key)) => key,
             _ => match PublicKey::from_protobuf_encoding(&source.to_bytes()[2..]) {

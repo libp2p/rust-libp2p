@@ -26,8 +26,8 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    ProtocolsHandler,
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, ProtocolsHandler,
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
@@ -49,7 +49,12 @@ pub enum Event {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<<<<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, <Self as NetworkBehaviour>::OutEvent>>,
+    queued_actions: VecDeque<
+        NetworkBehaviourAction<
+            <Self as NetworkBehaviour>::OutEvent,
+            <Self as NetworkBehaviour>::ProtocolsHandler,
+        >,
+    >,
 }
 
 impl Behaviour {
@@ -105,7 +110,12 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
+    fn inject_dial_failure(
+        &mut self,
+        _peer_id: &PeerId,
+        _handler: handler::Prototype,
+        _error: DialError,
+    ) {
         // TODO: How to handle retry? Golang seems to simply wait 2 seconds between each failure?
         // Shouldn't we do the whole CONNECT SYNC again to make sure we are aligned?
         //
@@ -121,6 +131,7 @@ impl NetworkBehaviour for Behaviour {
         _peer_id: &PeerId,
         _connection_id: &ConnectionId,
         _: &ConnectedPoint,
+        _handler: <<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         todo!();
     }
@@ -159,19 +170,23 @@ impl NetworkBehaviour for Behaviour {
                     ));
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
+                let handler = self.new_handler();
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::DialAddress {
                         // TODO: Handle empty addresses.
                         // TODO: What about the other addresses?
                         address: remote_addrs.into_iter().next().unwrap(),
+                        handler,
                     });
             }
             handler::Event::OutboundConnectNeg(remote_addrs) => {
+                let handler = self.new_handler();
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::DialAddress {
                         // TODO: Handle empty addresses.
                         // TODO: What about the other addresses?
                         address: remote_addrs.into_iter().next().unwrap(),
+                        handler,
                     });
             }
         }
@@ -181,7 +196,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>{
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(mut event) = self.queued_actions.pop_front() {
             // Set obs addresses.
             if let NetworkBehaviourAction::NotifyHandler {

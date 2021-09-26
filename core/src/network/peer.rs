@@ -22,8 +22,8 @@ use super::{DialError, DialingOpts, Network};
 use crate::{
     connection::{
         handler::THandlerInEvent, pool::Pool, ConnectedPoint, ConnectionHandler, ConnectionId,
-        ConnectionLimit, EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler,
-        PendingConnection, Substream,
+        EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler, PendingConnection,
+        Substream,
     },
     Multiaddr, PeerId, StreamMuxer, Transport,
 };
@@ -163,7 +163,7 @@ where
         address: Multiaddr,
         remaining: I,
         handler: THandler,
-    ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError>
+    ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
     where
         I: IntoIterator<Item = Multiaddr>,
     {
@@ -171,12 +171,7 @@ where
             Peer::Connected(p) => (p.peer_id, p.network),
             Peer::Dialing(p) => (p.peer_id, p.network),
             Peer::Disconnected(p) => (p.peer_id, p.network),
-            Peer::Local => {
-                return Err(DialError::ConnectionLimit(ConnectionLimit {
-                    current: 0,
-                    limit: 0,
-                }))
-            }
+            Peer::Local => return Err(DialError::LocalPeerId { handler }),
         };
 
         let id = network.dial_peer(DialingOpts {

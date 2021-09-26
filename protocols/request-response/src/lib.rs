@@ -58,17 +58,16 @@
 
 pub mod codec;
 pub mod handler;
-pub mod throttled;
 
 pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
-pub use throttled::Throttled;
 
 use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -247,11 +246,6 @@ impl<TResponse> ResponseChannel<TResponse> {
     pub fn is_open(&self) -> bool {
         !self.sender.is_canceled()
     }
-
-    /// Get the ID of the inbound request waiting for a response.
-    pub(crate) fn request_id(&self) -> RequestId {
-        self.request_id
-    }
 }
 
 /// The ID of an inbound or outbound request.
@@ -303,7 +297,7 @@ impl RequestResponseConfig {
 /// A request/response protocol for some message codec.
 pub struct RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: RequestResponseCodec + Clone + Send + 'static,
 {
     /// The supported inbound protocols.
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -320,8 +314,8 @@ where
     /// Pending events to return from `poll`.
     pending_events: VecDeque<
         NetworkBehaviourAction<
-            RequestProtocol<TCodec>,
             RequestResponseEvent<TCodec::Request, TCodec::Response>,
+            RequestResponseHandler<TCodec>,
         >,
     >,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
@@ -336,7 +330,7 @@ where
 
 impl<TCodec> RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec + Clone,
+    TCodec: RequestResponseCodec + Clone + Send + 'static,
 {
     /// Creates a new `RequestResponse` behaviour for the given
     /// protocols, codec and configuration.
@@ -368,19 +362,6 @@ where
         }
     }
 
-    /// Creates a `RequestResponse` which limits requests per peer.
-    ///
-    /// The behaviour is wrapped in [`Throttled`] and detects the limits
-    /// per peer at runtime which are then enforced.
-    pub fn throttled<I>(c: TCodec, protos: I, cfg: RequestResponseConfig) -> Throttled<TCodec>
-    where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
-        TCodec: Send,
-        TCodec::Protocol: Sync,
-    {
-        Throttled::new(c, protos, cfg)
-    }
-
     /// Initiates sending a request.
     ///
     /// If the targeted peer is currently not connected, a dialing
@@ -403,10 +384,12 @@ where
         };
 
         if let Some(request) = self.try_send_request(peer, request) {
+            let handler = self.new_handler();
             self.pending_events
                 .push_back(NetworkBehaviourAction::DialPeer {
                     peer_id: *peer,
                     condition: DialPeerCondition::Disconnected,
+                    handler,
                 });
             self.pending_outbound_requests
                 .entry(*peer)
@@ -639,6 +622,7 @@ where
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
         let connections = self
             .connected
@@ -682,7 +666,7 @@ where
         self.connected.remove(peer);
     }
 
-    fn inject_dial_failure(&mut self, peer: &PeerId) {
+    fn inject_dial_failure(&mut self, peer: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
         // If there are pending outgoing requests when a dial failure occurs,
         // it is implied that we are not connected to the peer, since pending
         // outgoing requests are drained when a connection is established and
@@ -863,12 +847,7 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            RequestProtocol<TCodec>,
-            RequestResponseEvent<TCodec::Request, TCodec::Response>,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
