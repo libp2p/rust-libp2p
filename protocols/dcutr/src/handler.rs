@@ -22,6 +22,7 @@ use crate::protocol;
 use either::Either;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::{upgrade, ConnectedPoint, PeerId};
 use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
@@ -37,6 +38,8 @@ use std::task::{Context, Poll};
 pub enum In {
     Connect {
         obs_addrs: Vec<Multiaddr>,
+        // Use new-type.
+        attempt: u8,
     },
     AcceptInboundConnect {
         obs_addrs: Vec<Multiaddr>,
@@ -47,9 +50,10 @@ pub enum In {
 impl fmt::Debug for In {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            In::Connect { obs_addrs } => f
+            In::Connect { obs_addrs, attempt } => f
                 .debug_struct("In::Connect")
                 .field("obs_addrs", obs_addrs)
+                .field("attempt", attempt)
                 .finish(),
             In::AcceptInboundConnect {
                 obs_addrs,
@@ -69,7 +73,10 @@ pub enum Event {
     },
     // TODO: Rename to InboundConnectNegotiated?
     InboundConnectNeg(Vec<Multiaddr>),
-    OutboundConnectNeg(Vec<Multiaddr>),
+    OutboundConnectNeg {
+        remote_addrs: Vec<Multiaddr>,
+        attempt: u8,
+    },
 }
 
 impl fmt::Debug for Event {
@@ -86,9 +93,13 @@ impl fmt::Debug for Event {
                 .debug_tuple("Event::InboundConnectNeg")
                 .field(addrs)
                 .finish(),
-            Event::OutboundConnectNeg(addrs) => f
-                .debug_tuple("Event::OutboundConnectNeg")
-                .field(addrs)
+            Event::OutboundConnectNeg {
+                remote_addrs,
+                attempt,
+            } => f
+                .debug_struct("Event::OutboundConnectNeg")
+                .field("remote_addrs", remote_addrs)
+                .field("attempt", attempt)
                 .finish(),
         }
     }
@@ -96,21 +107,31 @@ impl fmt::Debug for Event {
 
 pub enum Prototype {
     RelayedConnection,
-    DirectConnection,
+    DirectConnection { role: Role },
     UnknownConnection,
+}
+
+pub enum Role {
+    Initiator {
+        attempt: u8,
+        relay_connection_id: ConnectionId,
+    },
+    Listener,
 }
 
 impl IntoProtocolsHandler for Prototype {
     type Handler = Either<Handler, DummyProtocolsHandler>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        let is_relayed_addr = endpoint
-            .get_remote_address()
-            .iter()
-            .any(|p| p == Protocol::P2pCircuit);
+        let is_relayed_addr = match endpoint {
+            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Listener { local_addr, .. } => local_addr,
+        }
+        .iter()
+        .any(|p| p == Protocol::P2pCircuit);
 
-        match self {
-            Self::RelayedConnection | Self::UnknownConnection if is_relayed_addr => {
+        match (self, is_relayed_addr) {
+            (Self::RelayedConnection | Self::UnknownConnection, true) => {
                 // TODO: When handler is created via new_handler, the connection is inbound. It should only
                 // ever be us initiating a dcutr request on this handler then, as one never initiates a
                 // request on an outbound handler. Should this be enforced?
@@ -120,17 +141,14 @@ impl IntoProtocolsHandler for Prototype {
                     inbound_connects: Default::default(),
                 })
             }
-            Self::DirectConnection | Self::UnknownConnection if !is_relayed_addr => {
+            (Self::DirectConnection { .. } | Self::UnknownConnection, false) => {
                 Either::Right(DummyProtocolsHandler::default())
             }
-            Self::RelayedConnection => {
+            (Self::RelayedConnection, false) => {
                 todo!("Expected relayed connection.")
             }
-            Self::DirectConnection => {
+            (Self::DirectConnection { .. }, true) => {
                 todo!("Expected non-relayed connection.")
-            }
-            Self::UnknownConnection => {
-                todo!("Should be unreachable. Provable at compile time?")
             }
         }
     }
@@ -162,7 +180,8 @@ impl ProtocolsHandler for Handler {
     type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
     type InboundProtocol = protocol::InboundUpgrade;
     type OutboundProtocol = protocol::OutboundUpgrade;
-    type OutboundOpenInfo = ();
+    // TODO: Use new type for attempt instead of u8.
+    type OutboundOpenInfo = u8;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -186,22 +205,23 @@ impl ProtocolsHandler for Handler {
         protocol::Connect { obs_addrs }: <Self::OutboundProtocol as upgrade::OutboundUpgrade<
             NegotiatedSubstream,
         >>::Output,
-        _info: Self::OutboundOpenInfo,
+        attempt: Self::OutboundOpenInfo,
     ) {
         self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::OutboundConnectNeg(
-                obs_addrs,
-            )));
+            .push_back(ProtocolsHandlerEvent::Custom(Event::OutboundConnectNeg {
+                remote_addrs: obs_addrs,
+                attempt,
+            }));
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
-            In::Connect { obs_addrs } => {
+            In::Connect { obs_addrs, attempt } => {
                 self.queued_events
                     .push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             protocol::OutboundUpgrade::new(obs_addrs),
-                            (),
+                            attempt,
                         ),
                     });
             }
@@ -234,6 +254,9 @@ impl ProtocolsHandler for Handler {
     // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
     fn connection_keep_alive(&self) -> KeepAlive {
         // TODO
+        //
+        // How about a KeepAlive::Until of ~10 seconds, to enable coordination of hole punching
+        // retries on same relayed connection.
         KeepAlive::Yes
     }
 

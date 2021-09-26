@@ -45,6 +45,9 @@ pub enum Event {
     },
     // TODO: Emit
     DirectConnectionUpgradeSucceeded,
+    DirectConnectionUpgradeFailed {
+        remote_peer_id: PeerId,
+    },
 }
 
 pub struct Behaviour {
@@ -89,11 +92,15 @@ impl NetworkBehaviour for Behaviour {
             ConnectedPoint::Listener { local_addr, .. }
                 if local_addr.iter().any(|p| p == Protocol::P2pCircuit) =>
             {
+                // TODO: Only do this in case there is not already a direct connection.
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: *peer_id,
                         handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::In::Connect { obs_addrs: vec![] }),
+                        event: Either::Left(handler::In::Connect {
+                            obs_addrs: vec![],
+                            attempt: 1,
+                        }),
                     });
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
@@ -109,14 +116,40 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_dial_failure(
         &mut self,
-        _peer_id: &PeerId,
-        _handler: handler::Prototype,
+        peer_id: &PeerId,
+        handler: Self::ProtocolsHandler,
         _error: DialError,
     ) {
-        // TODO: How to handle retry? Golang seems to simply wait 2 seconds between each failure?
-        // Shouldn't we do the whole CONNECT SYNC again to make sure we are aligned?
-        //
-        // See https://github.com/libp2p/go-libp2p/pull/1057#issuecomment-897522382
+        match handler {
+            handler::Prototype::DirectConnection {
+                role:
+                    handler::Role::Initiator {
+                        attempt,
+                        relay_connection_id,
+                    },
+            } => {
+                if attempt < 3 {
+                    // TODO: Emit event that attempt failed and another attempt is started.
+                    self.queued_actions
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: *peer_id,
+                            handler: NotifyHandler::One(relay_connection_id),
+                            event: Either::Left(handler::In::Connect {
+                                obs_addrs: vec![],
+                                attempt: attempt + 1,
+                            }),
+                        });
+                } else {
+                    self.queued_actions
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            Event::DirectConnectionUpgradeFailed {
+                                remote_peer_id: *peer_id,
+                            },
+                        ));
+                }
+            }
+            _ => {}
+        }
     }
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {
@@ -172,16 +205,26 @@ impl NetworkBehaviour for Behaviour {
                         // TODO: Handle empty addresses.
                         // TODO: What about the other addresses?
                         address: remote_addrs.into_iter().next().unwrap(),
-                        handler: handler::Prototype::DirectConnection,
+                        handler: handler::Prototype::DirectConnection {
+                            role: handler::Role::Listener,
+                        },
                     });
             }
-            handler::Event::OutboundConnectNeg(remote_addrs) => {
+            handler::Event::OutboundConnectNeg {
+                remote_addrs,
+                attempt,
+            } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::DialAddress {
                         // TODO: Handle empty addresses.
                         // TODO: What about the other addresses?
                         address: remote_addrs.into_iter().next().unwrap(),
-                        handler: handler::Prototype::DirectConnection,
+                        handler: handler::Prototype::DirectConnection {
+                            role: handler::Role::Initiator {
+                                attempt: attempt,
+                                relay_connection_id: connection,
+                            },
+                        },
                     });
             }
         }
