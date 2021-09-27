@@ -38,6 +38,7 @@ fn empty() {
 fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
     }
@@ -56,6 +57,7 @@ fn one_field() {
 fn two_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -79,6 +81,7 @@ fn two_fields() {
 fn three_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -109,6 +112,7 @@ fn three_fields() {
 fn three_fields_non_last_ignored() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         #[behaviour(ignore)]
@@ -134,7 +138,7 @@ fn three_fields_non_last_ignored() {
 fn custom_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo")]
+    #[behaviour(poll_method = "foo", event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -173,7 +177,7 @@ fn custom_polling() {
 fn custom_event_no_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Vec<String>")]
+    #[behaviour(out_event = "Vec<String>", event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -197,7 +201,7 @@ fn custom_event_no_polling() {
 fn custom_event_and_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo", out_event = "String")]
+    #[behaviour(poll_method = "foo", out_event = "String", event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -236,6 +240,7 @@ fn custom_event_and_polling() {
 fn where_clause() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo<T: Copy> {
         ping: libp2p::ping::Ping,
         bar: T,
@@ -248,12 +253,14 @@ fn nested_derives_with_import() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
     }
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Bar {
         foo: Foo,
     }
@@ -293,7 +300,7 @@ fn event_process_false() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "BehaviourOutEvent", event_process = false)]
+    #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
