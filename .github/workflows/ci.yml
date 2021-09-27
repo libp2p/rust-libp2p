@@ -60,6 +60,13 @@ jobs:
         target: wasm32-wasi
         override: true
 
+    - name: Install Rust wasm32-unknown-unknown
+      uses: actions-rs/toolchain@v1.0.7
+      with:
+        toolchain: stable
+        target: wasm32-unknown-unknown
+        override: true
+
     - name: Install a recent version of clang
       run: |
         apt-get update
@@ -79,6 +86,11 @@ jobs:
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
       run: cargo build --target=wasm32-wasi
+
+    - name: Build on wasm32-wasi
+      # TODO: also run `cargo test`
+      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
+      run: cargo build --target=wasm32-unknown-unknown --features wasm-bindgen
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
