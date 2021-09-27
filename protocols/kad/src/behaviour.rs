@@ -919,10 +919,9 @@ where
             .filter(|p| !p.is_expired(Instant::now()))
             .map(|p| p.provider)
             .collect();
-        // TODO(stn): call remove_provider on expired providers?
         let info = QueryInfo::GetProviders {
             key: key.clone(),
-            providers: providers,
+            providers,
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);

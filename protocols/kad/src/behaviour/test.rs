@@ -1321,8 +1321,7 @@ fn network_behaviour_inject_address_change() {
 #[test]
 fn get_providers() {
     fn prop(key: record::Key) {
-        let config = KademliaConfig::default();
-        let (_, mut single_swarm) = build_node_with_config(config);
+        let (_, mut single_swarm) = build_node();
         single_swarm
             .behaviour_mut()
             .start_providing(key.clone())
