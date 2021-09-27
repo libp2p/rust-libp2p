@@ -20,9 +20,9 @@
 
 //! Implementation of the [AutoNAT] protocol.
 
-pub use self::autonat::{AutoNat, AutoNatEvent, DialResponse};
+pub use self::behaviour::AutoNat;
 
-mod autonat;
+mod behaviour;
 mod protocol;
 
 mod structs_proto {
