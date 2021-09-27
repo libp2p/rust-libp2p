@@ -139,6 +139,8 @@ pub enum GossipsubEvent {
         /// The topic it has subscribed from.
         topic: TopicHash,
     },
+    /// A peer that does not support gossipsub has connected.
+    GossipsubNotSupported { peer_id: PeerId },
 }
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
@@ -2995,9 +2997,7 @@ where
                 .connections
                 .iter()
                 .position(|v| v == connection_id)
-                .expect(
-                    "Previously established connection to a non-black-listed peer to be present",
-                );
+                .expect("Previously established connection to peer must be present");
             connections.connections.remove(index);
 
             // If there are more connections and this peer is in a mesh, inform the first connection
@@ -3066,8 +3066,11 @@ where
                         "Peer does not support gossipsub protocols. {}",
                         propagation_source
                     );
-                    // We treat this peer as disconnected
-                    self.inject_disconnected(&propagation_source);
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        GossipsubEvent::GossipsubNotSupported {
+                            peer_id: propagation_source,
+                        },
+                    ));
                 } else if let Some(conn) = self.connected_peers.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
                     // inject_connected). All other PeerKind changes are ignored.
