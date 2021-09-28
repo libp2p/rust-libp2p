@@ -37,7 +37,7 @@ use std::{
 };
 
 type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
-type TestNetwork = Network<TestTransport, TestHandler>;
+type TestNetwork = Network<TestTransport, TestHandler, StreamMuxerBox>;
 
 fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
     let keys = identity::Keypair::generate_ed25519();

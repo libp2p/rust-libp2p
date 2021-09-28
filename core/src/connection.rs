@@ -36,6 +36,7 @@ pub use substream::{Close, Substream, SubstreamEndpoint};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
+use futures::stream::Stream;
 use std::hash::Hash;
 use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
@@ -81,6 +82,21 @@ pub enum PendingPoint {
         /// Stack of protocols used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { .. } => PendingPoint::Dialer,
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
+        }
+    }
 }
 
 /// The endpoint roles associated with a peer-to-peer connection.
@@ -245,13 +261,18 @@ where
     pub fn close(self) -> (THandler, Close<TMuxer>) {
         (self.handler, self.muxing.close().0)
     }
+}
+
+impl<TMuxer, THandler> Stream for Connection<TMuxer, THandler>
+where
+    TMuxer: StreamMuxer,
+    THandler: ConnectionHandler<Substream = Substream<TMuxer>>,
+{
+    type Item = Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>;
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
-    pub fn poll(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             let mut io_pending = false;
 
@@ -271,9 +292,9 @@ where
                 }
                 Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
                     self.handler.inject_address_change(&address);
-                    return Poll::Ready(Ok(Event::AddressChange(address)));
+                    return Poll::Ready(Some(Ok(Event::AddressChange(address))));
                 }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::IO(err))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(ConnectionError::IO(err)))),
             }
 
             // Poll the handler for new events.
@@ -287,9 +308,11 @@ where
                     self.muxing.open_substream(user_data);
                 }
                 Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event))) => {
-                    return Poll::Ready(Ok(Event::Handler(event)));
+                    return Poll::Ready(Some(Ok(Event::Handler(event))));
                 }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
+                Poll::Ready(Err(err)) => {
+                    return Poll::Ready(Some(Err(ConnectionError::Handler(err))))
+                }
             }
         }
     }

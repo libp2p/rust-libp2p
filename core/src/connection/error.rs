@@ -30,10 +30,6 @@ pub enum ConnectionError<THandlerErr> {
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
 
-    /// The connection was dropped because the connection limit
-    /// for a peer has been reached.
-    ConnectionLimit(ConnectionLimit),
-
     /// The connection handler produced an error.
     Handler(THandlerErr),
 }
@@ -46,9 +42,6 @@ where
         match self {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {}", err),
             ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {}", err),
-            ConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {}.", l)
-            }
         }
     }
 }
@@ -61,7 +54,6 @@ where
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::Handler(err) => Some(err),
-            ConnectionError::ConnectionLimit(..) => None,
         }
     }
 }
@@ -76,6 +68,10 @@ pub enum PendingConnectionError<TTransErr> {
 
     /// An error occurred while negotiating the transport protocol(s).
     TransportListen(TransportError<TTransErr>),
+
+    /// The connection was dropped because the connection limit
+    /// for a peer has been reached.
+    ConnectionLimit(ConnectionLimit),
 
     /// Pending connection attempt has been aborted.
     Aborted,
@@ -112,6 +108,9 @@ where
                 // )
                 todo!()
             }
+            PendingConnectionError::ConnectionLimit(l) => {
+                write!(f, "Connection error: Connection limit: {}.", l)
+            }
             PendingConnectionError::InvalidPeerId => {
                 write!(f, "Pending connection: Invalid peer ID.")
             }
@@ -131,6 +130,7 @@ where
             PendingConnectionError::TransportDial(err) => None,
             PendingConnectionError::InvalidPeerId => None,
             PendingConnectionError::Aborted => None,
+            PendingConnectionError::ConnectionLimit(..) => None,
         }
     }
 }

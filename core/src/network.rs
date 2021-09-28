@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod concurrent_dial;
+// TODO: pub needed?
+pub mod concurrent_dial;
 mod event;
 pub mod peer;
 
@@ -52,7 +53,7 @@ use std::{
 };
 
 /// Implementation of `Stream` that handles the nodes.
-pub struct Network<TTrans, THandler>
+pub struct Network<TTrans, THandler, TMuxer>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
@@ -64,7 +65,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    pool: Pool<THandler, TTrans::Error>,
+    pool: Pool<THandler, TMuxer, TTrans::Error>,
 
     /// The ongoing dialing attempts.
     ///
@@ -81,7 +82,7 @@ where
     dialing: FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
 }
 
-impl<TTrans, THandler> fmt::Debug for Network<TTrans, THandler>
+impl<TTrans, THandler, TMuxer> fmt::Debug for Network<TTrans, THandler, TMuxer>
 where
     TTrans: fmt::Debug + Transport,
     THandler: fmt::Debug + ConnectionHandler,
@@ -96,17 +97,19 @@ where
     }
 }
 
-impl<TTrans, THandler> Unpin for Network<TTrans, THandler>
+impl<TTrans, THandler, TMuxer> Unpin for Network<TTrans, THandler, TMuxer>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
 {
 }
 
-impl<TTrans, THandler> Network<TTrans, THandler>
+impl<TTrans, THandler, TMuxer> Network<TTrans, THandler, TMuxer>
 where
     TTrans: Transport,
+    <TTrans as Transport>::Error: Send + 'static,
     THandler: IntoConnectionHandler,
+    TMuxer: Send + 'static,
 {
     fn disconnect(&mut self, peer: &PeerId) {
         self.pool.disconnect(peer);
@@ -114,10 +117,11 @@ where
     }
 }
 
-impl<TTrans, TMuxer, THandler> Network<TTrans, THandler>
+impl<TTrans, THandler, TMuxer> Network<TTrans, THandler, TMuxer>
 where
     TTrans: Transport + Clone + 'static,
-    TMuxer: StreamMuxer,
+    <TTrans as Transport>::Error: Send + 'static,
+    TMuxer: StreamMuxer + Send + 'static,
     THandler: IntoConnectionHandler + Send + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send,
@@ -226,15 +230,15 @@ where
         }
 
         // TODO: Clone needed?
-        let fut = concurrent_dial::ConcurrentDial::new(
-            self.transport().clone(),
+        self.pool.add_outgoing(
+            concurrent_dial::ConcurrentDial::new(
+                self.transport().clone(),
+                None,
+                vec![address.clone()],
+            ),
+            handler,
             None,
-            vec![address.clone()],
         )
-        .map_err(|e| PendingConnectionError::TransportDial(e))
-        .map_ok(|(peer_id, address, muxer)| (peer_id, ConnectedPoint::Dialer { address }, muxer));
-
-        self.pool.add_outgoing(fut, handler, None)
 
         // match self.transport().clone().dial(address.clone()) {
         //     Ok(f) => {
@@ -306,7 +310,7 @@ where
     }
 
     /// Obtains a view of a [`Peer`] with the given ID in the network.
-    pub fn peer(&mut self, peer_id: PeerId) -> Peer<'_, TTrans, THandler> {
+    pub fn peer(&mut self, peer_id: PeerId) -> Peer<'_, TTrans, THandler, TMuxer> {
         Peer::new(self, peer_id)
     }
 
@@ -501,7 +505,7 @@ struct DialingOpts<PeerId, THandler> {
 // TODO: How about making this a method?
 fn dial_peer_impl<TMuxer, THandler, TTrans>(
     transport: TTrans,
-    pool: &mut Pool<THandler, TTrans::Error>,
+    pool: &mut Pool<THandler, TMuxer, TTrans::Error>,
     dialing: &mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
     opts: DialingOpts<PeerId, THandler>,
 ) -> Result<ConnectionId, DialError<THandler>>
@@ -529,11 +533,11 @@ where
     //     }
     // };
 
-    let fut = concurrent_dial::ConcurrentDial::new(transport, Some(opts.peer), opts.addresses)
-        .map_err(|e| PendingConnectionError::TransportDial(e))
-        .map_ok(|(peer_id, address, muxer)| (peer_id, ConnectedPoint::Dialer { address }, muxer));
-
-    let result = pool.add_outgoing(fut, opts.handler, Some(opts.peer));
+    let result = pool.add_outgoing(
+        concurrent_dial::ConcurrentDial::new(transport, Some(opts.peer), opts.addresses),
+        opts.handler,
+        Some(opts.peer),
+    );
 
     // let result = match transport.dial(addr.clone()) {
     //     Ok(fut) => {

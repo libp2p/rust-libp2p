@@ -70,7 +70,8 @@ where
 /// Future that signals the remote that we have closed the connection.
 pub struct Close<TMuxer> {
     /// Muxer to close.
-    muxer: Arc<TMuxer>,
+    // TODO: pub needed?
+    pub muxer: Arc<TMuxer>,
 }
 
 /// A successfully opened substream.

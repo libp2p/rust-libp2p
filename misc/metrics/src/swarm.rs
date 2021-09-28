@@ -309,6 +309,7 @@ enum PendingConnectionError {
     TransportErrorOther,
     Aborted,
     Io,
+    ConnectionLimit,
 }
 
 impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>>
@@ -318,6 +319,9 @@ impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>
         match error {
             libp2p_core::connection::PendingConnectionError::InvalidPeerId => {
                 PendingConnectionError::InvalidPeerId
+            }
+            libp2p_core::connection::PendingConnectionError::ConnectionLimit(_) => {
+                PendingConnectionError::ConnectionLimit
             }
             libp2p_core::connection::PendingConnectionError::TransportListen(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),

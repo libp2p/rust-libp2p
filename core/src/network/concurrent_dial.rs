@@ -42,7 +42,9 @@ use std::{
 
 // TODO: Have a concurrency limit.
 
-pub(crate) struct ConcurrentDial<TMuxer, TError> {
+// TODO: pub needed?
+pub struct ConcurrentDial<TMuxer, TError> {
+    // TODO: We could as well spawn each of these on a separate task.
     dials: FuturesUnordered<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
     errors: Vec<(Multiaddr, TransportError<TError>)>,
 }
@@ -82,14 +84,26 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
 }
 
 impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
-    type Output = Result<(PeerId, Multiaddr, TMuxer), Vec<(Multiaddr, TransportError<TError>)>>;
+    type Output = Result<
+        (
+            PeerId,
+            Multiaddr,
+            TMuxer,
+            Vec<(Multiaddr, TransportError<TError>)>,
+        ),
+        Vec<(Multiaddr, TransportError<TError>)>,
+    >;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
-                // TODO: What about self.errors? Sure we should loose these?
                 Some((addr, Ok((peer_id, muxer)))) => {
-                    return Poll::Ready(Ok((peer_id, addr, muxer)));
+                    return Poll::Ready(Ok((
+                        peer_id,
+                        addr,
+                        muxer,
+                        std::mem::replace(&mut self.errors, vec![]),
+                    )));
                 }
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, TransportError::Other(e)));

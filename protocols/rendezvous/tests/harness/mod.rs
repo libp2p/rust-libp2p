@@ -155,9 +155,6 @@ where
                         SwarmEvent::ConnectionEstablished { .. } => {
                             dialer_done = true;
                         }
-                        SwarmEvent::UnknownPeerUnreachableAddr { address, error } if address == addr_to_dial => {
-                            panic!("Failed to dial address {}: {}", addr_to_dial, error)
-                        }
                         other => {
                             log::debug!("Ignoring {:?}", other);
                         }

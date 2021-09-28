@@ -251,6 +251,7 @@ where
     network: Network<
         transport::Boxed<(PeerId, StreamMuxerBox)>,
         NodeHandlerWrapperBuilder<THandler<TBehaviour>>,
+        StreamMuxerBox,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
@@ -931,12 +932,13 @@ fn notify_one<'a, THandlerInEvent>(
 /// was successfully sent to a handler, in either case the event is consumed.
 fn notify_any<'a, TTrans, THandler, TBehaviour>(
     ids: SmallVec<[ConnectionId; 10]>,
-    peer: &mut ConnectedPeer<'a, TTrans, THandler>,
+    peer: &mut ConnectedPeer<'a, TTrans, THandler, StreamMuxerBox>,
     event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
 ) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>
 where
     TTrans: Transport,
+    TTrans::Error: Send + 'static,
     TBehaviour: NetworkBehaviour,
     THandler: IntoConnectionHandler,
     THandler::Handler: ConnectionHandler<
@@ -1216,6 +1218,7 @@ impl DialError {
 impl From<PendingConnectionError<io::Error>> for DialError {
     fn from(error: PendingConnectionError<io::Error>) -> Self {
         match error {
+            PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
             PendingConnectionError::InvalidPeerId => DialError::InvalidPeerId,
             PendingConnectionError::IO(e) => DialError::ConnectionIo(e),

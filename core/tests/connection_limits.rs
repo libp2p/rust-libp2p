@@ -23,7 +23,7 @@ mod util;
 use futures::{future::poll_fn, ready};
 use libp2p_core::multiaddr::{multiaddr, Multiaddr, Protocol};
 use libp2p_core::{
-    connection::ConnectionError,
+    connection::{ConnectionError, PendingConnectionError},
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
     PeerId,
 };
@@ -113,8 +113,8 @@ fn max_established_incoming() {
                 network1.accept(connection, TestHandler()).unwrap();
             }
             NetworkEvent::ConnectionEstablished { .. } => {}
-            NetworkEvent::ConnectionClosed {
-                error: Some(ConnectionError::ConnectionLimit(err)),
+            NetworkEvent::IncomingConnectionError {
+                error: PendingConnectionError::ConnectionLimit(err),
                 ..
             } => {
                 assert_eq!(err.limit, limit);

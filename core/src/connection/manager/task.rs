@@ -301,40 +301,41 @@ where
                             }
                         }
                     } else {
-                        // Poll the connection for new events.
-                        match Connection::poll(Pin::new(&mut connection), cx) {
-                            Poll::Pending => {
-                                this.state = State::Established {
-                                    connection,
-                                    event: None,
-                                };
-                                return Poll::Pending;
-                            }
-                            Poll::Ready(Ok(connection::Event::Handler(event))) => {
-                                this.state = State::Established {
-                                    connection,
-                                    event: Some(Event::Notify { id, event }),
-                                };
-                            }
-                            Poll::Ready(Ok(connection::Event::AddressChange(new_address))) => {
-                                this.state = State::Established {
-                                    connection,
-                                    event: Some(Event::AddressChange { id, new_address }),
-                                };
-                            }
-                            Poll::Ready(Err(error)) => {
-                                // Don't accept any further commands.
-                                this.commands.get_mut().close();
-                                let (handler, _closing_muxer) = connection.close();
-                                // Terminate the task with the error, dropping the connection.
-                                let event = Event::Closed {
-                                    id,
-                                    error: Some(error),
-                                    handler,
-                                };
-                                this.state = State::Terminating(event);
-                            }
-                        }
+                        todo!("can be removed")
+                        // // Poll the connection for new events.
+                        // match Connection::poll(Pin::new(&mut connection), cx) {
+                        //     Poll::Pending => {
+                        //         this.state = State::Established {
+                        //             connection,
+                        //             event: None,
+                        //         };
+                        //         return Poll::Pending;
+                        //     }
+                        //     Poll::Ready(Ok(connection::Event::Handler(event))) => {
+                        //         this.state = State::Established {
+                        //             connection,
+                        //             event: Some(Event::Notify { id, event }),
+                        //         };
+                        //     }
+                        //     Poll::Ready(Ok(connection::Event::AddressChange(new_address))) => {
+                        //         this.state = State::Established {
+                        //             connection,
+                        //             event: Some(Event::AddressChange { id, new_address }),
+                        //         };
+                        //     }
+                        //     Poll::Ready(Err(error)) => {
+                        //         // Don't accept any further commands.
+                        //         this.commands.get_mut().close();
+                        //         let (handler, _closing_muxer) = connection.close();
+                        //         // Terminate the task with the error, dropping the connection.
+                        //         let event = Event::Closed {
+                        //             id,
+                        //             error: Some(error),
+                        //             handler,
+                        //         };
+                        //         this.state = State::Terminating(event);
+                        //     }
+                        // }
                     }
                 }
 
@@ -346,12 +347,13 @@ where
                     // Try to gracefully close the connection.
                     match closing_muxer.poll_unpin(cx) {
                         Poll::Ready(Ok(())) => {
-                            let event = Event::Closed {
-                                id: this.id,
-                                error: error.map(ConnectionError::ConnectionLimit),
-                                handler,
-                            };
-                            this.state = State::Terminating(event);
+                            todo!()
+                            // let event = Event::Closed {
+                            //     id: this.id,
+                            //     error: error.map(ConnectionError::ConnectionLimit),
+                            //     handler,
+                            // };
+                            // this.state = State::Terminating(event);
                         }
                         Poll::Ready(Err(e)) => {
                             let event = Event::Closed {

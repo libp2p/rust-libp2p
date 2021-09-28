@@ -76,17 +76,6 @@ async fn main() {
                             rendezvous_point,
                         );
                     }
-                    SwarmEvent::UnreachableAddr { error, address, .. }
-                    | SwarmEvent::UnknownPeerUnreachableAddr { error, address, .. }
-                        if address == rendezvous_point_address =>
-                    {
-                        log::error!(
-                            "Failed to connect to rendezvous point at {}: {}",
-                            address,
-                            error
-                        );
-                        return;
-                    }
                     SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::client::Event::Discovered {
                         registrations,
                         cookie: new_cookie,
