@@ -912,9 +912,16 @@ where
     /// The result of this operation is delivered in a
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
+        let providers = self
+            .store
+            .providers(&key)
+            .into_iter()
+            .filter(|p| !p.is_expired(Instant::now()))
+            .map(|p| p.provider)
+            .collect();
         let info = QueryInfo::GetProviders {
             key: key.clone(),
-            providers: HashSet::new(),
+            providers,
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);

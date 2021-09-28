@@ -1,5 +1,8 @@
 # 0.33.0 [unreleased]
 
+- Add an event to register peers that do not support the gossipsub protocol
+  [PR 2241](https://github.com/libp2p/rust-libp2p/pull/2241)
+
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
