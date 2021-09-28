@@ -40,6 +40,14 @@ pub enum PublishError {
     TransformFailed(std::io::Error),
 }
 
+impl std::fmt::Display for PublishError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for PublishError {}
+
 /// Error associated with subscribing to a topic.
 #[derive(Debug)]
 pub enum SubscriptionError {
@@ -48,6 +56,14 @@ pub enum SubscriptionError {
     /// We are not allowed to subscribe to this topic by the subscription filter
     NotAllowed,
 }
+
+impl std::fmt::Display for SubscriptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for SubscriptionError {}
 
 impl From<SigningError> for PublishError {
     fn from(error: SigningError) -> Self {
@@ -94,6 +110,15 @@ pub enum ValidationError {
     /// The data transformation failed.
     TransformFailed,
 }
+
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for ValidationError {}
 
 impl From<std::io::Error> for GossipsubHandlerError {
     fn from(error: std::io::Error) -> GossipsubHandlerError {
