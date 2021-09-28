@@ -130,6 +130,8 @@ where
 
     /// A dialing attempt to an address of a peer failed.
     DialError {
+        /// The ID of the connection that encountered an error.
+        id: ConnectionId,
         /// The number of remaining dialing attempts.
         attempts_remaining: DialAttemptsRemaining<THandler>,
 
@@ -145,6 +147,8 @@ where
 
     /// Failed to reach a peer that we were trying to dial.
     UnknownPeerDialError {
+        /// The ID of the connection that encountered an error.
+        id: ConnectionId,
         /// The multiaddr we failed to reach.
         multiaddr: Multiaddr,
 
@@ -262,21 +266,27 @@ where
                 .field("error", error)
                 .finish(),
             NetworkEvent::DialError {
+                id,
                 attempts_remaining,
                 peer_id,
                 multiaddr,
                 error,
             } => f
                 .debug_struct("DialError")
+                .field("id", id)
                 .field("attempts_remaining", &attempts_remaining.get_attempts())
                 .field("peer_id", peer_id)
                 .field("multiaddr", multiaddr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::UnknownPeerDialError {
-                multiaddr, error, ..
+                id,
+                multiaddr,
+                error,
+                ..
             } => f
                 .debug_struct("UnknownPeerDialError")
+                .field("id", id)
                 .field("multiaddr", multiaddr)
                 .field("error", error)
                 .finish(),

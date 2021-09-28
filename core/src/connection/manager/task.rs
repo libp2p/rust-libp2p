@@ -23,8 +23,8 @@ use crate::{
     connection::{
         self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Close, Connected, Connection, ConnectionError, ConnectionHandler, ConnectionLimit,
-        IntoConnectionHandler, PendingConnectionError, Substream,
+        Close, Connected, Connection, ConnectionError, ConnectionHandler, IntoConnectionHandler,
+        PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     Multiaddr,
@@ -43,7 +43,7 @@ pub enum Command<T> {
     NotifyHandler(T),
     /// Gracefully close the connection (active close) before
     /// terminating the task.
-    Close(Option<ConnectionLimit>),
+    Close,
 }
 
 /// Events that a task can emit to its manager.
@@ -163,7 +163,6 @@ where
     Closing {
         closing_muxer: Close<M>,
         handler: H::Handler,
-        error: Option<ConnectionLimit>,
     },
 
     /// The task is terminating with a final event for the `Manager`.
@@ -257,7 +256,7 @@ where
                             Poll::Ready(Some(Command::NotifyHandler(event))) => {
                                 connection.inject_event(event)
                             }
-                            Poll::Ready(Some(Command::Close(error))) => {
+                            Poll::Ready(Some(Command::Close)) => {
                                 // Don't accept any further commands.
                                 this.commands.get_mut().close();
                                 // Discard the event, if any, and start a graceful close.
@@ -265,7 +264,6 @@ where
                                 this.state = State::Closing {
                                     handler,
                                     closing_muxer,
-                                    error,
                                 };
                                 continue 'poll;
                             }
@@ -340,7 +338,6 @@ where
 
                 State::Closing {
                     handler,
-                    error,
                     mut closing_muxer,
                 } => {
                     // Try to gracefully close the connection.
@@ -348,7 +345,7 @@ where
                         Poll::Ready(Ok(())) => {
                             let event = Event::Closed {
                                 id: this.id,
-                                error: error.map(ConnectionError::ConnectionLimit),
+                                error: None,
                                 handler,
                             };
                             this.state = State::Terminating(event);
@@ -364,7 +361,6 @@ where
                         Poll::Pending => {
                             this.state = State::Closing {
                                 handler,
-                                error,
                                 closing_muxer,
                             };
                             return Poll::Pending;

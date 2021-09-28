@@ -35,7 +35,7 @@ use util::{test_network, TestHandler};
 fn max_outgoing() {
     let outgoing_limit = rand::thread_rng().gen_range(1, 10);
 
-    let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
+    let limits = ConnectionLimits::default().with_max_outgoing(Some(outgoing_limit));
     let cfg = NetworkConfig::default().with_connection_limits(limits);
     let mut network = test_network(cfg);
 
@@ -62,10 +62,7 @@ fn max_outgoing() {
 
     let info = network.info();
     assert_eq!(info.num_peers(), 0);
-    assert_eq!(
-        info.connection_counters().num_pending_outgoing(),
-        outgoing_limit
-    );
+    assert_eq!(info.connection_counters().num_outgoing(), outgoing_limit);
 
     // Abort all dialing attempts.
     let mut peer = network
@@ -78,18 +75,15 @@ fn max_outgoing() {
         attempt.abort();
     }
 
-    assert_eq!(
-        network.info().connection_counters().num_pending_outgoing(),
-        0
-    );
+    assert_eq!(network.info().connection_counters().num_outgoing(), 0);
 }
 
 #[test]
-fn max_established_incoming() {
+fn max_incoming() {
     let limit = rand::thread_rng().gen_range(1, 10);
 
     fn config(limit: u32) -> NetworkConfig {
-        let limits = ConnectionLimits::default().with_max_established_incoming(Some(limit));
+        let limits = ConnectionLimits::default().with_max_incoming(Some(limit));
         NetworkConfig::default().with_connection_limits(limits)
     }
 
@@ -102,28 +96,18 @@ fn max_established_incoming() {
     let mut addr_sender = Some(addr_sender);
 
     // Spawn the listener.
-    let listener = async_std::task::spawn(poll_fn(move |cx| loop {
-        match ready!(network1.poll(cx)) {
-            NetworkEvent::NewListenerAddress { listen_addr, .. } => {
-                addr_sender.take().unwrap().send(listen_addr).unwrap();
+    async_std::task::spawn(poll_fn(move |cx| -> Poll<()> {
+        loop {
+            match ready!(network1.poll(cx)) {
+                NetworkEvent::NewListenerAddress { listen_addr, .. } => {
+                    addr_sender.take().unwrap().send(listen_addr).unwrap();
+                }
+                NetworkEvent::IncomingConnection { connection, .. } => {
+                    network1.accept(connection, TestHandler());
+                }
+                NetworkEvent::ConnectionEstablished { .. } => {}
+                e => panic!("Unexpected network event: {:?}", e),
             }
-            NetworkEvent::IncomingConnection { connection, .. } => {
-                network1.accept(connection, TestHandler()).unwrap();
-            }
-            NetworkEvent::ConnectionEstablished { .. } => {}
-            NetworkEvent::ConnectionClosed {
-                error: Some(ConnectionError::ConnectionLimit(err)),
-                ..
-            } => {
-                assert_eq!(err.limit, limit);
-                assert_eq!(err.limit, err.current);
-                let info = network1.info();
-                let counters = info.connection_counters();
-                assert_eq!(counters.num_established_incoming(), limit);
-                assert_eq!(counters.num_established(), limit);
-                return Poll::Ready(());
-            }
-            e => panic!("Unexpected network event: {:?}", e),
         }
     }));
 
@@ -147,19 +131,15 @@ fn max_established_incoming() {
                                 expected_closed = Some(id);
                             }
                         } else {
-                            // This connection exceeds the limit for the listener and
-                            // is expected to close shortly. For the dialer, these connections
-                            // will first appear established before the listener closes them as
-                            // a result of the limit violation.
-                            assert_eq!(Some(connection.id()), expected_closed);
+                            panic!("Unexpected established connection beyond connection limit.")
                         }
                     }
-                    NetworkEvent::ConnectionClosed { id, .. } => {
+                    NetworkEvent::UnknownPeerDialError { id, .. } => {
                         assert_eq!(Some(id), expected_closed);
                         let info = network2.info();
                         let counters = info.connection_counters();
-                        assert_eq!(counters.num_established_outgoing(), limit);
-                        assert_eq!(counters.num_established(), limit);
+                        assert_eq!(counters.num_outgoing(), limit);
+                        assert_eq!(counters.num_total(), limit);
                         return Poll::Ready(());
                     }
                     e => panic!("Unexpected network event: {:?}", e),
@@ -168,7 +148,4 @@ fn max_established_incoming() {
         })
         .await
     });
-
-    // Wait for the listener to complete.
-    async_std::task::block_on(listener);
 }

@@ -614,6 +614,7 @@ where
         (
             opts,
             NetworkEvent::DialError {
+                id,
                 attempts_remaining,
                 peer_id,
                 multiaddr: failed_addr,
@@ -626,6 +627,7 @@ where
             ConnectedPoint::Dialer { address } => (
                 None,
                 NetworkEvent::UnknownPeerDialError {
+                    id,
                     multiaddr: address,
                     error,
                     handler,

@@ -51,7 +51,7 @@ fn deny_incoming_connec() {
         _ => panic!("Was expecting the listen address to be reported"),
     }));
 
-    swarm2
+    let (connection_id, _) = swarm2
         .peer(swarm1.local_peer_id().clone())
         .dial(address.clone(), Vec::new(), TestHandler())
         .unwrap();
@@ -65,11 +65,13 @@ fn deny_incoming_connec() {
 
         match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
+                id,
                 attempts_remaining,
                 peer_id,
                 multiaddr,
                 error: PendingConnectionError::Transport(_),
             }) => {
+                assert_eq!(id, connection_id);
                 assert_eq!(0u32, attempts_remaining.get_attempts());
                 assert_eq!(&peer_id, swarm1.local_peer_id());
                 assert_eq!(
@@ -191,6 +193,7 @@ fn multiple_addresses_err() {
         loop {
             match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::DialError {
+                    id: _,
                     attempts_remaining,
                     peer_id,
                     multiaddr,

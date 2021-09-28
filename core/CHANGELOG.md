@@ -1,6 +1,13 @@
 # 0.30.0 [unreleased]
 
-- Add `ConnectionLimit::with_max_established` (see [PR 2137]).
+- Add `ConnectionLimits::with_max_established` (see [PR 2137]).
+
+- Merge pending and established limits for both incoming and outgoing connections. More specifically
+  merge `ConnectionLimits::with_max_pending_incoming` with
+  `ConnectionLimits::with_max_established_incoming` and
+  `ConnectionLimits::with_max_pending_outgoing` with
+  `ConnectionLimits::with_max_established_outgoing`. Connection limits are checked on
+  `Network::dial` for outgoing and on `Network::accept` for incoming connections.
 
 - Add `Keypair::to_protobuf_encoding` (see [PR 2142]).
 
@@ -21,11 +28,6 @@
   (see [PR 2183]).
 
 - Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
-
-- Report `ConnectionLimit` error through `ConnectionError` and thus through
-  `NetworkEvent::ConnectionClosed` instead of previously through
-  `PendingConnectionError` and thus `NetworkEvent::{IncomingConnectionError,
-  DialError}` (see [PR 2191]).
 
 - Report abortion of pending connection through `DialError`,
   `UnknownPeerDialError` or `IncomingConnectionError` (see [PR 2191]).

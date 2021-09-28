@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use std::{fmt, io};
 
@@ -28,10 +27,6 @@ pub enum ConnectionError<THandlerErr> {
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
-
-    /// The connection was dropped because the connection limit
-    /// for a peer has been reached.
-    ConnectionLimit(ConnectionLimit),
 
     /// The connection handler produced an error.
     Handler(THandlerErr),
@@ -45,9 +40,6 @@ where
         match self {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {}", err),
             ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {}", err),
-            ConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {}.", l)
-            }
         }
     }
 }
@@ -60,7 +52,6 @@ where
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::Handler(err) => Some(err),
-            ConnectionError::ConnectionLimit(..) => None,
         }
     }
 }

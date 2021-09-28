@@ -624,6 +624,7 @@ where
                         );
                     let local_addr = connection.local_addr.clone();
                     let send_back_addr = connection.send_back_addr.clone();
+                    // TODO: Handler is lost here.
                     if let Err(e) = this.network.accept(connection, handler) {
                         log::warn!("Incoming connection rejected: {:?}", e);
                     }
@@ -709,6 +710,7 @@ where
                     });
                 }
                 Poll::Ready(NetworkEvent::DialError {
+                    id: _,
                     peer_id,
                     multiaddr,
                     error,
@@ -745,7 +747,10 @@ where
                     });
                 }
                 Poll::Ready(NetworkEvent::UnknownPeerDialError {
-                    multiaddr, error, ..
+                    id: _,
+                    multiaddr,
+                    error,
+                    ..
                 }) => {
                     log::debug!(
                         "Connection attempt to address {:?} of unknown peer failed with {:?}",
