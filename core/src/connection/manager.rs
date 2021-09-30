@@ -20,13 +20,13 @@
 
 use super::{
     handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionLimit,
-    IntoConnectionHandler, PendingConnectionError, Substream,
+    Connected, ConnectedPoint, ConnectionError, ConnectionHandler, IntoConnectionHandler,
+    PendingConnectionError, Substream,
 };
 use crate::{muxing::StreamMuxer, transport::TransportError, Executor, Multiaddr, PeerId};
 use fnv::FnvHashMap;
 use futures::{
-    channel::mpsc,
+    channel::{mpsc, oneshot},
     future::{poll_fn, BoxFuture, Either},
     prelude::*,
     ready,
@@ -39,6 +39,7 @@ use std::{
     task::{Context, Poll},
 };
 use task::{Task, TaskId};
+use void::Void;
 
 mod task;
 
@@ -115,9 +116,7 @@ pub struct Manager<H: IntoConnectionHandler, TMuxer, E> {
 
 impl<H: IntoConnectionHandler, TMuxer, E> fmt::Debug for Manager<H, TMuxer, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map()
-            .entries(self.tasks.iter().map(|(id, task)| (id, &task.state)))
-            .finish()
+        f.debug_map().entries(self.tasks.iter()).finish()
     }
 }
 
@@ -152,20 +151,16 @@ impl Default for ManagerConfig {
 /// Contains the sender to deliver event messages to the task, and
 /// the associated user data.
 #[derive(Debug)]
-struct TaskInfo<I> {
-    /// Channel endpoint to send messages to the task.
-    sender: mpsc::Sender<task::Command<I>>,
-    /// The state of the task as seen by the `Manager`.
-    state: TaskState,
-}
-
-/// Internal state of a running task as seen by the `Manager`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum TaskState {
-    /// The connection is being established.
-    Pending,
-    /// The connection is established.
-    Established(Connected),
+enum TaskInfo<I> {
+    Pending {
+        // TODO: Document
+        drop_notifier: oneshot::Sender<Void>,
+    },
+    Established {
+        connected: Connected,
+        /// Channel endpoint to send messages to the task.
+        sender: mpsc::Sender<task::Command<I>>,
+    },
 }
 
 /// Events produced by the [`Manager`].
@@ -288,22 +283,16 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
     {
         let task_id = self.next_task_id();
 
-        let (sender, mut receiver) = mpsc::channel(self.task_command_buffer_size);
-        self.tasks.insert(
-            task_id,
-            TaskInfo {
-                sender,
-                state: TaskState::Pending,
-            },
-        );
+        let (drop_notifier, mut drop_receiver) = oneshot::channel();
+        self.tasks
+            .insert(task_id, TaskInfo::Pending { drop_notifier });
 
         let mut events = self.events_tx.clone();
 
         self.spawn(
             async move {
-                match futures::future::select(receiver.next(), Box::pin(dial)).await {
-                    Either::Left((None, _)) => {
-                        receiver.close();
+                match futures::future::select(drop_receiver, Box::pin(dial)).await {
+                    Either::Left((Err(oneshot::Canceled), _)) => {
                         events
                             .send(task::Event::PendingFailed {
                                 id: task_id,
@@ -311,10 +300,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                             })
                             .await;
                     }
-                    Either::Left((Some(_), _)) => {
-                        // TODO: We should never get a command here.
-                        // TODO: Create a channel with Void.
-                    }
+                    Either::Left((Ok(v), _)) => void::unreachable(v),
                     Either::Right((Ok((peer_id, muxer)), _)) => {
                         events
                             .send(task::Event::IncomingEstablished {
@@ -350,24 +336,17 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
     {
         let task_id = self.next_task_id();
 
-        let (sender, mut receiver) = mpsc::channel(self.task_command_buffer_size);
+        let (drop_notifier, mut drop_receiver) = oneshot::channel();
 
-        self.tasks.insert(
-            task_id,
-            TaskInfo {
-                sender,
-                state: TaskState::Pending,
-            },
-        );
+        self.tasks
+            .insert(task_id, TaskInfo::Pending { drop_notifier });
 
         let mut events = self.events_tx.clone();
 
         self.spawn(
             async move {
-                match futures::future::select(receiver.next(), Box::pin(dial)).await {
-                    Either::Left((None, _)) => {
-                        // TODO: Needed?
-                        receiver.close();
+                match futures::future::select(drop_receiver, Box::pin(dial)).await {
+                    Either::Left((Err(oneshot::Canceled), _)) => {
                         events
                             .send(task::Event::PendingFailed {
                                 id: task_id,
@@ -375,10 +354,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                             })
                             .await;
                     }
-                    Either::Left((Some(_), _)) => {
-                        // TODO: We should never get a command here.
-                        // TODO: Create a channel with Void.
-                    }
+                    Either::Left((Ok(v), _)) => void::unreachable(v),
                     Either::Right((Ok((peer_id, address, muxer, errors)), _)) => {
                         events
                             .send(task::Event::OutgoingEstablished {
@@ -422,9 +398,9 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
         self.tasks.insert(
             task_id.0,
-            TaskInfo {
+            TaskInfo::Established {
                 sender: command_sender,
-                state: TaskState::Established(connected),
+                connected,
             },
         );
 
@@ -505,46 +481,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         self.spawn(task);
     }
 
-    /// Adds to the manager a future that tries to reach a node.
-    ///
-    /// This method spawns a task dedicated to resolving this future and
-    /// processing the node's events.
-    pub fn add_pending<F>(&mut self, future: F, handler: H) -> ConnectionId
-    where
-        TE: error::Error + Send + 'static,
-        F: Future<Output = ConnectResult<TMuxer, TE>> + Send + 'static,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
-        H: IntoConnectionHandler + Send + 'static,
-        H::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-        <H::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-    {
-        let task_id = self.next_task_id();
-
-        let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
-        self.tasks.insert(
-            task_id,
-            TaskInfo {
-                sender: tx,
-                state: TaskState::Pending,
-            },
-        );
-
-        let task = Box::pin(Task::pending(
-            task_id,
-            self.events_tx.clone(),
-            rx,
-            future,
-            handler,
-        ));
-
-        self.spawn(task);
-
-        ConnectionId(task_id)
-    }
-
     /// Gets an entry for a managed connection, if it exists.
-    // TODO: Rework this.
     pub fn entry(&mut self, id: ConnectionId) -> Option<Entry<'_, THandlerInEvent<H>>> {
         if let hash_map::Entry::Occupied(task) = self.tasks.entry(id.0) {
             Some(Entry::new(task))
@@ -555,13 +492,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
     /// Checks whether an established connection with the given ID is currently managed.
     pub fn is_established(&self, id: &ConnectionId) -> bool {
-        matches!(
-            self.tasks.get(&id.0),
-            Some(TaskInfo {
-                state: TaskState::Established(..),
-                ..
-            })
-        )
+        matches!(self.tasks.get(&id.0), Some(TaskInfo::Established { .. }))
     }
 
     /// Polls the manager for events relating to the managed connections.
@@ -617,16 +548,18 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     Event::PendingConnectionError { id, error }
                 }
                 task::Event::AddressChange { id: _, new_address } => {
-                    let (new, old) = if let TaskState::Established(c) = &mut task.get_mut().state {
-                        let mut new_endpoint = c.endpoint.clone();
-                        new_endpoint.set_remote_address(new_address);
-                        let old_endpoint = mem::replace(&mut c.endpoint, new_endpoint.clone());
-                        (new_endpoint, old_endpoint)
-                    } else {
-                        unreachable!(
+                    let (new, old) =
+                        if let TaskInfo::Established { connected, .. } = &mut task.get_mut() {
+                            let mut new_endpoint = connected.endpoint.clone();
+                            new_endpoint.set_remote_address(new_address);
+                            let old_endpoint =
+                                mem::replace(&mut connected.endpoint, new_endpoint.clone());
+                            (new_endpoint, old_endpoint)
+                        } else {
+                            unreachable!(
                             "`Event::AddressChange` implies (2) occurred on that task and thus (3)."
                         )
-                    };
+                        };
                     Event::AddressChange {
                         entry: EstablishedEntry { task },
                         old_endpoint: old,
@@ -635,15 +568,15 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                 }
                 task::Event::Closed { id, error, handler } => {
                     let id = ConnectionId(id);
-                    let task = task.remove();
-                    match task.state {
-                        TaskState::Established(connected) => Event::ConnectionClosed {
+                    match task.remove() {
+                        TaskInfo::Established { sender, connected } => Event::ConnectionClosed {
                             id,
                             connected,
                             error,
                             handler,
                         },
-                        TaskState::Pending => unreachable!(
+                        TaskInfo::Pending { .. } => unreachable!(
+                            // TODO: Reconsider these numbers.
                             "`Event::Closed` implies (2) occurred on that task and thus (3)."
                         ),
                     }
@@ -664,9 +597,9 @@ pub enum Entry<'a, I> {
 
 impl<'a, I> Entry<'a, I> {
     fn new(task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I>>) -> Self {
-        match &task.get().state {
-            TaskState::Pending => Entry::Pending(PendingEntry { task }),
-            TaskState::Established(_) => Entry::Established(EstablishedEntry { task }),
+        match &task.get() {
+            TaskInfo::Pending { .. } => Entry::Pending(PendingEntry { task }),
+            TaskInfo::Established { .. } => Entry::Established(EstablishedEntry { task }),
         }
     }
 }
@@ -694,14 +627,15 @@ impl<'a, I> EstablishedEntry<'a, I> {
     /// > the connection handler not being ready at this time.
     pub fn notify_handler(&mut self, event: I) -> Result<(), I> {
         let cmd = task::Command::NotifyHandler(event); // (*)
-        self.task
-            .get_mut()
-            .sender
-            .try_send(cmd)
-            .map_err(|e| match e.into_inner() {
-                task::Command::NotifyHandler(event) => event,
-                _ => panic!("Unexpected command. Expected `NotifyHandler`"), // see (*)
-            })
+        match self.task.get_mut() {
+            TaskInfo::Established { sender, .. } => {
+                sender.try_send(cmd).map_err(|e| match e.into_inner() {
+                    task::Command::NotifyHandler(event) => event,
+                    _ => panic!("Unexpected command. Expected `NotifyHandler`"), // see (*)
+                })
+            }
+            TaskInfo::Pending { .. } => unreachable!("TODO"),
+        }
     }
 
     /// Checks if `notify_handler` is ready to accept an event.
@@ -711,7 +645,10 @@ impl<'a, I> EstablishedEntry<'a, I> {
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
     pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
-        self.task.get_mut().sender.poll_ready(cx).map_err(|_| ())
+        match self.task.get_mut() {
+            TaskInfo::Established { sender, .. } => sender.poll_ready(cx).map_err(|_| ()),
+            TaskInfo::Pending { .. } => unreachable!("TODO"),
+        }
     }
 
     /// Sends a close command to the associated background task,
@@ -724,23 +661,22 @@ impl<'a, I> EstablishedEntry<'a, I> {
     pub fn start_close(mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
-        match self
-            .task
-            .get_mut()
-            .sender
-            .clone()
-            .try_send(task::Command::Close)
-        {
-            Ok(()) => {}
-            Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
+        match self.task.get_mut() {
+            TaskInfo::Established { sender, .. } => {
+                match sender.clone().try_send(task::Command::Close) {
+                    Ok(()) => {}
+                    Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
+                }
+            }
+            TaskInfo::Pending { .. } => unreachable!("TODO"),
         }
     }
 
     /// Obtains information about the established connection.
     pub fn connected(&self) -> &Connected {
-        match &self.task.get().state {
-            TaskState::Established(c) => c,
-            TaskState::Pending => unreachable!("By Entry::new()"),
+        match &self.task.get() {
+            TaskInfo::Established { connected, .. } => connected,
+            TaskInfo::Pending { .. } => unreachable!("By Entry::new()"),
         }
     }
 
