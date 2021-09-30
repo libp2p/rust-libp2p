@@ -46,7 +46,15 @@ impl std::fmt::Display for PublishError {
     }
 }
 
-impl std::error::Error for PublishError {}
+impl std::error::Error for PublishError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::SigningError(err) => Some(err),
+            Self::TransformFailed(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 /// Error associated with subscribing to a topic.
 #[derive(Debug)]
@@ -63,7 +71,14 @@ impl std::fmt::Display for SubscriptionError {
     }
 }
 
-impl std::error::Error for SubscriptionError {}
+impl std::error::Error for SubscriptionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::PublishError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 impl From<SigningError> for PublishError {
     fn from(error: SigningError) -> Self {
@@ -110,7 +125,6 @@ pub enum ValidationError {
     /// The data transformation failed.
     TransformFailed,
 }
-
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
