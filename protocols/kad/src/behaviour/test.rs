@@ -1281,7 +1281,7 @@ fn network_behaviour_inject_address_change() {
     };
 
     // Mimick a connection being established.
-    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint);
+    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None);
     kademlia.inject_connected(&remote_peer_id);
 
     // At this point the remote is not yet known to support the

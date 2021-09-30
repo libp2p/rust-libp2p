@@ -84,17 +84,11 @@ impl<THandler: IntoConnectionHandler, TMuxer, TTransErr> Unpin
 
 /// Event that can happen on the `Pool`.
 pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
-    /// A new outgoing connection has been established.
-    OutgoingConnectionEstablished {
+    /// A new connection has been established.
+    ConnectionEstablished {
         connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
         num_established: NonZeroU32,
-        errors: Vec<(Multiaddr, TransportError<TTransErr>)>,
-    },
-
-    /// A new incoming connection has been established.
-    IncomingConnectionEstablished {
-        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
-        num_established: NonZeroU32,
+        outgoing: Option<Vec<(Multiaddr, TransportError<TTransErr>)>>,
     },
 
     /// An established connection was closed.
@@ -165,13 +159,14 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            PoolEvent::OutgoingConnectionEstablished { ref connection, .. } => f
+            PoolEvent::ConnectionEstablished {
+                ref connection,
+                ref outgoing,
+                ..
+            } => f
                 .debug_tuple("PoolEvent::OutgoingConnectionEstablished")
                 .field(connection)
-                .finish(),
-            PoolEvent::IncomingConnectionEstablished { ref connection, .. } => f
-                .debug_tuple("PoolEvent::IncomingConnectionEstablished")
-                .field(connection)
+                .field(outgoing)
                 .finish(),
             PoolEvent::ConnectionClosed {
                 ref id,
@@ -572,13 +567,11 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                         handler,
                     });
                 }
-                manager::Event::OutgoingConnectionEstablished {
+                manager::Event::ConnectionEstablished {
                     id,
                     peer_id,
-                    address,
+                    outgoing,
                     muxer,
-                    // TODO: Bubble these errors up.
-                    errors,
                 } => {
                     let PendingConnectionInfo {
                         peer_id: expected_peer_id,
@@ -589,103 +582,30 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                         .remove(&id)
                         .expect("Entry in `self.pending` for previously pending connection.");
 
-                    assert_eq!(endpoint, PendingPoint::Dialer);
                     self.counters.dec_pending(&endpoint);
 
-                    let endpoint = ConnectedPoint::Dialer { address };
-
-                    let error = self
-                        .counters
-                        // Check general established connection limit.
-                        .check_max_established(&endpoint)
-                        .map_err(PendingConnectionError::ConnectionLimit)
-                        // Check per-peer established connection limit.
-                        .and_then(|()| {
-                            self.counters
-                                .check_max_established_per_peer(num_peer_established(
-                                    &self.established,
-                                    peer_id,
-                                ))
-                                .map_err(PendingConnectionError::ConnectionLimit)
-                        })
-                        // Check expected peer id matches.
-                        .and_then(|()| {
-                            if let Some(peer) = expected_peer_id {
-                                if peer != peer_id {
-                                    return Err(PendingConnectionError::InvalidPeerId);
-                                }
-                            }
-                            Ok(())
-                        })
-                        // Check peer is not local peer.
-                        .and_then(|()| {
-                            if self.local_id == peer_id {
-                                Err(PendingConnectionError::InvalidPeerId)
-                            } else {
-                                Ok(())
-                            }
-                        });
-
-                    if let Err(error) = error {
-                        self.manager.add_closing(muxer);
-                        return Poll::Ready(PoolEvent::PendingConnectionError {
-                            id,
-                            endpoint: endpoint.into(),
-                            error,
-                            handler,
-                            peer: Some(peer_id),
-                            pool: self,
-                        });
-                    }
-
-                    // Add the connection to the pool.
-                    let conns = self.established.entry(peer_id).or_default();
-                    let num_established = NonZeroU32::new(u32::try_from(conns.len() + 1).unwrap())
-                        .expect("n + 1 is always non-zero; qed");
-                    self.counters.inc_established(&endpoint);
-                    conns.insert(id, endpoint.clone());
-
-                    let connected = Connected {
-                        endpoint: endpoint.clone(),
-                        peer_id,
-                    };
-
-                    let connection =
-                        super::Connection::new(muxer, handler.into_handler(&connected));
-                    self.manager.add_established(id, connection, connected);
-
-                    match self.get(id) {
-                        Some(PoolConnection::Established(connection)) => {
-                            return Poll::Ready(PoolEvent::OutgoingConnectionEstablished {
-                                connection,
-                                num_established,
-                                errors,
-                            })
+                    let (endpoint, dialing_errors) = match (endpoint, outgoing) {
+                        (PendingPoint::Dialer, Some((address, errors))) => {
+                            (ConnectedPoint::Dialer { address }, Some(errors))
                         }
-                        _ => unreachable!("since `entry` is an `EstablishedEntry`."),
-                    }
-                }
-                manager::Event::IncomingConnectionEstablished { id, peer_id, muxer } => {
-                    let PendingConnectionInfo {
-                        peer_id: expected_peer_id,
-                        handler,
-                        endpoint,
-                    } = self
-                        .pending
-                        .remove(&id)
-                        .expect("Entry in `self.pending` for previously pending connection.");
-                    self.counters.dec_pending(&endpoint);
-
-                    let endpoint = match endpoint {
-                        PendingPoint::Listener {
-                            local_addr,
-                            send_back_addr,
-                        } => ConnectedPoint::Listener {
-                            local_addr,
-                            send_back_addr,
-                        },
-                        PendingPoint::Dialer => unreachable!(
-                            "Established incoming connection on pending outgoing connection."
+                        (
+                            PendingPoint::Listener {
+                                local_addr,
+                                send_back_addr,
+                            },
+                            None,
+                        ) => (
+                            ConnectedPoint::Listener {
+                                local_addr,
+                                send_back_addr,
+                            },
+                            None,
+                        ),
+                        (PendingPoint::Dialer, None) => unreachable!(
+                            "Established incoming connection via pending outgoing connection."
+                        ),
+                        (PendingPoint::Listener { .. }, Some(_)) => unreachable!(
+                            "Established outgoing connection via pending incoming connection."
                         ),
                     };
 
@@ -751,9 +671,10 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
 
                     match self.get(id) {
                         Some(PoolConnection::Established(connection)) => {
-                            return Poll::Ready(PoolEvent::IncomingConnectionEstablished {
+                            return Poll::Ready(PoolEvent::ConnectionEstablished {
                                 connection,
                                 num_established,
+                                outgoing: dialing_errors,
                             })
                         }
                         _ => unreachable!("since `entry` is an `EstablishedEntry`."),

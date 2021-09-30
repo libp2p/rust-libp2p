@@ -55,6 +55,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let into_proto_select_ident = quote! {::libp2p::swarm::IntoProtocolsHandlerSelect};
     let peer_id = quote! {::libp2p::core::PeerId};
     let connection_id = quote! {::libp2p::core::connection::ConnectionId};
+    let dial_errors = quote! {Option<&Vec<::libp2p::core::Multiaddr>>};
     let connected_point = quote! {::libp2p::core::ConnectedPoint};
     let listener_id = quote! {::libp2p::core::connection::ListenerId};
     let dial_error = quote! {::libp2p::swarm::DialError};
@@ -203,8 +204,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 return None;
             }
             Some(match field.ident {
-                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint); },
-                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint); },
+                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint, errors); },
+                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint, errors); },
             })
         })
     };
@@ -659,7 +660,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_disconnected_stmts);*
             }
 
-            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
+            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, errors: #dial_errors) {
                 #(#inject_connection_established_stmts);*
             }
 

@@ -113,7 +113,15 @@ pub trait NetworkBehaviour: Send + 'static {
     fn inject_disconnected(&mut self, _: &PeerId) {}
 
     /// Informs the behaviour about a newly established connection to a peer.
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
+    // TODO: Should we pass more than just the Multiaddr? The behaviour can't do anything with it anyways.
+    fn inject_connection_established(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
+    ) {
+    }
 
     /// Informs the behaviour about a closed connection to a peer.
     ///

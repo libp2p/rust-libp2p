@@ -202,6 +202,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection_id: &ConnectionId,
         _: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
     ) {
         let is_first = self
             .connected_peers

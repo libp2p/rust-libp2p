@@ -606,6 +606,7 @@ where
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        _errors: Option<&Vec<Multiaddr>>,
     ) {
         let address = match endpoint {
             ConnectedPoint::Dialer { address } => Some(address.clone()),

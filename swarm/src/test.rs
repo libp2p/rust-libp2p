@@ -188,10 +188,16 @@ where
         self.inner.inject_connected(peer);
     }
 
-    fn inject_connection_established(&mut self, p: &PeerId, c: &ConnectionId, e: &ConnectedPoint) {
+    fn inject_connection_established(
+        &mut self,
+        p: &PeerId,
+        c: &ConnectionId,
+        e: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
+    ) {
         self.inject_connection_established
             .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_established(p, c, e);
+        self.inner.inject_connection_established(p, c, e, errors);
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {

@@ -112,7 +112,7 @@ fn max_established_incoming() {
             NetworkEvent::IncomingConnection { connection, .. } => {
                 network1.accept(connection, TestHandler()).unwrap();
             }
-            NetworkEvent::IncomingConnectionEstablished { .. } => {}
+            NetworkEvent::ConnectionEstablished { .. } => {}
             NetworkEvent::IncomingConnectionError {
                 error: PendingConnectionError::ConnectionLimit(err),
                 ..
@@ -138,7 +138,7 @@ fn max_established_incoming() {
         poll_fn(|cx| {
             loop {
                 match ready!(network2.poll(cx)) {
-                    NetworkEvent::OutgoingConnectionEstablished { connection, .. } => {
+                    NetworkEvent::ConnectionEstablished { connection, .. } => {
                         n += 1;
                         if n <= limit {
                             // Dial again until the limit is exceeded.

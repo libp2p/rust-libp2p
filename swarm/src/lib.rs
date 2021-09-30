@@ -537,6 +537,7 @@ where
                 Poll::Ready(NetworkEvent::ConnectionEstablished {
                     connection,
                     num_established,
+                    outgoing,
                 }) => {
                     let peer_id = connection.peer_id();
                     let endpoint = connection.endpoint().clone();
@@ -558,6 +559,9 @@ where
                             &peer_id,
                             &connection.id(),
                             &endpoint,
+                            outgoing
+                                .map(|es| es.into_iter().map(|(a, e)| a).collect())
+                                .as_ref(),
                         );
                         if num_established.get() == 1 {
                             this.behaviour.inject_connected(&peer_id);

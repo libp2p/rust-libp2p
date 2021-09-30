@@ -195,19 +195,11 @@ pub enum Event<'a, H: IntoConnectionHandler, TMuxer, TE> {
     },
 
     /// A connection has been established.
-    OutgoingConnectionEstablished {
-        id: ConnectionId,
-        peer_id: PeerId,
-        address: Multiaddr,
-        muxer: TMuxer,
-        errors: Vec<(Multiaddr, TransportError<TE>)>,
-    },
-
-    /// A connection has been established.
-    IncomingConnectionEstablished {
+    ConnectionEstablished {
         id: ConnectionId,
         peer_id: PeerId,
         muxer: TMuxer,
+        outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<TE>)>)>,
     },
 
     /// A connection handler has produced an event.
@@ -509,10 +501,11 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
             Poll::Ready(match event {
                 task::Event::IncomingEstablished { id, peer_id, muxer } => {
                     task.remove();
-                    Event::IncomingConnectionEstablished {
+                    Event::ConnectionEstablished {
                         id: ConnectionId(id),
                         peer_id,
                         muxer,
+                        outgoing: None,
                     }
                 }
                 task::Event::OutgoingEstablished {
@@ -523,12 +516,11 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     errors,
                 } => {
                     task.remove();
-                    Event::OutgoingConnectionEstablished {
+                    Event::ConnectionEstablished {
                         id: ConnectionId(id),
                         peer_id,
-                        address,
                         muxer,
-                        errors,
+                        outgoing: Some((address, errors)),
                     }
                 }
                 task::Event::Notify { id: _, event } => Event::ConnectionEvent {

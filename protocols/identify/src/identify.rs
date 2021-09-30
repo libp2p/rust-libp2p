@@ -199,6 +199,7 @@ impl NetworkBehaviour for Identify {
         peer_id: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
     ) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address } => address.clone(),

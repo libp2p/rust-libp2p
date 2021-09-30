@@ -96,23 +96,14 @@ where
     },
 
     /// A new connection to a peer has been established.
-    IncomingConnectionEstablished {
-        /// The newly established connection.
-        connection: EstablishedConnection<'a, TInEvent>,
-        /// The total number of established connections to the same peer,
-        /// including the one that has just been opened.
-        num_established: NonZeroU32,
-    },
-
-    /// A new connection to a peer has been established.
-    OutgoingConnectionEstablished {
+    ConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent>,
         /// The total number of established connections to the same peer,
         /// including the one that has just been opened.
         num_established: NonZeroU32,
         // TODO: Document
-        errors: Vec<(Multiaddr, TransportError<TTrans::Error>)>,
+        outgoing: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
     },
 
     /// An established connection to a peer has been closed.
@@ -241,16 +232,14 @@ where
                 .field("send_back_addr", send_back_addr)
                 .field("error", error)
                 .finish(),
-            NetworkEvent::OutgoingConnectionEstablished {
-                connection, errors, ..
+            NetworkEvent::ConnectionEstablished {
+                connection,
+                outgoing,
+                ..
             } => f
                 .debug_struct("OutgoingConnectionEstablished")
                 .field("connection", connection)
-                .field("errors", errors)
-                .finish(),
-            NetworkEvent::IncomingConnectionEstablished { connection, .. } => f
-                .debug_struct("IncomingConnectionEstablished")
-                .field("connection", connection)
+                .field("outgoing", outgoing)
                 .finish(),
             NetworkEvent::ConnectionClosed {
                 id,

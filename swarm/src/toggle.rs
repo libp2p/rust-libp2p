@@ -103,9 +103,10 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_established(peer_id, connection, endpoint)
+            inner.inject_connection_established(peer_id, connection, endpoint, errors)
         }
     }
 

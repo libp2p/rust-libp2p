@@ -1743,7 +1743,54 @@ where
         peer_addrs
     }
 
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {
+    fn inject_connection_established(
+        &mut self,
+        peer_id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
+    ) {
+        for addr in errors.map(|a| a.into_iter()).into_iter().flatten() {
+            // TODO: Should this be deduplicated with the logic triggered in inject_dial_failure?
+            let key = kbucket::Key::from(*peer_id);
+
+            if let Some(addrs) = self.kbuckets.entry(&key).value() {
+                // TODO: Ideally, the address should only be removed if the error can
+                // be classified as "permanent" but since `err` is currently a borrowed
+                // trait object without a `'static` bound, even downcasting for inspection
+                // of the error is not possible (and also not truly desirable or ergonomic).
+                // The error passed in should rather be a dedicated enum.
+                if addrs.remove(addr).is_ok() {
+                    debug!(
+                        // "Address '{}' removed from peer '{}' due to error: {}.",
+                        "Address '{}' removed from peer '{}'.",
+                        addr, peer_id
+                    );
+                } else {
+                    // Despite apparently having no reachable address (any longer),
+                    // the peer is kept in the routing table with the last address to avoid
+                    // (temporary) loss of network connectivity to "flush" the routing
+                    // table. Once in, a peer is only removed from the routing table
+                    // if it is the least recently connected peer, currently disconnected
+                    // and is unreachable in the context of another peer pending insertion
+                    // into the same bucket. This is handled transparently by the
+                    // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
+                    // within `Kademlia::poll`.
+                    debug!(
+                        // "Last remaining address '{}' of peer '{}' is unreachable: {}.",
+                        "Last remaining address '{}' of peer '{}' is unreachable.",
+                        addr, peer_id
+                    )
+                }
+            }
+
+            for query in self.queries.iter_mut() {
+                if let Some(addrs) = query.inner.addresses.get_mut(peer_id) {
+                    addrs.retain(|a| a != addr);
+                }
+            }
+        }
+
         // When a connection is established, we don't know yet whether the
         // remote supports the configured protocol name. Only once a connection
         // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
