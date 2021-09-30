@@ -29,7 +29,7 @@ use libp2p::{Multiaddr, NetworkBehaviour};
 use libp2p_swarm::AddressScore;
 use std::time::Duration;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     env_logger::init();
 
