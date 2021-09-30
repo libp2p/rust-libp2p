@@ -14,6 +14,8 @@
 - Allow `message_id_fn`s to accept closures that capture variables.
   [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
 
+- Added std::error::Error impls for error types
+
 # 0.32.0 [2021-07-12]
 
 - Update dependencies.
