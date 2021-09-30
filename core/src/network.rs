@@ -414,9 +414,10 @@ where
         // Poll the known peers.
         let event = match self.pool.poll(cx) {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(PoolEvent::ConnectionEstablished {
+            Poll::Ready(PoolEvent::OutgoingConnectionEstablished {
                 connection,
                 num_established,
+                errors,
             }) => {
                 if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id()) {
                     e.get_mut().retain(|s| *s != connection.id());
@@ -425,11 +426,19 @@ where
                     }
                 }
 
-                NetworkEvent::ConnectionEstablished {
+                NetworkEvent::OutgoingConnectionEstablished {
                     connection,
                     num_established,
+                    errors,
                 }
             }
+            Poll::Ready(PoolEvent::IncomingConnectionEstablished {
+                connection,
+                num_established,
+            }) => NetworkEvent::IncomingConnectionEstablished {
+                connection,
+                num_established,
+            },
             Poll::Ready(PoolEvent::PendingConnectionError {
                 id,
                 endpoint,

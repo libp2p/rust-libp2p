@@ -25,7 +25,7 @@ use crate::{
         Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionId,
         EstablishedConnection, IntoConnectionHandler, ListenerId, PendingConnectionError,
     },
-    transport::Transport,
+    transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
 use std::{fmt, num::NonZeroU32};
@@ -96,12 +96,23 @@ where
     },
 
     /// A new connection to a peer has been established.
-    ConnectionEstablished {
+    IncomingConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent>,
         /// The total number of established connections to the same peer,
         /// including the one that has just been opened.
         num_established: NonZeroU32,
+    },
+
+    /// A new connection to a peer has been established.
+    OutgoingConnectionEstablished {
+        /// The newly established connection.
+        connection: EstablishedConnection<'a, TInEvent>,
+        /// The total number of established connections to the same peer,
+        /// including the one that has just been opened.
+        num_established: NonZeroU32,
+        // TODO: Document
+        errors: Vec<(Multiaddr, TransportError<TTrans::Error>)>,
     },
 
     /// An established connection to a peer has been closed.
@@ -230,8 +241,15 @@ where
                 .field("send_back_addr", send_back_addr)
                 .field("error", error)
                 .finish(),
-            NetworkEvent::ConnectionEstablished { connection, .. } => f
-                .debug_struct("ConnectionEstablished")
+            NetworkEvent::OutgoingConnectionEstablished {
+                connection, errors, ..
+            } => f
+                .debug_struct("OutgoingConnectionEstablished")
+                .field("connection", connection)
+                .field("errors", errors)
+                .finish(),
+            NetworkEvent::IncomingConnectionEstablished { connection, .. } => f
+                .debug_struct("IncomingConnectionEstablished")
                 .field("connection", connection)
                 .finish(),
             NetworkEvent::ConnectionClosed {

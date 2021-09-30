@@ -74,6 +74,7 @@ impl Endpoint {
 }
 
 // TODO: Find better name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PendingPoint {
     Dialer,
     Listener {
