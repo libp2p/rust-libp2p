@@ -27,7 +27,8 @@ use crate::{
         IntoConnectionHandler, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
-    Multiaddr,
+    transport::TransportError,
+    Multiaddr, PeerId,
 };
 use futures::{channel::mpsc, prelude::*, stream};
 use std::{pin::Pin, task::Context, task::Poll};
@@ -48,13 +49,32 @@ pub enum Command<T> {
 
 /// Events that a task can emit to its manager.
 #[derive(Debug)]
-pub enum Event<H: IntoConnectionHandler, TE> {
+pub enum Event<H: IntoConnectionHandler, TMuxer, TError> {
+    // TODO: Remove most of these
     /// A connection to a node has succeeded.
     Established { id: TaskId, info: Connected },
+    IncomingEstablished {
+        id: TaskId,
+        // A result in a success message?
+        result: Result<(PeerId, TMuxer), PendingConnectionError<TError>>,
+    },
+    OutgoingEstablished {
+        id: TaskId,
+        // A result in a success message?
+        result: Result<
+            (
+                PeerId,
+                Multiaddr,
+                TMuxer,
+                Vec<(Multiaddr, TransportError<TError>)>,
+            ),
+            Vec<(Multiaddr, TransportError<TError>)>,
+        >,
+    },
     /// A pending connection failed.
     Failed {
         id: TaskId,
-        error: PendingConnectionError<TE>,
+        error: PendingConnectionError<TError>,
         handler: H,
     },
     /// A node we are connected to has changed its address.
@@ -75,10 +95,12 @@ pub enum Event<H: IntoConnectionHandler, TE> {
     },
 }
 
-impl<H: IntoConnectionHandler, TE> Event<H, TE> {
+impl<H: IntoConnectionHandler, TMuxer, TError> Event<H, TMuxer, TError> {
     pub fn id(&self) -> &TaskId {
         match self {
             Event::Established { id, .. } => id,
+            Event::IncomingEstablished { id, .. } => id,
+            Event::OutgoingEstablished { id, .. } => id,
             Event::Failed { id, .. } => id,
             Event::AddressChange { id, .. } => id,
             Event::Notify { id, .. } => id,
@@ -98,7 +120,7 @@ where
     id: TaskId,
 
     /// Sender to emit events to the manager of this task.
-    events: mpsc::Sender<Event<H, E>>,
+    events: mpsc::Sender<Event<H, M, E>>,
 
     /// Receiver for commands sent by the manager of this task.
     commands: stream::Fuse<mpsc::Receiver<Command<THandlerInEvent<H>>>>,
@@ -116,7 +138,7 @@ where
     /// Create a new task to connect and handle some node.
     pub fn pending(
         id: TaskId,
-        events: mpsc::Sender<Event<H, E>>,
+        events: mpsc::Sender<Event<H, M, E>>,
         commands: mpsc::Receiver<Command<THandlerInEvent<H>>>,
         future: F,
         handler: H,
@@ -156,7 +178,7 @@ where
         /// is polled for new events in this state, otherwise the event
         /// must be sent to the `Manager` before the connection can be
         /// polled again.
-        event: Option<Event<H, E>>,
+        event: Option<Event<H, M, E>>,
     },
 
     /// The connection is closing (active close).
@@ -167,7 +189,7 @@ where
     },
 
     /// The task is terminating with a final event for the `Manager`.
-    Terminating(Event<H, E>),
+    Terminating(Event<H, M, E>),
 
     /// The task has finished.
     Done,

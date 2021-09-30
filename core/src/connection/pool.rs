@@ -331,10 +331,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
     /// Gets an entry representing a connection in the pool.
     ///
     /// Returns `None` if the pool has no connection with the given ID.
-    pub fn get(
-        &mut self,
-        id: ConnectionId,
-    ) -> Option<PoolConnection<'_, THandlerInEvent<THandler>, THandler, TMuxer, TTransErr>> {
+    pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, THandler>> {
         match self.manager.entry(id) {
             Some(manager::Entry::Established(entry)) => {
                 Some(PoolConnection::Established(EstablishedConnection { entry }))
@@ -366,10 +363,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
     }
 
     /// Gets a pending outgoing connection by ID.
-    pub fn get_outgoing(
-        &mut self,
-        id: ConnectionId,
-    ) -> Option<PendingConnection<'_, THandler, TMuxer, TTransErr>> {
+    pub fn get_outgoing(&mut self, id: ConnectionId) -> Option<PendingConnection<'_, THandler>> {
         match self.pending_outgoing_connection.get(&id) {
             Some(PendingOutgoingConnectionInfo { peer_id, .. }) => match self.manager.entry(id) {
                 Some(manager::Entry::Pending(entry)) => {
@@ -819,14 +813,14 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
 }
 
 /// A connection in a [`Pool`].
-pub enum PoolConnection<'a, TInEvent, THandler, TMuxer, TError> {
-    Pending(PendingConnection<'a, THandler, TMuxer, TError>),
-    Established(EstablishedConnection<'a, TInEvent>),
+pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
+    Pending(PendingConnection<'a, THandler>),
+    Established(EstablishedConnection<'a, THandlerInEvent<THandler>>),
 }
 
 /// A pending connection in a pool.
-pub struct PendingConnection<'a, THandler, TMuxer, TError> {
-    entry: manager::PendingEntry<'a, TMuxer, TError>,
+pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
+    entry: manager::PendingEntry<'a, THandlerInEvent<THandler>>,
     pending_outgoing_connection:
         &'a mut HashMap<ConnectionId, PendingOutgoingConnectionInfo<THandler>>,
     pending_incoming_connection:
@@ -836,7 +830,7 @@ pub struct PendingConnection<'a, THandler, TMuxer, TError> {
     counters: &'a mut ConnectionCounters,
 }
 
-impl<THandler, TMuxer, TError> PendingConnection<'_, THandler, TMuxer, TError> {
+impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Returns the local connection ID.
     pub fn id(&self) -> ConnectionId {
         todo!()

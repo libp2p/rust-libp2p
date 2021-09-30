@@ -391,10 +391,7 @@ where
     /// the current connection attempt.
     //
     // TODO: Still needed?
-    pub fn attempt(
-        &mut self,
-        id: ConnectionId,
-    ) -> Option<DialingAttempt<'_, THandler, TMuxer, TTrans::Error>> {
+    pub fn attempt(&mut self, id: ConnectionId) -> Option<DialingAttempt<'_, THandler>> {
         if let hash_map::Entry::Occupied(attempts) = self.network.dialing.entry(self.peer_id) {
             if let Some(pos) = attempts.get().iter().position(|s| *s == id) {
                 if let Some(inner) = self.network.pool.get_outgoing(id) {
@@ -421,7 +418,7 @@ where
     /// Obtains some dialing connection to the peer.
     ///
     /// At least one dialing connection is guaranteed to exist on a `DialingPeer`.
-    pub fn some_attempt(&mut self) -> DialingAttempt<'_, THandler, TMuxer, TTrans::Error> {
+    pub fn some_attempt(&mut self) -> DialingAttempt<'_, THandler> {
         self.attempts()
             .into_first()
             .expect("By `Peer::new` and the definition of `DialingPeer`.")
@@ -489,16 +486,16 @@ where
 /// A `DialingAttempt` is an ongoing outgoing connection attempt to
 /// a known / expected remote peer ID and a list of alternative addresses
 /// to connect to, if the current connection attempt fails.
-pub struct DialingAttempt<'a, THandler, TMuxer, TError> {
+pub struct DialingAttempt<'a, THandler: IntoConnectionHandler> {
     /// The underlying pending connection in the `Pool`.
-    inner: PendingConnection<'a, THandler, TMuxer, TError>,
+    inner: PendingConnection<'a, THandler>,
     /// All current dialing attempts of the peer.
     attempts: hash_map::OccupiedEntry<'a, PeerId, SmallVec<[ConnectionId; 10]>>,
     /// The position of the current `ConnectionId` of this connection in the `attempts`.
     pos: usize,
 }
 
-impl<'a, THandler, TMuxer, TError> DialingAttempt<'a, THandler, TMuxer, TError> {
+impl<'a, THandler: IntoConnectionHandler> DialingAttempt<'a, THandler> {
     /// Returns the ID of the current connection attempt.
     pub fn id(&self) -> ConnectionId {
         self.inner.id()
@@ -574,7 +571,7 @@ where
 
     /// Obtains the next dialing connection, if any.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<DialingAttempt<'_, THandler, TMuxer, TTransErr>> {
+    pub fn next(&mut self) -> Option<DialingAttempt<'_, THandler>> {
         // If the number of elements reduced, the current `DialingAttempt` has been
         // aborted and iteration needs to continue from the previous position to
         // account for the removed element.
@@ -608,7 +605,7 @@ where
     }
 
     /// Returns the first connection, if any, consuming the iterator.
-    pub fn into_first<'b>(self) -> Option<DialingAttempt<'b, THandler, TMuxer, TTransErr>>
+    pub fn into_first<'b>(self) -> Option<DialingAttempt<'b, THandler>>
     where
         'a: 'b,
     {

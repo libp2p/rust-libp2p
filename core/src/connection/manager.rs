@@ -26,17 +26,16 @@ use super::{
 use crate::{muxing::StreamMuxer, transport::TransportError, Executor, Multiaddr, PeerId};
 use fnv::FnvHashMap;
 use futures::{
-    channel::{mpsc, oneshot},
+    channel::mpsc,
     future::{poll_fn, BoxFuture, Either},
     prelude::*,
     ready,
     stream::FuturesUnordered,
 };
 use std::{
-    collections::{hash_map, HashMap},
+    collections::hash_map,
     error, fmt, mem,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 use task::{Task, TaskId};
@@ -82,9 +81,6 @@ impl ConnectionId {
 
 /// A connection `Manager` orchestrates the I/O of a set of connections.
 pub struct Manager<H: IntoConnectionHandler, TMuxer, E> {
-    pending_outgoing_tasks: HashMap<TaskId, PendingOutgoingTaskInfo<TMuxer, E>>,
-    pending_incoming_tasks: HashMap<TaskId, PendingIncomingTaskInfo<TMuxer, E>>,
-
     /// The tasks of the managed connections.
     ///
     /// Each managed connection is associated with a (background) task
@@ -111,10 +107,10 @@ pub struct Manager<H: IntoConnectionHandler, TMuxer, E> {
 
     /// Sender distributed to managed tasks for reporting events back
     /// to the manager.
-    events_tx: mpsc::Sender<task::Event<H, E>>,
+    events_tx: mpsc::Sender<task::Event<H, TMuxer, E>>,
 
     /// Receiver for events reported from managed tasks.
-    events_rx: mpsc::Receiver<task::Event<H, E>>,
+    events_rx: mpsc::Receiver<task::Event<H, TMuxer, E>>,
 }
 
 impl<H: IntoConnectionHandler, TMuxer, E> fmt::Debug for Manager<H, TMuxer, E> {
@@ -243,8 +239,6 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
     pub fn new(config: ManagerConfig) -> Self {
         let (tx, rx) = mpsc::channel(config.task_event_buffer_size);
         Self {
-            pending_outgoing_tasks: Default::default(),
-            pending_incoming_tasks: Default::default(),
             tasks: FnvHashMap::default(),
             next_task_id: TaskId(0),
             task_command_buffer_size: config.task_command_buffer_size,
@@ -288,25 +282,35 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
     where
         TFut:
             Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TE>>> + Send + 'static,
+
+        H: IntoConnectionHandler + Send + 'static,
+        H::Handler: ConnectionHandler + Send + 'static,
     {
         let task_id = self.next_task_id();
 
-        let (mut sender, receiver) = oneshot::channel();
+        let (sender, mut receiver) = mpsc::channel(self.task_command_buffer_size);
+        self.tasks.insert(
+            task_id,
+            TaskInfo {
+                sender,
+                state: TaskState::Pending,
+            },
+        );
 
-        self.pending_incoming_tasks
-            .insert(task_id, PendingIncomingTaskInfo { receiver });
+        let mut events = self.events_tx.clone();
 
         self.spawn(
             async move {
-                match futures::future::select(
-                    poll_fn(|cx| sender.poll_canceled(cx)),
-                    Box::pin(dial),
-                )
-                .await
-                {
+                match futures::future::select(receiver.next(), Box::pin(dial)).await {
+                    // TODO: The receiver has been dropped. We should never get a command here.
                     Either::Left((_, _)) => todo!(),
                     Either::Right((res, _)) => {
-                        sender.send(res);
+                        events
+                            .send(task::Event::IncomingEstablished {
+                                id: task_id,
+                                result: res,
+                            })
+                            .await;
                     }
                 }
             }
@@ -319,25 +323,36 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
     pub fn add_pending_outgoing(
         &mut self,
         dial: crate::network::concurrent_dial::ConcurrentDial<TMuxer, TE>,
-    ) -> ConnectionId {
+    ) -> ConnectionId
+    where
+        H: IntoConnectionHandler + Send + 'static,
+        H::Handler: ConnectionHandler + Send + 'static,
+    {
         let task_id = self.next_task_id();
 
-        let (mut sender, receiver) = oneshot::channel();
+        let (sender, mut receiver) = mpsc::channel(self.task_command_buffer_size);
 
-        self.pending_outgoing_tasks
-            .insert(task_id, PendingOutgoingTaskInfo { receiver });
+        self.tasks.insert(
+            task_id,
+            TaskInfo {
+                sender,
+                state: TaskState::Pending,
+            },
+        );
+
+        let mut events = self.events_tx.clone();
 
         self.spawn(
             async move {
-                match futures::future::select(
-                    poll_fn(|cx| sender.poll_canceled(cx)),
-                    Box::pin(dial),
-                )
-                .await
-                {
+                match futures::future::select(receiver.next(), Box::pin(dial)).await {
                     Either::Left((_, _)) => todo!(),
                     Either::Right((res, _)) => {
-                        sender.send(res);
+                        events
+                            .send(task::Event::OutgoingEstablished {
+                                id: task_id,
+                                result: res,
+                            })
+                            .await;
                     }
                 }
             }
@@ -482,24 +497,11 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
     /// Gets an entry for a managed connection, if it exists.
     // TODO: Rework this.
-    pub fn entry(&mut self, id: ConnectionId) -> Option<Entry<'_, THandlerInEvent<H>, TMuxer, TE>> {
+    pub fn entry(&mut self, id: ConnectionId) -> Option<Entry<'_, THandlerInEvent<H>>> {
         if let hash_map::Entry::Occupied(task) = self.tasks.entry(id.0) {
             Some(Entry::new(task))
         } else {
-            if let hash_map::Entry::Occupied(entry) = self.pending_incoming_tasks.entry(id.0) {
-                Some(Entry::Pending(PendingEntry {
-                    connection_id: id,
-                    task: Either::Left(entry),
-                }))
-            } else if let hash_map::Entry::Occupied(entry) = self.pending_outgoing_tasks.entry(id.0)
-            {
-                Some(Entry::Pending(PendingEntry {
-                    connection_id: id,
-                    task: Either::Right(entry),
-                }))
-            } else {
-                None
-            }
+            None
         }
     }
 
@@ -519,49 +521,6 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         // Advance the content of `local_spawns`.
         while let Poll::Ready(Some(_)) = self.local_spawns.poll_next_unpin(cx) {}
 
-        // TODO: Iterating a hashmap each time is not ideal. Can we do better? Does it matter?
-        for (task_id, PendingOutgoingTaskInfo { receiver }) in
-            self.pending_outgoing_tasks.iter_mut()
-        {
-            match receiver.poll_unpin(cx) {
-                Poll::Ready(Ok(Ok((peer_id, address, muxer, errors)))) => {
-                    return Poll::Ready(Event::OutgoingConnectionEstablished {
-                        id: ConnectionId(*task_id),
-                        peer_id,
-                        address,
-                        muxer,
-                        errors,
-                    })
-                }
-                Poll::Ready(Ok(Err(errors))) => {
-                    return Poll::Ready(Event::PendingConnectionError {
-                        id: ConnectionId(*task_id),
-                        error: PendingConnectionError::TransportDial(errors),
-                    })
-                }
-                Poll::Ready(Err(e)) => println!("{:?}", e),
-                Poll::Pending => {}
-            }
-        }
-
-        // TODO: Iterating a hashmap each time is not ideal. Can we do better? Does it matter?
-        for (task_id, PendingIncomingTaskInfo { receiver }) in
-            self.pending_incoming_tasks.iter_mut()
-        {
-            match receiver.poll_unpin(cx) {
-                Poll::Ready(Ok(Ok((peer_id, muxer)))) => {
-                    return Poll::Ready(Event::IncomingConnectionEstablished {
-                        id: ConnectionId(*task_id),
-                        peer_id,
-                        muxer,
-                    })
-                }
-                Poll::Ready(Ok(Err(errors))) => todo!(),
-                Poll::Ready(Err(e)) => println!("{:?}", e),
-                Poll::Pending => {}
-            }
-        }
-
         // Poll for the first event for which the manager still has a registered task, if any.
         let event = loop {
             match self.events_rx.poll_next_unpin(cx) {
@@ -578,6 +537,30 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
         if let hash_map::Entry::Occupied(mut task) = self.tasks.entry(*event.id()) {
             Poll::Ready(match event {
+                // TODO: Make sure to remove the task.
+                task::Event::IncomingEstablished { id, result } => match result {
+                    Ok((peer_id, muxer)) => Event::IncomingConnectionEstablished {
+                        id: ConnectionId(id),
+                        peer_id,
+                        muxer,
+                    },
+                    _ => todo!(),
+                },
+                // TODO: Make sure to remove the task.
+                task::Event::OutgoingEstablished { id, result } => match result {
+                    Ok((peer_id, address, muxer, errors)) => Event::OutgoingConnectionEstablished {
+                        id: ConnectionId(id),
+                        peer_id,
+                        address,
+                        muxer,
+                        errors,
+                    },
+                    Err(errors) => Event::PendingConnectionError {
+                        id: ConnectionId(id),
+                        error: PendingConnectionError::TransportDial(errors),
+                    },
+                    _ => todo!(),
+                },
                 task::Event::Notify { id: _, event } => Event::ConnectionEvent {
                     entry: EstablishedEntry { task },
                     event,
@@ -637,15 +620,15 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
 /// An entry for a connection in the manager.
 #[derive(Debug)]
-pub enum Entry<'a, I, TMuxer, TError> {
-    Pending(PendingEntry<'a, TMuxer, TError>),
+pub enum Entry<'a, I> {
+    Pending(PendingEntry<'a, I>),
     Established(EstablishedEntry<'a, I>),
 }
 
-impl<'a, I, TMuxer, TError> Entry<'a, I, TMuxer, TError> {
+impl<'a, I> Entry<'a, I> {
     fn new(task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I>>) -> Self {
         match &task.get().state {
-            TaskState::Pending => todo!(),
+            TaskState::Pending => Entry::Pending(PendingEntry { task }),
             TaskState::Established(_) => Entry::Established(EstablishedEntry { task }),
         }
     }
@@ -730,52 +713,21 @@ impl<'a, I> EstablishedEntry<'a, I> {
     }
 }
 
-#[derive(Debug)]
-struct PendingOutgoingTaskInfo<TMuxer, TError> {
-    receiver: oneshot::Receiver<
-        Result<
-            (
-                PeerId,
-                Multiaddr,
-                TMuxer,
-                Vec<(Multiaddr, TransportError<TError>)>,
-            ),
-            Vec<(Multiaddr, TransportError<TError>)>,
-        >,
-    >,
-}
-
-#[derive(Debug)]
-struct PendingIncomingTaskInfo<TMuxer, TError> {
-    receiver: oneshot::Receiver<Result<(PeerId, TMuxer), PendingConnectionError<TError>>>,
-}
-
 /// An entry for a managed connection that is currently being established
 /// (i.e. pending).
 #[derive(Debug)]
-pub struct PendingEntry<'a, TMuxer, TError> {
-    connection_id: ConnectionId,
-    task: Either<
-        hash_map::OccupiedEntry<'a, TaskId, PendingIncomingTaskInfo<TMuxer, TError>>,
-        hash_map::OccupiedEntry<'a, TaskId, PendingOutgoingTaskInfo<TMuxer, TError>>,
-    >,
+pub struct PendingEntry<'a, I> {
+    task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I>>,
 }
 
-impl<'a, TMuxer, TError> PendingEntry<'a, TMuxer, TError> {
+impl<'a, I> PendingEntry<'a, I> {
     /// Returns the connection id.
     pub fn id(&self) -> ConnectionId {
-        self.connection_id
+        ConnectionId(*self.task.key())
     }
 
     /// Aborts the pending connection attempt.
     pub fn abort(self) {
-        match self.task {
-            Either::Left(entry) => {
-                entry.remove();
-            }
-            Either::Right(entry) => {
-                entry.remove();
-            }
-        }
+        self.task.remove();
     }
 }
