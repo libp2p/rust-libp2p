@@ -333,6 +333,7 @@ where
     {
         let upgrade = connection
             .upgrade
+            // TODO: Why this map?
             .map_err(|err| PendingConnectionError::TransportListen(TransportError::Other(err)));
         let info = IncomingInfo {
             local_addr: &connection.local_addr,

@@ -271,7 +271,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         self.spawn(
             poll_fn(move |cx| {
                 ready!(muxer.close(cx));
-                // TODO: Send the result back to the manager.
+                // TODO: Should we send the result back to the manager?
                 Poll::Ready(())
             })
             .boxed(),
@@ -302,13 +302,33 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         self.spawn(
             async move {
                 match futures::future::select(receiver.next(), Box::pin(dial)).await {
-                    // TODO: The receiver has been dropped. We should never get a command here.
-                    Either::Left((_, _)) => todo!(),
-                    Either::Right((res, _)) => {
+                    Either::Left((None, _)) => {
+                        receiver.close();
+                        events
+                            .send(task::Event::PendingFailed {
+                                id: task_id,
+                                error: PendingConnectionError::Aborted,
+                            })
+                            .await;
+                    }
+                    Either::Left((Some(_), _)) => {
+                        // TODO: We should never get a command here.
+                        // TODO: Create a channel with Void.
+                    }
+                    Either::Right((Ok((peer_id, muxer)), _)) => {
                         events
                             .send(task::Event::IncomingEstablished {
                                 id: task_id,
-                                result: res,
+                                peer_id,
+                                muxer,
+                            })
+                            .await;
+                    }
+                    Either::Right((Err(e), _)) => {
+                        events
+                            .send(task::Event::PendingFailed {
+                                id: task_id,
+                                error: e,
                             })
                             .await;
                     }
@@ -345,12 +365,36 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         self.spawn(
             async move {
                 match futures::future::select(receiver.next(), Box::pin(dial)).await {
-                    Either::Left((_, _)) => todo!(),
-                    Either::Right((res, _)) => {
+                    Either::Left((None, _)) => {
+                        // TODO: Needed?
+                        receiver.close();
+                        events
+                            .send(task::Event::PendingFailed {
+                                id: task_id,
+                                error: PendingConnectionError::Aborted,
+                            })
+                            .await;
+                    }
+                    Either::Left((Some(_), _)) => {
+                        // TODO: We should never get a command here.
+                        // TODO: Create a channel with Void.
+                    }
+                    Either::Right((Ok((peer_id, address, muxer, errors)), _)) => {
                         events
                             .send(task::Event::OutgoingEstablished {
                                 id: task_id,
-                                result: res,
+                                peer_id,
+                                muxer,
+                                address,
+                                errors,
+                            })
+                            .await;
+                    }
+                    Either::Right((Err(e), _)) => {
+                        events
+                            .send(task::Event::PendingFailed {
+                                id: task_id,
+                                error: PendingConnectionError::TransportDial(e),
                             })
                             .await;
                     }
@@ -392,18 +436,22 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     Either::Left((Some(command), _)) => {
                         match command {
                             task::Command::NotifyHandler(event) => connection.inject_event(event),
-                            task::Command::Close(error) => {
+                            task::Command::Close => {
                                 // Don't accept any further commands.
                                 command_receiver.close();
                                 // Discard the event, if any, and start a graceful close.
                                 let (handler, closing_muxer) = connection.close();
-                                todo!()
-                                // this.state = State::Closing {
-                                //     handler,
-                                //     closing_muxer,
-                                //     error,
-                                // };
-                                // continue 'poll;
+
+                                let error = closing_muxer.await;
+                                events
+                                    .send(task::Event::Closed {
+                                        // TODO: Safe task id instead of connection id once.
+                                        id: task_id.0,
+                                        error: error.err().map(ConnectionError::IO),
+                                        handler,
+                                    })
+                                    .await;
+                                return;
                             }
                         }
                     }
@@ -538,43 +586,32 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         if let hash_map::Entry::Occupied(mut task) = self.tasks.entry(*event.id()) {
             Poll::Ready(match event {
                 // TODO: Make sure to remove the task.
-                task::Event::IncomingEstablished { id, result } => match result {
-                    Ok((peer_id, muxer)) => Event::IncomingConnectionEstablished {
+                task::Event::IncomingEstablished { id, peer_id, muxer } => {
+                    Event::IncomingConnectionEstablished {
                         id: ConnectionId(id),
                         peer_id,
                         muxer,
-                    },
-                    _ => todo!(),
-                },
+                    }
+                }
                 // TODO: Make sure to remove the task.
-                task::Event::OutgoingEstablished { id, result } => match result {
-                    Ok((peer_id, address, muxer, errors)) => Event::OutgoingConnectionEstablished {
-                        id: ConnectionId(id),
-                        peer_id,
-                        address,
-                        muxer,
-                        errors,
-                    },
-                    Err(errors) => Event::PendingConnectionError {
-                        id: ConnectionId(id),
-                        error: PendingConnectionError::TransportDial(errors),
-                    },
-                    _ => todo!(),
+                task::Event::OutgoingEstablished {
+                    id,
+                    peer_id,
+                    address,
+                    muxer,
+                    errors,
+                } => Event::OutgoingConnectionEstablished {
+                    id: ConnectionId(id),
+                    peer_id,
+                    address,
+                    muxer,
+                    errors,
                 },
                 task::Event::Notify { id: _, event } => Event::ConnectionEvent {
                     entry: EstablishedEntry { task },
                     event,
                 },
-                task::Event::Established { id: _, info } => {
-                    // (2)
-                    // task.get_mut().state = TaskState::Established(info); // (3)
-                    // Event::ConnectionEstablished {
-                    //     entry: EstablishedEntry { task },
-                    // }
-
-                    todo!()
-                }
-                task::Event::Failed { id, error, handler } => {
+                task::Event::PendingFailed { id, error } => {
                     let id = ConnectionId(id);
                     let _ = task.remove();
                     Event::PendingConnectionError { id, error }
@@ -684,7 +721,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
     ///
     /// When the connection is ultimately closed, [`Event::ConnectionClosed`]
     /// is emitted by [`Manager::poll`].
-    pub fn start_close(mut self, error: Option<ConnectionLimit>) {
+    pub fn start_close(mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
         match self
@@ -692,7 +729,7 @@ impl<'a, I> EstablishedEntry<'a, I> {
             .get_mut()
             .sender
             .clone()
-            .try_send(task::Command::Close(error))
+            .try_send(task::Command::Close)
         {
             Ok(()) => {}
             Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),

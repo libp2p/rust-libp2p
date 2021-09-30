@@ -406,7 +406,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
         if let Some(conns) = self.established.get(peer) {
             for (&id, _endpoint) in conns.iter() {
                 if let Some(manager::Entry::Established(e)) = self.manager.entry(id) {
-                    e.start_close(None);
+                    e.start_close();
                 }
             }
         }
@@ -924,7 +924,7 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     ///
     /// Has no effect if the connection is already closing.
     pub fn start_close(self) {
-        self.entry.start_close(None)
+        self.entry.start_close()
     }
 }
 
