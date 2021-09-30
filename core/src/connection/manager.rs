@@ -153,7 +153,7 @@ impl Default for ManagerConfig {
 #[derive(Debug)]
 enum TaskInfo<I> {
     Pending {
-        // TODO: Document
+        /// When dropped, notifies the task which can then terminate.
         drop_notifier: oneshot::Sender<Void>,
     },
     Established {
@@ -384,7 +384,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
     pub fn add_established(
         &mut self,
-        task_id: ConnectionId,
+        connection_id: ConnectionId,
         mut connection: crate::connection::Connection<TMuxer, H::Handler>,
         connected: Connected,
     ) where
@@ -394,10 +394,11 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         H::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
         <H::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
     {
+        let task_id = connection_id.0;
         let (command_sender, mut command_receiver) = mpsc::channel(self.task_command_buffer_size);
 
         self.tasks.insert(
-            task_id.0,
+            task_id,
             TaskInfo::Established {
                 sender: command_sender,
                 connected,
@@ -409,28 +410,23 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
         let task = async move {
             loop {
                 match futures::future::select(command_receiver.next(), connection.next()).await {
-                    Either::Left((Some(command), _)) => {
-                        match command {
-                            task::Command::NotifyHandler(event) => connection.inject_event(event),
-                            task::Command::Close => {
-                                // Don't accept any further commands.
-                                command_receiver.close();
-                                // Discard the event, if any, and start a graceful close.
-                                let (handler, closing_muxer) = connection.close();
+                    Either::Left((Some(command), _)) => match command {
+                        task::Command::NotifyHandler(event) => connection.inject_event(event),
+                        task::Command::Close => {
+                            command_receiver.close();
+                            let (handler, closing_muxer) = connection.close();
 
-                                let error = closing_muxer.await;
-                                events
-                                    .send(task::Event::Closed {
-                                        // TODO: Safe task id instead of connection id once.
-                                        id: task_id.0,
-                                        error: error.err().map(ConnectionError::IO),
-                                        handler,
-                                    })
-                                    .await;
-                                return;
-                            }
+                            let error = closing_muxer.await.err().map(ConnectionError::IO);
+                            events
+                                .send(task::Event::Closed {
+                                    id: task_id,
+                                    error,
+                                    handler,
+                                })
+                                .await;
+                            return;
                         }
-                    }
+                    },
 
                     // The manager has disappeared; abort.
                     Either::Left((None, _)) => return,
@@ -439,28 +435,24 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                         match event {
                             Ok(super::Event::Handler(event)) => {
                                 events
-                                    .send(task::Event::Notify {
-                                        id: task_id.0,
-                                        event,
-                                    })
+                                    .send(task::Event::Notify { id: task_id, event })
                                     .await;
                             }
                             Ok(super::Event::AddressChange(new_address)) => {
                                 events
                                     .send(task::Event::AddressChange {
-                                        id: task_id.0,
+                                        id: task_id,
                                         new_address,
                                     })
                                     .await;
                             }
                             Err(error) => {
-                                // Don't accept any further commands.
                                 command_receiver.close();
                                 let (handler, _closing_muxer) = connection.close();
                                 // Terminate the task with the error, dropping the connection.
                                 events
                                     .send(task::Event::Closed {
-                                        id: task_id.0,
+                                        id: task_id,
                                         error: Some(error),
                                         handler,
                                     })
@@ -470,7 +462,6 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                         }
                     }
                     Either::Right((None, _)) => {
-                        // TODO: Double check this is correct.
                         unreachable!("Connection is an infinite stream");
                     }
                 }
@@ -516,28 +507,30 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
         if let hash_map::Entry::Occupied(mut task) = self.tasks.entry(*event.id()) {
             Poll::Ready(match event {
-                // TODO: Make sure to remove the task.
                 task::Event::IncomingEstablished { id, peer_id, muxer } => {
+                    task.remove();
                     Event::IncomingConnectionEstablished {
                         id: ConnectionId(id),
                         peer_id,
                         muxer,
                     }
                 }
-                // TODO: Make sure to remove the task.
                 task::Event::OutgoingEstablished {
                     id,
                     peer_id,
                     address,
                     muxer,
                     errors,
-                } => Event::OutgoingConnectionEstablished {
-                    id: ConnectionId(id),
-                    peer_id,
-                    address,
-                    muxer,
-                    errors,
-                },
+                } => {
+                    task.remove();
+                    Event::OutgoingConnectionEstablished {
+                        id: ConnectionId(id),
+                        peer_id,
+                        address,
+                        muxer,
+                        errors,
+                    }
+                }
                 task::Event::Notify { id: _, event } => Event::ConnectionEvent {
                     entry: EstablishedEntry { task },
                     event,
@@ -575,10 +568,9 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                             error,
                             handler,
                         },
-                        TaskInfo::Pending { .. } => unreachable!(
-                            // TODO: Reconsider these numbers.
-                            "`Event::Closed` implies (2) occurred on that task and thus (3)."
-                        ),
+                        TaskInfo::Pending { .. } => {
+                            unreachable!("`Event::Closed` is never emitted for pending connection.")
+                        }
                     }
                 }
             })
@@ -626,15 +618,17 @@ impl<'a, I> EstablishedEntry<'a, I> {
     /// > task _may not be notified_ if sending the event fails due to
     /// > the connection handler not being ready at this time.
     pub fn notify_handler(&mut self, event: I) -> Result<(), I> {
-        let cmd = task::Command::NotifyHandler(event); // (*)
+        let cmd = task::Command::NotifyHandler(event);
         match self.task.get_mut() {
             TaskInfo::Established { sender, .. } => {
                 sender.try_send(cmd).map_err(|e| match e.into_inner() {
                     task::Command::NotifyHandler(event) => event,
-                    _ => panic!("Unexpected command. Expected `NotifyHandler`"), // see (*)
+                    _ => unreachable!("Expect `EstablishedEntry` to point to established task."),
                 })
             }
-            TaskInfo::Pending { .. } => unreachable!("TODO"),
+            TaskInfo::Pending { .. } => {
+                unreachable!("Expect `EstablishedEntry` to point to established task.")
+            }
         }
     }
 
@@ -647,7 +641,9 @@ impl<'a, I> EstablishedEntry<'a, I> {
     pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
         match self.task.get_mut() {
             TaskInfo::Established { sender, .. } => sender.poll_ready(cx).map_err(|_| ()),
-            TaskInfo::Pending { .. } => unreachable!("TODO"),
+            TaskInfo::Pending { .. } => {
+                unreachable!("Expect `EstablishedEntry` to point to established task.")
+            }
         }
     }
 
@@ -668,7 +664,9 @@ impl<'a, I> EstablishedEntry<'a, I> {
                     Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
                 }
             }
-            TaskInfo::Pending { .. } => unreachable!("TODO"),
+            TaskInfo::Pending { .. } => {
+                unreachable!("Expect `EstablishedEntry` to point to established task.")
+            }
         }
     }
 
