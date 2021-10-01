@@ -32,20 +32,23 @@ use futures::stream::FuturesUnordered;
 use futures::{future, prelude::*};
 use smallvec::SmallVec;
 use std::{
-    collections::hash_map,
+    collections::{hash_map, VecDeque},
     convert::TryFrom as _,
     error, fmt,
     num::{NonZeroU32, NonZeroUsize},
     pin::Pin,
     task::{Context, Poll},
+    time::Instant,
 };
 
 // TODO: Have a concurrency limit.
 
 // TODO: pub needed?
 pub struct ConcurrentDial<TMuxer, TError> {
+    start: Instant,
     // TODO: We could as well spawn each of these on a separate task.
     dials: FuturesUnordered<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
+    pending_dials: VecDeque<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
     errors: Vec<(Multiaddr, TransportError<TError>)>,
 }
 
@@ -63,12 +66,23 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
         TError: std::fmt::Debug,
     {
         let dials = FuturesUnordered::default();
+        let mut pending_dials = VecDeque::default();
         let mut errors = vec![];
 
-        for address in addresses.into_iter().map(|a| p2p_addr(peer, a)) {
-            match address {
+        let addresses = addresses.into_iter();
+
+        for addr in addresses.into_iter().map(|a| p2p_addr(peer, a)) {
+            match addr {
                 Ok(address) => match transport.clone().dial(address.clone()) {
-                    Ok(fut) => dials.push(fut.map(|r| (address, r)).boxed()),
+                    Ok(fut) => {
+                        let fut = fut.map(|r| (address, r)).boxed();
+                        // TODO: Move to constant
+                        if dials.len() <= 5 {
+                            dials.push(fut)
+                        } else {
+                            pending_dials.push_back(fut)
+                        }
+                    }
                     Err(err) => errors.push((address, err)),
                 },
                 Err(address) => errors.push((
@@ -79,11 +93,16 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
             }
         }
 
-        Self { dials, errors }
+        Self {
+            start: Instant::now(),
+            dials,
+            errors,
+            pending_dials,
+        }
     }
 }
 
-impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
+impl<TMuxer, TError: std::fmt::Debug> Future for ConcurrentDial<TMuxer, TError> {
     type Output = Result<
         (
             PeerId,
@@ -98,15 +117,14 @@ impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
                 Some((addr, Ok((peer_id, muxer)))) => {
-                    return Poll::Ready(Ok((
-                        peer_id,
-                        addr,
-                        muxer,
-                        std::mem::replace(&mut self.errors, vec![]),
-                    )));
+                    let errors = std::mem::replace(&mut self.errors, vec![]);
+                    return Poll::Ready(Ok((peer_id, addr, muxer, errors)));
                 }
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, TransportError::Other(e)));
+                    if let Some(dial) = self.pending_dials.pop_front() {
+                        self.dials.push(dial)
+                    }
                 }
                 None => {
                     return Poll::Ready(Err(std::mem::replace(&mut self.errors, vec![])));
