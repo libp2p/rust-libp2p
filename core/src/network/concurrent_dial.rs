@@ -38,14 +38,10 @@ use std::{
     num::{NonZeroU32, NonZeroUsize},
     pin::Pin,
     task::{Context, Poll},
-    time::Instant,
 };
-
-// TODO: Have a concurrency limit.
 
 // TODO: pub needed?
 pub struct ConcurrentDial<TMuxer, TError> {
-    start: Instant,
     // TODO: We could as well spawn each of these on a separate task.
     dials: FuturesUnordered<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
     pending_dials: VecDeque<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
@@ -63,7 +59,6 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
     where
         TTrans: Transport<Output = (PeerId, TMuxer), Error = TError> + Clone,
         TTrans::Dial: Send + 'static,
-        TError: std::fmt::Debug,
     {
         let dials = FuturesUnordered::default();
         let mut pending_dials = VecDeque::default();
@@ -94,7 +89,6 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
         }
 
         Self {
-            start: Instant::now(),
             dials,
             errors,
             pending_dials,
@@ -102,7 +96,7 @@ impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
     }
 }
 
-impl<TMuxer, TError: std::fmt::Debug> Future for ConcurrentDial<TMuxer, TError> {
+impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
     type Output = Result<
         (
             PeerId,
