@@ -68,6 +68,8 @@ jobs:
       run: apt-get install -y cmake
 
     - uses: Swatinem/rust-cache@v1.3.0
+      with:
+        key: ${{ matrix.toolchain }}
 
     - name: Build on ${{ matrix.toolchain }}
       # TODO: also run `cargo test`
