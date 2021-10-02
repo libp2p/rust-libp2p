@@ -217,19 +217,23 @@ where
 
     /// Remove the listener matching the given `ListenerId`.
     ///
-    /// Return `Ok(())` if a listener with this ID was in the list.
-    pub fn remove_listener(&mut self, id: ListenerId) -> Result<(), ()> {
+    /// Returns `true` if there was a listener with this ID, `false`
+    /// otherwise.
+    pub fn remove_listener(&mut self, id: ListenerId) -> bool {
         if let Some(i) = self.listeners.iter().position(|l| l.id == id) {
-            let mut listener = self.listeners.remove(i).ok_or(())?;
+            let mut listener = self
+                .listeners
+                .remove(i)
+                .expect("Index can not be out of bounds.");
             let listener_project = listener.as_mut().project();
             self.pending_events.push_back(ListenersEvent::Closed {
                 listener_id: *listener_project.id,
                 addresses: listener_project.addresses.drain(..).collect(),
                 reason: Ok(()),
             });
-            Ok(())
+            true
         } else {
-            Err(())
+            false
         }
     }
 
@@ -569,7 +573,7 @@ mod tests {
                 panic!("Was expecting the listen address to be reported")
             }
 
-            listeners.remove_listener(id).unwrap();
+            assert!(listeners.remove_listener(id));
 
             match listeners.next().await.unwrap() {
                 ListenersEvent::Closed {
