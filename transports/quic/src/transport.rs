@@ -233,7 +233,7 @@ where
             }
             Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
             Poll::Ready(Ok(_)) => {
-                panic!("muxer.incoming is set to false so no events can be produced");
+                unreachable!("muxer.incoming is set to false so no events can be produced");
             }
         }
     }
