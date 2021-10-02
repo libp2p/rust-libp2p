@@ -39,7 +39,7 @@ use std::{
 
 type FiniteAddrScore = u32;
 
-pub struct AutoNat {
+pub struct Behaviour {
     inner: RequestResponse<AutoNatCodec>,
     local_addresses: HashMap<Multiaddr, FiniteAddrScore>,
     pending_inbound: HashMap<PeerId, ResponseChannel<DialResponse>>,
@@ -47,7 +47,7 @@ pub struct AutoNat {
     send_request: VecDeque<PeerId>,
 }
 
-impl Default for AutoNat {
+impl Default for Behaviour {
     fn default() -> Self {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
         let cfg = RequestResponseConfig::default();
@@ -62,7 +62,7 @@ impl Default for AutoNat {
     }
 }
 
-impl AutoNat {
+impl Behaviour {
     pub fn add_local_address(&mut self, address: Multiaddr) {
         if self.local_addresses.get(&address).is_none() {
             self.local_addresses.insert(address, 1);
@@ -70,7 +70,7 @@ impl AutoNat {
     }
 }
 
-impl NetworkBehaviour for AutoNat {
+impl NetworkBehaviour for Behaviour {
     type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
     type OutEvent = ();
 
@@ -222,7 +222,7 @@ impl NetworkBehaviour for AutoNat {
         self.inner.inject_new_external_addr(addr);
         match self.local_addresses.get_mut(addr) {
             Some(score) if *score == 0 => *score = 1,
-            Some(_) => {},
+            Some(_) => {}
             None => {
                 self.local_addresses.insert(addr.clone(), 1);
             }

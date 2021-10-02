@@ -20,7 +20,7 @@
 
 //! Implementation of the [AutoNAT] protocol.
 
-pub use self::behaviour::AutoNat;
+pub use self::behaviour::Behaviour;
 
 mod behaviour;
 mod protocol;
