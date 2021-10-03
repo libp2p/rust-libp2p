@@ -35,9 +35,29 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
+    time::Duration,
 };
 
 type FiniteAddrScore = u32;
+
+pub struct Config {
+    timeout: Duration,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            timeout: Duration::from_secs(5),
+        }
+    }
+}
+
+impl Config {
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+}
 
 pub struct Behaviour {
     inner: RequestResponse<AutoNatCodec>,
@@ -49,8 +69,15 @@ pub struct Behaviour {
 
 impl Default for Behaviour {
     fn default() -> Self {
+        Behaviour::new(Config::default())
+    }
+}
+
+impl Behaviour {
+    pub fn new(config: Config) -> Self {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
-        let cfg = RequestResponseConfig::default();
+        let mut cfg = RequestResponseConfig::default();
+        cfg.set_request_timeout(config.timeout);
         let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
         Self {
             inner,
@@ -60,9 +87,7 @@ impl Default for Behaviour {
             send_request: VecDeque::default(),
         }
     }
-}
 
-impl Behaviour {
     pub fn add_local_address(&mut self, address: Multiaddr) {
         if self.local_addresses.get(&address).is_none() {
             self.local_addresses.insert(address, 1);
