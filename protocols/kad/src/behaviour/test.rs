@@ -1318,97 +1318,116 @@ fn network_behaviour_inject_address_change() {
     );
 }
 
-#[test]
-fn client_mode() {
+#[futures_test::test]
+async fn client_mode_test() {
+    let mut addrs = Vec::new();
+    let mut peers = Vec::new();
+
     // Create server peers.
-    let mut server_nodes = build_fully_connected_nodes_with_config(2, KademliaConfig::default());
+    let server1 = build_node();
+    addrs.push(server1.0);
+    let mut server1 = server1.1;
+
+    let server2 = build_node();
+    addrs.push(server2.0);
+    let mut server2 = server2.1;
 
     // Create a client peer.
     let mut cfg = KademliaConfig::default();
-    cfg.set_mode(Mode::Client);
-    let mut client = build_node_with_config(cfg);
+    cfg.set_mode(Mode::Server);
+    let client = build_node_with_config(cfg);
+    addrs.push(client.0);
+    let mut client = client.1;
 
     // Fitler out peer Ids.
-    let mut peers: Vec<_> = server_nodes
-        .iter()
-        .map(|(_, swarm)| swarm.local_peer_id().clone())
-        .collect();
-    peers.push(client.1.local_peer_id().clone());
+    peers.push(*server1.local_peer_id());
+    peers.push(*server2.local_peer_id());
+    peers.push(*client.local_peer_id());
 
-    // Filter out MultiAddrs and swarms.
-    let mut addrs: Vec<_> = server_nodes.iter().map(|(addr, _)| addr.clone()).collect();
-    addrs.push(client.0.clone());
+    // Connect server1 and server2.
+    server1
+        .behaviour_mut()
+        .add_address(&peers[1], addrs[1].clone());
 
-    let mut swarms: Vec<_> = server_nodes.iter_mut().map(|(_, swarm)| swarm).collect();
-    swarms.push(&mut client.1);
-
-    let key = "123".to_string();
-    let key = Key::new(&key);
-    let record = Record::new(key.clone(), vec![4, 5, 6]);
+    server2
+        .behaviour_mut()
+        .add_address(&peers[0], addrs[0].clone());
 
     // Put a record from a server peer.
-    swarms[0]
+    let key = Key::new(&"123".to_string());
+    let record = Record::new(key.clone(), vec![4, 5, 6]);
+
+    let put_qid = server1
         .behaviour_mut()
         .put_record(record.clone(), Quorum::One)
         .unwrap();
 
-    // Dial a server peer from the client peer.
-    swarms[2]
-        .behaviour_mut()
-        .add_address(&peers[1], addrs[1].clone());
+    loop {
+        futures::select! {
+            event = server1.next() => if let Some(SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                result: QueryResult::PutRecord(result),
+                id: qid,
+                ..
+            })) = event {
+                assert_eq!(qid, put_qid);
+                match result {
+                    Ok(PutRecordOk { key: actual_key }) => {
+                        if actual_key == key {
+                            // Dial a server peer from the client peer.
+                            client
+                                .behaviour_mut()
+                                .add_address(&peers[1], addrs[1].clone());
 
-    // Try to get the same record from the client node.
-    swarms[2].behaviour_mut().get_record(&key, Quorum::One);
-
-    block_on(poll_fn(|ctx| {
-        for swarm in &mut swarms {
-            loop {
-                match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryCompleted { result, .. },
-                    ))) => match result {
-                        QueryResult::PutRecord(result) => match result {
-                            Ok(PutRecordOk { .. }) => {
-                                // Check if the server peer is not connected to the client peer.
-                                assert!(
-                                    swarm
-                                        .behaviour_mut()
-                                        .connected_peers
-                                        .iter()
-                                        .all(|p| *p != peers[2]),
-                                    "The server peer is connected to the client peer."
-                                );
-                            }
-                            Err(e) => panic!("PUT operation failed: {:?}", e),
-                        },
-                        QueryResult::GetRecord(result) => match result {
-                            Ok(GetRecordOk { .. }) => {
-                                // Check if the client peer is connected to the server peer.
-                                assert!(
-                                    swarm
-                                        .behaviour_mut()
-                                        .connected_peers
-                                        .iter()
-                                        .any(|p| (*p == peers[0] || *p == peers[1])),
-                                    "The client peer is not connected to the server peers."
-                                );
-
-                                // GetRecord will never be successful unless and until PutRecord is
-                                // successful.
-                                return Poll::Ready(());
-                            }
-                            Err(e) => panic!("GET operation failed: {:?}", e),
-                        },
-                        _ => {}
+                            client.behaviour_mut().get_record(&key, Quorum::One);
+                        }
                     },
-                    Poll::Ready(Some(_)) => {}
-                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                    Poll::Pending => break,
+                    Err(e) => panic!("{:?}", e),
+                }
+            },
+            _event = server2.next() => {},
+            event = client.next() => if let Some(SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted{
+                result: QueryResult::GetRecord(result),
+                ..
+            })) = event {
+                match result {
+                    Ok(GetRecordOk { records: actual_record, .. }) => {
+                        assert_eq!(&record.key, &actual_record[0].record.key);
+
+                        let mut records = Vec::new();
+
+                        // Read the routing table.
+                        for bucket in client.behaviour_mut().kbuckets() {
+                            for record in bucket.iter() {
+                                records.push(*record.node.key.preimage());
+                            }
+                        }
+
+                        assert!(records.contains(&peers[1]));
+
+                        records.clear();
+                        for bucket in server1.behaviour_mut().kbuckets() {
+                            for record in bucket.iter() {
+                                records.push(*record.node.key.preimage());
+                            }
+                        }
+
+                        assert!(!records.contains(&peers[2]));
+
+                        records.clear();
+                        for bucket in server2.behaviour_mut().kbuckets() {
+                            for record in bucket.iter() {
+                                records.push(*record.node.key.preimage());
+                            }
+                        }
+
+                        assert!(!records.contains(&peers[2]));
+                        break;
+                    },
+                    Err(e) => panic!("{:?}", e),
                 }
             }
         }
-        Poll::Pending
-    }));
+    }
 }
 
 #[test]
