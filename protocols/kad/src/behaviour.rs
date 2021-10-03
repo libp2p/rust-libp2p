@@ -1734,7 +1734,6 @@ where
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         KademliaHandlerProto::new(KademliaHandlerConfig {
             protocol_config: self.protocol_config.clone(),
-            allow_listening: true,
             idle_timeout: self.connection_idle_timeout,
             mode: Mode::default(),
         })

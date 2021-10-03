@@ -64,13 +64,7 @@ impl<T: Clone + fmt::Debug + Send + 'static> IntoProtocolsHandler for KademliaHa
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         match self.config.mode {
             Mode::Client => upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade),
-            Mode::Server => {
-                if self.config.allow_listening {
-                    upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
-                } else {
-                    upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
-                }
-            }
+            Mode::Server => upgrade::EitherUpgrade::A(self.config.protocol_config.clone()),
         }
     }
 }
@@ -122,9 +116,6 @@ enum ProtocolStatus {
 pub struct KademliaHandlerConfig {
     /// Configuration of the wire protocol.
     pub protocol_config: KademliaProtocolConfig,
-
-    /// If false, we deny incoming requests.
-    pub allow_listening: bool,
 
     /// Time after which we close an idle connection.
     pub idle_timeout: Duration,
@@ -489,14 +480,8 @@ where
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self.config.mode {
-            Mode::Server => {
-                if self.config.allow_listening {
-                    SubstreamProtocol::new(self.config.protocol_config.clone(), ())
-                        .map_upgrade(upgrade::EitherUpgrade::A)
-                } else {
-                    SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
-                }
-            }
+            Mode::Server => SubstreamProtocol::new(self.config.protocol_config.clone(), ())
+                .map_upgrade(upgrade::EitherUpgrade::A),
             // If we are in client mode, I don't want to advertise Kademlia so that other peers will
             // not send me Kademlia requests.
             Mode::Client => {
@@ -525,14 +510,11 @@ where
         protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         (): Self::InboundOpenInfo,
     ) {
-        // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
-        // is a `Void`.
         let protocol = match protocol {
             EitherOutput::First(p) => p,
             EitherOutput::Second(p) => void::unreachable(p),
         };
 
-        debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.substreams
@@ -774,7 +756,6 @@ impl Default for KademliaHandlerConfig {
     fn default() -> Self {
         KademliaHandlerConfig {
             protocol_config: Default::default(),
-            allow_listening: true,
             idle_timeout: Duration::from_secs(10),
             mode: Mode::default(),
         }

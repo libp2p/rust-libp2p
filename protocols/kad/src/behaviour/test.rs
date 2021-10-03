@@ -1374,6 +1374,7 @@ async fn client_mode_test() {
                     Ok(PutRecordOk { key: actual_key }) => {
                         if actual_key == key {
                             // Dial a server peer from the client peer.
+                            // client.dial_addr(addrs[1].clone());
                             client
                                 .behaviour_mut()
                                 .add_address(&peers[1], addrs[1].clone());
