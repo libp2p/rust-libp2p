@@ -407,14 +407,13 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
             }
         }
 
-        todo!()
-        // for (&id, (_endpoint, peer2)) in &self.pending {
-        //     if Some(peer) == peer2.as_ref() {
-        //         if let Some(manager::Entry::Pending(e)) = self.manager.entry(id) {
-        //             e.abort();
-        //         }
-        //     }
-        // }
+        for (&id, connection_info) in &self.pending {
+            if Some(peer) == connection_info.peer_id.as_ref() {
+                if let Some(manager::Entry::Pending(e)) = self.manager.entry(id) {
+                    e.abort();
+                }
+            }
+        }
     }
 
     /// Counts the number of established connections to the given peer.
