@@ -38,11 +38,77 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use task::{Task, TaskId};
 use void::Void;
 
-mod task;
+/// Identifier of a [`Task`] in a [`Manager`](super::Manager).
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TaskId(pub(super) usize);
 
+/// Commands that can be sent to a task.
+#[derive(Debug)]
+pub enum Command<T> {
+    /// Notify the connection handler of an event.
+    NotifyHandler(T),
+    /// Gracefully close the connection (active close) before
+    /// terminating the task.
+    Close,
+}
+
+/// Events that a task can emit to its manager.
+#[derive(Debug)]
+pub enum TaskEvent<H: IntoConnectionHandler, TMuxer, TError> {
+    // TODO: Remove most of these
+    IncomingEstablished {
+        id: TaskId,
+        peer_id: PeerId,
+        muxer: TMuxer,
+    },
+    OutgoingEstablished {
+        id: TaskId,
+        peer_id: PeerId,
+        muxer: TMuxer,
+        address: Multiaddr,
+        // TODO: Document errors in a success message.
+        errors: Vec<(Multiaddr, TransportError<TError>)>,
+    },
+    /// A pending connection failed.
+    PendingFailed {
+        id: TaskId,
+        error: PendingConnectionError<TError>,
+    },
+    /// A node we are connected to has changed its address.
+    AddressChange { id: TaskId, new_address: Multiaddr },
+    /// Notify the manager of an event from the connection.
+    Notify {
+        id: TaskId,
+        event: THandlerOutEvent<H>,
+    },
+    /// A connection closed, possibly due to an error.
+    ///
+    /// If `error` is `None`, the connection has completed
+    /// an active orderly close.
+    Closed {
+        id: TaskId,
+        error: Option<ConnectionError<THandlerError<H>>>,
+        handler: H::Handler,
+    },
+}
+
+impl<H: IntoConnectionHandler, TMuxer, TError> TaskEvent<H, TMuxer, TError> {
+    pub fn id(&self) -> &TaskId {
+        match self {
+            TaskEvent::IncomingEstablished { id, .. } => id,
+            TaskEvent::OutgoingEstablished { id, .. } => id,
+            TaskEvent::PendingFailed { id, .. } => id,
+            TaskEvent::AddressChange { id, .. } => id,
+            TaskEvent::Notify { id, .. } => id,
+            TaskEvent::Closed { id, .. } => id,
+        }
+    }
+}
+
+// TODO: Still up to date?
+//
 // Implementation Notes
 // ====================
 //
@@ -108,10 +174,10 @@ pub struct Manager<H: IntoConnectionHandler, TMuxer, E> {
 
     /// Sender distributed to managed tasks for reporting events back
     /// to the manager.
-    events_tx: mpsc::Sender<task::Event<H, TMuxer, E>>,
+    events_tx: mpsc::Sender<TaskEvent<H, TMuxer, E>>,
 
     /// Receiver for events reported from managed tasks.
-    events_rx: mpsc::Receiver<task::Event<H, TMuxer, E>>,
+    events_rx: mpsc::Receiver<TaskEvent<H, TMuxer, E>>,
 }
 
 impl<H: IntoConnectionHandler, TMuxer, E> fmt::Debug for Manager<H, TMuxer, E> {
@@ -159,7 +225,7 @@ enum TaskInfo<I> {
     Established {
         connected: Connected,
         /// Channel endpoint to send messages to the task.
-        sender: mpsc::Sender<task::Command<I>>,
+        sender: mpsc::Sender<Command<I>>,
     },
 }
 
@@ -286,7 +352,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                 match futures::future::select(drop_receiver, Box::pin(dial)).await {
                     Either::Left((Err(oneshot::Canceled), _)) => {
                         events
-                            .send(task::Event::PendingFailed {
+                            .send(TaskEvent::PendingFailed {
                                 id: task_id,
                                 error: PendingConnectionError::Aborted,
                             })
@@ -295,7 +361,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     Either::Left((Ok(v), _)) => void::unreachable(v),
                     Either::Right((Ok((peer_id, muxer)), _)) => {
                         events
-                            .send(task::Event::IncomingEstablished {
+                            .send(TaskEvent::IncomingEstablished {
                                 id: task_id,
                                 peer_id,
                                 muxer,
@@ -304,7 +370,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     }
                     Either::Right((Err(e), _)) => {
                         events
-                            .send(task::Event::PendingFailed {
+                            .send(TaskEvent::PendingFailed {
                                 id: task_id,
                                 error: e,
                             })
@@ -340,7 +406,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                 match futures::future::select(drop_receiver, Box::pin(dial)).await {
                     Either::Left((Err(oneshot::Canceled), _)) => {
                         events
-                            .send(task::Event::PendingFailed {
+                            .send(TaskEvent::PendingFailed {
                                 id: task_id,
                                 error: PendingConnectionError::Aborted,
                             })
@@ -349,7 +415,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     Either::Left((Ok(v), _)) => void::unreachable(v),
                     Either::Right((Ok((peer_id, address, muxer, errors)), _)) => {
                         events
-                            .send(task::Event::OutgoingEstablished {
+                            .send(TaskEvent::OutgoingEstablished {
                                 id: task_id,
                                 peer_id,
                                 muxer,
@@ -360,7 +426,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     }
                     Either::Right((Err(e), _)) => {
                         events
-                            .send(task::Event::PendingFailed {
+                            .send(TaskEvent::PendingFailed {
                                 id: task_id,
                                 error: PendingConnectionError::TransportDial(e),
                             })
@@ -403,14 +469,14 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
             loop {
                 match futures::future::select(command_receiver.next(), connection.next()).await {
                     Either::Left((Some(command), _)) => match command {
-                        task::Command::NotifyHandler(event) => connection.inject_event(event),
-                        task::Command::Close => {
+                        Command::NotifyHandler(event) => connection.inject_event(event),
+                        Command::Close => {
                             command_receiver.close();
                             let (handler, closing_muxer) = connection.close();
 
                             let error = closing_muxer.await.err().map(ConnectionError::IO);
                             events
-                                .send(task::Event::Closed {
+                                .send(TaskEvent::Closed {
                                     id: task_id,
                                     error,
                                     handler,
@@ -426,13 +492,11 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                     Either::Right((Some(event), _)) => {
                         match event {
                             Ok(super::Event::Handler(event)) => {
-                                events
-                                    .send(task::Event::Notify { id: task_id, event })
-                                    .await;
+                                events.send(TaskEvent::Notify { id: task_id, event }).await;
                             }
                             Ok(super::Event::AddressChange(new_address)) => {
                                 events
-                                    .send(task::Event::AddressChange {
+                                    .send(TaskEvent::AddressChange {
                                         id: task_id,
                                         new_address,
                                     })
@@ -443,7 +507,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                                 let (handler, _closing_muxer) = connection.close();
                                 // Terminate the task with the error, dropping the connection.
                                 events
-                                    .send(task::Event::Closed {
+                                    .send(TaskEvent::Closed {
                                         id: task_id,
                                         error: Some(error),
                                         handler,
@@ -499,7 +563,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
 
         if let hash_map::Entry::Occupied(mut task) = self.tasks.entry(*event.id()) {
             Poll::Ready(match event {
-                task::Event::IncomingEstablished { id, peer_id, muxer } => {
+                TaskEvent::IncomingEstablished { id, peer_id, muxer } => {
                     task.remove();
                     Event::ConnectionEstablished {
                         id: ConnectionId(id),
@@ -508,7 +572,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                         outgoing: None,
                     }
                 }
-                task::Event::OutgoingEstablished {
+                TaskEvent::OutgoingEstablished {
                     id,
                     peer_id,
                     address,
@@ -523,16 +587,16 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                         outgoing: Some((address, errors)),
                     }
                 }
-                task::Event::Notify { id: _, event } => Event::ConnectionEvent {
+                TaskEvent::Notify { id: _, event } => Event::ConnectionEvent {
                     entry: EstablishedEntry { task },
                     event,
                 },
-                task::Event::PendingFailed { id, error } => {
+                TaskEvent::PendingFailed { id, error } => {
                     let id = ConnectionId(id);
                     let _ = task.remove();
                     Event::PendingConnectionError { id, error }
                 }
-                task::Event::AddressChange { id: _, new_address } => {
+                TaskEvent::AddressChange { id: _, new_address } => {
                     let (new, old) =
                         if let TaskInfo::Established { connected, .. } = &mut task.get_mut() {
                             let mut new_endpoint = connected.endpoint.clone();
@@ -551,7 +615,7 @@ impl<H: IntoConnectionHandler, TMuxer: Send + 'static, TE: Send + 'static> Manag
                         new_endpoint: new,
                     }
                 }
-                task::Event::Closed { id, error, handler } => {
+                TaskEvent::Closed { id, error, handler } => {
                     let id = ConnectionId(id);
                     match task.remove() {
                         TaskInfo::Established { sender, connected } => Event::ConnectionClosed {
@@ -610,11 +674,11 @@ impl<'a, I> EstablishedEntry<'a, I> {
     /// > task _may not be notified_ if sending the event fails due to
     /// > the connection handler not being ready at this time.
     pub fn notify_handler(&mut self, event: I) -> Result<(), I> {
-        let cmd = task::Command::NotifyHandler(event);
+        let cmd = Command::NotifyHandler(event);
         match self.task.get_mut() {
             TaskInfo::Established { sender, .. } => {
                 sender.try_send(cmd).map_err(|e| match e.into_inner() {
-                    task::Command::NotifyHandler(event) => event,
+                    Command::NotifyHandler(event) => event,
                     _ => unreachable!("Expect `EstablishedEntry` to point to established task."),
                 })
             }
@@ -650,12 +714,10 @@ impl<'a, I> EstablishedEntry<'a, I> {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
         match self.task.get_mut() {
-            TaskInfo::Established { sender, .. } => {
-                match sender.clone().try_send(task::Command::Close) {
-                    Ok(()) => {}
-                    Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
-                }
-            }
+            TaskInfo::Established { sender, .. } => match sender.clone().try_send(Command::Close) {
+                Ok(()) => {}
+                Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
+            },
             TaskInfo::Pending { .. } => {
                 unreachable!("Expect `EstablishedEntry` to point to established task.")
             }
