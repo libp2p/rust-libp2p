@@ -23,14 +23,12 @@ pub(crate) mod handler;
 mod listeners;
 mod substream;
 
-pub(crate) mod manager;
 pub(crate) mod pool;
 
 pub use error::{ConnectionError, PendingConnectionError};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
 pub use listeners::{ListenerId, ListenersEvent, ListenersStream};
-pub use manager::ConnectionId;
-pub use pool::{ConnectionCounters, ConnectionLimits};
+pub use pool::{ConnectionCounters, ConnectionId, ConnectionLimits};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
 pub use substream::{Close, Substream, SubstreamEndpoint};
 

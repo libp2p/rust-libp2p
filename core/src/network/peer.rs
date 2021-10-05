@@ -285,12 +285,8 @@ where
     /// Gets an iterator over all established connections to the peer.
     pub fn connections(
         &mut self,
-    ) -> EstablishedConnectionIter<
-        impl Iterator<Item = ConnectionId>,
-        THandler,
-        TMuxer,
-        TTrans::Error,
-    > {
+    ) -> EstablishedConnectionIter<impl Iterator<Item = ConnectionId>, THandlerInEvent<THandler>>
+    {
         self.network.pool.iter_peer_established(&self.peer_id)
     }
 
@@ -323,7 +319,11 @@ where
             .field("peer_id", &self.peer_id)
             .field(
                 "established",
-                &self.network.pool.iter_peer_established_info(&self.peer_id),
+                &self
+                    .network
+                    .pool
+                    .iter_peer_established_info(&self.peer_id)
+                    .collect::<Vec<_>>(),
             )
             .field("attempts", &self.network.dialing.get(&self.peer_id))
             .finish()
@@ -437,7 +437,11 @@ where
             .field("peer_id", &self.peer_id)
             .field(
                 "established",
-                &self.network.pool.iter_peer_established_info(&self.peer_id),
+                &self
+                    .network
+                    .pool
+                    .iter_peer_established_info(&self.peer_id)
+                    .collect::<Vec<_>>(),
             )
             .field("attempts", &self.network.dialing.get(&self.peer_id))
             .finish()

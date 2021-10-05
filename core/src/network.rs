@@ -30,8 +30,7 @@ pub use peer::Peer;
 use crate::{
     connection::{
         handler::{THandlerInEvent, THandlerOutEvent},
-        manager::ManagerConfig,
-        pool::{Pool, PoolEvent},
+        pool::{ManagerConfig, Pool, PoolEvent},
         ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint, IncomingInfo,
         IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, OutgoingInfo,
         PendingConnectionError, PendingPoint, Substream,
