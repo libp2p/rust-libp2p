@@ -30,10 +30,10 @@ pub use peer::Peer;
 use crate::{
     connection::{
         handler::{THandlerInEvent, THandlerOutEvent},
-        pool::{ManagerConfig, Pool, PoolEvent},
+        pool::{Pool, PoolConfig, PoolEvent},
         ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint, IncomingInfo,
-        IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, OutgoingInfo,
-        PendingConnectionError, PendingPoint, Substream,
+        IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, PendingConnectionError,
+        PendingPoint, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
@@ -131,7 +131,7 @@ where
         Network {
             local_peer_id,
             listeners: ListenersStream::new(transport),
-            pool: Pool::new(local_peer_id, config.manager_config, config.limits),
+            pool: Pool::new(local_peer_id, config.pool_config, config.limits),
             dialing: Default::default(),
         }
     }
@@ -228,7 +228,6 @@ where
             }
         }
 
-        // TODO: Clone needed?
         self.pool.add_outgoing(
             concurrent_dial::ConcurrentDial::new(
                 self.transport().clone(),
@@ -238,20 +237,6 @@ where
             handler,
             None,
         )
-
-        // match self.transport().clone().dial(address.clone()) {
-        //     Ok(f) => {
-        //         let address = address.clone();
-        //         let f = f
-        //             .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)))
-        //             .map_ok(|(peer_id, muxer)| (peer_id, address, muxer));
-        //         self.pool.add_outgoing(f, handler, None)
-        //     }
-        //     Err(err) => {
-        //         let f = future::err(PendingConnectionError::Transport(err));
-        //         self.pool.add_outgoing(f, handler, None)
-        //     }
-        // }
     }
 
     /// Returns information about the state of the `Network`.
@@ -264,21 +249,10 @@ where
         }
     }
 
-    // /// Returns an iterator for information on all pending incoming connections.
-    // pub fn incoming_info(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
-    //     self.pool.iter_pending_incoming()
-    // }
-
-    // /// Returns the list of addresses we're currently dialing without knowing the `PeerId` of.
-    // pub fn unknown_dials(&self) -> impl Iterator<Item = &Multiaddr> {
-    //     self.pool.iter_pending_outgoing().filter_map(|info| {
-    //         if info.peer_id.is_none() {
-    //             Some(info.address)
-    //         } else {
-    //             None
-    //         }
-    //     })
-    // }
+    /// Returns an iterator for information on all pending incoming connections.
+    pub fn incoming_info(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
+        self.pool.iter_pending_incoming()
+    }
 
     /// Returns a list of all connected peers, i.e. peers to whom the `Network`
     /// has at least one established connection.
@@ -541,25 +515,6 @@ where
         Some(opts.peer),
     );
 
-    // let result = match transport.dial(addr.clone()) {
-    //     Ok(fut) => {
-    //         let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
-    //         let info = OutgoingInfo {
-    //             address: &addr,
-    //             peer_id: Some(&opts.peer),
-    //         };
-    //         pool.add_outgoing(fut, opts.handler, info)
-    //     }
-    //     Err(err) => {
-    //         let fut = future::err(PendingConnectionError::Transport(err));
-    //         let info = OutgoingInfo {
-    //             address: &addr,
-    //             peer_id: Some(&opts.peer),
-    //         };
-    //         pool.add_outgoing(fut, opts.handler, info)
-    //     }
-    // };
-
     if let Ok(id) = &result {
         dialing.entry(opts.peer).or_default().push(*id);
     }
@@ -644,10 +599,8 @@ impl NetworkInfo {
 /// `notify_handler` buffer size of 8.
 #[derive(Default)]
 pub struct NetworkConfig {
-    /// Note that the `ManagerConfig`s task command buffer always provides
-    /// one "free" slot per task. Thus the given total `notify_handler_buffer_size`
-    /// exposed for configuration on the `Network` is reduced by one.
-    manager_config: ManagerConfig,
+    /// Connection [`Pool`] configuration.
+    pool_config: PoolConfig,
     /// The effective connection limits.
     limits: ConnectionLimits,
 }
@@ -655,7 +608,7 @@ pub struct NetworkConfig {
 impl NetworkConfig {
     /// Configures the executor to use for spawning connection background tasks.
     pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.manager_config.executor = Some(e);
+        self.pool_config.executor = Some(e);
         self
     }
 
@@ -665,7 +618,7 @@ impl NetworkConfig {
     where
         F: FnOnce() -> Option<Box<dyn Executor + Send>>,
     {
-        self.manager_config.executor = self.manager_config.executor.or_else(f);
+        self.pool_config.executor = self.pool_config.executor.or_else(f);
         self
     }
 
@@ -677,7 +630,7 @@ impl NetworkConfig {
     /// longer be able to deliver events to the associated `ConnectionHandler`,
     /// thus exerting back-pressure on the connection and peer API.
     pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
-        self.manager_config.task_command_buffer_size = n.get() - 1;
+        self.pool_config.task_command_buffer_size = n.get() - 1;
         self
     }
 
@@ -688,7 +641,7 @@ impl NetworkConfig {
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
     pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.manager_config.task_event_buffer_size = n;
+        self.pool_config.task_event_buffer_size = n;
         self
     }
 

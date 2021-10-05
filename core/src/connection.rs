@@ -344,22 +344,6 @@ impl<'a> IncomingInfo<'a> {
     }
 }
 
-/// Borrowed information about an outgoing connection currently being negotiated.
-#[derive(Debug, Copy, Clone)]
-pub struct OutgoingInfo<'a> {
-    pub address: &'a Multiaddr,
-    pub peer_id: Option<&'a PeerId>,
-}
-
-impl<'a> OutgoingInfo<'a> {
-    /// Builds a `ConnectedPoint` corresponding to the outgoing connection.
-    pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Dialer {
-            address: self.address.clone(),
-        }
-    }
-}
-
 /// Information about a connection limit.
 #[derive(Debug, Clone)]
 pub struct ConnectionLimit {
