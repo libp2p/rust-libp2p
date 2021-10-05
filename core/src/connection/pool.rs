@@ -594,9 +594,6 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
     {
-        // Advance the tasks in `local_spawns`.
-        while let Poll::Ready(Some(_)) = self.local_spawns.poll_next_unpin(cx) {}
-
         // Poll for events of established connections.
         //
         // Note that established connections are polled before pending connections, thus
@@ -844,6 +841,9 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                 }
             }
         }
+
+        // Advance the tasks in `local_spawns`.
+        while let Poll::Ready(Some(_)) = self.local_spawns.poll_next_unpin(cx) {}
 
         Poll::Pending
     }
