@@ -111,7 +111,7 @@ struct PendingConnectionInfo<THandler> {
     handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which can then terminate.
-    drop_notifier: oneshot::Sender<Void>,
+    _drop_notifier: oneshot::Sender<Void>,
 }
 
 impl<THandler: IntoConnectionHandler, TMuxer, TTransErr> fmt::Debug
@@ -177,8 +177,6 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
         handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
-        /// A reference to the pool that managed the connection.
-        pool: &'a mut Pool<THandler, TMuxer, TTransErr>,
     },
 
     /// A node has produced an event.
@@ -330,7 +328,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                 peer_id: expected_peer_id,
                 handler,
                 endpoint: PendingPoint::Dialer,
-                drop_notifier,
+                _drop_notifier: drop_notifier,
             },
         );
         Ok(connection_id)
@@ -386,7 +384,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                 peer_id: None,
                 handler,
                 endpoint: endpoint.into(),
-                drop_notifier,
+                _drop_notifier: drop_notifier,
             },
         );
         Ok(connection_id)
@@ -699,7 +697,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
-                        drop_notifier: _,
+                        _drop_notifier,
                     } = self
                         .pending
                         .remove(&id)
@@ -767,8 +765,8 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                     if let Err(error) = error {
                         self.spawn(
                             poll_fn(move |cx| {
-                                ready!(muxer.close(cx));
                                 // TODO: Should we send the result back to the Pool?
+                                let _ = ready!(muxer.close(cx));
                                 Poll::Ready(())
                             })
                             .boxed(),
@@ -780,7 +778,6 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                             error,
                             handler,
                             peer: Some(peer_id),
-                            pool: self,
                         });
                     }
 
@@ -790,7 +787,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                         .expect("n + 1 is always non-zero; qed");
                     self.counters.inc_established(&endpoint);
 
-                    let (command_sender, mut command_receiver) =
+                    let (command_sender, command_receiver) =
                         mpsc::channel(self.task_command_buffer_size);
                     conns.insert(
                         id,
@@ -832,7 +829,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                         peer_id,
                         handler,
                         endpoint,
-                        drop_notifier: _,
+                        _drop_notifier,
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
@@ -842,7 +839,6 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
                             error,
                             handler,
                             peer: peer_id,
-                            pool: self,
                         });
                     }
                 }

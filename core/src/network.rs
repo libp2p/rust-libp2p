@@ -31,22 +31,22 @@ use crate::{
     connection::{
         handler::{THandlerInEvent, THandlerOutEvent},
         pool::{Pool, PoolConfig, PoolEvent},
-        ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint, IncomingInfo,
-        IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, PendingConnectionError,
-        PendingPoint, Substream,
+        ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo, IntoConnectionHandler,
+        ListenerId, ListenersEvent, ListenersStream, PendingConnectionError, PendingPoint,
+        Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
-    ConnectedPoint, Executor, Multiaddr, PeerId,
+    Executor, Multiaddr, PeerId,
 };
 use fnv::FnvHashMap;
-use futures::{future, prelude::*};
+use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{
     collections::hash_map,
     convert::TryFrom as _,
     error, fmt,
-    num::{NonZeroU32, NonZeroUsize},
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -410,7 +410,6 @@ where
                 endpoint,
                 error,
                 handler,
-                pool,
                 ..
             }) => {
                 let dialing = &mut self.dialing;
@@ -496,19 +495,6 @@ where
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send + 'static,
 {
-    // // Ensure the address to dial encapsulates the `p2p` protocol for the
-    // // targeted peer, so that the transport has a "fully qualified" address
-    // // to work with.
-    // let addr = match p2p_addr(opts.peer, opts.address) {
-    //     Ok(address) => address,
-    //     Err(address) => {
-    //         return Err(DialError::InvalidAddress {
-    //             address,
-    //             handler: opts.handler,
-    //         })
-    //     }
-    // };
-
     let result = pool.add_outgoing(
         concurrent_dial::ConcurrentDial::new(transport, Some(opts.peer), opts.addresses),
         opts.handler,
@@ -540,7 +526,7 @@ where
 {
     // Check if the failed connection is associated with a dialing attempt.
     let dialing_failed = dialing.iter_mut().find_map(|(peer, attempts)| {
-        if let Some(pos) = attempts.iter().position(|s| *s == id) {
+        if attempts.iter().any(|s| *s == id) {
             Some(*peer)
         } else {
             None

@@ -24,7 +24,6 @@ use futures::prelude::*;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::{
     connection::PendingConnectionError,
-    multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
     PeerId,
 };

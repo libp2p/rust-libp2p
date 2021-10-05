@@ -87,7 +87,7 @@ pub enum PendingConnectionError<TTransErr> {
 
 impl<TTransErr> fmt::Display for PendingConnectionError<TTransErr>
 where
-    TTransErr: fmt::Display,
+    TTransErr: fmt::Display + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -101,12 +101,11 @@ where
                 )
             }
             PendingConnectionError::TransportDial(err) => {
-                // write!(
-                //     f,
-                //     "Pending connection: Transport error on dialing connection: {}",
-                //     err
-                // )
-                todo!()
+                write!(
+                    f,
+                    "Pending connection: Transport error on dialing connection: {:?}",
+                    err
+                )
             }
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {}.", l)
@@ -125,9 +124,8 @@ where
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             PendingConnectionError::IO(err) => Some(err),
-            // TODO: Should we return the first of all transport errors? Or implement std::error::Error for Vec<TTransErr>?
-            PendingConnectionError::TransportListen(err) => None,
-            PendingConnectionError::TransportDial(err) => None,
+            PendingConnectionError::TransportListen(err) => Some(err),
+            PendingConnectionError::TransportDial(_) => None,
             PendingConnectionError::InvalidPeerId => None,
             PendingConnectionError::Aborted => None,
             PendingConnectionError::ConnectionLimit(..) => None,

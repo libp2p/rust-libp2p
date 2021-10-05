@@ -21,21 +21,16 @@
 pub use crate::connection::{ConnectionCounters, ConnectionLimits};
 
 use crate::{
-    muxing::StreamMuxer,
     transport::{Transport, TransportError},
-    ConnectedPoint, Executor, Multiaddr, PeerId,
+    Multiaddr, PeerId,
 };
-use fnv::FnvHashMap;
-use futures::future::BoxFuture;
-use futures::ready;
-use futures::stream::FuturesUnordered;
-use futures::{future, prelude::*};
-use smallvec::SmallVec;
+use futures::{
+    future::{BoxFuture, Future, FutureExt},
+    ready,
+    stream::{FuturesUnordered, StreamExt},
+};
 use std::{
-    collections::{hash_map, VecDeque},
-    convert::TryFrom as _,
-    error, fmt,
-    num::{NonZeroU32, NonZeroUsize},
+    collections::VecDeque,
     pin::Pin,
     task::{Context, Poll},
 };

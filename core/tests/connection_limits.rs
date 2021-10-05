@@ -21,9 +21,9 @@
 mod util;
 
 use futures::{future::poll_fn, ready};
-use libp2p_core::multiaddr::{multiaddr, Multiaddr, Protocol};
+use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
-    connection::{ConnectionError, PendingConnectionError},
+    connection::PendingConnectionError,
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
     PeerId,
 };

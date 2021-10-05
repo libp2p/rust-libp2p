@@ -93,26 +93,6 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
     },
 }
 
-// TODO: Still needed?
-impl<TMuxer, TError> PendingConnectionEvent<TMuxer, TError> {
-    pub fn id(&self) -> &ConnectionId {
-        match self {
-            PendingConnectionEvent::ConnectionEstablished { id, .. } => id,
-            PendingConnectionEvent::PendingFailed { id, .. } => id,
-        }
-    }
-}
-
-impl<H: IntoConnectionHandler> EstablishedConnectionEvent<H> {
-    pub fn id(&self) -> &ConnectionId {
-        match self {
-            EstablishedConnectionEvent::AddressChange { id, .. } => id,
-            EstablishedConnectionEvent::Notify { id, .. } => id,
-            EstablishedConnectionEvent::Closed { id, .. } => id,
-        }
-    }
-}
-
 pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
     connection_id: ConnectionId,
     dial: crate::network::concurrent_dial::ConcurrentDial<TMuxer, TTransErr>,
@@ -121,7 +101,7 @@ pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
 ) {
     match futures::future::select(drop_receiver, Box::pin(dial)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
-            events
+            let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
                     error: PendingConnectionError::Aborted,
@@ -130,7 +110,7 @@ pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok((peer_id, address, muxer, errors)), _)) => {
-            events
+            let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
                     peer_id,
@@ -140,7 +120,7 @@ pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
                 .await;
         }
         Either::Right((Err(e), _)) => {
-            events
+            let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
                     error: PendingConnectionError::TransportDial(e),
@@ -162,7 +142,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
 {
     match futures::future::select(drop_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
-            events
+            let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
                     error: PendingConnectionError::Aborted,
@@ -171,7 +151,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok((peer_id, muxer)), _)) => {
-            events
+            let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
                     peer_id,
@@ -181,7 +161,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
                 .await;
         }
         Either::Right((Err(e), _)) => {
-            events
+            let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
                     error: e,
@@ -213,7 +193,7 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
                     let (handler, closing_muxer) = connection.close();
 
                     let error = closing_muxer.await.err().map(ConnectionError::IO);
-                    events
+                    let _ = events
                         .send(EstablishedConnectionEvent::Closed {
                             id: connection_id,
                             peer_id,
@@ -231,7 +211,7 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
             Either::Right((Some(event), _)) => {
                 match event {
                     Ok(connection::Event::Handler(event)) => {
-                        events
+                        let _ = events
                             .send(EstablishedConnectionEvent::Notify {
                                 id: connection_id,
                                 peer_id,
@@ -240,7 +220,7 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
                             .await;
                     }
                     Ok(connection::Event::AddressChange(new_address)) => {
-                        events
+                        let _ = events
                             .send(EstablishedConnectionEvent::AddressChange {
                                 id: connection_id,
                                 peer_id,
@@ -252,7 +232,7 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
                         command_receiver.close();
                         let (handler, _closing_muxer) = connection.close();
                         // Terminate the task with the error, dropping the connection.
-                        events
+                        let _ = events
                             .send(EstablishedConnectionEvent::Closed {
                                 id: connection_id,
                                 peer_id,
