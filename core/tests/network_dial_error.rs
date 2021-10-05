@@ -24,6 +24,7 @@ use futures::prelude::*;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::{
     connection::PendingConnectionError,
+    multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
     PeerId,
 };
@@ -160,7 +161,6 @@ fn dial_self_by_id() {
     assert!(swarm.peer(peer_id).into_disconnected().is_none());
 }
 
-#[ignore] // TODO: Resurect
 #[test]
 fn multiple_addresses_err() {
     // Tries dialing multiple addresses, and makes sure there's one dialing error per address.
@@ -189,15 +189,21 @@ fn multiple_addresses_err() {
                 Poll::Ready(NetworkEvent::DialError {
                     peer_id,
                     // multiaddr,
-                    error: PendingConnectionError::TransportDial(_),
+                    error: PendingConnectionError::TransportDial(errors),
                     handler: _,
                 }) => {
                     assert_eq!(peer_id, target);
-                    // TODO: Bring back.
-                    // let expected = addresses
-                    //     .remove(0)
-                    //     .with(Protocol::P2p(target.clone().into()));
-                    // assert_eq!(multiaddr, expected);
+
+                    let failed_addresses =
+                        errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
+                    assert_eq!(
+                        failed_addresses,
+                        addresses
+                            .clone()
+                            .into_iter()
+                            .map(|addr| addr.with(Protocol::P2p(target.into())))
+                            .collect::<Vec<_>>()
+                    );
 
                     return Poll::Ready(Ok(()));
                 }

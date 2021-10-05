@@ -34,7 +34,7 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, EitherUpgrade},
     ConnectedPoint, Multiaddr, PeerId,
 };
-use std::{error, task::Context, task::Poll};
+use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///

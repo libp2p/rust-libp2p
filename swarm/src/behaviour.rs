@@ -24,7 +24,7 @@ use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Multiaddr, PeerId,
 };
-use std::{error, task::Context, task::Poll};
+use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ProtocolsHandler`].
 type THandlerInEvent<THandler> =

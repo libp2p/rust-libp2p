@@ -184,10 +184,10 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         .inc();
                 };
 
-                let error = match error {
+                match error {
                     libp2p_swarm::DialError::Transport(errors) => {
                         for (_multiaddr, error) in errors {
-                            let error = match error {
+                            match error {
                                 libp2p_core::transport::TransportError::MultiaddrNotSupported(
                                     _,
                                 ) => record(

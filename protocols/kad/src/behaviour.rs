@@ -53,7 +53,7 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
-use std::{borrow::Cow, error, time::Duration};
+use std::{borrow::Cow, time::Duration};
 use wasm_timer::Instant;
 
 pub use crate::query::QueryStats;

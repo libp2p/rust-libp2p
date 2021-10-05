@@ -66,7 +66,6 @@ pub use behaviour::{
     CloseConnection, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction,
     NetworkBehaviourEventProcess, NotifyHandler, PollParameters,
 };
-use log::Level::Error;
 pub use protocols_handler::{
     IntoProtocolsHandler, IntoProtocolsHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerSelect,
@@ -550,8 +549,9 @@ where
                         return Poll::Ready(SwarmEvent::BannedPeer { peer_id, endpoint });
                     } else {
                         log::debug!(
-                            "Connection established: {:?}; Total (peer): {}.",
-                            connection.connected(),
+                            "Connection established: {:?} {:?}; Total (peer): {}.",
+                            connection.peer_id(),
+                            connection.endpoint(),
                             num_established
                         );
                         let endpoint = connection.endpoint().clone();
