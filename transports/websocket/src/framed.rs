@@ -205,13 +205,13 @@ where
                                 .receive_request()
                                 .map_err(|e| Error::Handshake(Box::new(e)))
                                 .await?;
-                            request.into_key()
+                            request.key()
                         };
 
                         trace!("accepting websocket handshake request from {}", remote2);
 
                         let response = handshake::server::Response::Accept {
-                            key: &ws_key,
+                            key: ws_key,
                             protocol: None,
                         };
 
@@ -583,6 +583,7 @@ where
                 Ok(soketto::Incoming::Pong(pong)) => {
                     Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
                 }
+                Ok(soketto::Incoming::Closed(_)) => None,
                 Err(connection::Error::Closed) => None,
                 Err(e) => Some((Err(e), (data, receiver))),
             }
