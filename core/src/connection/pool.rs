@@ -42,7 +42,7 @@ use smallvec::SmallVec;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
-    error, fmt,
+    fmt,
     num::NonZeroU32,
     pin::Pin,
     task::Context,
@@ -294,15 +294,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
         dial: crate::network::concurrent_dial::ConcurrentDial<TMuxer, TTransErr>,
         handler: THandler,
         expected_peer_id: Option<PeerId>,
-    ) -> Result<ConnectionId, DialError<THandler>>
-    where
-        THandler: IntoConnectionHandler + Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TTransErr: error::Error + Send + 'static,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
-    {
+    ) -> Result<ConnectionId, DialError<THandler>> {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
             return Err(DialError::ConnectionLimit { limit, handler });
         };
@@ -347,17 +339,8 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
     ) -> Result<ConnectionId, ConnectionLimit>
     where
         TFut: Future<Output = Result<(PeerId, TMuxer), TTransErr>> + Send + 'static,
-        // TODO: Bounds still needed here?
-        THandler: IntoConnectionHandler + Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TTransErr: error::Error + Send + 'static,
-        // TODO: Still needed?
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
     {
-        // TODO: This is a hack. Fix.
-        let endpoint = info.clone().to_connected_point();
+        let endpoint = info.to_connected_point();
         // TODO: We loose the handler here.
         self.counters.check_max_pending_incoming()?;
 
@@ -587,10 +570,10 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
     ) -> Poll<PoolEvent<'a, THandler, TMuxer, TTransErr>>
     where
         TMuxer: StreamMuxer + Send + Sync + 'static,
-        THandler: IntoConnectionHandler + Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-        TMuxer::OutboundSubstream: Send + 'static,
+        THandler: IntoConnectionHandler + 'static,
+        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
+        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
+        TMuxer::OutboundSubstream: Send,
     {
         // Poll for events of established connections.
         //

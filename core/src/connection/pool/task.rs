@@ -176,11 +176,9 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
     mut command_receiver: mpsc::Receiver<Command<THandlerInEvent<THandler>>>,
     mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
 ) where
-    TMuxer: StreamMuxer + Send + Sync + 'static,
-    TMuxer::OutboundSubstream: Send + 'static,
+    TMuxer: StreamMuxer,
     THandler: IntoConnectionHandler,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>>,
 {
     loop {
         match futures::future::select(command_receiver.next(), connection.next()).await {

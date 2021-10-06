@@ -685,6 +685,7 @@ impl<THandler> fmt::Debug for DialError<THandler> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::future::Future;
 
     struct Dummy;
 
