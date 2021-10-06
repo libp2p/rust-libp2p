@@ -141,6 +141,10 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Number of established connections to this peer, including the one that has just been
         /// opened.
         num_established: NonZeroU32,
+        /// [`Some`] when the new connection is an outgoing connection.
+        /// Addresses are dialed in parallel. Contains the addresses and errors
+        /// of dial attempts that failed before the one successful dial.
+        outgoing: Option<Vec<(Multiaddr, TransportError<io::Error>)>>,
     },
     /// A connection with the given peer has been closed,
     /// possibly as a result of an error.
@@ -555,13 +559,14 @@ where
                             num_established
                         );
                         let endpoint = connection.endpoint().clone();
+                        let failed_addresses = outgoing
+                            .as_ref()
+                            .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
                         this.behaviour.inject_connection_established(
                             &peer_id,
                             &connection.id(),
                             &endpoint,
-                            outgoing
-                                .map(|es| es.into_iter().map(|(a, e)| a).collect())
-                                .as_ref(),
+                            failed_addresses.as_ref(),
                         );
                         if num_established.get() == 1 {
                             this.behaviour.inject_connected(&peer_id);
@@ -570,6 +575,7 @@ where
                             peer_id,
                             num_established,
                             endpoint,
+                            outgoing,
                         });
                     }
                 }
