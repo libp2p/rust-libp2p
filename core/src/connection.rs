@@ -71,10 +71,16 @@ impl Endpoint {
     }
 }
 
-// TODO: Find better name.
+/// The endpoint roles associated with a pending peer-to-peer connection.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
     Dialer,
+    /// The socket comes from a listener.
     Listener {
         /// Local connection address.
         local_addr: Multiaddr,
@@ -98,7 +104,7 @@ impl From<ConnectedPoint> for PendingPoint {
     }
 }
 
-/// The endpoint roles associated with a peer-to-peer connection.
+/// The endpoint roles associated with an established peer-to-peer connection.
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum ConnectedPoint {
     /// We dialed the node.
