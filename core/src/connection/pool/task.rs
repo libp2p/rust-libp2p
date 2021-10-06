@@ -136,9 +136,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
     drop_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TMuxer, TTransErr>>,
 ) where
-    TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
-        + Send
-        + 'static,
+    TFut: Future<Output = Result<(PeerId, TMuxer), TTransErr>> + Send + 'static,
 {
     match futures::future::select(drop_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
@@ -164,7 +162,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
-                    error: e,
+                    error: PendingConnectionError::TransportListen(TransportError::Other(e)),
                 })
                 .await;
         }

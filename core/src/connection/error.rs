@@ -61,12 +61,12 @@ where
 /// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
 pub enum PendingConnectionError<TTransErr> {
-    // TODO: Not ideal that a dial could potentially emit a TransportListen error
-    // TODO: Could as well rename this to TransportConcurrent
-    // TODO: In some cases the multiaddr is included twice now. E.g. MultiaddrUnsupported.
+    /// An error occurred while negotiating the transport protocol(s) on a
+    /// dialing connection.
     TransportDial(Vec<(Multiaddr, TransportError<TTransErr>)>),
 
-    /// An error occurred while negotiating the transport protocol(s).
+    /// An error occurred while negotiating the transport protocol(s) on a
+    /// listening connection.
     TransportListen(TransportError<TTransErr>),
 
     /// The connection was dropped because the connection limit

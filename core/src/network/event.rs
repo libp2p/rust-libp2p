@@ -102,7 +102,9 @@ where
         /// The total number of established connections to the same peer,
         /// including the one that has just been opened.
         num_established: NonZeroU32,
-        // TODO: Document
+        /// [`Some`] when the new connection is an outgoing connection.
+        /// Addresses are dialed in parallel. Contains the addresses and errors
+        /// of dial attempts that failed before the one successful dial.
         outgoing: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
     },
 

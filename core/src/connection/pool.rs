@@ -100,17 +100,20 @@ pub struct Pool<THandler: IntoConnectionHandler, TMuxer, TTransErr> {
 
 #[derive(Debug)]
 struct EstablishedConnectionInfo<TInEvent> {
+    /// [`PeerId`] of the remote peer.
     peer_id: PeerId,
     endpoint: ConnectedPoint,
-    /// Channel endpoint to send messages to the task.
+    /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
 }
 
 struct PendingConnectionInfo<THandler> {
+    /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
+    /// Handler to handle connection once no longer pending but established.
     handler: THandler,
     endpoint: PendingPoint,
-    /// When dropped, notifies the task which can then terminate.
+    /// When dropped, notifies the task which then knows to terminate.
     _drop_notifier: oneshot::Sender<Void>,
 }
 
@@ -120,14 +123,8 @@ impl<THandler: IntoConnectionHandler, TMuxer, TTransErr> fmt::Debug
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
-            // TODO: Should we add more fields?
             .finish()
     }
-}
-
-impl<THandler: IntoConnectionHandler, TMuxer, TTransErr> Unpin
-    for Pool<THandler, TMuxer, TTransErr>
-{
 }
 
 /// Event that can happen on the `Pool`.
@@ -136,6 +133,9 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
     ConnectionEstablished {
         connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
         num_established: NonZeroU32,
+        /// [`Some`] when the new connection is an outgoing connection.
+        /// Addresses are dialed in parallel. Contains the addresses and errors
+        /// of dial attempts that failed before the one successful dial.
         outgoing: Option<Vec<(Multiaddr, TransportError<TTransErr>)>>,
     },
 
@@ -346,9 +346,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
         info: IncomingInfo<'_>,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
-        TFut: Future<Output = Result<(PeerId, TMuxer), PendingConnectionError<TTransErr>>>
-            + Send
-            + 'static,
+        TFut: Future<Output = Result<(PeerId, TMuxer), TTransErr>> + Send + 'static,
         // TODO: Bounds still needed here?
         THandler: IntoConnectionHandler + Send + 'static,
         THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,

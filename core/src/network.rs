@@ -40,7 +40,6 @@ use crate::{
     Executor, Multiaddr, PeerId,
 };
 use fnv::FnvHashMap;
-use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{
     collections::hash_map,
@@ -294,7 +293,11 @@ where
     /// completed, the connection is associated with the provided `handler`.
     pub fn accept(
         &mut self,
-        connection: IncomingConnection<TTrans::ListenerUpgrade>,
+        IncomingConnection {
+            upgrade,
+            local_addr,
+            send_back_addr,
+        }: IncomingConnection<TTrans::ListenerUpgrade>,
         handler: THandler,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
@@ -304,15 +307,14 @@ where
         TTrans::Error: Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
     {
-        let upgrade = connection
-            .upgrade
-            // TODO: Why this map?
-            .map_err(|err| PendingConnectionError::TransportListen(TransportError::Other(err)));
-        let info = IncomingInfo {
-            local_addr: &connection.local_addr,
-            send_back_addr: &connection.send_back_addr,
-        };
-        self.pool.add_incoming(upgrade, handler, info)
+        self.pool.add_incoming(
+            upgrade,
+            handler,
+            IncomingInfo {
+                local_addr: &local_addr,
+                send_back_addr: &send_back_addr,
+            },
+        )
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.

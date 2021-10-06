@@ -182,7 +182,6 @@ impl ConnectedPoint {
     }
 }
 
-// TODO: Still needed?
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connected {
