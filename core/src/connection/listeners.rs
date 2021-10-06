@@ -90,7 +90,7 @@ where
     listeners: VecDeque<Pin<Box<Listener<TTrans>>>>,
     /// The next listener ID to assign.
     next_id: ListenerId,
-    /// Pending listeners events to return from `poll`.
+    /// Pending listeners events to return from [`ListenersStream::poll`].
     pending_events: VecDeque<ListenersEvent<TTrans>>,
 }
 
