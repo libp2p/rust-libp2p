@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 // TODO: pub needed?
-pub mod concurrent_dial;
+pub(crate) mod concurrent_dial;
 mod event;
 pub mod peer;
 
@@ -207,7 +207,7 @@ where
         handler: THandler,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
-        TTrans: Transport<Output = (PeerId, TMuxer)>,
+        TTrans: Transport<Output = (PeerId, TMuxer)> + Send,
         TTrans::Error: Send + 'static,
         TTrans::Dial: Send + 'static,
         TMuxer: Send + Sync + 'static,
@@ -454,7 +454,7 @@ where
         opts: DialingOpts<PeerId, THandler>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
-        TTrans: Transport<Output = (PeerId, TMuxer)>,
+        TTrans: Transport<Output = (PeerId, TMuxer)> + Send,
         TTrans::Dial: Send + 'static,
         TTrans::Error: Send + 'static,
         TMuxer: Send + Sync + 'static,
@@ -491,7 +491,7 @@ where
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
     THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-    TTrans: Transport<Output = (PeerId, TMuxer)> + Clone + 'static,
+    TTrans: Transport<Output = (PeerId, TMuxer)> + Clone + Send + 'static,
     TTrans::Dial: Send + 'static,
     TTrans::Error: error::Error + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,

@@ -30,75 +30,77 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
 };
 use std::{
-    collections::VecDeque,
     pin::Pin,
     task::{Context, Poll},
 };
 
-// TODO: pub needed?
+type Dial<TMuxer, TError> =
+    BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TransportError<TError>>)>;
+
 pub struct ConcurrentDial<TMuxer, TError> {
-    // TODO: We could as well spawn each of these on a separate task.
-    dials: FuturesUnordered<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
-    pending_dials: VecDeque<BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TError>)>>,
+    dials: FuturesUnordered<Dial<TMuxer, TError>>,
+    pending_dials: Box<dyn Iterator<Item = Dial<TMuxer, TError>> + Send>,
     errors: Vec<(Multiaddr, TransportError<TError>)>,
 }
 
 impl<TMuxer, TError> Unpin for ConcurrentDial<TMuxer, TError> {}
 
-impl<TMuxer, TError> ConcurrentDial<TMuxer, TError> {
-    pub(crate) fn new<TTrans>(
+impl<TMuxer: Send + 'static, TError: Send + 'static> ConcurrentDial<TMuxer, TError> {
+    pub(crate) fn new<TTrans: Send>(
         transport: TTrans,
         peer: Option<PeerId>,
         addresses: Vec<Multiaddr>,
     ) -> Self
     where
-        TTrans: Transport<Output = (PeerId, TMuxer), Error = TError> + Clone,
+        TTrans: Transport<Output = (PeerId, TMuxer), Error = TError> + Clone + 'static,
         TTrans::Dial: Send + 'static,
     {
-        let dials = FuturesUnordered::default();
-        let mut pending_dials = VecDeque::default();
-        let mut errors = vec![];
-
-        let addresses = addresses.into_iter();
-
-        for addr in addresses.into_iter().map(|a| p2p_addr(peer, a)) {
-            match addr {
+        let mut pending_dials = addresses.into_iter().map(move |address| {
+            match p2p_addr(peer, address) {
                 Ok(address) => match transport.clone().dial(address.clone()) {
-                    Ok(fut) => {
-                        let fut = fut.map(|r| (address, r)).boxed();
-                        // TODO: Move to constant
-                        if dials.len() <= 5 {
-                            dials.push(fut)
-                        } else {
-                            pending_dials.push_back(fut)
-                        }
-                    }
-                    Err(err) => errors.push((address, err)),
+                    Ok(fut) => fut
+                        .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
+                        .boxed(),
+                    Err(err) => futures::future::ready((address.clone(), Err(err))).boxed(),
                 },
-                Err(address) => errors.push((
-                    address.clone(),
-                    // TODO: It is not really the Multiaddr that is not supported.
-                    TransportError::MultiaddrNotSupported(address),
-                )),
+                Err(address) => {
+                    futures::future::ready((
+                        address.clone(),
+                        // TODO: It is not really the Multiaddr that is not supported.
+                        Err(TransportError::MultiaddrNotSupported(address)),
+                    ))
+                    .boxed()
+                }
+            }
+        });
+
+        let dials = FuturesUnordered::new();
+        while let Some(dial) = pending_dials.next() {
+            dials.push(dial);
+            if dials.len() == 5 {
+                break;
             }
         }
 
         Self {
             dials,
-            errors,
-            pending_dials,
+            errors: Default::default(),
+            pending_dials: Box::new(pending_dials),
         }
     }
 }
 
 impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
     type Output = Result<
+        // Either one dial succeeded, returning the negotiated [`PeerId`], the address, the
+        // muxer and the addresses and errors of the dials that failed before.
         (
             PeerId,
             Multiaddr,
             TMuxer,
             Vec<(Multiaddr, TransportError<TError>)>,
         ),
+        // Or all dials failed, thus returning the address and error for each dial.
         Vec<(Multiaddr, TransportError<TError>)>,
     >;
 
@@ -110,8 +112,8 @@ impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
                     return Poll::Ready(Ok((peer_id, addr, muxer, errors)));
                 }
                 Some((addr, Err(e))) => {
-                    self.errors.push((addr, TransportError::Other(e)));
-                    if let Some(dial) = self.pending_dials.pop_front() {
+                    self.errors.push((addr, e));
+                    if let Some(dial) = self.pending_dials.next() {
                         self.dials.push(dial)
                     }
                 }
