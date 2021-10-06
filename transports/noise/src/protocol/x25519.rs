@@ -219,7 +219,7 @@ impl SecretKey<X25519> {
         // let ed25519_sk = ed25519::SecretKey::from(ed);
         let mut curve25519_sk: [u8; 32] = [0; 32];
         let hash = Sha512::digest(ed25519_sk.as_ref());
-        curve25519_sk.copy_from_slice(&hash.as_ref()[..32]);
+        curve25519_sk.copy_from_slice(&hash[..32]);
         let sk = SecretKey(X25519(curve25519_sk)); // Copy
         curve25519_sk.zeroize();
         sk
