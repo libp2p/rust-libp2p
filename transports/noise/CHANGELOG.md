@@ -1,3 +1,9 @@
+# 0.30.1 [2021-10-06]
+
+- Update dependencies (see [PR 2272]).
+
+[PR 2272]: https://github.com/libp2p/rust-libp2p/pull/2272
+
 # 0.30.0 [2021-03-17]
 
 - Update `libp2p-core`.
