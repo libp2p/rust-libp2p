@@ -28,7 +28,7 @@ pub(crate) mod pool;
 pub use error::{ConnectionError, PendingConnectionError};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
 pub use listeners::{ListenerId, ListenersEvent, ListenersStream};
-pub use pool::{ConnectionCounters, ConnectionId, ConnectionLimits};
+pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
 pub use substream::{Close, Substream, SubstreamEndpoint};
 
@@ -38,6 +38,21 @@ use futures::stream::Stream;
 use std::hash::Hash;
 use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
+
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(usize);
+
+impl ConnectionId {
+    /// Creates a `ConnectionId` from a non-negative integer.
+    ///
+    /// This is primarily useful for creating connection IDs
+    /// in test environments. There is in general no guarantee
+    /// that all connection IDs are based on non-negative integers.
+    pub fn new(id: usize) -> Self {
+        ConnectionId(id)
+    }
+}
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

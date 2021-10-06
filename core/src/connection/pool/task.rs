@@ -21,13 +21,12 @@
 
 //! Async functions driving pending and established connections in the form of a task.
 
-use super::ConnectionId;
 use crate::{
     connection::{
         self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        ConnectionError, ConnectionHandler, IntoConnectionHandler, PendingConnectionError,
-        Substream,
+        ConnectionError, ConnectionHandler, ConnectionId, IntoConnectionHandler,
+        PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     transport::TransportError,

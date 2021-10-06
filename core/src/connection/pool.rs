@@ -22,7 +22,7 @@
 use crate::{
     connection::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionLimit, IncomingInfo,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
         IntoConnectionHandler, PendingConnectionError, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
@@ -1211,22 +1211,6 @@ impl ConnectionLimits {
     pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
         self.max_established_per_peer = limit;
         self
-    }
-}
-
-/// Connection identifier.
-// TODO: Should this live in connection.rs?
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ConnectionId(usize);
-
-impl ConnectionId {
-    /// Creates a `ConnectionId` from a non-negative integer.
-    ///
-    /// This is primarily useful for creating connection IDs
-    /// in test environments. There is in general no guarantee
-    /// that all connection IDs are based on non-negative integers.
-    pub fn new(id: usize) -> Self {
-        ConnectionId(id)
     }
 }
 
