@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: pub needed?
-pub(crate) mod concurrent_dial;
 mod event;
 pub mod peer;
 
@@ -228,11 +226,9 @@ where
         }
 
         self.pool.add_outgoing(
-            concurrent_dial::ConcurrentDial::new(
-                self.transport().clone(),
-                None,
-                vec![address.clone()],
-            ),
+            self.transport().clone(),
+            std::iter::once(address.clone()),
+            None,
             handler,
             None,
         )
@@ -498,7 +494,9 @@ where
     TMuxer::OutboundSubstream: Send + 'static,
 {
     let result = pool.add_outgoing(
-        concurrent_dial::ConcurrentDial::new(transport, Some(opts.peer), opts.addresses),
+        transport,
+        opts.addresses.into_iter(),
+        Some(opts.peer),
         opts.handler,
         Some(opts.peer),
     );

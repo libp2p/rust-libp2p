@@ -27,9 +27,10 @@ use crate::{
     },
     muxing::StreamMuxer,
     network::DialError,
-    transport::TransportError,
+    transport::{Transport, TransportError},
     ConnectedPoint, Executor, Multiaddr, PeerId,
 };
+use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures::{
@@ -50,6 +51,7 @@ use std::{
 };
 use void::Void;
 
+mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
@@ -289,15 +291,23 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
     ///
     /// Returns an error if the limit of pending outgoing connections
     /// has been reached.
-    pub fn add_outgoing(
+    pub fn add_outgoing<TTrans>(
         &mut self,
-        dial: crate::network::concurrent_dial::ConcurrentDial<TMuxer, TTransErr>,
+        transport: TTrans,
+        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
+        peer: Option<PeerId>,
         handler: THandler,
         expected_peer_id: Option<PeerId>,
-    ) -> Result<ConnectionId, DialError<THandler>> {
+    ) -> Result<ConnectionId, DialError<THandler>>
+    where
+        TTrans: Transport<Output = (PeerId, TMuxer), Error = TTransErr> + Clone + Send + 'static,
+        TTrans::Dial: Send + 'static,
+    {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
             return Err(DialError::ConnectionLimit { limit, handler });
         };
+
+        let dial = ConcurrentDial::new(transport, peer, addresses);
 
         let connection_id = self.next_connection_id();
 

@@ -21,6 +21,7 @@
 
 //! Async functions driving pending and established connections in the form of a task.
 
+use super::concurrent_dial::ConcurrentDial;
 use crate::{
     connection::{
         self,
@@ -94,7 +95,7 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
 
 pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
     connection_id: ConnectionId,
-    dial: crate::network::concurrent_dial::ConcurrentDial<TMuxer, TTransErr>,
+    dial: ConcurrentDial<TMuxer, TTransErr>,
     drop_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TMuxer, TTransErr>>,
 ) {

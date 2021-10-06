@@ -49,13 +49,13 @@ impl<TMuxer: Send + 'static, TError: Send + 'static> ConcurrentDial<TMuxer, TErr
     pub(crate) fn new<TTrans: Send>(
         transport: TTrans,
         peer: Option<PeerId>,
-        addresses: Vec<Multiaddr>,
+        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
     ) -> Self
     where
         TTrans: Transport<Output = (PeerId, TMuxer), Error = TError> + Clone + 'static,
         TTrans::Dial: Send + 'static,
     {
-        let mut pending_dials = addresses.into_iter().map(move |address| {
+        let mut pending_dials = addresses.map(move |address| {
             match p2p_addr(peer, address) {
                 Ok(address) => match transport.clone().dial(address.clone()) {
                     Ok(fut) => fut
