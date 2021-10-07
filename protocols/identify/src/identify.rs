@@ -272,15 +272,9 @@ impl NetworkBehaviour for Identify {
     ) {
         match event {
             IdentifyHandlerEvent::Identified(info) => {
-                match self.discovered_peers.get_mut(&peer_id) {
-                    Some(entry) => {
-                        entry.extend(info.listen_addrs.clone());
-                    }
-                    None => {
-                        self.discovered_peers
-                            .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
-                    }
-                }
+                // replace existing addresses to prevent other peer from filling up our memory
+                self.discovered_peers
+                    .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
 
                 let observed = info.observed_addr.clone();
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
