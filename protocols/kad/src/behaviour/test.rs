@@ -1317,3 +1317,51 @@ fn network_behaviour_inject_address_change() {
         kademlia.addresses_of_peer(&remote_peer_id),
     );
 }
+
+#[test]
+fn get_providers() {
+    fn prop(key: record::Key) {
+        let (_, mut single_swarm) = build_node();
+        single_swarm
+            .behaviour_mut()
+            .start_providing(key.clone())
+            .expect("could not provide");
+
+        block_on(async {
+            match single_swarm.next().await.unwrap() {
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    result: QueryResult::StartProviding(Ok(_)),
+                    ..
+                }) => {}
+                SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                _ => {}
+            }
+        });
+
+        let query_id = single_swarm.behaviour_mut().get_providers(key.clone());
+
+        block_on(async {
+            match single_swarm.next().await.unwrap() {
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    id,
+                    result:
+                        QueryResult::GetProviders(Ok(GetProvidersOk {
+                            key: found_key,
+                            providers,
+                            ..
+                        })),
+                    ..
+                }) if id == query_id => {
+                    assert_eq!(key, found_key);
+                    assert_eq!(
+                        single_swarm.local_peer_id(),
+                        providers.iter().next().unwrap()
+                    );
+                }
+                SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                _ => {}
+            }
+        });
+    }
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_))
+}
