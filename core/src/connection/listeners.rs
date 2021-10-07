@@ -27,7 +27,7 @@ use crate::{
 use futures::{prelude::*, task::Context, task::Poll};
 use log::debug;
 use smallvec::SmallVec;
-use std::{collections::VecDeque, fmt, pin::Pin};
+use std::{collections::VecDeque, fmt, mem, pin::Pin};
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
@@ -226,9 +226,10 @@ where
                 .remove(i)
                 .expect("Index can not be out of bounds.");
             let listener_project = listener.as_mut().project();
+            let addresses = mem::take(listener_project.addresses).into_vec();
             self.pending_events.push_back(ListenersEvent::Closed {
                 listener_id: *listener_project.id,
-                addresses: listener_project.addresses.drain(..).collect(),
+                addresses,
                 reason: Ok(()),
             });
             true
@@ -311,18 +312,20 @@ where
                     });
                 }
                 Poll::Ready(None) => {
+                    let addresses = mem::take(listener_project.addresses).into_vec();
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        addresses: listener_project.addresses.drain(..).collect(),
+                        addresses,
                         reason: Ok(()),
-                    })
+                    });
                 }
                 Poll::Ready(Some(Err(err))) => {
+                    let addresses = mem::take(listener_project.addresses).into_vec();
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        addresses: listener_project.addresses.drain(..).collect(),
+                        addresses,
                         reason: Err(err),
-                    })
+                    });
                 }
             }
         }
