@@ -484,14 +484,6 @@ impl<'a, THandler: IntoConnectionHandler> DialingAttempt<'a, THandler> {
         &self.peer_id
     }
 
-    // /// Returns the remote address of the current connection attempt.
-    // pub fn address(&self) -> &Multiaddr {
-    //     match self.inner.endpoint() {
-    //         ConnectedPoint::Dialer { address } => address,
-    //         ConnectedPoint::Listener { .. } => unreachable!("by definition of a `DialingAttempt`."),
-    //     }
-    // }
-
     /// Aborts the dialing attempt.
     ///
     /// Aborting a dialing attempt involves aborting the current connection
