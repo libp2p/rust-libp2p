@@ -78,7 +78,7 @@ use libp2p_core::{
     connection::{
         ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
         EstablishedConnection, IntoConnectionHandler, ListenerId, PendingConnectionError,
-        Substream,
+        PendingInboundConnectionError, PendingOutboundConnectionError, Substream,
     },
     muxing::StreamMuxerBox,
     network::{
@@ -185,7 +185,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingConnectionError<io::Error>,
+        error: PendingInboundConnectionError<io::Error>,
     },
     /// Tried to dial an address but it ended up being unreachaable.
     OutgoingConnectionError {
@@ -254,7 +254,6 @@ where
     network: Network<
         transport::Boxed<(PeerId, StreamMuxerBox)>,
         NodeHandlerWrapperBuilder<THandler<TBehaviour>>,
-        StreamMuxerBox,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
@@ -942,7 +941,7 @@ fn notify_one<'a, THandlerInEvent>(
 /// was successfully sent to a handler, in either case the event is consumed.
 fn notify_any<'a, TTrans, THandler, TBehaviour>(
     ids: SmallVec<[ConnectionId; 10]>,
-    peer: &mut ConnectedPeer<'a, TTrans, THandler, StreamMuxerBox>,
+    peer: &mut ConnectedPeer<'a, TTrans, THandler>,
     event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
 ) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>
@@ -1225,15 +1224,14 @@ impl DialError {
     }
 }
 
-impl From<PendingConnectionError<io::Error>> for DialError {
-    fn from(error: PendingConnectionError<io::Error>) -> Self {
+impl From<PendingOutboundConnectionError<io::Error>> for DialError {
+    fn from(error: PendingOutboundConnectionError<io::Error>) -> Self {
         match error {
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
             PendingConnectionError::InvalidPeerId => DialError::InvalidPeerId,
             PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
-            PendingConnectionError::TransportDial(e) => DialError::Transport(e),
-            PendingConnectionError::TransportListen(e) => todo!(),
+            PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
 }

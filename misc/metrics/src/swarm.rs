@@ -299,11 +299,11 @@ enum OutgoingConnectionErrorError {
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct IncomingConnectionErrorLabels {
-    error: PendingConnectionError,
+    error: PendingInboundConnectionError,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
-enum PendingConnectionError {
+enum PendingInboundConnectionError {
     InvalidPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
@@ -312,28 +312,29 @@ enum PendingConnectionError {
     ConnectionLimit,
 }
 
-impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>>
-    for PendingConnectionError
+impl<TTransErr> From<&libp2p_core::connection::PendingInboundConnectionError<TTransErr>>
+    for PendingInboundConnectionError
 {
-    fn from(error: &libp2p_core::connection::PendingConnectionError<TTransErr>) -> Self {
+    fn from(error: &libp2p_core::connection::PendingInboundConnectionError<TTransErr>) -> Self {
         match error {
-            libp2p_core::connection::PendingConnectionError::InvalidPeerId => {
-                PendingConnectionError::InvalidPeerId
+            libp2p_core::connection::PendingInboundConnectionError::InvalidPeerId => {
+                PendingInboundConnectionError::InvalidPeerId
             }
-            libp2p_core::connection::PendingConnectionError::ConnectionLimit(_) => {
-                PendingConnectionError::ConnectionLimit
+            libp2p_core::connection::PendingInboundConnectionError::ConnectionLimit(_) => {
+                PendingInboundConnectionError::ConnectionLimit
             }
-            libp2p_core::connection::PendingConnectionError::TransportListen(
+            libp2p_core::connection::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
-            ) => PendingConnectionError::TransportErrorMultiaddrNotSupported,
-            libp2p_core::connection::PendingConnectionError::TransportListen(
+            ) => PendingInboundConnectionError::TransportErrorMultiaddrNotSupported,
+            libp2p_core::connection::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::Other(_),
-            ) => PendingConnectionError::TransportErrorOther,
-            libp2p_core::connection::PendingConnectionError::TransportDial(_) => unreachable!(),
-            libp2p_core::connection::PendingConnectionError::Aborted => {
-                PendingConnectionError::Aborted
+            ) => PendingInboundConnectionError::TransportErrorOther,
+            libp2p_core::connection::PendingInboundConnectionError::Aborted => {
+                PendingInboundConnectionError::Aborted
             }
-            libp2p_core::connection::PendingConnectionError::IO(_) => PendingConnectionError::Io,
+            libp2p_core::connection::PendingInboundConnectionError::IO(_) => {
+                PendingInboundConnectionError::Io
+            }
         }
     }
 }
