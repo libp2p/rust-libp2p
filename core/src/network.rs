@@ -49,7 +49,7 @@ use std::{
 };
 
 /// Implementation of `Stream` that handles the nodes.
-pub struct Network<TTrans, THandler, TMuxer>
+pub struct Network<TTrans, THandler>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
@@ -61,7 +61,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    pool: Pool<THandler, TMuxer, TTrans::Error>,
+    pool: Pool<THandler, TTrans>,
 
     /// The ongoing dialing attempts.
     ///
@@ -78,7 +78,7 @@ where
     dialing: FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
 }
 
-impl<TTrans, THandler, TMuxer> fmt::Debug for Network<TTrans, THandler, TMuxer>
+impl<TTrans, THandler> fmt::Debug for Network<TTrans, THandler>
 where
     TTrans: fmt::Debug + Transport,
     THandler: fmt::Debug + ConnectionHandler,
@@ -93,19 +93,18 @@ where
     }
 }
 
-impl<TTrans, THandler, TMuxer> Unpin for Network<TTrans, THandler, TMuxer>
+impl<TTrans, THandler> Unpin for Network<TTrans, THandler>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler,
 {
 }
 
-impl<TTrans, THandler, TMuxer> Network<TTrans, THandler, TMuxer>
+impl<TTrans, THandler> Network<TTrans, THandler>
 where
     TTrans: Transport,
     <TTrans as Transport>::Error: Send + 'static,
     THandler: IntoConnectionHandler,
-    TMuxer: Send + 'static,
 {
     fn disconnect(&mut self, peer: &PeerId) {
         self.pool.disconnect(peer);
@@ -113,15 +112,11 @@ where
     }
 }
 
-impl<TTrans, THandler, TMuxer> Network<TTrans, THandler, TMuxer>
+impl<TTrans, THandler> Network<TTrans, THandler>
 where
     TTrans: Transport + Clone + 'static,
     <TTrans as Transport>::Error: Send + 'static,
-    TMuxer: StreamMuxer + Send + 'static,
     THandler: IntoConnectionHandler + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
-    <THandler::Handler as ConnectionHandler>::Error: error::Error + Send,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
 {
     /// Creates a new node events stream.
     pub fn new(transport: TTrans, local_peer_id: PeerId, config: NetworkConfig) -> Self {
@@ -172,7 +167,6 @@ where
     /// The translation is transport-specific. See [`Transport::address_translation`].
     pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr) -> Vec<Multiaddr>
     where
-        TMuxer: 'a,
         THandler: 'a,
     {
         let transport = self.listeners.transport();
@@ -205,11 +199,11 @@ where
         handler: THandler,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
-        TTrans: Transport<Output = (PeerId, TMuxer)> + Send,
+        TTrans: Transport + Send,
+        TTrans::Output: Send + 'static,
+        TTrans::Dial: Send + 'static,
         TTrans::Error: Send + 'static,
         TTrans::Dial: Send + 'static,
-        TMuxer: Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
     {
         // If the address ultimately encapsulates an expected peer ID, dial that peer
         // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
@@ -230,8 +224,30 @@ where
             std::iter::once(address.clone()),
             None,
             handler,
-            None,
         )
+    }
+
+    /// Initiates a connection attempt to a known peer.
+    fn dial_peer(
+        &mut self,
+        opts: DialingOpts<PeerId, THandler>,
+    ) -> Result<ConnectionId, DialError<THandler>>
+    where
+        TTrans: Transport + Send,
+        TTrans::Output: Send + 'static,
+        TTrans::Dial: Send + 'static,
+        TTrans::Error: Send + 'static,
+    {
+        let id = self.pool.add_outgoing(
+            self.transport().clone(),
+            opts.addresses.into_iter(),
+            Some(opts.peer),
+            opts.handler,
+        )?;
+
+        self.dialing.entry(opts.peer).or_default().push(id);
+
+        Ok(id)
     }
 
     /// Returns information about the state of the `Network`.
@@ -278,7 +294,7 @@ where
     }
 
     /// Obtains a view of a [`Peer`] with the given ID in the network.
-    pub fn peer(&mut self, peer_id: PeerId) -> Peer<'_, TTrans, THandler, TMuxer> {
+    pub fn peer(&mut self, peer_id: PeerId) -> Peer<'_, TTrans, THandler> {
         Peer::new(self, peer_id)
     }
 
@@ -297,9 +313,8 @@ where
         handler: THandler,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-        TTrans: Transport<Output = (PeerId, TMuxer)>,
+        TTrans: Transport,
+        TTrans::Output: Send + 'static,
         TTrans::Error: Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
     {
@@ -314,7 +329,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(
+    pub fn poll<'a, TMuxer>(
         &'a mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
@@ -325,10 +340,13 @@ where
         TTrans::Error: Send + 'static,
         TTrans::Dial: Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
-        TMuxer: Send + Sync + 'static,
+        TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         THandler: IntoConnectionHandler + Send + 'static,
         <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
+        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
+        <THandler::Handler as ConnectionHandler>::Error: error::Error + Send,
+        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
     {
         // Poll the listener(s) for new connections.
         match ListenersStream::poll(Pin::new(&mut self.listeners), cx) {
@@ -443,26 +461,6 @@ where
 
         Poll::Ready(event)
     }
-
-    /// Initiates a connection attempt to a known peer.
-    fn dial_peer(
-        &mut self,
-        opts: DialingOpts<PeerId, THandler>,
-    ) -> Result<ConnectionId, DialError<THandler>>
-    where
-        TTrans: Transport<Output = (PeerId, TMuxer)> + Send,
-        TTrans::Dial: Send + 'static,
-        TTrans::Error: Send + 'static,
-        TMuxer: Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-    {
-        dial_peer_impl(
-            self.transport().clone(),
-            &mut self.pool,
-            &mut self.dialing,
-            opts,
-        )
-    }
 }
 
 /// Options for a dialing attempt (i.e. repeated connection attempt
@@ -471,41 +469,6 @@ struct DialingOpts<PeerId, THandler> {
     peer: PeerId,
     handler: THandler,
     addresses: Vec<Multiaddr>,
-}
-
-/// Standalone implementation of `Network::dial_peer` for more granular borrowing.
-//
-// TODO: How about making this a method?
-fn dial_peer_impl<TMuxer, THandler, TTrans>(
-    transport: TTrans,
-    pool: &mut Pool<THandler, TMuxer, TTrans::Error>,
-    dialing: &mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
-    opts: DialingOpts<PeerId, THandler>,
-) -> Result<ConnectionId, DialError<THandler>>
-where
-    THandler: IntoConnectionHandler + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send + 'static,
-    TTrans: Transport<Output = (PeerId, TMuxer)> + Clone + Send + 'static,
-    TTrans::Dial: Send + 'static,
-    TTrans::Error: error::Error + Send + 'static,
-    TMuxer: StreamMuxer + Send + Sync + 'static,
-    TMuxer::OutboundSubstream: Send + 'static,
-{
-    let result = pool.add_outgoing(
-        transport,
-        opts.addresses.into_iter(),
-        Some(opts.peer),
-        opts.handler,
-        Some(opts.peer),
-    );
-
-    if let Ok(id) = &result {
-        dialing.entry(opts.peer).or_default().push(*id);
-    }
-
-    result
 }
 
 /// Callback for handling a failed connection attempt, returning an

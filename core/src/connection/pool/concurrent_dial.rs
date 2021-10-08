@@ -34,27 +34,34 @@ use std::{
     task::{Context, Poll},
 };
 
-type Dial<TMuxer, TError> =
-    BoxFuture<'static, (Multiaddr, Result<(PeerId, TMuxer), TransportError<TError>>)>;
+type Dial<TTrans: Transport> = BoxFuture<
+    'static,
+    (
+        Multiaddr,
+        Result<TTrans::Output, TransportError<TTrans::Error>>,
+    ),
+>;
 
-pub struct ConcurrentDial<TMuxer, TError> {
-    dials: FuturesUnordered<Dial<TMuxer, TError>>,
-    pending_dials: Box<dyn Iterator<Item = Dial<TMuxer, TError>> + Send>,
-    errors: Vec<(Multiaddr, TransportError<TError>)>,
+pub struct ConcurrentDial<TTrans: Transport> {
+    dials: FuturesUnordered<Dial<TTrans>>,
+    pending_dials: Box<dyn Iterator<Item = Dial<TTrans>> + Send>,
+    errors: Vec<(Multiaddr, TransportError<TTrans::Error>)>,
 }
 
-impl<TMuxer, TError> Unpin for ConcurrentDial<TMuxer, TError> {}
+impl<TTrans: Transport> Unpin for ConcurrentDial<TTrans> {}
 
-impl<TMuxer: Send + 'static, TError: Send + 'static> ConcurrentDial<TMuxer, TError> {
-    pub(crate) fn new<TTrans: Send>(
+impl<TTrans> ConcurrentDial<TTrans>
+where
+    TTrans: Transport + Clone + Send + 'static,
+    TTrans::Output: Send,
+    TTrans::Error: Send,
+    TTrans::Dial: Send + 'static,
+{
+    pub(crate) fn new(
         transport: TTrans,
         peer: Option<PeerId>,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
-    ) -> Self
-    where
-        TTrans: Transport<Output = (PeerId, TMuxer), Error = TError> + Clone + 'static,
-        TTrans::Dial: Send + 'static,
-    {
+    ) -> Self {
         let mut pending_dials = addresses.map(move |address| {
             match p2p_addr(peer, address) {
                 Ok(address) => match transport.clone().dial(address.clone()) {
@@ -90,26 +97,28 @@ impl<TMuxer: Send + 'static, TError: Send + 'static> ConcurrentDial<TMuxer, TErr
     }
 }
 
-impl<TMuxer, TError> Future for ConcurrentDial<TMuxer, TError> {
+impl<TTrans> Future for ConcurrentDial<TTrans>
+where
+    TTrans: Transport,
+{
     type Output = Result<
         // Either one dial succeeded, returning the negotiated [`PeerId`], the address, the
         // muxer and the addresses and errors of the dials that failed before.
         (
-            PeerId,
             Multiaddr,
-            TMuxer,
-            Vec<(Multiaddr, TransportError<TError>)>,
+            TTrans::Output,
+            Vec<(Multiaddr, TransportError<TTrans::Error>)>,
         ),
         // Or all dials failed, thus returning the address and error for each dial.
-        Vec<(Multiaddr, TransportError<TError>)>,
+        Vec<(Multiaddr, TransportError<TTrans::Error>)>,
     >;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
-                Some((addr, Ok((peer_id, muxer)))) => {
+                Some((addr, Ok(output))) => {
                     let errors = std::mem::replace(&mut self.errors, vec![]);
-                    return Poll::Ready(Ok((peer_id, addr, muxer, errors)));
+                    return Poll::Ready(Ok((addr, output, errors)));
                 }
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, e));

@@ -55,7 +55,10 @@ mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoConnectionHandler, TMuxer, TTransErr> {
+pub struct Pool<THandler: IntoConnectionHandler, TTrans>
+where
+    TTrans: Transport,
+{
     local_id: PeerId,
 
     /// The connection counter(s).
@@ -87,10 +90,10 @@ pub struct Pool<THandler: IntoConnectionHandler, TMuxer, TTransErr> {
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
-    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent<TMuxer, TTransErr>>,
+    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent<TTrans>>,
 
     /// Receiver for events reported from pending tasks.
-    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent<TMuxer, TTransErr>>,
+    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent<TTrans>>,
 
     /// Sender distributed to established tasks for reporting events back
     /// to the pool.
@@ -119,9 +122,7 @@ struct PendingConnectionInfo<THandler> {
     _drop_notifier: oneshot::Sender<Void>,
 }
 
-impl<THandler: IntoConnectionHandler, TMuxer, TTransErr> fmt::Debug
-    for Pool<THandler, TMuxer, TTransErr>
-{
+impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -130,7 +131,10 @@ impl<THandler: IntoConnectionHandler, TMuxer, TTransErr> fmt::Debug
 }
 
 /// Event that can happen on the `Pool`.
-pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
+pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTrans>
+where
+    TTrans: Transport,
+{
     /// A new connection has been established.
     ConnectionEstablished {
         connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
@@ -138,7 +142,7 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
-        outgoing: Option<Vec<(Multiaddr, TransportError<TTransErr>)>>,
+        outgoing: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
     },
 
     /// An established connection was closed.
@@ -160,7 +164,7 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
         /// was closed by the local peer.
         error: Option<ConnectionError<THandlerError<THandler>>>,
         /// A reference to the pool that used to manage the connection.
-        pool: &'a mut Pool<THandler, TMuxer, TTransErr>,
+        pool: &'a mut Pool<THandler, TTrans>,
         /// The remaining number of established connections to the same peer.
         num_established: u32,
         handler: THandler::Handler,
@@ -173,7 +177,7 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
         /// The local endpoint of the failed connection.
         endpoint: PendingPoint,
         /// The error that occurred.
-        error: PendingConnectionError<TTransErr>,
+        error: PendingConnectionError<TTrans::Error>,
         /// The handler that was supposed to handle the connection,
         /// if the connection failed before the handler was consumed.
         handler: THandler,
@@ -200,10 +204,10 @@ pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> {
     },
 }
 
-impl<'a, THandler: IntoConnectionHandler, TMuxer, TTransErr> fmt::Debug
-    for PoolEvent<'a, THandler, TMuxer, TTransErr>
+impl<'a, THandler: IntoConnectionHandler, TTrans> fmt::Debug for PoolEvent<'a, THandler, TTrans>
 where
-    TTransErr: fmt::Debug,
+    TTrans: Transport,
+    TTrans::Error: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
@@ -256,8 +260,10 @@ where
     }
 }
 
-impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 'static>
-    Pool<THandler, TMuxer, TTransErr>
+impl<THandler, TTrans> Pool<THandler, TTrans>
+where
+    THandler: IntoConnectionHandler,
+    TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
@@ -284,101 +290,6 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
     /// Gets the dedicated connection counters.
     pub fn counters(&self) -> &ConnectionCounters {
         &self.counters
-    }
-
-    /// Adds a pending outgoing connection to the pool in the form of a `Future`
-    /// that establishes and negotiates the connection.
-    ///
-    /// Returns an error if the limit of pending outgoing connections
-    /// has been reached.
-    pub fn add_outgoing<TTrans>(
-        &mut self,
-        transport: TTrans,
-        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
-        peer: Option<PeerId>,
-        handler: THandler,
-        expected_peer_id: Option<PeerId>,
-    ) -> Result<ConnectionId, DialError<THandler>>
-    where
-        TTrans: Transport<Output = (PeerId, TMuxer), Error = TTransErr> + Clone + Send + 'static,
-        TTrans::Dial: Send + 'static,
-    {
-        if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err(DialError::ConnectionLimit { limit, handler });
-        };
-
-        let dial = ConcurrentDial::new(transport, peer, addresses);
-
-        let connection_id = self.next_connection_id();
-
-        let (drop_notifier, drop_receiver) = oneshot::channel();
-
-        self.spawn(
-            task::new_for_pending_outgoing_connection(
-                connection_id,
-                dial,
-                drop_receiver,
-                self.pending_connection_events_tx.clone(),
-            )
-            .boxed(),
-        );
-
-        self.counters.inc_pending(&PendingPoint::Dialer);
-        self.pending.insert(
-            connection_id,
-            PendingConnectionInfo {
-                peer_id: expected_peer_id,
-                handler,
-                endpoint: PendingPoint::Dialer,
-                _drop_notifier: drop_notifier,
-            },
-        );
-        Ok(connection_id)
-    }
-
-    /// Adds a pending incoming connection to the pool in the form of a
-    /// `Future` that establishes and negotiates the connection.
-    ///
-    /// Returns an error if the limit of pending incoming connections
-    /// has been reached.
-    pub fn add_incoming<TFut>(
-        &mut self,
-        future: TFut,
-        handler: THandler,
-        info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, ConnectionLimit>
-    where
-        TFut: Future<Output = Result<(PeerId, TMuxer), TTransErr>> + Send + 'static,
-    {
-        let endpoint = info.to_connected_point();
-        // TODO: We loose the handler here.
-        self.counters.check_max_pending_incoming()?;
-
-        let connection_id = self.next_connection_id();
-
-        let (drop_notifier, drop_receiver) = oneshot::channel();
-
-        self.spawn(
-            task::new_for_pending_incoming_connection(
-                connection_id,
-                future,
-                drop_receiver,
-                self.pending_connection_events_tx.clone(),
-            )
-            .boxed(),
-        );
-
-        self.counters.inc_pending_incoming();
-        self.pending.insert(
-            connection_id,
-            PendingConnectionInfo {
-                peer_id: None,
-                handler,
-                endpoint: endpoint.into(),
-                _drop_notifier: drop_notifier,
-            },
-        );
-        Ok(connection_id)
     }
 
     /// Gets an entry representing a connection in the pool.
@@ -569,16 +480,118 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
             self.local_spawns.push(task);
         }
     }
+}
 
+impl<THandler, TTrans> Pool<THandler, TTrans>
+where
+    THandler: IntoConnectionHandler,
+    TTrans: Transport + 'static,
+    TTrans::Output: Send + 'static,
+    TTrans::Error: Send + 'static,
+{
+    /// Adds a pending outgoing connection to the pool in the form of a `Future`
+    /// that establishes and negotiates the connection.
+    ///
+    /// Returns an error if the limit of pending outgoing connections
+    /// has been reached.
+    pub fn add_outgoing(
+        &mut self,
+        transport: TTrans,
+        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
+        peer: Option<PeerId>,
+        handler: THandler,
+    ) -> Result<ConnectionId, DialError<THandler>>
+    where
+        TTrans: Clone + Send,
+        TTrans::Dial: Send + 'static,
+    {
+        if let Err(limit) = self.counters.check_max_pending_outgoing() {
+            return Err(DialError::ConnectionLimit { limit, handler });
+        };
+
+        let dial = ConcurrentDial::new(transport, peer, addresses);
+
+        let connection_id = self.next_connection_id();
+
+        let (drop_notifier, drop_receiver) = oneshot::channel();
+
+        self.spawn(
+            task::new_for_pending_outgoing_connection(
+                connection_id,
+                dial,
+                drop_receiver,
+                self.pending_connection_events_tx.clone(),
+            )
+            .boxed(),
+        );
+
+        self.counters.inc_pending(&PendingPoint::Dialer);
+        self.pending.insert(
+            connection_id,
+            PendingConnectionInfo {
+                peer_id: peer,
+                handler,
+                endpoint: PendingPoint::Dialer,
+                _drop_notifier: drop_notifier,
+            },
+        );
+        Ok(connection_id)
+    }
+
+    /// Adds a pending incoming connection to the pool in the form of a
+    /// `Future` that establishes and negotiates the connection.
+    ///
+    /// Returns an error if the limit of pending incoming connections
+    /// has been reached.
+    pub fn add_incoming<TFut>(
+        &mut self,
+        future: TFut,
+        handler: THandler,
+        info: IncomingInfo<'_>,
+    ) -> Result<ConnectionId, ConnectionLimit>
+    where
+        TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
+    {
+        let endpoint = info.to_connected_point();
+        // TODO: We loose the handler here.
+        self.counters.check_max_pending_incoming()?;
+
+        let connection_id = self.next_connection_id();
+
+        let (drop_notifier, drop_receiver) = oneshot::channel();
+
+        self.spawn(
+            task::new_for_pending_incoming_connection(
+                connection_id,
+                future,
+                drop_receiver,
+                self.pending_connection_events_tx.clone(),
+            )
+            .boxed(),
+        );
+
+        self.counters.inc_pending_incoming();
+        self.pending.insert(
+            connection_id,
+            PendingConnectionInfo {
+                peer_id: None,
+                handler,
+                endpoint: endpoint.into(),
+                _drop_notifier: drop_notifier,
+            },
+        );
+        Ok(connection_id)
+    }
     /// Polls the connection pool for events.
     ///
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a>(
+    pub fn poll<'a, TMuxer>(
         &'a mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<PoolEvent<'a, THandler, TMuxer, TTransErr>>
+    ) -> Poll<PoolEvent<'a, THandler, TTrans>>
     where
+        TTrans: Transport<Output = (PeerId, TMuxer)>,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         THandler: IntoConnectionHandler + 'static,
         THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
@@ -677,8 +690,7 @@ impl<THandler: IntoConnectionHandler, TMuxer: Send + 'static, TTransErr: Send + 
             match event {
                 task::PendingConnectionEvent::ConnectionEstablished {
                     id,
-                    peer_id,
-                    muxer,
+                    output: (peer_id, muxer),
                     outgoing,
                 } => {
                     let PendingConnectionInfo {

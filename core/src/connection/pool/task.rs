@@ -30,7 +30,7 @@ use crate::{
         PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
-    transport::TransportError,
+    transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
 use futures::{
@@ -51,19 +51,21 @@ pub enum Command<T> {
 }
 
 #[derive(Debug)]
-pub enum PendingConnectionEvent<TMuxer, TError> {
+pub enum PendingConnectionEvent<TTrans>
+where
+    TTrans: Transport,
+{
     // TODO: Remove most of these
     ConnectionEstablished {
         id: ConnectionId,
-        peer_id: PeerId,
-        muxer: TMuxer,
+        output: TTrans::Output,
         // TODO: Document errors in a success message.
-        outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<TError>)>)>,
+        outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<TTrans::Error>)>)>,
     },
     /// A pending connection failed.
     PendingFailed {
         id: ConnectionId,
-        error: PendingConnectionError<TError>,
+        error: PendingConnectionError<TTrans::Error>,
     },
 }
 
@@ -93,12 +95,14 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
     },
 }
 
-pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
+pub async fn new_for_pending_outgoing_connection<TTrans>(
     connection_id: ConnectionId,
-    dial: ConcurrentDial<TMuxer, TTransErr>,
+    dial: ConcurrentDial<TTrans>,
     drop_receiver: oneshot::Receiver<Void>,
-    mut events: mpsc::Sender<PendingConnectionEvent<TMuxer, TTransErr>>,
-) {
+    mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
+) where
+    TTrans: Transport,
+{
     match futures::future::select(drop_receiver, Box::pin(dial)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
             let _ = events
@@ -109,12 +113,11 @@ pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
                 .await;
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
-        Either::Right((Ok((peer_id, address, muxer, errors)), _)) => {
+        Either::Right((Ok((address, output, errors)), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
-                    peer_id,
-                    muxer,
+                    output,
                     outgoing: Some((address, errors)),
                 })
                 .await;
@@ -130,13 +133,14 @@ pub async fn new_for_pending_outgoing_connection<TMuxer, TTransErr>(
     }
 }
 
-pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
+pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
     connection_id: ConnectionId,
     future: TFut,
     drop_receiver: oneshot::Receiver<Void>,
-    mut events: mpsc::Sender<PendingConnectionEvent<TMuxer, TTransErr>>,
+    mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
 ) where
-    TFut: Future<Output = Result<(PeerId, TMuxer), TTransErr>> + Send + 'static,
+    TTrans: Transport,
+    TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
 {
     match futures::future::select(drop_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
@@ -148,12 +152,11 @@ pub async fn new_for_pending_incoming_connection<TFut, TMuxer, TTransErr>(
                 .await;
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
-        Either::Right((Ok((peer_id, muxer)), _)) => {
+        Either::Right((Ok(output), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
-                    peer_id,
-                    muxer,
+                    output,
                     outgoing: None,
                 })
                 .await;
