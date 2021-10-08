@@ -672,7 +672,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_connection_closed_stmts);*
             }
 
-            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler, error: &#dial_error) {
+            fn inject_dial_failure(&mut self, peer_id: Option<#peer_id>, handlers: Self::ProtocolsHandler, error: &#dial_error) {
                 #(#inject_dial_failure_stmts);*
             }
 

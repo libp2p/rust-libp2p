@@ -108,7 +108,7 @@ where
         ConnectionId,
         <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     )>,
-    pub inject_dial_failure: Vec<PeerId>,
+    pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
     pub inject_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub inject_new_external_addr: Vec<Multiaddr>,
@@ -229,11 +229,11 @@ where
 
     fn inject_dial_failure(
         &mut self,
-        p: &PeerId,
+        p: Option<PeerId>,
         handler: Self::ProtocolsHandler,
         error: &DialError,
     ) {
-        self.inject_dial_failure.push(p.clone());
+        self.inject_dial_failure.push(p);
         self.inner.inject_dial_failure(p, handler, error);
     }
 

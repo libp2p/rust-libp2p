@@ -305,7 +305,7 @@ impl NetworkBehaviour for Relay {
 
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         _: Self::ProtocolsHandler,
         error: &DialError,
     ) {
@@ -317,35 +317,37 @@ impl NetworkBehaviour for Relay {
             return;
         }
 
-        if let Entry::Occupied(o) = self.listeners.entry(*peer_id) {
-            if matches!(o.get(), RelayListener::Connecting { .. }) {
-                // By removing the entry, the channel to the listener is dropped and thus the
-                // listener is notified that dialing the relay failed.
-                o.remove_entry();
+        if let Some(peer_id) = peer_id {
+            if let Entry::Occupied(o) = self.listeners.entry(peer_id) {
+                if matches!(o.get(), RelayListener::Connecting { .. }) {
+                    // By removing the entry, the channel to the listener is dropped and thus the
+                    // listener is notified that dialing the relay failed.
+                    o.remove_entry();
+                }
             }
-        }
 
-        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer_id) {
-            for req in reqs {
-                let _ = req.send_back.send(Err(OutgoingRelayReqError::DialingRelay));
+            if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(&peer_id) {
+                for req in reqs {
+                    let _ = req.send_back.send(Err(OutgoingRelayReqError::DialingRelay));
+                }
             }
-        }
 
-        if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
-            for req in reqs {
-                let IncomingRelayReq::DialingDst {
-                    src_peer_id,
-                    incoming_relay_req,
-                    ..
-                } = req;
-                self.outbox_to_swarm
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: src_peer_id,
-                        handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::DenyIncomingRelayReq(
-                            incoming_relay_req.deny(circuit_relay::Status::HopCantDialDst),
-                        ),
-                    })
+            if let Some(reqs) = self.incoming_relay_reqs.remove(&peer_id) {
+                for req in reqs {
+                    let IncomingRelayReq::DialingDst {
+                        src_peer_id,
+                        incoming_relay_req,
+                        ..
+                    } = req;
+                    self.outbox_to_swarm
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: src_peer_id,
+                            handler: NotifyHandler::Any,
+                            event: RelayHandlerIn::DenyIncomingRelayReq(
+                                incoming_relay_req.deny(circuit_relay::Status::HopCantDialDst),
+                            ),
+                        })
+                }
             }
         }
     }

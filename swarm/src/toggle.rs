@@ -149,7 +149,7 @@ where
 
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         handler: Self::ProtocolsHandler,
         error: &DialError,
     ) {

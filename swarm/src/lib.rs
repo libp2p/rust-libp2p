@@ -353,7 +353,8 @@ where
     ) -> Result<(), DialError> {
         if self.banned_peers.contains(peer_id) {
             let error = DialError::Banned;
-            self.behaviour.inject_dial_failure(peer_id, handler, &error);
+            self.behaviour
+                .inject_dial_failure(Some(*peer_id), handler, &error);
             return Err(error);
         }
 
@@ -367,7 +368,8 @@ where
 
         if addrs.peek().is_none() {
             let error = DialError::NoAddresses;
-            self.behaviour.inject_dial_failure(peer_id, handler, &error);
+            self.behaviour
+                .inject_dial_failure(Some(*peer_id), handler, &error);
             return Err(error);
         };
 
@@ -379,7 +381,7 @@ where
             Err(error) => {
                 let (error, handler) = DialError::from_network_dial_error(error);
                 self.behaviour.inject_dial_failure(
-                    peer_id,
+                    Some(*peer_id),
                     handler.into_protocols_handler(),
                     &error,
                 );
@@ -719,7 +721,7 @@ where
                     let error = error.into();
 
                     this.behaviour.inject_dial_failure(
-                        &peer_id,
+                        Some(peer_id),
                         handler.into_protocols_handler(),
                         &error,
                     );
@@ -738,9 +740,11 @@ where
                 Poll::Ready(NetworkEvent::UnknownPeerDialError { error, handler }) => {
                     log::debug!("Connection attempt to unknown peer failed with {:?}", error);
                     let error = error.into();
-                    // TODO: Make sure to give the handler back to the behaviour.
-                    // this.behaviour
-                    //     .inject_dial_failure(None, &multiaddr, &error);
+                    this.behaviour.inject_dial_failure(
+                        None,
+                        handler.into_protocols_handler(),
+                        &error,
+                    );
                     return Poll::Ready(SwarmEvent::OutgoingConnectionError {
                         peer_id: None,
                         error: error,
@@ -813,34 +817,17 @@ where
                             return Poll::Ready(SwarmEvent::Dialing(peer_id));
                         }
                     } else {
-                        // TODO: Make sure this behaviour is removed from all other doc comments as well.
-                        //
-                        // // Even if the condition for a _new_ dialing attempt is not met,
-                        // // we always add any potentially new addresses of the peer to an
-                        // // ongoing dialing attempt, if there is one.
-                        // log::trace!(
-                        //     "Condition for new dialing attempt to {:?} not met: {:?}",
-                        //     peer_id,
-                        //     condition
-                        // );
-                        // let self_listening = &this.listened_addrs;
-                        // if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
-                        //     let addrs = this.behaviour.addresses_of_peer(peer.id());
-                        //     let mut attempt = peer.some_attempt();
-                        //     for a in addrs {
-                        //         if !self_listening.contains(&a) {
-                        //             attempt.add_address(a);
-                        //         }
-                        //     }
-                        // }
+                        log::trace!(
+                            "Condition for new dialing attempt to {:?} not met: {:?}",
+                            peer_id,
+                            condition
+                        );
 
                         this.behaviour.inject_dial_failure(
-                            &peer_id,
+                            Some(peer_id),
                             handler,
                             &DialError::DialPeerConditionFalse(condition),
                         );
-
-                        // TODO: Should we not emit a swarm event?
                     }
                 }
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler {
