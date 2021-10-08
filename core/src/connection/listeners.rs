@@ -264,8 +264,7 @@ where
                 Poll::Ready(Some(Ok(ListenerEvent::NewAddress(a)))) => {
                     if listener_project.addresses.contains(&a) {
                         debug!("Transport has reported address {} multiple times", a)
-                    }
-                    if !listener_project.addresses.contains(&a) {
+                    } else {
                         listener_project.addresses.push(a.clone());
                     }
                     let id = *listener_project.id;
