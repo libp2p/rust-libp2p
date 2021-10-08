@@ -329,6 +329,7 @@ where
         TTrans::Dial: Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::Error: std::fmt::Debug,
         TMuxer::OutboundSubstream: Send,
         THandler: IntoConnectionHandler + Send + 'static,
         <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,

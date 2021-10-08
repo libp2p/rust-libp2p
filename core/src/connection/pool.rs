@@ -188,9 +188,9 @@ where
     PendingInboundConnectionError {
         /// The ID of the failed connection.
         id: ConnectionId,
-        // TODO: Document.
+        /// Stack of protocols used to send back data to the remote.
         send_back_addr: Multiaddr,
-        // TODO: Document.
+        /// Local connection address.
         local_addr: Multiaddr,
         /// The error that occurred.
         error: PendingInboundConnectionError<TTrans::Error>,
@@ -380,8 +380,8 @@ where
     /// by the pool effective immediately.
     pub fn disconnect(&mut self, peer: &PeerId) {
         if let Some(conns) = self.established.get_mut(peer) {
-            // TODO: Detour via EstablishedConnection not ideal, but at least only one code path to
-            // start closing a connection.
+            // Detour via `EstablishedConnection` is not ideal, but at least only one code path in
+            // order to start closing a connection exists.
             let connection_ids = conns.iter().map(|(id, _)| *id).collect::<Vec<_>>();
 
             for id in connection_ids.into_iter() {
@@ -618,10 +618,11 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::Error: std::fmt::Debug,
+        TMuxer::OutboundSubstream: Send,
         THandler: IntoConnectionHandler + 'static,
         THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
-        TMuxer::OutboundSubstream: Send,
     {
         // Poll for events of established connections.
         //
@@ -806,8 +807,14 @@ where
                     if let Err(error) = error {
                         self.spawn(
                             poll_fn(move |cx| {
-                                // TODO: Should we send the result back to the Pool?
-                                let _ = ready!(muxer.close(cx));
+                                if let Err(e) = ready!(muxer.close(cx)) {
+                                    log::debug!(
+                                        "Failed to close connection {:?} to peer {}: {:?}",
+                                        id,
+                                        peer_id,
+                                        e
+                                    );
+                                }
                                 Poll::Ready(())
                             })
                             .boxed(),
@@ -881,9 +888,6 @@ where
                     }
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
-                    // TODO: How about not removing from pending on abortion and instead remove it
-                    // here. Thus not requiring a loop in poll.
-
                     if let Some(PendingConnectionInfo {
                         peer_id,
                         handler,
