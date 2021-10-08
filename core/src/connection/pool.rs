@@ -573,13 +573,15 @@ where
         future: TFut,
         handler: THandler,
         info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, ConnectionLimit>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
         let endpoint = info.to_connected_point();
-        // TODO: We loose the handler here.
-        self.counters.check_max_pending_incoming()?;
+
+        if let Err(limit) = self.counters.check_max_pending_incoming() {
+            return Err((limit, handler));
+        }
 
         let connection_id = self.next_connection_id();
 

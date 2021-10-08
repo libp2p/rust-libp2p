@@ -618,13 +618,22 @@ where
                         );
                     let local_addr = connection.local_addr.clone();
                     let send_back_addr = connection.send_back_addr.clone();
-                    if let Err(e) = this.network.accept(connection, handler) {
-                        log::warn!("Incoming connection rejected: {:?}", e);
+                    match this.network.accept(connection, handler) {
+                        Ok(_connection_id) => {
+                            return Poll::Ready(SwarmEvent::IncomingConnection {
+                                local_addr,
+                                send_back_addr,
+                            });
+                        }
+                        Err((connection_limit, handler)) => {
+                            this.behaviour.inject_listen_failure(
+                                &local_addr,
+                                &send_back_addr,
+                                handler.into_protocols_handler(),
+                            );
+                            log::warn!("Incoming connection rejected: {:?}", connection_limit);
+                        }
                     }
-                    return Poll::Ready(SwarmEvent::IncomingConnection {
-                        local_addr,
-                        send_back_addr,
-                    });
                 }
                 Poll::Ready(NetworkEvent::NewListenerAddress {
                     listener_id,
@@ -707,10 +716,6 @@ where
                     error,
                     handler,
                 }) => {
-                    // TODO: Remove
-                    // this.behaviour
-                    //     .inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
-
                     let error = error.into();
 
                     this.behaviour.inject_dial_failure(

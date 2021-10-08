@@ -299,7 +299,7 @@ where
             send_back_addr,
         }: IncomingConnection<TTrans::ListenerUpgrade>,
         handler: THandler,
-    ) -> Result<ConnectionId, ConnectionLimit>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TTrans: Transport,
         TTrans::Output: Send + 'static,

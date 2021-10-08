@@ -32,6 +32,7 @@ pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
     TestNetwork::new(transport, local_public_key.into(), cfg)
 }
 
+#[derive(Debug)]
 pub struct TestHandler();
 
 impl ConnectionHandler for TestHandler {
