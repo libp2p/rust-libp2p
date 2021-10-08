@@ -66,15 +66,14 @@ fn deny_incoming_connec() {
         match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
                 peer_id,
-                error: PendingConnectionError::Transport(_),
+                error: PendingConnectionError::Transport(errors),
                 handler: _,
             }) => {
                 assert_eq!(&peer_id, swarm1.local_peer_id());
-                // TODO: Bring back.
-                // assert_eq!(
-                //     multiaddr,
-                //     address.clone().with(Protocol::P2p(peer_id.into()))
-                // );
+                assert_eq!(
+                    errors.get(0).expect("One error.").0,
+                    address.clone().with(Protocol::P2p(peer_id.into()))
+                );
                 return Poll::Ready(Ok(()));
             }
             Poll::Ready(_) => unreachable!(),
@@ -118,21 +117,21 @@ fn dial_self() {
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
-                Poll::Ready(NetworkEvent::UnknownPeerDialError {
-                    // multiaddr,
+                Poll::Ready(NetworkEvent::DialError {
+                    peer_id,
                     error: PendingConnectionError::InvalidPeerId { .. },
                     ..
                 }) => {
+                    assert_eq!(&peer_id, swarm.local_peer_id());
                     assert!(!got_dial_err);
-                    // assert_eq!(multiaddr, local_address);
                     got_dial_err = true;
                     if got_inc_err {
                         return Poll::Ready(Ok(()));
                     }
                 }
-                Poll::Ready(NetworkEvent::IncomingConnectionError { /*local_addr,*/ .. }) => {
+                Poll::Ready(NetworkEvent::IncomingConnectionError { local_addr, .. }) => {
                     assert!(!got_inc_err);
-                    // assert_eq!(local_addr, local_address);
+                    assert_eq!(local_addr, local_address);
                     got_inc_err = true;
                     if got_dial_err {
                         return Poll::Ready(Ok(()));

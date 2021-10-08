@@ -358,12 +358,12 @@ where
             return Err(error);
         }
 
-        let self_listening = &self.listened_addrs;
+        let self_listening = self.listened_addrs.clone();
         let mut addrs = self
             .behaviour
             .addresses_of_peer(peer_id)
             .into_iter()
-            .filter(|a| !self_listening.contains(a))
+            .filter(move |a| !self_listening.contains(a))
             .peekable();
 
         if addrs.peek().is_none() {
@@ -1179,7 +1179,6 @@ where
 }
 
 /// The possible failures of dialing.
-// TODO: Should we have separate errors for synchronous and asynchronous dial errors?
 #[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
@@ -1194,11 +1193,14 @@ pub enum DialError {
     NoAddresses,
     /// The provided [`DialPeerCondition`] evaluated to false and thus the dial was aborted.
     DialPeerConditionFalse(DialPeerCondition),
-
-    // TODO: Document
+    /// Pending connection attempt has been aborted.
     Aborted,
+    /// The peer identity obtained on the connection did not
+    /// match the one that was expected or is otherwise invalid.
     InvalidPeerId,
+    /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
 
@@ -1208,9 +1210,6 @@ impl DialError {
             network::DialError::ConnectionLimit { limit, handler } => {
                 (DialError::ConnectionLimit(limit), handler)
             }
-            // network::DialError::InvalidAddress { address, handler } => {
-            //     (DialError::InvalidAddress(address), handler)
-            // }
             network::DialError::LocalPeerId { handler } => (DialError::LocalPeerId, handler),
         }
     }
@@ -1234,8 +1233,6 @@ impl fmt::Display for DialError {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
-            // DialError::InvalidAddress(a) => write!(f, "Dial error: invalid address: {}", a),
-            // DialError::UnreachableAddr(a) => write!(f, "Dial error: unreachable address: {}", a),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
                 write!(
@@ -1244,7 +1241,16 @@ impl fmt::Display for DialError {
                     c
                 )
             }
-            _ => todo!(),
+            DialError::Aborted => write!(
+                f,
+                "Dial error: Pending connection attempt has been aborted."
+            ),
+            DialError::InvalidPeerId => write!(f, "Dial error: Invalid peer ID."),
+            DialError::ConnectionIo(e) => write!(
+                f,
+                "Dial error: An I/O error occurred on the connection: {:?}.", e
+            ),
+            DialError::Transport(e) => write!(f, "An error occurred while negotiating the transport protocol(s) on a connection: {:?}.", e),
         }
     }
 }
@@ -1253,13 +1259,14 @@ impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
-            // DialError::InvalidAddress(_) => None,
-            // TODO: Can we do better?
             DialError::LocalPeerId => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
-            _ => todo!(),
+            DialError::Aborted => None,
+            DialError::InvalidPeerId => None,
+            DialError::ConnectionIo(_) => None,
+            DialError::Transport(_) => None,
         }
     }
 }

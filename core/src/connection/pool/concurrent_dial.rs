@@ -62,23 +62,18 @@ where
         peer: Option<PeerId>,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
     ) -> Self {
-        let mut pending_dials = addresses.map(move |address| {
-            match p2p_addr(peer, address) {
-                Ok(address) => match transport.clone().dial(address.clone()) {
-                    Ok(fut) => fut
-                        .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
-                        .boxed(),
-                    Err(err) => futures::future::ready((address.clone(), Err(err))).boxed(),
-                },
-                Err(address) => {
-                    futures::future::ready((
-                        address.clone(),
-                        // TODO: It is not really the Multiaddr that is not supported.
-                        Err(TransportError::MultiaddrNotSupported(address)),
-                    ))
-                    .boxed()
-                }
-            }
+        let mut pending_dials = addresses.map(move |address| match p2p_addr(peer, address) {
+            Ok(address) => match transport.clone().dial(address.clone()) {
+                Ok(fut) => fut
+                    .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
+                    .boxed(),
+                Err(err) => futures::future::ready((address.clone(), Err(err))).boxed(),
+            },
+            Err(address) => futures::future::ready((
+                address.clone(),
+                Err(TransportError::MultiaddrNotSupported(address)),
+            ))
+            .boxed(),
         });
 
         let dials = FuturesUnordered::new();
@@ -145,7 +140,6 @@ where
 /// If the given address is not yet a `p2p` address for the given peer,
 /// the `/p2p/<peer-id>` protocol is appended to the returned address.
 fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-    // TODO: Make hack nicer.
     let peer = match peer {
         Some(p) => p,
         None => return Ok(addr),

@@ -163,6 +163,7 @@ where
     ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
     where
         I: IntoIterator<Item = Multiaddr>,
+        I::IntoIter: Send + 'static,
     {
         let (peer_id, network) = match self {
             Peer::Connected(p) => (p.peer_id, p.network),
@@ -174,8 +175,7 @@ where
         let id = network.dial_peer(DialingOpts {
             peer: peer_id,
             handler,
-            // TODO: Should network.dial_peer take an iterator as well?
-            addresses: addresses.into_iter().collect(),
+            addresses: addresses.into_iter(),
         })?;
 
         Ok((id, DialingPeer { network, peer_id }))
@@ -380,8 +380,6 @@ where
 
     /// Obtains a dialing attempt to the peer by connection ID of
     /// the current connection attempt.
-    //
-    // TODO: Still needed?
     pub fn attempt(&mut self, id: ConnectionId) -> Option<DialingAttempt<'_, THandler>> {
         Some(DialingAttempt {
             peer_id: self.peer_id,

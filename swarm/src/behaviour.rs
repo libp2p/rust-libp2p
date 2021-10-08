@@ -113,13 +113,12 @@ pub trait NetworkBehaviour: Send + 'static {
     fn inject_disconnected(&mut self, _: &PeerId) {}
 
     /// Informs the behaviour about a newly established connection to a peer.
-    // TODO: Should we pass more than just the Multiaddr? The behaviour can't do anything with it anyways.
     fn inject_connection_established(
         &mut self,
-        _: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        _: Option<&Vec<Multiaddr>>,
+        _peer_id: &PeerId,
+        _connection_id: &ConnectionId,
+        _endpoint: &ConnectedPoint,
+        _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
     }
 
@@ -178,8 +177,6 @@ pub trait NetworkBehaviour: Send + 'static {
         _local_addr: &Multiaddr,
         _send_back_addr: &Multiaddr,
         _handler: Self::ProtocolsHandler,
-        // TODO: Should we forward the PendingConnectionError to the inject_listen_failure call as
-        // well?
     ) {
     }
 

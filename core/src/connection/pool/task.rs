@@ -55,11 +55,12 @@ pub enum PendingConnectionEvent<TTrans>
 where
     TTrans: Transport,
 {
-    // TODO: Remove most of these
     ConnectionEstablished {
         id: ConnectionId,
         output: TTrans::Output,
-        // TODO: Document errors in a success message.
+        /// [`Some`] when the new connection is an outgoing connection.
+        /// Addresses are dialed in parallel. Contains the addresses and errors
+        /// of dial attempts that failed before the one successful dial.
         outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<TTrans::Error>)>)>,
     },
     /// A pending connection failed.
