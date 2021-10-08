@@ -34,11 +34,11 @@ use std::{
     task::{Context, Poll},
 };
 
-type Dial<TTrans: Transport> = BoxFuture<
+type Dial<TTrans> = BoxFuture<
     'static,
     (
         Multiaddr,
-        Result<TTrans::Output, TransportError<TTrans::Error>>,
+        Result<<TTrans as Transport>::Output, TransportError<<TTrans as Transport>::Error>>,
     ),
 >;
 

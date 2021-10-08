@@ -30,17 +30,13 @@ use crate::{
         handler::{THandlerInEvent, THandlerOutEvent},
         pool::{Pool, PoolConfig, PoolEvent},
         ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo, IntoConnectionHandler,
-        ListenerId, ListenersEvent, ListenersStream, PendingConnectionError, PendingPoint,
-        Substream,
+        ListenerId, ListenersEvent, ListenersStream, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
     Executor, Multiaddr, PeerId,
 };
-use fnv::FnvHashMap;
-use smallvec::SmallVec;
 use std::{
-    collections::hash_map,
     convert::TryFrom as _,
     error, fmt,
     num::NonZeroUsize,
@@ -62,20 +58,6 @@ where
 
     /// The nodes currently active.
     pool: Pool<THandler, TTrans>,
-
-    /// The ongoing dialing attempts.
-    ///
-    /// There may be multiple ongoing dialing attempts to the same peer.
-    /// Each dialing attempt is associated with a new connection and hence
-    /// a new connection ID.
-    ///
-    /// > **Note**: `dialing` must be consistent with the pending outgoing
-    /// > connections in `pool`. That is, for every entry in `dialing`
-    /// > there must exist a pending outgoing connection in `pool` with
-    /// > the same connection ID. This is ensured by the implementation of
-    /// > `Network` (see `dial_peer_impl` and `on_connection_failed`)
-    /// > together with the implementation of `DialingAttempt::abort`.
-    dialing: FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
 }
 
 impl<TTrans, THandler> fmt::Debug for Network<TTrans, THandler>
@@ -88,7 +70,6 @@ where
             .field("local_peer_id", &self.local_peer_id)
             .field("listeners", &self.listeners)
             .field("peers", &self.pool)
-            .field("dialing", &self.dialing)
             .finish()
     }
 }
@@ -103,12 +84,29 @@ where
 impl<TTrans, THandler> Network<TTrans, THandler>
 where
     TTrans: Transport,
-    <TTrans as Transport>::Error: Send + 'static,
     THandler: IntoConnectionHandler,
 {
+    /// Checks whether the network has an established connection to a peer.
+    pub fn is_connected(&self, peer: &PeerId) -> bool {
+        self.pool.is_connected(peer)
+    }
+
+    fn dialing_attempts(&self, peer: PeerId) -> impl Iterator<Item = &ConnectionId> {
+        self.pool
+            .iter_pending_info()
+            .filter(move |(_, endpoint, peer_id)| {
+                matches!(endpoint, PendingPoint::Dialer) && peer_id.as_ref() == Some(&peer)
+            })
+            .map(|(connection_id, _, _)| connection_id)
+    }
+
+    /// Checks whether the network has an ongoing dialing attempt to a peer.
+    pub fn is_dialing(&self, peer: &PeerId) -> bool {
+        self.dialing_attempts(*peer).next().is_some()
+    }
+
     fn disconnect(&mut self, peer: &PeerId) {
         self.pool.disconnect(peer);
-        self.dialing.remove(peer);
     }
 }
 
@@ -124,7 +122,6 @@ where
             local_peer_id,
             listeners: ListenersStream::new(transport),
             pool: Pool::new(local_peer_id, config.pool_config, config.limits),
-            dialing: Default::default(),
         }
     }
 
@@ -245,8 +242,6 @@ where
             opts.handler,
         )?;
 
-        self.dialing.entry(opts.peer).or_default().push(id);
-
         Ok(id)
     }
 
@@ -271,16 +266,6 @@ where
         self.pool.iter_connected()
     }
 
-    /// Checks whether the network has an established connection to a peer.
-    pub fn is_connected(&self, peer: &PeerId) -> bool {
-        self.pool.is_connected(peer)
-    }
-
-    /// Checks whether the network has an ongoing dialing attempt to a peer.
-    pub fn is_dialing(&self, peer: &PeerId) -> bool {
-        self.dialing.contains_key(peer)
-    }
-
     /// Checks whether the network has neither an ongoing dialing attempt,
     /// nor an established connection to a peer.
     pub fn is_disconnected(&self, peer: &PeerId) -> bool {
@@ -290,7 +275,10 @@ where
     /// Returns a list of all the peers to whom a new outgoing connection
     /// is currently being established.
     pub fn dialing_peers(&self) -> impl Iterator<Item = &PeerId> {
-        self.dialing.keys()
+        self.pool
+            .iter_pending_info()
+            .filter(|(_, endpoint, _)| matches!(endpoint, PendingPoint::Dialer))
+            .filter_map(|(_, _, peer)| peer.as_ref())
     }
 
     /// Obtains a view of a [`Peer`] with the given ID in the network.
@@ -407,30 +395,39 @@ where
                 connection,
                 num_established,
                 outgoing,
-            }) => {
-                if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id()) {
-                    e.get_mut().retain(|s| *s != connection.id());
-                    if e.get().is_empty() {
-                        e.remove();
-                    }
-                }
-
-                NetworkEvent::ConnectionEstablished {
-                    connection,
-                    num_established,
-                    outgoing,
-                }
-            }
-            Poll::Ready(PoolEvent::PendingConnectionError {
-                id,
-                endpoint,
+            }) => NetworkEvent::ConnectionEstablished {
+                connection,
+                num_established,
+                outgoing,
+            },
+            Poll::Ready(PoolEvent::PendingOutboundConnectionError {
+                id: _,
                 error,
                 handler,
-                ..
+                peer,
             }) => {
-                let dialing = &mut self.dialing;
-                on_connection_failed(dialing, id, endpoint, error, handler)
+                if let Some(peer) = peer {
+                    NetworkEvent::DialError {
+                        handler,
+                        peer_id: peer,
+                        error,
+                    }
+                } else {
+                    NetworkEvent::UnknownPeerDialError { error, handler }
+                }
             }
+            Poll::Ready(PoolEvent::PendingInboundConnectionError {
+                id: _,
+                send_back_addr,
+                local_addr,
+                error,
+                handler,
+            }) => NetworkEvent::IncomingConnectionError {
+                error,
+                handler,
+                send_back_addr,
+                local_addr,
+            },
             Poll::Ready(PoolEvent::ConnectionClosed {
                 id,
                 connected,
@@ -469,54 +466,6 @@ struct DialingOpts<PeerId, THandler> {
     peer: PeerId,
     handler: THandler,
     addresses: Vec<Multiaddr>,
-}
-
-/// Callback for handling a failed connection attempt, returning an
-/// event to emit from the `Network`.
-///
-/// If the failed connection attempt was a dialing attempt and there
-/// are more addresses to try, new `DialingOpts` are returned.
-fn on_connection_failed<'a, TTrans, THandler>(
-    dialing: &mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
-    id: ConnectionId,
-    endpoint: PendingPoint,
-    error: PendingConnectionError<TTrans::Error>,
-    handler: THandler,
-) -> NetworkEvent<'a, TTrans, THandlerInEvent<THandler>, THandlerOutEvent<THandler>, THandler>
-where
-    TTrans: Transport,
-    THandler: IntoConnectionHandler,
-{
-    // Check if the failed connection is associated with a dialing attempt.
-    let dialing_failed = dialing.iter_mut().find_map(|(peer, attempts)| {
-        if attempts.iter().any(|s| *s == id) {
-            Some(*peer)
-        } else {
-            None
-        }
-    });
-
-    if let Some(peer_id) = dialing_failed {
-        NetworkEvent::DialError {
-            handler,
-            peer_id,
-            error,
-        }
-    } else {
-        // A pending incoming connection or outgoing connection to an unknown peer failed.
-        match endpoint {
-            PendingPoint::Dialer => NetworkEvent::UnknownPeerDialError { error, handler },
-            PendingPoint::Listener {
-                send_back_addr,
-                local_addr,
-            } => NetworkEvent::IncomingConnectionError {
-                error,
-                handler,
-                send_back_addr,
-                local_addr,
-            },
-        }
-    }
 }
 
 /// Information about the network obtained by [`Network::info()`].

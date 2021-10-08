@@ -23,13 +23,10 @@ use crate::{
     connection::{
         handler::THandlerInEvent, pool::Pool, ConnectionHandler, ConnectionId,
         EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler, PendingConnection,
-        Substream,
     },
-    Multiaddr, PeerId, StreamMuxer, Transport,
+    Multiaddr, PeerId, Transport,
 };
-use fnv::FnvHashMap;
-use smallvec::SmallVec;
-use std::{collections::hash_map, error, fmt};
+use std::{collections::VecDeque, error, fmt};
 
 /// The possible representations of a peer in a [`Network`], as
 /// seen by the local node.
@@ -90,7 +87,7 @@ where
             return Self::connected(network, peer_id);
         }
 
-        if network.dialing.get_mut(&peer_id).is_some() {
+        if network.is_dialing(&peer_id) {
             return Self::dialing(network, peer_id);
         }
 
@@ -262,13 +259,13 @@ where
     ///
     /// Returns `true` iff [`ConnectedPeer::into_dialing`] returns `Some`.
     pub fn is_dialing(&self) -> bool {
-        self.network.dialing.contains_key(&self.peer_id)
+        self.network.is_dialing(&self.peer_id)
     }
 
     /// Converts this peer into a [`DialingPeer`], if there is an ongoing
     /// dialing attempt, `None` otherwise.
     pub fn into_dialing(self) -> Option<DialingPeer<'a, TTrans, THandler>> {
-        if self.network.dialing.contains_key(&self.peer_id) {
+        if self.network.is_dialing(&self.peer_id) {
             Some(DialingPeer {
                 network: self.network,
                 peer_id: self.peer_id,
@@ -320,7 +317,7 @@ where
                     .iter_peer_established_info(&self.peer_id)
                     .collect::<Vec<_>>(),
             )
-            .field("attempts", &self.network.dialing.get(&self.peer_id))
+            .field("attempts", &self.network.is_dialing(&self.peer_id))
             .finish()
     }
 }
@@ -386,27 +383,15 @@ where
     //
     // TODO: Still needed?
     pub fn attempt(&mut self, id: ConnectionId) -> Option<DialingAttempt<'_, THandler>> {
-        if let hash_map::Entry::Occupied(attempts) = self.network.dialing.entry(self.peer_id) {
-            if let Some(pos) = attempts.get().iter().position(|s| *s == id) {
-                if let Some(inner) = self.network.pool.get_outgoing(id) {
-                    return Some(DialingAttempt {
-                        pos,
-                        inner,
-                        attempts,
-                    });
-                }
-            }
-        }
-        None
+        Some(DialingAttempt {
+            peer_id: self.peer_id,
+            inner: self.network.pool.get_outgoing(id)?,
+        })
     }
 
     /// Gets an iterator over all dialing (i.e. pending outgoing) connections to the peer.
     pub fn attempts(&mut self) -> DialingAttemptIter<'_, THandler, TTrans> {
-        DialingAttemptIter::new(
-            &self.peer_id,
-            &mut self.network.pool,
-            &mut self.network.dialing,
-        )
+        DialingAttemptIter::new(&self.peer_id, &mut self.network)
     }
 
     /// Obtains some dialing connection to the peer.
@@ -436,7 +421,6 @@ where
                     .iter_peer_established_info(&self.peer_id)
                     .collect::<Vec<_>>(),
             )
-            .field("attempts", &self.network.dialing.get(&self.peer_id))
             .finish()
     }
 }
@@ -484,12 +468,9 @@ where
 /// a known / expected remote peer ID and a list of alternative addresses
 /// to connect to, if the current connection attempt fails.
 pub struct DialingAttempt<'a, THandler: IntoConnectionHandler> {
+    peer_id: PeerId,
     /// The underlying pending connection in the `Pool`.
     inner: PendingConnection<'a, THandler>,
-    /// All current dialing attempts of the peer.
-    attempts: hash_map::OccupiedEntry<'a, PeerId, SmallVec<[ConnectionId; 10]>>,
-    /// The position of the current `ConnectionId` of this connection in the `attempts`.
-    pos: usize,
 }
 
 impl<'a, THandler: IntoConnectionHandler> DialingAttempt<'a, THandler> {
@@ -500,7 +481,7 @@ impl<'a, THandler: IntoConnectionHandler> DialingAttempt<'a, THandler> {
 
     /// Returns the (expected) peer ID of the dialing attempt.
     pub fn peer_id(&self) -> &PeerId {
-        self.attempts.key()
+        &self.peer_id
     }
 
     // /// Returns the remote address of the current connection attempt.
@@ -516,11 +497,7 @@ impl<'a, THandler: IntoConnectionHandler> DialingAttempt<'a, THandler> {
     /// Aborting a dialing attempt involves aborting the current connection
     /// attempt and dropping any remaining addresses given to [`Peer::dial()`]
     /// that have not yet been tried.
-    pub fn abort(mut self) {
-        self.attempts.get_mut().remove(self.pos);
-        if self.attempts.get().is_empty() {
-            self.attempts.remove();
-        }
+    pub fn abort(self) {
         self.inner.abort();
     }
 }
@@ -531,16 +508,8 @@ pub struct DialingAttemptIter<'a, THandler: IntoConnectionHandler, TTrans: Trans
     peer_id: &'a PeerId,
     /// The underlying connection `Pool` of the `Network`.
     pool: &'a mut Pool<THandler, TTrans>,
-    /// The state of all current dialing attempts known to the `Network`.
-    ///
-    /// Ownership of the `OccupiedEntry` for `peer_id` containing all attempts must be
-    /// borrowed to each `DialingAttempt` in order for it to remove the entry if the
-    /// last dialing attempt is aborted.
-    dialing: &'a mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
-    /// The current position of the iterator in `dialing[peer_id]`.
-    pos: usize,
-    /// The total number of elements in `dialing[peer_id]` to iterate over.
-    end: usize,
+    /// [`ConnectionId`]s of the dialing attempts of the peer.
+    connections: VecDeque<ConnectionId>,
 }
 
 // Note: Ideally this would be an implementation of `Iterator`, but that
@@ -549,76 +518,40 @@ pub struct DialingAttemptIter<'a, THandler: IntoConnectionHandler, TTrans: Trans
 impl<'a, THandler: IntoConnectionHandler, TTrans: Transport>
     DialingAttemptIter<'a, THandler, TTrans>
 {
-    fn new(
-        peer_id: &'a PeerId,
-        pool: &'a mut Pool<THandler, TTrans>,
-        dialing: &'a mut FnvHashMap<PeerId, SmallVec<[ConnectionId; 10]>>,
-    ) -> Self {
-        let end = dialing.get(peer_id).map_or(0, |conns| conns.len());
+    fn new(peer_id: &'a PeerId, network: &'a mut Network<TTrans, THandler>) -> Self {
+        let connections = network.dialing_attempts(*peer_id).map(|id| *id).collect();
         Self {
-            pos: 0,
-            end,
-            pool,
-            dialing,
+            pool: &mut network.pool,
             peer_id,
+            connections,
         }
     }
 
     /// Obtains the next dialing connection, if any.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<DialingAttempt<'_, THandler>> {
-        // If the number of elements reduced, the current `DialingAttempt` has been
-        // aborted and iteration needs to continue from the previous position to
-        // account for the removed element.
-        let end = self
-            .dialing
-            .get(self.peer_id)
-            .map_or(0, |conns| conns.len());
-        if self.end > end {
-            self.end = end;
-            self.pos -= 1;
-        }
+        let connection_id = self.connections.pop_front()?;
 
-        if self.pos == self.end {
-            return None;
-        }
+        let inner = self.pool.get_outgoing(connection_id)?;
 
-        if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(*self.peer_id) {
-            let id = attempts.get()[self.pos];
-            if let Some(inner) = self.pool.get_outgoing(id) {
-                let conn = DialingAttempt {
-                    pos: self.pos,
-                    inner,
-                    attempts,
-                };
-                self.pos += 1;
-                return Some(conn);
-            }
-        }
-
-        None
+        Some(DialingAttempt {
+            peer_id: *self.peer_id,
+            inner,
+        })
     }
 
     /// Returns the first connection, if any, consuming the iterator.
-    pub fn into_first<'b>(self) -> Option<DialingAttempt<'b, THandler>>
+    pub fn into_first<'b>(mut self) -> Option<DialingAttempt<'b, THandler>>
     where
         'a: 'b,
     {
-        if self.pos == self.end {
-            return None;
-        }
+        let connection_id = self.connections.pop_front()?;
 
-        if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(*self.peer_id) {
-            let id = attempts.get()[self.pos];
-            if let Some(inner) = self.pool.get_outgoing(id) {
-                return Some(DialingAttempt {
-                    pos: self.pos,
-                    inner,
-                    attempts,
-                });
-            }
-        }
+        let inner = self.pool.get_outgoing(connection_id)?;
 
-        None
+        Some(DialingAttempt {
+            peer_id: *self.peer_id,
+            inner,
+        })
     }
 }

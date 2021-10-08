@@ -23,7 +23,8 @@
 use crate::{
     connection::{
         Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionId,
-        EstablishedConnection, IntoConnectionHandler, ListenerId, PendingConnectionError,
+        EstablishedConnection, IntoConnectionHandler, ListenerId, PendingInboundConnectionError,
+        PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
     Multiaddr, PeerId,
@@ -91,7 +92,7 @@ where
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingInboundConnectionError<TTrans::Error>,
         handler: THandler,
     },
 
@@ -141,7 +142,7 @@ where
         peer_id: PeerId,
 
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError<TTrans::Error>,
     },
 
     // TODO: How about merging this into [`DialError`]?
@@ -151,7 +152,7 @@ where
         // multiaddr: Multiaddr,
 
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError<TTrans::Error>,
 
         handler: THandler,
     },
