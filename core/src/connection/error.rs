@@ -58,16 +58,23 @@ where
     }
 }
 
+/// Errors that can occur in the context of a pending outgoing `Connection`.
+///
+/// Note: Addresses for an outbound connection are dialed in parallel. Thus, compared to
+/// [`PendingInboundConnectionError`], one or more [`TransportError`]s can occur for a single
+/// connection.
+pub type PendingOutboundConnectionError<TTransErr> =
+    PendingConnectionError<Vec<(Multiaddr, TransportError<TTransErr>)>>;
+
+/// Errors that can occur in the context of a pending incoming `Connection`.
+pub type PendingInboundConnectionError<TTransErr> =
+    PendingConnectionError<TransportError<TTransErr>>;
+
 /// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
-pub enum PendingConnectionError<TTransErr> {
-    /// An error occurred while negotiating the transport protocol(s) on a
-    /// dialing connection.
-    TransportDial(Vec<(Multiaddr, TransportError<TTransErr>)>),
-
-    /// An error occurred while negotiating the transport protocol(s) on a
-    /// listening connection.
-    TransportListen(TransportError<TTransErr>),
+pub enum PendingConnectionError<TransportError> {
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
+    Transport(TransportError),
 
     /// The connection was dropped because the connection limit
     /// for a peer has been reached.
@@ -85,25 +92,18 @@ pub enum PendingConnectionError<TTransErr> {
     IO(io::Error),
 }
 
-impl<TTransErr> fmt::Display for PendingConnectionError<TTransErr>
+impl<TransportError> fmt::Display for PendingConnectionError<TransportError>
 where
-    TTransErr: fmt::Display + fmt::Debug,
+    TransportError: fmt::Display + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {}", err),
             PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
-            PendingConnectionError::TransportListen(err) => {
+            PendingConnectionError::Transport(err) => {
                 write!(
                     f,
-                    "Pending connection: Transport error on listening connection: {}",
-                    err
-                )
-            }
-            PendingConnectionError::TransportDial(err) => {
-                write!(
-                    f,
-                    "Pending connection: Transport error on dialing connection: {:?}",
+                    "Pending connection: Transport error on connection: {}",
                     err
                 )
             }
@@ -117,15 +117,14 @@ where
     }
 }
 
-impl<TTransErr> std::error::Error for PendingConnectionError<TTransErr>
+impl<TransportError> std::error::Error for PendingConnectionError<TransportError>
 where
-    TTransErr: std::error::Error + 'static,
+    TransportError: std::error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             PendingConnectionError::IO(err) => Some(err),
-            PendingConnectionError::TransportListen(err) => Some(err),
-            PendingConnectionError::TransportDial(_) => None,
+            PendingConnectionError::Transport(_) => None,
             PendingConnectionError::InvalidPeerId => None,
             PendingConnectionError::Aborted => None,
             PendingConnectionError::ConnectionLimit(..) => None,

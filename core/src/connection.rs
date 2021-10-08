@@ -25,7 +25,10 @@ mod substream;
 
 pub(crate) mod pool;
 
-pub use error::{ConnectionError, PendingConnectionError};
+pub use error::{
+    ConnectionError, PendingConnectionError, PendingInboundConnectionError,
+    PendingOutboundConnectionError,
+};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
 pub use listeners::{ListenerId, ListenersEvent, ListenersStream};
 pub use pool::{ConnectionCounters, ConnectionLimits};

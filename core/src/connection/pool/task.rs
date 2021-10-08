@@ -27,7 +27,7 @@ use crate::{
         self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
         ConnectionError, ConnectionHandler, ConnectionId, IntoConnectionHandler,
-        PendingConnectionError, Substream,
+        PendingInboundConnectionError, PendingOutboundConnectionError, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
@@ -65,7 +65,10 @@ where
     /// A pending connection failed.
     PendingFailed {
         id: ConnectionId,
-        error: PendingConnectionError<TTrans::Error>,
+        error: Either<
+            PendingOutboundConnectionError<TTrans::Error>,
+            PendingInboundConnectionError<TTrans::Error>,
+        >,
     },
 }
 
@@ -108,7 +111,7 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
-                    error: PendingConnectionError::Aborted,
+                    error: Either::Left(PendingOutboundConnectionError::Aborted),
                 })
                 .await;
         }
@@ -126,7 +129,7 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
-                    error: PendingConnectionError::TransportDial(e),
+                    error: Either::Left(PendingOutboundConnectionError::Transport(e)),
                 })
                 .await;
         }
@@ -147,7 +150,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
-                    error: PendingConnectionError::Aborted,
+                    error: Either::Right(PendingInboundConnectionError::Aborted),
                 })
                 .await;
         }
@@ -165,7 +168,9 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
-                    error: PendingConnectionError::TransportListen(TransportError::Other(e)),
+                    error: Either::Right(PendingInboundConnectionError::Transport(
+                        TransportError::Other(e),
+                    )),
                 })
                 .await;
         }
