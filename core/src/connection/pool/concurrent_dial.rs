@@ -34,6 +34,9 @@ use std::{
     task::{Context, Poll},
 };
 
+/// Maximum number of address candidates concurrently dialed in a dial attempt.
+const CONCURRENCY_FACTOR: usize = 5;
+
 type Dial<TTrans> = BoxFuture<
     'static,
     (
@@ -79,7 +82,7 @@ where
         let dials = FuturesUnordered::new();
         while let Some(dial) = pending_dials.next() {
             dials.push(dial);
-            if dials.len() == 5 {
+            if dials.len() == CONCURRENCY_FACTOR {
                 break;
             }
         }
