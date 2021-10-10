@@ -382,6 +382,7 @@ where
         if let Some(conns) = self.established.get_mut(peer) {
             // Detour via `EstablishedConnection` is not ideal, but at least only one code path in
             // order to start closing a connection exists.
+            #[allow(clippy::needless_collect)]
             let connection_ids = conns.iter().map(|(id, _)| *id).collect::<Vec<_>>();
 
             for id in connection_ids.into_iter() {
@@ -396,6 +397,7 @@ where
             }
         }
 
+        #[allow(clippy::needless_collect)]
         let pending_connections = self
             .pending
             .iter()
@@ -403,7 +405,7 @@ where
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
 
-        for pending_connection in pending_connections.into_iter() {
+        for pending_connection in pending_connections {
             let pending_connection = match self.pending.entry(pending_connection) {
                 hash_map::Entry::Occupied(entry) => PendingConnection {
                     entry,

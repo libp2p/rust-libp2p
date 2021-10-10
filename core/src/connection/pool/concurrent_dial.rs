@@ -67,7 +67,7 @@ where
                 Ok(fut) => fut
                     .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
                     .boxed(),
-                Err(err) => futures::future::ready((address.clone(), Err(err))).boxed(),
+                Err(err) => futures::future::ready((address, Err(err))).boxed(),
             },
             Err(address) => futures::future::ready((
                 address.clone(),
