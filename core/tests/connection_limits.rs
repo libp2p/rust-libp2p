@@ -39,7 +39,7 @@ fn max_outgoing() {
     let cfg = NetworkConfig::default().with_connection_limits(limits);
     let mut network = test_network(cfg);
 
-    let addr: Multiaddr = "/ip6/::1/tcp/1234".parse().unwrap();
+    let addr: Multiaddr = "/memory/1234".parse().unwrap();
 
     let target = PeerId::random();
     for _ in 0..outgoing_limit {
@@ -98,7 +98,7 @@ fn max_established_incoming() {
     let mut network1 = test_network(config(limit));
     let mut network2 = test_network(config(limit));
 
-    let listen_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
+    let listen_addr = multiaddr![Memory(0u64)];
     let _ = network1.listen_on(listen_addr.clone()).unwrap();
     let (addr_sender, addr_receiver) = futures::channel::oneshot::channel();
     let mut addr_sender = Some(addr_sender);

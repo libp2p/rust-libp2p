@@ -39,9 +39,7 @@ fn deny_incoming_connec() {
     let mut swarm1 = test_network(NetworkConfig::default());
     let mut swarm2 = test_network(NetworkConfig::default());
 
-    swarm1
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
+    swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
     let address = async_std::task::block_on(future::poll_fn(|cx| match swarm1.poll(cx) {
         Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
@@ -98,9 +96,7 @@ fn dial_self() {
     // The last two can happen in any order.
 
     let mut swarm = test_network(NetworkConfig::default());
-    swarm
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
+    swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
     let local_address = async_std::task::block_on(future::poll_fn(|cx| match swarm.poll(cx) {
         Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
