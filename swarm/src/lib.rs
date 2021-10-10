@@ -236,10 +236,10 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     },
     /// A new dialing attempt has been initiated.
     ///
-    /// A [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished)
-    /// event is reported if the dialing attempt succeeds, otherwise a
-    /// [`UnreachableAddr`](SwarmEvent::UnreachableAddr) event is reported
-    /// with `attempts_remaining` equal to 0.
+    /// A [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished) event is
+    /// reported if the dialing attempt succeeds, otherwise a
+    /// [`OutgoingConnectionError`](SwarmEvent::OutgoingConnectionError) event
+    /// is reported with `attempts_remaining` equal to 0.
     Dialing(PeerId),
 }
 
