@@ -42,11 +42,28 @@
   parameters to `NetworkBehaviourAction<Self::OutEvent,
   Self::ProtocolsHandler>`. See [PR 2191].
 
+- Concurrently dial up to 5 address candidates within a single dial attempt (see [PR 2248]).
+
+  - On success of a single address, report errors of the thus far failed dials via
+    `SwarmEvent::ConnectionEstablished::outgoing`.
+
+  - On failure of all addresses, report errors via the new `SwarmEvent::OutgoingConnectionError`.
+
+  - Remove `SwarmEvent::UnreachableAddr` and `SwarmEvent::UnknownPeerUnreachableAddr` event.
+
+  - In `NetworkBehaviour::inject_connection_established` provide errors of all thus far failed addresses.
+
+  - On unknown peer dial failures, call `NetworkBehaviour::inject_dial_failure` with a peer ID of `None`.
+
+  - Remove `NetworkBehaviour::inject_addr_reach_failure`. Information is now provided via
+    `NetworkBehaviour::inject_connection_established` and `NetworkBehaviour::inject_dial_failure`.
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 [PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+[PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
 
 # 0.30.0 [2021-07-12]
 
