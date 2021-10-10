@@ -177,14 +177,13 @@ where
         id: ConnectionId,
         /// The error that occurred.
         error: PendingOutboundConnectionError<TTrans::Error>,
-        /// The handler that was supposed to handle the connection,
-        /// if the connection failed before the handler was consumed.
+        /// The handler that was supposed to handle the connection.
         handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
     },
 
-    /// An outbound connection attempt failed.
+    /// An inbound connection attempt failed.
     PendingInboundConnectionError {
         /// The ID of the failed connection.
         id: ConnectionId,
@@ -194,8 +193,7 @@ where
         local_addr: Multiaddr,
         /// The error that occurred.
         error: PendingInboundConnectionError<TTrans::Error>,
-        /// The handler that was supposed to handle the connection,
-        /// if the connection failed before the handler was consumed.
+        /// The handler that was supposed to handle the connection.
         handler: THandler,
     },
 
@@ -230,7 +228,7 @@ where
                 outgoing,
                 ..
             } => f
-                .debug_tuple("PoolEvent::OutgoingConnectionEstablished")
+                .debug_tuple("PoolEvent::ConnectionEstablished")
                 .field(connection)
                 .field(outgoing)
                 .finish(),
@@ -938,7 +936,7 @@ where
         }
 
         // Advance the tasks in `local_spawns`.
-        while let Poll::Ready(Some(_)) = self.local_spawns.poll_next_unpin(cx) {}
+        while let Poll::Ready(Some(())) = self.local_spawns.poll_next_unpin(cx) {}
 
         Poll::Pending
     }

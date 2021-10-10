@@ -187,7 +187,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// The error that happened.
         error: PendingInboundConnectionError<io::Error>,
     },
-    /// Tried to dial an address but it ended up being unreachaable.
+    /// Outgoing connection attempt failed.
     OutgoingConnectionError {
         /// If known, [`PeerId`] of the peer we tried to reach.
         peer_id: Option<PeerId>,
