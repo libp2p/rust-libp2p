@@ -75,13 +75,13 @@ jobs:
         key: ${{ matrix.toolchain }}
 
     - name: Build on ${{ matrix.toolchain }}
-      if: matrix.toolchain != wasm32-unknown-unknown
+      if: matrix.toolchain != 'wasm32-unknown-unknown'
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
       run: cargo build --target=${{ matrix.toolchain }}
 
     - name: Build on ${{ matrix.toolchain }}
-      if: matrix.toolchain == wasm32-unknown-unknown
+      if: matrix.toolchain == 'wasm32-unknown-unknown'
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
       run: cargo build --target=${{ matrix.toolchain }} --features wasm-bindgen
