@@ -21,7 +21,7 @@
 #[macro_use]
 pub mod harness;
 
-use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
+use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm, SwarmExt};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
@@ -170,22 +170,19 @@ async fn discover_allows_for_dial_by_peer_id() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None);
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { .. },
+        || { }
+    };
+
     bob.behaviour_mut()
         .discover(Some(namespace.clone()), None, None, roberts_peer_id);
-
-    // TODO: Clean up
-    match alice.select_next_some().await {
-        SwarmEvent::Behaviour(rendezvous::client::Event::Registered { .. }) => {}
-        _ => todo!(),
-    }
-
-    // TODO: Clean up
-    match bob.select_next_some().await {
-        SwarmEvent::Behaviour(rendezvous::client::Event::Discovered { registrations, .. }) => {
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { registrations,.. },
+        || {
             assert!(!registrations.is_empty());
         }
-        _ => todo!(),
-    }
+    };
 
     let alices_peer_id = *alice.local_peer_id();
     let bobs_peer_id = *bob.local_peer_id();
@@ -283,22 +280,18 @@ async fn registration_on_clients_expire() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, Some(registration_ttl));
+    assert_behaviour_events! {
+        alice: rendezvous::client::Event::Registered { .. },
+        || { }
+    };
     bob.behaviour_mut()
         .discover(Some(namespace), None, None, roberts_peer_id);
-
-    // TODO: Clean up
-    match alice.select_next_some().await {
-        SwarmEvent::Behaviour(rendezvous::client::Event::Registered { .. }) => {}
-        _ => todo!(),
-    }
-
-    // TODO: Clean up
-    match bob.select_next_some().await {
-        SwarmEvent::Behaviour(rendezvous::client::Event::Discovered { registrations, .. }) => {
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { registrations,.. },
+        || {
             assert!(!registrations.is_empty());
         }
-        _ => todo!(),
-    }
+    };
 
     tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
 
