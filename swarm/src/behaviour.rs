@@ -390,7 +390,7 @@ pub enum NetworkBehaviourAction<
     ///     #
     ///     fn inject_dial_failure(
     ///         &mut self,
-    ///         _: &PeerId,
+    ///         _: Option<PeerId>,
     ///         handler: Self::ProtocolsHandler,
     ///         _: &DialError,
     ///     ) {
