@@ -147,8 +147,9 @@ where
 
     /// Remove a previously added listener.
     ///
-    /// Returns `Ok(())` if a listener with this ID was in the list.
-    pub fn remove_listener(&mut self, id: ListenerId) -> Result<(), ()> {
+    /// Returns `true` if there was a listener with this ID, `false`
+    /// otherwise.
+    pub fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.listeners.remove_listener(id)
     }
 
