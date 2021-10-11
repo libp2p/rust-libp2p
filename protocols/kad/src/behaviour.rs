@@ -2448,12 +2448,6 @@ pub enum InboundRequest {
         num_provider_peers: usize,
     },
     /// Request to store a peer as a provider.
-    //
-    // TODO: In the future one might want to use this event, not only to report
-    // a new provider, but to allow the upper layer to validate the incoming
-    // provider record, discarding it or passing it back down to be stored. This
-    // would follow a similar style to the `KademliaBucketInserts` strategy.
-    // Same would be applicable to `PutRecord`.
     AddProvider {},
     /// Request to retrieve a record.
     GetRecord {
