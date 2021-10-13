@@ -482,10 +482,6 @@ impl<'a, THandler: IntoConnectionHandler> DialingAttempt<'a, THandler> {
     }
 
     /// Aborts the dialing attempt.
-    ///
-    /// Aborting a dialing attempt involves aborting the current connection
-    /// attempt and dropping any remaining addresses given to [`Peer::dial()`]
-    /// that have not yet been tried.
     pub fn abort(self) {
         self.inner.abort();
     }
