@@ -42,11 +42,15 @@
   parameters to `NetworkBehaviourAction<Self::OutEvent,
   Self::ProtocolsHandler>`. See [PR 2191].
 
+- Return `bool` instead of `Result<(), ()>` for `Swarm::remove_listener`(see
+  [PR 2261]).
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 [PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
 
 # 0.30.0 [2021-07-12]
 
