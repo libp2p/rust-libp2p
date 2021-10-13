@@ -63,8 +63,8 @@ pub mod protocols_handler;
 pub mod toggle;
 
 pub use behaviour::{
-    CloseConnection, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction,
-    NetworkBehaviourEventProcess, NotifyHandler, PollParameters,
+    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
+    NotifyHandler, PollParameters,
 };
 pub use protocols_handler::{
     IntoProtocolsHandler, IntoProtocolsHandlerSelect, KeepAlive, OneShotHandler,
@@ -73,6 +73,7 @@ pub use protocols_handler::{
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
+use dial_opts::DialOpts;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::{
     connection::{
@@ -321,72 +322,124 @@ where
         self.network.remove_listener(id)
     }
 
-    /// Initiates a new dialing attempt to the given address.
-    pub fn dial_addr(&mut self, addr: Multiaddr) -> Result<(), DialError> {
+    pub fn dial(&mut self, opts: DialOpts) -> Result<(), DialError> {
         let handler = self.behaviour.new_handler();
-        self.dial_addr_with_handler(addr, handler)
-            .map_err(DialError::from_network_dial_error)
-            .map_err(|(e, _)| e)
-    }
-
-    fn dial_addr_with_handler(
-        &mut self,
-        addr: Multiaddr,
-        handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
-    ) -> Result<(), network::DialError<NodeHandlerWrapperBuilder<THandler<TBehaviour>>>> {
-        let handler = handler
-            .into_node_handler_builder()
-            .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-
-        self.network.dial(&addr, handler).map(|_id| ())
-    }
-
-    /// Initiates a new dialing attempt to the given peer.
-    pub fn dial(&mut self, peer_id: &PeerId) -> Result<(), DialError> {
-        let handler = self.behaviour.new_handler();
-        self.dial_with_handler(peer_id, handler)
+        self.dial_with_handler(opts, handler)
     }
 
     fn dial_with_handler(
         &mut self,
-        peer_id: &PeerId,
+        opts: DialOpts,
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
-        if self.banned_peers.contains(peer_id) {
-            let error = DialError::Banned;
-            self.behaviour
-                .inject_dial_failure(Some(*peer_id), handler, &error);
-            return Err(error);
+        // TODO: Remove Import
+        use dial_opts::PeerCondition;
+
+        match opts {
+            DialOpts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
+            | DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
+                peer_id,
+                condition,
+                ..
+            }) => {
+                let condition_matched = match condition {
+                    PeerCondition::Disconnected => self.network.is_disconnected(&peer_id),
+                    PeerCondition::NotDialing => !self.network.is_dialing(&peer_id),
+                    PeerCondition::Always => true,
+                };
+
+                if !condition_matched {
+                    self.behaviour.inject_dial_failure(
+                        Some(peer_id),
+                        handler,
+                        &DialError::DialPeerConditionFalse(condition),
+                    );
+
+                    return Err(DialError::DialPeerConditionFalse(condition));
+                }
+            }
+            DialOpts::WithoutPeerIdWithAddress { .. } => {}
         }
 
-        let self_listening = self.listened_addrs.clone();
-        let mut addrs = self
-            .behaviour
-            .addresses_of_peer(peer_id)
-            .into_iter()
-            .filter(move |a| !self_listening.contains(a))
-            .peekable();
+        match opts {
+            DialOpts::WithPeerId(dial_opts::WithPeerId { peer_id, .. })
+            | DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
+                peer_id,
+                ..
+            }) => {
+                if self.banned_peers.contains(&peer_id) {
+                    let error = DialError::Banned;
+                    self.behaviour
+                        .inject_dial_failure(Some(peer_id), handler, &error);
+                    return Err(error);
+                }
 
-        if addrs.peek().is_none() {
-            let error = DialError::NoAddresses;
-            self.behaviour
-                .inject_dial_failure(Some(*peer_id), handler, &error);
-            return Err(error);
-        };
+                let addresses = match opts {
+                    DialOpts::WithPeerId(dial_opts::WithPeerId { .. }) => {
+                        self.behaviour.addresses_of_peer(&peer_id)
+                    }
+                    DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
+                        peer_id,
+                        mut addresses,
+                        extend_addresses_through_behaviour,
+                        ..
+                    }) => {
+                        if extend_addresses_through_behaviour {
+                            addresses.extend(self.behaviour.addresses_of_peer(&peer_id))
+                        }
+                        addresses
+                    }
+                    DialOpts::WithoutPeerIdWithAddress { .. } => {
+                        unreachable!("Due to outer match.")
+                    }
+                };
 
-        let handler = handler
-            .into_node_handler_builder()
-            .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-        match self.network.peer(*peer_id).dial(addrs, handler) {
-            Ok(_connection_id) => Ok(()),
-            Err(error) => {
-                let (error, handler) = DialError::from_network_dial_error(error);
-                self.behaviour.inject_dial_failure(
-                    Some(*peer_id),
-                    handler.into_protocols_handler(),
-                    &error,
-                );
-                Err(error)
+                if addresses.is_empty() {
+                    let error = DialError::NoAddresses;
+                    self.behaviour
+                        .inject_dial_failure(Some(peer_id), handler, &error);
+                    return Err(error);
+                };
+
+                let handler = handler
+                    .into_node_handler_builder()
+                    .with_substream_upgrade_protocol_override(
+                        self.substream_upgrade_protocol_override,
+                    );
+
+                match self.network.peer(peer_id).dial(addresses, handler) {
+                    Ok(_connection_id) => Ok(()),
+                    Err(error) => {
+                        let (error, handler) = DialError::from_network_dial_error(error);
+                        self.behaviour.inject_dial_failure(
+                            Some(peer_id),
+                            handler.into_protocols_handler(),
+                            &error,
+                        );
+                        return Err(error);
+                    }
+                }
+            }
+            DialOpts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress { address }) => {
+                let handler = handler
+                    .into_node_handler_builder()
+                    .with_substream_upgrade_protocol_override(
+                        self.substream_upgrade_protocol_override,
+                    );
+
+                match self.network.dial(&address, handler).map(|_id| ()) {
+                    Ok(_connection_id) => Ok(()),
+                    Err(error) => {
+                        // TODO: Deduplicate with the above?
+                        let (error, handler) = DialError::from_network_dial_error(error);
+                        self.behaviour.inject_dial_failure(
+                            None,
+                            handler.into_protocols_handler(),
+                            &error,
+                        );
+                        return Err(error);
+                    }
+                }
             }
         }
     }
@@ -808,37 +861,56 @@ where
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     return Poll::Ready(SwarmEvent::Behaviour(event))
                 }
-                Poll::Ready(NetworkBehaviourAction::DialAddress { address, handler }) => {
-                    let _ = Swarm::dial_addr_with_handler(&mut *this, address, handler);
-                }
-                Poll::Ready(NetworkBehaviourAction::DialPeer {
-                    peer_id,
-                    condition,
-                    handler,
-                }) => {
-                    let condition_matched = match condition {
-                        DialPeerCondition::Disconnected => this.network.is_disconnected(&peer_id),
-                        DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
-                        DialPeerCondition::Always => true,
-                    };
-                    if condition_matched {
-                        if Swarm::dial_with_handler(this, &peer_id, handler).is_ok() {
-                            return Poll::Ready(SwarmEvent::Dialing(peer_id));
-                        }
-                    } else {
-                        log::trace!(
-                            "Condition for new dialing attempt to {:?} not met: {:?}",
-                            peer_id,
-                            condition
-                        );
-
-                        this.behaviour.inject_dial_failure(
-                            Some(peer_id),
-                            handler,
-                            &DialError::DialPeerConditionFalse(condition),
-                        );
+                // Poll::Ready(NetworkBehaviourAction::DialAddress { address, handler }) => {
+                //     let _ = Swarm::dial_addr_with_handler(&mut *this, address, handler);
+                // }
+                Poll::Ready(NetworkBehaviourAction::Dial { opts, handler }) => {
+                    if let Ok(()) = this.dial_with_handler(opts, handler) {
+                        // TODO
+                        // return Poll::Ready(SwarmEvent::Dialing(peer_id));
                     }
                 }
+                // Poll::Ready(NetworkBehaviourAction::DialPeer {
+                //     peer_id,
+                //     condition,
+                //     handler,
+                // }) => {
+                //     let condition_matched = match condition {
+                //         DialPeerCondition::Disconnected => this.network.is_disconnected(&peer_id),
+                //         DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
+                //         DialPeerCondition::Always => true,
+                //     };
+                //     if condition_matched {
+                //         if Swarm::dial_with_handler(this, &peer_id, handler).is_ok() {
+                //             return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                //         }
+                //     } else {
+                //         // Even if the condition for a _new_ dialing attempt is not met,
+                //         // we always add any potentially new addresses of the peer to an
+                //         // ongoing dialing attempt, if there is one.
+                //         log::trace!(
+                //             "Condition for new dialing attempt to {:?} not met: {:?}",
+                //             peer_id,
+                //             condition
+                //         );
+                //         let self_listening = &this.listened_addrs;
+                //         if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
+                //             let addrs = this.behaviour.addresses_of_peer(peer.id());
+                //             let mut attempt = peer.some_attempt();
+                //             for a in addrs {
+                //                 if !self_listening.contains(&a) {
+                //                     attempt.add_address(a);
+                //                 }
+                //             }
+                //         }
+
+                //         this.behaviour.inject_dial_failure(
+                //             &peer_id,
+                //             handler,
+                //             DialError::DialPeerConditionFalse(condition),
+                //         );
+                //     }
+                // }
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
                     handler,
@@ -1215,7 +1287,7 @@ pub enum DialError {
     /// for the peer to dial.
     NoAddresses,
     /// The provided [`DialPeerCondition`] evaluated to false and thus the dial was aborted.
-    DialPeerConditionFalse(DialPeerCondition),
+    DialPeerConditionFalse(dial_opts::PeerCondition),
     /// Pending connection attempt has been aborted.
     Aborted,
     /// The peer identity obtained on the connection did not
@@ -1457,7 +1529,9 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1.dial_addr(addr2.clone()).unwrap();
+            swarm1
+                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
+                .unwrap();
         }
         let mut state = State::Connecting;
 
@@ -1489,7 +1563,11 @@ mod tests {
                             swarm2.behaviour.reset();
                             unbanned = true;
                             for _ in 0..num_connections {
-                                swarm2.dial_addr(addr1.clone()).unwrap();
+                                swarm2
+                                    .dial(
+                                        DialOpts::unknown_peer_id().address(addr1.clone()).build(),
+                                    )
+                                    .unwrap();
                             }
                             state = State::Connecting;
                         }
@@ -1532,7 +1610,9 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1.dial_addr(addr2.clone()).unwrap();
+            swarm1
+                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
+                .unwrap();
         }
         let mut state = State::Connecting;
 
@@ -1562,7 +1642,9 @@ mod tests {
                         swarm1.behaviour.reset();
                         swarm2.behaviour.reset();
                         for _ in 0..num_connections {
-                            swarm2.dial_addr(addr1.clone()).unwrap();
+                            swarm2
+                                .dial(DialOpts::unknown_peer_id().address(addr1.clone()).build())
+                                .unwrap();
                         }
                         state = State::Connecting;
                     }
@@ -1605,7 +1687,9 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1.dial_addr(addr2.clone()).unwrap();
+            swarm1
+                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
+                .unwrap();
         }
         let mut state = State::Connecting;
 
@@ -1638,7 +1722,9 @@ mod tests {
                         swarm1.behaviour.reset();
                         swarm2.behaviour.reset();
                         for _ in 0..num_connections {
-                            swarm2.dial_addr(addr1.clone()).unwrap();
+                            swarm2
+                                .dial(DialOpts::unknown_peer_id().address(addr1.clone()).build())
+                                .unwrap();
                         }
                         state = State::Connecting;
                     }
@@ -1680,7 +1766,9 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1.dial_addr(addr2.clone()).unwrap();
+            swarm1
+                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
+                .unwrap();
         }
         let mut state = State::Connecting;
         let mut disconnected_conn_id = None;
@@ -1729,5 +1817,126 @@ mod tests {
                 return Poll::Pending;
             }
         }))
+    }
+}
+
+pub mod dial_opts {
+    use libp2p_core::{Multiaddr, PeerId};
+
+    #[derive(Debug)]
+    pub enum DialOpts {
+        // TODO:  How about folding these structs into the enum variants?
+        WithPeerId(WithPeerId),
+        WithPeerIdWithAddresses(WithPeerIdWithAddresses),
+        WithoutPeerIdWithAddress(WithoutPeerIdWithAddress),
+    }
+
+    impl DialOpts {
+        pub fn peer_id(peer_id: PeerId) -> WithPeerId {
+            WithPeerId {
+                peer_id,
+                condition: Default::default(),
+            }
+        }
+
+        pub fn unknown_peer_id() -> WithoutPeerId {
+            WithoutPeerId {}
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct WithPeerId {
+        pub(crate) peer_id: PeerId,
+        pub(crate) condition: PeerCondition,
+    }
+
+    impl WithPeerId {
+        pub fn condition(mut self, condition: PeerCondition) -> Self {
+            self.condition = condition;
+            self
+        }
+
+        pub fn addresses(self, addresses: Vec<Multiaddr>) -> WithPeerIdWithAddresses {
+            WithPeerIdWithAddresses {
+                peer_id: self.peer_id,
+                condition: self.condition,
+                addresses,
+                extend_addresses_through_behaviour: false,
+            }
+        }
+
+        pub fn build(self) -> DialOpts {
+            DialOpts::WithPeerId(self)
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct WithPeerIdWithAddresses {
+        pub(crate) peer_id: PeerId,
+        pub(crate) condition: PeerCondition,
+        pub(crate) addresses: Vec<Multiaddr>,
+        pub(crate) extend_addresses_through_behaviour: bool,
+    }
+
+    impl WithPeerIdWithAddresses {
+        pub fn extend_addresses_through_behaviour(mut self) -> Self {
+            self.extend_addresses_through_behaviour = true;
+            self
+        }
+
+        pub fn build(self) -> DialOpts {
+            DialOpts::WithPeerIdWithAddresses(self)
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct WithoutPeerId {}
+
+    impl WithoutPeerId {
+        pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
+            WithoutPeerIdWithAddress { address }
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct WithoutPeerIdWithAddress {
+        pub(crate) address: Multiaddr,
+    }
+
+    impl WithoutPeerIdWithAddress {
+        pub fn build(self) -> DialOpts {
+            DialOpts::WithoutPeerIdWithAddress(self)
+        }
+    }
+
+    /// The available conditions under which a new dialing attempt to
+    /// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].
+    #[derive(Debug, Copy, Clone)]
+    pub enum PeerCondition {
+        /// A new dialing attempt is initiated _only if_ the peer is currently
+        /// considered disconnected, i.e. there is no established connection
+        /// and no ongoing dialing attempt.
+        ///
+        /// If there is an ongoing dialing attempt, the addresses reported by
+        /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
+        /// dialing attempt, ignoring duplicates.
+        Disconnected,
+        /// A new dialing attempt is initiated _only if_ there is currently
+        /// no ongoing dialing attempt, i.e. the peer is either considered
+        /// disconnected or connected but without an ongoing dialing attempt.
+        ///
+        /// If there is an ongoing dialing attempt, the addresses reported by
+        /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
+        /// dialing attempt, ignoring duplicates.
+        NotDialing,
+        /// A new dialing attempt is always initiated, only subject to the
+        /// configured connection limits.
+        Always,
+    }
+
+    impl Default for PeerCondition {
+        fn default() -> Self {
+            PeerCondition::Disconnected
+        }
     }
 }

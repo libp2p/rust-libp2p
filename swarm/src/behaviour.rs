@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::dial_opts::DialOpts;
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
 use crate::{AddressRecord, AddressScore, DialError};
 use libp2p_core::{
@@ -269,31 +270,7 @@ pub enum NetworkBehaviourAction<
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
-    /// Instructs the swarm to dial the given multiaddress optionally including a [`PeerId`].
-    ///
-    /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
-    /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
-    ///
-    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
-    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
-    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
-    /// can be included in the handler, and thus directly send on connection success or extracted by
-    /// the [`NetworkBehaviour`] on connection failure. See [`NetworkBehaviourAction::DialPeer`] for
-    /// example.
-    DialAddress {
-        /// The address to dial.
-        address: Multiaddr,
-        /// The handler to be used to handle the connection to the peer.
-        handler: THandler,
-    },
-
-    /// Instructs the swarm to dial a known `PeerId`.
-    ///
-    /// The [`NetworkBehaviour::addresses_of_peer`] method is called to determine which addresses to
-    /// attempt to reach.
-    ///
-    /// If we were already trying to dial this node, the addresses that are not yet in the queue of
-    /// addresses to try are added back to this queue.
+    /// Instructs the swarm to start a dial.
     ///
     /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
     /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
@@ -316,10 +293,11 @@ pub enum NetworkBehaviourAction<
     /// # use libp2p::core::PeerId;
     /// # use libp2p::plaintext::PlainText2Config;
     /// # use libp2p::swarm::{
-    /// #     DialError, DialPeerCondition, IntoProtocolsHandler, KeepAlive, NegotiatedSubstream,
+    /// #     DialError, IntoProtocolsHandler, KeepAlive, NegotiatedSubstream,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler,
     /// #     ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };
+    /// # use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p::yamux;
     /// # use std::collections::VecDeque;
     /// # use std::task::{Context, Poll};
@@ -362,9 +340,10 @@ pub enum NetworkBehaviourAction<
     /// # impl MyBehaviour {
     /// #     fn send(&mut self, peer_id: PeerId, msg: PreciousMessage) {
     /// #         self.outbox_to_swarm
-    /// #             .push_back(NetworkBehaviourAction::DialPeer {
-    /// #                 peer_id,
-    /// #                 condition: DialPeerCondition::Always,
+    /// #             .push_back(NetworkBehaviourAction::Dial {
+    /// #                 opts: DialOpts::peer_id(peer_id)
+    /// #                           .condition(PeerCondition::Always)
+    /// #                           .build(),
     /// #                 handler: MyHandler { message: Some(msg) },
     /// #             });
     /// #     }
@@ -476,14 +455,7 @@ pub enum NetworkBehaviourAction<
     /// # #[derive(Debug, PartialEq, Eq)]
     /// # struct PreciousMessage(String);
     /// ```
-    DialPeer {
-        /// The peer to try reach.
-        peer_id: PeerId,
-        /// The condition for initiating a new dialing attempt.
-        condition: DialPeerCondition,
-        /// The handler to be used to handle the connection to the peer.
-        handler: THandler,
-    },
+    Dial { opts: DialOpts, handler: THandler },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
@@ -553,18 +525,9 @@ impl<TOutEvent, THandler: IntoProtocolsHandler, TInEventOld>
     ) -> NetworkBehaviourAction<TOutEvent, THandler, TInEventNew> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::DialAddress { address, handler } => {
-                NetworkBehaviourAction::DialAddress { address, handler }
+            NetworkBehaviourAction::Dial { opts, handler } => {
+                NetworkBehaviourAction::Dial { opts, handler }
             }
-            NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition,
-                handler,
-            } => NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition,
-                handler,
-            },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -593,18 +556,9 @@ impl<TOutEvent, THandler: IntoProtocolsHandler> NetworkBehaviourAction<TOutEvent
     pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, THandler> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::DialAddress { address, handler } => {
-                NetworkBehaviourAction::DialAddress { address, handler }
+            NetworkBehaviourAction::Dial { opts, handler } => {
+                NetworkBehaviourAction::Dial { opts, handler }
             }
-            NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition,
-                handler,
-            } => NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition,
-                handler,
-            },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -644,19 +598,8 @@ where
     {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::DialAddress { address, handler } => {
-                NetworkBehaviourAction::DialAddress {
-                    address,
-                    handler: f(handler),
-                }
-            }
-            NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition,
-                handler,
-            } => NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition,
+            NetworkBehaviourAction::Dial { opts, handler } => NetworkBehaviourAction::Dial {
+                opts,
                 handler: f(handler),
             },
             NetworkBehaviourAction::NotifyHandler {
@@ -689,29 +632,6 @@ pub enum NotifyHandler {
     One(ConnectionId),
     /// Notify an arbitrary connection handler.
     Any,
-}
-
-/// The available conditions under which a new dialing attempt to
-/// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].
-#[derive(Debug, Copy, Clone)]
-pub enum DialPeerCondition {
-    /// A new dialing attempt is initiated _only if_ the peer is currently
-    /// considered disconnected, i.e. there is no established connection
-    /// and no ongoing dialing attempt.
-    Disconnected,
-    /// A new dialing attempt is initiated _only if_ there is currently
-    /// no ongoing dialing attempt, i.e. the peer is either considered
-    /// disconnected or connected but without an ongoing dialing attempt.
-    NotDialing,
-    /// A new dialing attempt is always initiated, only subject to the
-    /// configured connection limits.
-    Always,
-}
-
-impl Default for DialPeerCondition {
-    fn default() -> Self {
-        DialPeerCondition::Disconnected
-    }
 }
 
 /// The options which connections to close.
