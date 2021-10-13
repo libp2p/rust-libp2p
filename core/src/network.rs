@@ -396,11 +396,11 @@ where
             Poll::Ready(PoolEvent::ConnectionEstablished {
                 connection,
                 num_established,
-                outgoing,
+                concurrent_dial_errors,
             }) => NetworkEvent::ConnectionEstablished {
                 connection,
                 num_established,
-                outgoing,
+                concurrent_dial_errors,
             },
             Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                 id: _,

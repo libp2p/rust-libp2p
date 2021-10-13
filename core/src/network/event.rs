@@ -106,7 +106,7 @@ where
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
-        outgoing: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
+        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
     },
 
     /// An established connection to a peer has been closed.
@@ -233,12 +233,12 @@ where
                 .finish(),
             NetworkEvent::ConnectionEstablished {
                 connection,
-                outgoing,
+                concurrent_dial_errors,
                 ..
             } => f
                 .debug_struct("OutgoingConnectionEstablished")
                 .field("connection", connection)
-                .field("outgoing", outgoing)
+                .field("concurrent_dial_errors", concurrent_dial_errors)
                 .finish(),
             NetworkEvent::ConnectionClosed {
                 id,

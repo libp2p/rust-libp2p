@@ -112,7 +112,7 @@ fn concurrent_dialing() {
                 match network_2.poll(cx) {
                     Poll::Ready(NetworkEvent::ConnectionEstablished {
                         connection,
-                        outgoing,
+                        concurrent_dial_errors,
                         ..
                     }) => {
                         match connection.endpoint() {
@@ -126,7 +126,7 @@ fn concurrent_dialing() {
                             }
                             ConnectedPoint::Listener { .. } => panic!("Expected dialer."),
                         }
-                        assert!(outgoing.unwrap().is_empty());
+                        assert!(concurrent_dial_errors.unwrap().is_empty());
                         network_2_connection_established = true;
                         if network_1_connection_established {
                             return Poll::Ready(());
@@ -139,7 +139,7 @@ fn concurrent_dialing() {
                 match ready!(network_1.poll(cx)) {
                     NetworkEvent::ConnectionEstablished {
                         connection,
-                        outgoing,
+                        concurrent_dial_errors,
                         ..
                     } => {
                         match connection.endpoint() {
@@ -148,7 +148,7 @@ fn concurrent_dialing() {
                             }
                             ConnectedPoint::Dialer { .. } => panic!("Expected listener."),
                         }
-                        assert!(outgoing.is_none());
+                        assert!(concurrent_dial_errors.is_none());
                         network_1_connection_established = true;
                         if network_2_connection_established {
                             return Poll::Ready(());
