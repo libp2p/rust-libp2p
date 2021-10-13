@@ -101,7 +101,7 @@ pub enum PendingPoint {
     Listener {
         /// Local connection address.
         local_addr: Multiaddr,
-        /// Stack of protocols used to send back data to the remote.
+        /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
 }
@@ -133,7 +133,7 @@ pub enum ConnectedPoint {
     Listener {
         /// Local connection address.
         local_addr: Multiaddr,
-        /// Stack of protocols used to send back data to the remote.
+        /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
 }
@@ -338,7 +338,7 @@ where
 pub struct IncomingInfo<'a> {
     /// Local connection address.
     pub local_addr: &'a Multiaddr,
-    /// Stack of protocols used to send back data to the remote.
+    /// Address used to send back data to the remote.
     pub send_back_addr: &'a Multiaddr,
 }
 

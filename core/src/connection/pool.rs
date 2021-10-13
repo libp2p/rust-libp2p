@@ -190,7 +190,7 @@ where
     PendingInboundConnectionError {
         /// The ID of the failed connection.
         id: ConnectionId,
-        /// Stack of protocols used to send back data to the remote.
+        /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// Local connection address.
         local_addr: Multiaddr,
