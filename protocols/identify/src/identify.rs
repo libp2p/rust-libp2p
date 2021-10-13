@@ -162,7 +162,10 @@ impl IdentifyConfig {
         self
     }
 
-    /// Configures the size of the LRU cache for discovered peers.
+    /// Configures the size of the LRU cache, caching addresses of discovered peers.
+    ///
+    /// The [`Swarm`] may extend the set of addresses of an outgoing connection attempt via
+    ///  [`<Identify as NetworkBehaviour>::addresses_of_peer`].
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
         self.cache_size = cache_size;
         self
@@ -272,7 +275,7 @@ impl NetworkBehaviour for Identify {
     ) {
         match event {
             IdentifyHandlerEvent::Identified(info) => {
-                // replace existing addresses to prevent other peer from filling up our memory
+                // Replace existing addresses to prevent other peer from filling up our memory.
                 self.discovered_peers
                     .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
 
