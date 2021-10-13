@@ -35,9 +35,10 @@ use crate::{
 };
 use futures::{
     channel::{mpsc, oneshot},
-    future::{Either, Future},
+    future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
 };
+use std::pin::Pin;
 use void::Void;
 
 /// Commands that can be sent to a task.
@@ -190,7 +191,12 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
     THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>>,
 {
     loop {
-        match futures::future::select(command_receiver.next(), connection.next()).await {
+        match futures::future::select(
+            command_receiver.next(),
+            poll_fn(|cx| Pin::new(&mut connection).poll(cx)),
+        )
+        .await
+        {
             Either::Left((Some(command), _)) => match command {
                 Command::NotifyHandler(event) => connection.inject_event(event),
                 Command::Close => {
@@ -213,7 +219,7 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
             // The manager has disappeared; abort.
             Either::Left((None, _)) => return,
 
-            Either::Right((Some(event), _)) => {
+            Either::Right((event, _)) => {
                 match event {
                     Ok(connection::Event::Handler(event)) => {
                         let _ = events
@@ -248,9 +254,6 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
                         return;
                     }
                 }
-            }
-            Either::Right((None, _)) => {
-                unreachable!("Connection is an infinite stream");
             }
         }
     }

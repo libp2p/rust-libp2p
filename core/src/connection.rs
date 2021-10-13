@@ -37,7 +37,6 @@ pub use substream::{Close, Substream, SubstreamEndpoint};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
-use futures::stream::Stream;
 use std::hash::Hash;
 use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
@@ -284,18 +283,13 @@ where
     pub fn close(self) -> (THandler, Close<TMuxer>) {
         (self.handler, self.muxing.close().0)
     }
-}
-
-impl<TMuxer, THandler> Stream for Connection<TMuxer, THandler>
-where
-    TMuxer: StreamMuxer,
-    THandler: ConnectionHandler<Substream = Substream<TMuxer>>,
-{
-    type Item = Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>;
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    pub fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
         loop {
             let mut io_pending = false;
 
@@ -315,9 +309,9 @@ where
                 }
                 Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
                     self.handler.inject_address_change(&address);
-                    return Poll::Ready(Some(Ok(Event::AddressChange(address))));
+                    return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
-                Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(ConnectionError::IO(err)))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::IO(err))),
             }
 
             // Poll the handler for new events.
@@ -331,11 +325,9 @@ where
                     self.muxing.open_substream(user_data);
                 }
                 Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event))) => {
-                    return Poll::Ready(Some(Ok(Event::Handler(event))));
+                    return Poll::Ready(Ok(Event::Handler(event)));
                 }
-                Poll::Ready(Err(err)) => {
-                    return Poll::Ready(Some(Err(ConnectionError::Handler(err))))
-                }
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
             }
         }
     }
