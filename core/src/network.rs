@@ -227,7 +227,7 @@ where
     /// Initiates a connection attempt to a known peer.
     fn dial_peer<I>(
         &mut self,
-        opts: DialingOpts<PeerId, THandler, I>,
+        opts: DialingOpts<THandler, I>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         I: Iterator<Item = Multiaddr> + Send + 'static,
@@ -464,7 +464,7 @@ where
 
 /// Options for a dialing attempt (i.e. repeated connection attempt
 /// via a list of address) to a peer.
-struct DialingOpts<PeerId, THandler, I: Iterator<Item = Multiaddr>> {
+struct DialingOpts<THandler, I> {
     peer: PeerId,
     handler: THandler,
     addresses: I,
