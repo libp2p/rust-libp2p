@@ -72,9 +72,9 @@ pub type PendingInboundConnectionError<TTransErr> =
 
 /// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
-pub enum PendingConnectionError<TransportError> {
+pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s) on a connection.
-    Transport(TransportError),
+    Transport(TTransErr),
 
     /// The connection was dropped because the connection limit
     /// for a peer has been reached.
@@ -92,9 +92,9 @@ pub enum PendingConnectionError<TransportError> {
     IO(io::Error),
 }
 
-impl<TransportError> fmt::Display for PendingConnectionError<TransportError>
+impl<TTransErr> fmt::Display for PendingConnectionError<TTransErr>
 where
-    TransportError: fmt::Display + fmt::Debug,
+    TTransErr: fmt::Display + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -117,9 +117,9 @@ where
     }
 }
 
-impl<TransportError> std::error::Error for PendingConnectionError<TransportError>
+impl<TTransErr> std::error::Error for PendingConnectionError<TTransErr>
 where
-    TransportError: std::error::Error + 'static,
+    TTransErr: std::error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
