@@ -42,6 +42,9 @@
   parameters to `NetworkBehaviourAction<Self::OutEvent,
   Self::ProtocolsHandler>`. See [PR 2191].
 
+- Return `bool` instead of `Result<(), ()>` for `Swarm::remove_listener`(see
+  [PR 2261]).
+
 - Concurrently dial up to 5 address candidates within a single dial attempt (see [PR 2248]).
 
   - On success of a single address, report errors of the thus far failed dials via
@@ -64,6 +67,7 @@
 [PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 [PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
 
 # 0.30.0 [2021-07-12]
 

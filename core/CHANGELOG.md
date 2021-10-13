@@ -36,6 +36,9 @@
 - Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003]
   (see [PR 2107]).
 
+- Report `ListenersEvent::Closed` when dropping a listener in `ListenersStream::remove_listener`,
+  return `bool` instead of `Result<(), ()>` (see [PR 2261]).
+
 - Concurrently dial up to 5 address candidates within a single dial attempt (see [PR 2248]).
 
   - On success of a single address, provide errors of the thus far failed dials via
@@ -52,6 +55,7 @@
 [PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
 [PR 2107]: https://github.com/libp2p/rust-libp2p/pull/2107
 [PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
 [RFC0002]: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
 [RFC0003]: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md
 
