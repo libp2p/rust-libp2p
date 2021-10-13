@@ -462,9 +462,8 @@ where
     }
 }
 
-/// A `DialingAttempt` is an ongoing outgoing connection attempt to
-/// a known / expected remote peer ID and a list of alternative addresses
-/// to connect to, if the current connection attempt fails.
+/// A [`DialingAttempt`] is a pending outgoing connection attempt to a known /
+/// expected remote peer ID.
 pub struct DialingAttempt<'a, THandler: IntoConnectionHandler> {
     peer_id: PeerId,
     /// The underlying pending connection in the `Pool`.
