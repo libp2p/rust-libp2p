@@ -93,7 +93,7 @@ use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::HashSet;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::{
     error, fmt, io,
     pin::Pin,
@@ -1113,6 +1113,12 @@ where
     /// [`NetworkBehaviour`].
     pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
         self.network_config = self.network_config.with_connection_event_buffer_size(n);
+        self
+    }
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub fn dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.network_config = self.network_config.with_dial_concurrency_factor(factor);
         self
     }
 

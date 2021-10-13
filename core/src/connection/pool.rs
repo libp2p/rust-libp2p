@@ -45,7 +45,7 @@ use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
     fmt,
-    num::NonZeroU32,
+    num::{NonZeroU32, NonZeroU8},
     pin::Pin,
     task::Context,
     task::Poll,
@@ -79,6 +79,9 @@ where
 
     /// Size of the task command buffer (per task).
     task_command_buffer_size: usize,
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    dial_concurrency_factor: NonZeroU8,
 
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
@@ -301,6 +304,7 @@ where
             pending: Default::default(),
             next_connection_id: ConnectionId(0),
             task_command_buffer_size: config.task_command_buffer_size,
+            dial_concurrency_factor: config.dial_concurrency_factor,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -534,7 +538,7 @@ where
             return Err(DialError::ConnectionLimit { limit, handler });
         };
 
-        let dial = ConcurrentDial::new(transport, peer, addresses);
+        let dial = ConcurrentDial::new(transport, peer, addresses, self.dial_concurrency_factor);
 
         let connection_id = self.next_connection_id();
 
@@ -1340,6 +1344,9 @@ pub struct PoolConfig {
     /// Size of the pending connection task event buffer and the established connection task event
     /// buffer.
     pub task_event_buffer_size: usize,
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub dial_concurrency_factor: NonZeroU8,
 }
 
 impl Default for PoolConfig {
@@ -1348,6 +1355,8 @@ impl Default for PoolConfig {
             executor: None,
             task_event_buffer_size: 32,
             task_command_buffer_size: 7,
+            // By default, addresses of a single connection attempt are dialed in sequence.
+            dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
         }
     }
 }

@@ -39,7 +39,7 @@ use crate::{
 use std::{
     convert::TryFrom as _,
     error, fmt,
-    num::NonZeroUsize,
+    num::{NonZeroU8, NonZeroUsize},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -542,6 +542,12 @@ impl NetworkConfig {
     /// the network connection I/O.
     pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
         self.pool_config.task_event_buffer_size = n;
+        self
+    }
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.pool_config.dial_concurrency_factor = factor;
         self
     }
 

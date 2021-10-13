@@ -30,12 +30,10 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
 };
 use std::{
+    num::NonZeroU8,
     pin::Pin,
     task::{Context, Poll},
 };
-
-/// Maximum number of address candidates concurrently dialed in a dial attempt.
-const CONCURRENCY_FACTOR: usize = 5;
 
 type Dial<TTrans> = BoxFuture<
     'static,
@@ -64,6 +62,7 @@ where
         transport: TTrans,
         peer: Option<PeerId>,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
+        concurrency_factor: NonZeroU8,
     ) -> Self {
         let mut pending_dials = addresses.map(move |address| match p2p_addr(peer, address) {
             Ok(address) => match transport.clone().dial(address.clone()) {
@@ -82,7 +81,7 @@ where
         let dials = FuturesUnordered::new();
         while let Some(dial) = pending_dials.next() {
             dials.push(dial);
-            if dials.len() == CONCURRENCY_FACTOR {
+            if dials.len() == concurrency_factor.get().into() {
                 break;
             }
         }
