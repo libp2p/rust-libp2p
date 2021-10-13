@@ -410,15 +410,16 @@ where
             .collect::<Vec<_>>();
 
         for pending_connection in pending_connections {
-            let pending_connection = match self.pending.entry(pending_connection) {
-                hash_map::Entry::Occupied(entry) => PendingConnection {
-                    entry,
-                    counters: &mut self.counters,
-                },
-                hash_map::Entry::Vacant(_) => unreachable!("Iterating pending connections"),
-            };
+            let entry = self
+                .pending
+                .entry(pending_connection)
+                .expect_occupied("Iterating pending connections");
 
-            pending_connection.abort();
+            PendingConnection {
+                entry,
+                counters: &mut self.counters,
+            }
+            .abort();
         }
     }
 
@@ -641,22 +642,16 @@ where
             Poll::Ready(None) => unreachable!("Pool holds both sender and receiver."),
 
             Poll::Ready(Some(task::EstablishedConnectionEvent::Notify { id, peer_id, event })) => {
-                match self
+                let entry = self
                     .established
                     .get_mut(&peer_id)
                     .expect("Receive `Notify` event for established peer.")
                     .entry(id)
-                {
-                    hash_map::Entry::Occupied(entry) => {
-                        return Poll::Ready(PoolEvent::ConnectionEvent {
-                            connection: EstablishedConnection { entry },
-                            event,
-                        })
-                    }
-                    hash_map::Entry::Vacant(_) => {
-                        unreachable!("Receive `Notify` event from established connection")
-                    }
-                }
+                    .expect_occupied("Receive `Notify` event from established connection");
+                return Poll::Ready(PoolEvent::ConnectionEvent {
+                    connection: EstablishedConnection { entry },
+                    event,
+                });
             }
             Poll::Ready(Some(task::EstablishedConnectionEvent::AddressChange {
                 id,
@@ -1072,10 +1067,11 @@ where
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>> {
         if let (Some(id), Some(connections)) = (self.ids.next(), self.connections.as_mut()) {
-            match connections.entry(id) {
-                hash_map::Entry::Occupied(entry) => Some(EstablishedConnection { entry }),
-                hash_map::Entry::Vacant(_) => unreachable!("Established entry not found in pool."),
-            }
+            Some(EstablishedConnection {
+                entry: connections
+                    .entry(id)
+                    .expect_occupied("Established entry not found in pool."),
+            })
         } else {
             None
         }
@@ -1092,10 +1088,11 @@ where
         'a: 'b,
     {
         if let (Some(id), Some(connections)) = (self.ids.next(), self.connections) {
-            match connections.entry(id) {
-                hash_map::Entry::Occupied(entry) => Some(EstablishedConnection { entry }),
-                hash_map::Entry::Vacant(_) => unreachable!("Established entry not found in pool."),
-            }
+            Some(EstablishedConnection {
+                entry: connections
+                    .entry(id)
+                    .expect_occupied("Established entry not found in pool."),
+            })
         } else {
             None
         }
@@ -1348,6 +1345,19 @@ impl Default for PoolConfig {
             task_command_buffer_size: 7,
             // By default, addresses of a single connection attempt are dialed in sequence.
             dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
+        }
+    }
+}
+
+trait EntryExt<'a, K, V> {
+    fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V>;
+}
+
+impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
+    fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V> {
+        match self {
+            hash_map::Entry::Occupied(entry) => entry,
+            hash_map::Entry::Vacant(_) => panic!("{}", msg),
         }
     }
 }
