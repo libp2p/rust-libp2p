@@ -116,6 +116,20 @@ struct EstablishedConnectionInfo<TInEvent> {
     sender: mpsc::Sender<task::Command<TInEvent>>,
 }
 
+impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
+    /// Initiates a graceful close of the connection.
+    ///
+    /// Has no effect if the connection is already closing.
+    pub fn start_close(&mut self) {
+        // Clone the sender so that we are guaranteed to have
+        // capacity for the close command (every sender gets a slot).
+        match self.sender.clone().try_send(task::Command::Close) {
+            Ok(()) => {}
+            Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
+        };
+    }
+}
+
 struct PendingConnectionInfo<THandler> {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
@@ -382,20 +396,8 @@ where
     /// by the pool effective immediately.
     pub fn disconnect(&mut self, peer: &PeerId) {
         if let Some(conns) = self.established.get_mut(peer) {
-            // Detour via `EstablishedConnection` is not ideal, but at least only one code path in
-            // order to start closing a connection exists.
-            #[allow(clippy::needless_collect)]
-            let connection_ids = conns.iter().map(|(id, _)| *id).collect::<Vec<_>>();
-
-            for id in connection_ids.into_iter() {
-                let established_connection = match conns.entry(id) {
-                    hash_map::Entry::Occupied(entry) => EstablishedConnection { entry },
-                    hash_map::Entry::Vacant(_) => {
-                        unreachable!("Iterating established connections.")
-                    }
-                };
-
-                established_connection.start_close();
+            for (_, conn) in conns.iter_mut() {
+                conn.start_close();
             }
         }
 
@@ -1049,18 +1051,7 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     ///
     /// Has no effect if the connection is already closing.
     pub fn start_close(mut self) {
-        // Clone the sender so that we are guaranteed to have
-        // capacity for the close command (every sender gets a slot).
-        match self
-            .entry
-            .get_mut()
-            .sender
-            .clone()
-            .try_send(task::Command::Close)
-        {
-            Ok(()) => {}
-            Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
-        };
+        self.entry.get_mut().start_close()
     }
 }
 
