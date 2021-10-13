@@ -343,14 +343,14 @@ pub struct IncomingInfo<'a> {
 }
 
 impl<'a> IncomingInfo<'a> {
-    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
+    /// Builds the [`PendingPoint`] corresponding to the incoming connection.
     pub fn to_pending_point(&self) -> PendingPoint {
         PendingPoint::Listener {
             local_addr: self.local_addr.clone(),
             send_back_addr: self.send_back_addr.clone(),
         }
     }
-    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
+    /// Builds the [`ConnectedPoint`] corresponding to the incoming connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Listener {
             local_addr: self.local_addr.clone(),
