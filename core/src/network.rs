@@ -317,7 +317,7 @@ where
         )
     }
 
-    /// Provides an API similar to `Stream`, except that it cannot error.
+    /// Provides an API similar to `Stream`, except that it does not terminate.
     pub fn poll<'a, TMuxer>(
         &'a mut self,
         cx: &mut Context<'_>,
