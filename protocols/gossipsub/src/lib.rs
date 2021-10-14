@@ -125,7 +125,6 @@
 pub mod error;
 pub mod protocol;
 
-#[cfg(feature = "metrics")]
 pub mod metrics;
 
 mod backoff;

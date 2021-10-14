@@ -19,19 +19,24 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::TopicHash;
+use libp2p_core::PeerId;
 use log::{debug, error, warn};
+use open_metrics_client::encoding::text::Encode;
 use std::collections::{BTreeSet, HashMap};
 use std::ops::AddAssign;
-
-use libp2p_core::PeerId;
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 
-#[derive(Default, Clone)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Encode)]
+pub struct Slot {
+    pub slot: u64,
+}
+
 /// This struct stores all the metrics for a given mesh slot.
 /// NOTE: all the `message_*` counters refer to messages received from peers assigned to
 /// this mesh slot on the topic this slot is associated with. See [`TopicMetrics`] for more
 /// information.
+#[derive(Default, Clone)]
 pub struct SlotMetricCounts {
     /// The number of times this slot has been assigned to a peer
     assign_sum: u32,
@@ -144,7 +149,7 @@ impl SlotMetricCounts {
     }
 
     /// increments a message metric count
-    fn increment_message_metric(&mut self, message_metric: SlotMessageMetric) {
+    fn increment_message_metric(&mut self, message_metric: &SlotMessageMetric) {
         match message_metric {
             SlotMessageMetric::MessagesAll => self.messages_all.add_assign(1),
             SlotMessageMetric::MessagesDuplicates => self.messages_duplicates.add_assign(1),
@@ -259,26 +264,33 @@ impl TopicMetrics {
     }
 
     /// Increments the message metric for the specified peer
-    pub fn increment_message_metric(&mut self, peer: &PeerId, message_metric: SlotMessageMetric) {
+    pub fn increment_message_metric(
+        &mut self,
+        peer: &PeerId,
+        message_metric: &SlotMessageMetric,
+    ) -> Result<Slot, ()> {
         let slot = self
             .peer_slots
             .get(peer)
             .map(|s| *s)
             // peers that aren't in the mesh get slot 0
             .unwrap_or(0);
-        match self
-            .slot_metrics
-            .get_mut(slot)
-        {
-            Some(metric_counts) => metric_counts.increment_message_metric(message_metric),
-            None => error!(
+        match self.slot_metrics.get_mut(slot) {
+            Some(metric_counts) => {
+                metric_counts.increment_message_metric(message_metric);
+                Ok(Slot { slot: slot as u64 })
+            }
+            None => {
+                error!(
                 "metrics_event[{}]: [slot {:02}] increment {} peer {} FAILURE [peer_slots contains peer with slot not existing in slot_metrics!]",
                 self.topic,
                 slot,
-                <SlotMessageMetric as Into<&'static str>>::into(message_metric),
+                <SlotMessageMetric as Into<&'static str>>::into(*message_metric),
                 peer,
-            ),
-        };
+            );
+                Err(())
+            }
+        }
     }
 
     /// Assigns a slot to the peer if the peer doesn't already have one. Note that the
@@ -331,39 +343,50 @@ impl TopicMetrics {
     }
 
     /// Churns the slot occupied by peer.
-    pub fn churn_slot(&mut self, peer: &PeerId, churn_reason: SlotChurnMetric) {
+    pub fn churn_slot(&mut self, peer: &PeerId, churn_reason: SlotChurnMetric) -> Result<Slot, ()> {
         match self.peer_slots.get(peer).cloned() {
-            Some(slot) => match self.slot_metrics.get_mut(slot) {
-                Some(metric_counts) => {
-                    debug_assert!(!self.vacant_slots.contains(&slot),
+            Some(slot) => {
+                match self.slot_metrics.get_mut(slot) {
+                    Some(metric_counts) => {
+                        debug_assert!(!self.vacant_slots.contains(&slot),
                         "metrics_event[{}] [slot {:02}] increment {} peer {} FAILURE [vacant slots already contains this slot!]",
                             self.topic, slot, <SlotChurnMetric as Into<&'static str>>::into(churn_reason), peer
                     );
-                    let churn_sum = metric_counts.churn_slot(churn_reason);
-                    self.vacant_slots.insert(slot);
-                    self.peer_slots.remove(peer);
-                    debug!(
+                        let churn_sum = metric_counts.churn_slot(churn_reason);
+                        self.vacant_slots.insert(slot);
+                        self.peer_slots.remove(peer);
+                        debug!(
                         "metrics_event[{}]: [slot {:02}] increment {} peer {} SUCCESS ChurnSum[{}]",
                             self.topic, slot, <SlotChurnMetric as Into<&'static str>>::into(churn_reason), peer, churn_sum,
                     );
-                },
-                None => warn!(
+                        Ok(Slot { slot: slot as u64 })
+                    }
+                    None => {
+                        warn!(
                     "metrics_event[{}]: [slot {:02}] increment {} peer {} FAILURE [retrieving metric_counts]",
                         self.topic, slot, <SlotChurnMetric as Into<&'static str>>::into(churn_reason), peer
-                ),
-            },
-            None => warn!(
-                "metrics_event[{}]: [slot --] increment {} peer {} FAILURE [retrieving slot]",
-                    self.topic, <SlotChurnMetric as Into<&'static str>>::into(churn_reason), peer
-            ),
-        };
+                );
+                        Err(())
+                    }
+                }
+            }
+            None => {
+                warn!(
+                    "metrics_event[{}]: [slot --] increment {} peer {} FAILURE [retrieving slot]",
+                    self.topic,
+                    <SlotChurnMetric as Into<&'static str>>::into(churn_reason),
+                    peer
+                );
+                Err(())
+            }
+        }
     }
 
     /// Churns all slots in this topic that aren't already vacant (while incrementing
     /// churn_reason). Also clears the peer_slots. This loop is faster than calling
     /// churn_slot() for each peer in the topic because it minimizes redundant lookups
     /// and only traverses a vector.
-    pub fn churn_all_slots(&mut self, churn_reason: SlotChurnMetric) {
+    pub fn churn_all_slots(&mut self, churn_reason: SlotChurnMetric) -> u64 {
         for slot in (1..self.slot_metrics.len())
             .filter(|s| !self.vacant_slots.contains(s))
             .collect::<Vec<_>>()
@@ -385,6 +408,7 @@ impl TopicMetrics {
             }
         }
         self.peer_slots.clear();
+        self.slot_metrics.len() as u64
     }
 
     /// This function verifies that the TopicMetrics is synchronized perfectly with the mesh.
