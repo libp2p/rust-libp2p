@@ -15,7 +15,7 @@ libp2p-core = { version = "0.30.0", path = "../../core", default-features = fals
 libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
 log = "0.4.1"
 lru = "0.6"
-prost = "0.8"
+prost = "0.9"
 smallvec = "1.6.1"
 wasm-timer = "0.2"
 
