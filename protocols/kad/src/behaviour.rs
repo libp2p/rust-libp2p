@@ -912,9 +912,16 @@ where
     /// The result of this operation is delivered in a
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
+        let providers = self
+            .store
+            .providers(&key)
+            .into_iter()
+            .filter(|p| !p.is_expired(Instant::now()))
+            .map(|p| p.provider)
+            .collect();
         let info = QueryInfo::GetProviders {
             key: key.clone(),
-            providers: HashSet::new(),
+            providers,
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
@@ -2441,12 +2448,6 @@ pub enum InboundRequest {
         num_provider_peers: usize,
     },
     /// Request to store a peer as a provider.
-    //
-    // TODO: In the future one might want to use this event, not only to report
-    // a new provider, but to allow the upper layer to validate the incoming
-    // provider record, discarding it or passing it back down to be stored. This
-    // would follow a similar style to the `KademliaBucketInserts` strategy.
-    // Same would be applicable to `PutRecord`.
     AddProvider {},
     /// Request to retrieve a record.
     GetRecord {

@@ -324,8 +324,9 @@ where
 
     /// Remove some listener.
     ///
-    /// Returns `Ok(())` if there was a listener with this ID.
-    pub fn remove_listener(&mut self, id: ListenerId) -> Result<(), ()> {
+    /// Returns `true` if there was a listener with this ID, `false`
+    /// otherwise.
+    pub fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.network.remove_listener(id)
     }
 

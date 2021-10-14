@@ -58,11 +58,9 @@
 
 pub mod codec;
 pub mod handler;
-pub mod throttled;
 
 pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
-pub use throttled::Throttled;
 
 use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
@@ -248,11 +246,6 @@ impl<TResponse> ResponseChannel<TResponse> {
     pub fn is_open(&self) -> bool {
         !self.sender.is_canceled()
     }
-
-    /// Get the ID of the inbound request waiting for a response.
-    pub(crate) fn request_id(&self) -> RequestId {
-        self.request_id
-    }
 }
 
 /// The ID of an inbound or outbound request.
@@ -367,19 +360,6 @@ where
             pending_outbound_requests: HashMap::new(),
             addresses: HashMap::new(),
         }
-    }
-
-    /// Creates a `RequestResponse` which limits requests per peer.
-    ///
-    /// The behaviour is wrapped in [`Throttled`] and detects the limits
-    /// per peer at runtime which are then enforced.
-    pub fn throttled<I>(c: TCodec, protos: I, cfg: RequestResponseConfig) -> Throttled<TCodec>
-    where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
-        TCodec: Send,
-        TCodec::Protocol: Sync,
-    {
-        Throttled::new(c, protos, cfg)
     }
 
     /// Initiates sending a request.
