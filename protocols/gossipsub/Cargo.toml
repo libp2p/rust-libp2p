@@ -40,4 +40,4 @@ hex = "0.4.2"
 derive_builder = "0.10.0"
 
 [build-dependencies]
-prost-build = "0.8"
+prost-build = "0.9"

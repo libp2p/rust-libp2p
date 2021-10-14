@@ -25,4 +25,4 @@ quickcheck = "0.9.0"
 rand = "0.7"
 
 [build-dependencies]
-prost-build = "0.8"
+prost-build = "0.9"
