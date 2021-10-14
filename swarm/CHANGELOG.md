@@ -45,7 +45,8 @@
 - Return `bool` instead of `Result<(), ()>` for `Swarm::remove_listener`(see
   [PR 2261]).
 
-- Concurrently dial up to 5 address candidates within a single dial attempt (see [PR 2248]).
+- Concurrently dial address candidates within a single dial attempt (see [PR 2248]) configured via
+  `Swarm::dial_concurrency_factor`.
 
   - On success of a single address, report errors of the thus far failed dials via
     `SwarmEvent::ConnectionEstablished::outgoing`.

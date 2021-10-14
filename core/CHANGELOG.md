@@ -39,7 +39,8 @@
 - Report `ListenersEvent::Closed` when dropping a listener in `ListenersStream::remove_listener`,
   return `bool` instead of `Result<(), ()>` (see [PR 2261]).
 
-- Concurrently dial up to 5 address candidates within a single dial attempt (see [PR 2248]).
+- Concurrently dial up address candidates within a single dial attempt (see [PR 2248]) configured
+  via `Network::with_dial_concurrency_factor`.
 
   - On success of a single address, provide errors of the thus far failed dials via
     `NetworkEvent::ConnectionEstablished::outgoing`.
