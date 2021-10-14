@@ -220,6 +220,7 @@ impl NetworkBehaviour for Identify {
         peer_id: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address } => address.clone(),
@@ -230,6 +231,16 @@ impl NetworkBehaviour for Identify {
             .entry(*peer_id)
             .or_default()
             .insert(*conn, addr);
+
+        if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
+            for addr in failed_addresses
+                .into_iter()
+                .map(|addresses| addresses.into_iter())
+                .flatten()
+            {
+                entry.remove(addr);
+            }
+        }
     }
 
     fn inject_connection_closed(
@@ -244,9 +255,24 @@ impl NetworkBehaviour for Identify {
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
-        if !self.connected.contains_key(peer_id) {
-            self.pending_push.remove(peer_id);
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: Option<PeerId>,
+        _: Self::ProtocolsHandler,
+        error: &DialError,
+    ) {
+        if let Some(peer_id) = peer_id {
+            if !self.connected.contains_key(&peer_id) {
+                self.pending_push.remove(&peer_id);
+            }
+        }
+
+        if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
+            if let DialError::Transport(errors) = error {
+                for (addr, _error) in errors {
+                    entry.remove(addr);
+                }
+            }
         }
     }
 
@@ -420,19 +446,6 @@ impl NetworkBehaviour for Identify {
             .cloned()
             .map(|addr| Vec::from_iter(addr))
             .unwrap_or_default()
-    }
-
-    fn inject_addr_reach_failure(
-        &mut self,
-        peer_id: Option<&PeerId>,
-        addr: &Multiaddr,
-        _: &dyn std::error::Error,
-    ) {
-        if let Some(peer) = peer_id {
-            if let Some(entry) = self.discovered_peers.get_mut(peer) {
-                entry.remove(addr);
-            }
-        }
     }
 }
 

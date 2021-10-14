@@ -36,8 +36,8 @@ use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::KeepAlive;
 use libp2p_swarm::{
-    DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
-    PollParameters, Swarm, SwarmEvent,
+    DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
+    NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
 };
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -391,10 +391,11 @@ fn src_try_connect_to_offline_dst() {
 
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::UnreachableAddr {
-                    address, peer_id, ..
-                } if address == dst_addr_via_relay => {
-                    assert_eq!(peer_id, dst_peer_id);
+                SwarmEvent::OutgoingConnectionError {
+                    error: DialError::Transport(addresses),
+                    peer_id,
+                } if *addresses.iter().map(|(a, _)| a).next().unwrap() == dst_addr_via_relay => {
+                    assert_eq!(peer_id, Some(dst_peer_id));
                     break;
                 }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -448,10 +449,11 @@ fn src_try_connect_to_unsupported_dst() {
 
         loop {
             match src_swarm.select_next_some().await {
-                SwarmEvent::UnreachableAddr {
-                    address, peer_id, ..
-                } if address == dst_addr_via_relay => {
-                    assert_eq!(peer_id, dst_peer_id);
+                SwarmEvent::OutgoingConnectionError {
+                    error: DialError::Transport(addresses),
+                    peer_id,
+                } if *addresses.iter().map(|(a, _)| a).next().unwrap() == dst_addr_via_relay => {
+                    assert_eq!(peer_id, Some(dst_peer_id));
                     break;
                 }
                 SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {}
@@ -492,16 +494,18 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
 
         // Source Node fail to reach Relay.
         match src_swarm.select_next_some().await {
-            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {}
+            SwarmEvent::OutgoingConnectionError { peer_id, .. }
+                if peer_id == Some(relay_peer_id) => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node fail to reach Destination Node due to failure reaching Relay.
         match src_swarm.select_next_some().await {
-            SwarmEvent::UnreachableAddr {
-                address, peer_id, ..
-            } if address == dst_addr_via_relay => {
-                assert_eq!(peer_id, dst_peer_id);
+            SwarmEvent::OutgoingConnectionError {
+                error: DialError::Transport(addresses),
+                peer_id,
+            } if *addresses.iter().map(|(a, _)| a).next().unwrap() == dst_addr_via_relay => {
+                assert_eq!(peer_id, Some(dst_peer_id));
             }
             e => panic!("{:?}", e),
         }
@@ -1063,10 +1067,13 @@ fn yield_incoming_connection_through_correct_listener() {
                     e => panic!("{:?}", e),
                 },
                 event = src_3_swarm.select_next_some() => match event {
-                    SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                        if address == dst_addr_via_relay_3 =>
+                    SwarmEvent::OutgoingConnectionError {
+                        error: DialError::Transport(addresses),
+                        peer_id,
+                    } if *addresses.iter().map(|(a, _)| a).next().unwrap()
+                        == dst_addr_via_relay_3 =>
                     {
-                        assert_eq!(peer_id, dst_peer_id);
+                        assert_eq!(peer_id, Some(dst_peer_id));
                         break;
                     }
                     SwarmEvent::Dialing { .. } => {}

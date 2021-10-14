@@ -34,7 +34,7 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, EitherUpgrade},
     ConnectedPoint, Multiaddr, PeerId,
 };
-use std::{error, task::Context, task::Poll};
+use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///
@@ -103,9 +103,10 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_established(peer_id, connection, endpoint)
+            inner.inject_connection_established(peer_id, connection, endpoint, errors)
         }
     }
 
@@ -146,22 +147,11 @@ where
         }
     }
 
-    fn inject_addr_reach_failure(
-        &mut self,
-        peer_id: Option<&PeerId>,
-        addr: &Multiaddr,
-        error: &dyn error::Error,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_addr_reach_failure(peer_id, addr, error)
-        }
-    }
-
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         handler: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             if let Some(handler) = handler.inner {

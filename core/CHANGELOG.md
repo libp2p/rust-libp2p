@@ -39,6 +39,14 @@
 - Report `ListenersEvent::Closed` when dropping a listener in `ListenersStream::remove_listener`,
   return `bool` instead of `Result<(), ()>` (see [PR 2261]).
 
+- Concurrently dial address candidates within a single dial attempt (see [PR 2248]) configured
+  via `Network::with_dial_concurrency_factor`.
+
+  - On success of a single address, provide errors of the thus far failed dials via
+    `NetworkEvent::ConnectionEstablished::outgoing`.
+
+  - On failure of all addresses, provide the errors via `NetworkEvent::DialError`.
+
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
@@ -47,6 +55,7 @@
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 [PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
 [PR 2107]: https://github.com/libp2p/rust-libp2p/pull/2107
+[PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
 [PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
 [RFC0002]: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
 [RFC0003]: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md

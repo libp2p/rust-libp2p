@@ -23,7 +23,7 @@ mod util;
 use futures::{future::poll_fn, ready};
 use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
-    connection::ConnectionError,
+    connection::PendingConnectionError,
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
     PeerId,
 };
@@ -39,18 +39,20 @@ fn max_outgoing() {
     let cfg = NetworkConfig::default().with_connection_limits(limits);
     let mut network = test_network(cfg);
 
+    let addr: Multiaddr = "/memory/1234".parse().unwrap();
+
     let target = PeerId::random();
     for _ in 0..outgoing_limit {
         network
             .peer(target.clone())
-            .dial(Multiaddr::empty(), Vec::new(), TestHandler())
+            .dial(vec![addr.clone()], TestHandler())
             .ok()
             .expect("Unexpected connection limit.");
     }
 
     match network
         .peer(target.clone())
-        .dial(Multiaddr::empty(), Vec::new(), TestHandler())
+        .dial(vec![addr.clone()], TestHandler())
         .expect_err("Unexpected dialing success.")
     {
         DialError::ConnectionLimit { limit, handler: _ } => {
@@ -96,7 +98,7 @@ fn max_established_incoming() {
     let mut network1 = test_network(config(limit));
     let mut network2 = test_network(config(limit));
 
-    let listen_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
+    let listen_addr = multiaddr![Memory(0u64)];
     let _ = network1.listen_on(listen_addr.clone()).unwrap();
     let (addr_sender, addr_receiver) = futures::channel::oneshot::channel();
     let mut addr_sender = Some(addr_sender);
@@ -111,8 +113,8 @@ fn max_established_incoming() {
                 network1.accept(connection, TestHandler()).unwrap();
             }
             NetworkEvent::ConnectionEstablished { .. } => {}
-            NetworkEvent::ConnectionClosed {
-                error: Some(ConnectionError::ConnectionLimit(err)),
+            NetworkEvent::IncomingConnectionError {
+                error: PendingConnectionError::ConnectionLimit(err),
                 ..
             } => {
                 assert_eq!(err.limit, limit);
