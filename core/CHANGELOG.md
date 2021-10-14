@@ -1,4 +1,4 @@
-# 0.30.0 [unreleased]
+# 0.30.0 [2021-10-15]
 
 - Add `ConnectionLimit::with_max_established` (see [PR 2137]).
 
