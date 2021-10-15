@@ -94,9 +94,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // same content will be propagated.
             .build()
             .expect("Valid config");
-        // build a gossipsub network behaviour
+        // Build a gossipsub network behaviour.
+        // NOTE: The last parameter specifies an `open_metrics_client` `Registry` which optionally
+        // enables metrics for the gossipsub behaviour.
         let mut gossipsub: gossipsub::Gossipsub =
-            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
+            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config, None)
                 .expect("Correct configuration");
 
         // subscribes to our topic

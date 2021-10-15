@@ -20,12 +20,18 @@
 
 //! A set of metrics used to help track and diagnose the network behaviour of the gossipsub
 //! protocol.
+//!
+//! Note that if metrics are enabled, we store a lot of detail for each metric. Specifically, each metric is stored
+//! per "slot" of each mesh. This means each metric is counted for each peer whilst they are in the
+//! mesh. The exposed open metric values typically aggregate these into a per
+//! mesh metric. Users are able to fine-grain their access to the more detailed metrics via the
+//! [`slot_metrics_for_topic`] function.
 
 pub mod topic_metrics;
 
 use crate::topic::TopicHash;
 use libp2p_core::PeerId;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use topic_metrics::Slot;
 
 // use open_metrics_client::encoding::text::Encode;
@@ -37,11 +43,16 @@ use open_metrics_client::registry::Registry;
 
 use self::topic_metrics::{SlotChurnMetric, SlotMessageMetric, SlotMetricCounts, TopicMetrics};
 
-/// A collection of metrics used throughout the gossipsub behaviour.
+/// This provides an upper bound to the number of mesh topics we create metrics for. It prevents
+/// unbounded labels being created in the metrics.
+const MESH_TOPIC_LIMIT: usize = 300;
+/// A separate limit is used to keep track of non-mesh topics. Mesh topics are controlled by the
+/// user via subscriptions whereas non-mesh topics are determined by users on the network.
+/// This limit permits a fixed amount of topics to allow, in-addition to the mesh topics.
+const NON_MESH_TOPIC_LIMIT: usize = 50;
+
+/// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct InternalMetrics {
-    /// If a registry is not initially passed to gossipsub, all metric calculations are
-    /// not enabled.
-    enabled: bool,
     /// The current peers in each mesh.
     mesh_peers: Family<TopicHash, Gauge>,
     /// The scores for each peer in each mesh.
@@ -81,212 +92,192 @@ pub struct InternalMetrics {
     memcache_misses: Counter,
     /// Current metrics for all known mesh data. See [`TopicMetrics`] for further information.
     topic_metrics: HashMap<TopicHash, TopicMetrics>,
-}
-
-impl Default for InternalMetrics {
-    fn default() -> Self {
-        InternalMetrics {
-            enabled: false,
-            mesh_peers: Family::default(),
-            mesh_score: Family::new_with_constructor(|| {
-                Histogram::new(exponential_buckets(-1000.0, 10.0, 100))
-            }),
-            mesh_avg_score: Family::default(),
-            mesh_message_rx_total: Family::default(),
-            mesh_message_tx_total: Family::default(),
-            mesh_messages_from_non_mesh_peers: Family::default(),
-            mesh_duplicates_filtered: Family::default(),
-            mesh_messages_validated: Family::default(),
-            mesh_messages_rejected: Family::default(),
-            mesh_messages_ignored: Family::default(),
-            mesh_first_message_deliveries_per_slot: Family::default(),
-            mesh_iwant_requests: Family::default(),
-            broken_promises: Counter::default(),
-            memcache_misses: Counter::default(),
-            topic_peers: Family::default(),
-            subscribed_topic_peers: Family::default(),
-            invalid_topic_messages: Counter::default(),
-            topic_metrics: HashMap::default(),
-        }
-    }
+    /// Keeps track of which mesh topics have been added to metrics or not.
+    added_mesh_topics: HashSet<TopicHash>,
+    /// Keeps track of which non mesh topics have been added to metrics or not.
+    added_non_mesh_topics: HashSet<TopicHash>,
 }
 
 impl InternalMetrics {
     /// Constructs and builds the internal metrics given a registry.
-    pub fn new(registry: Option<&mut Registry>) -> Self {
-        if let Some(registry) = registry {
-            let sub_registry = registry.sub_registry_with_prefix("gossipsub");
+    pub fn new(registry: &mut Registry) -> Self {
+        let sub_registry = registry.sub_registry_with_prefix("gossipsub");
 
-            /* Mesh Metrics */
+        /* Mesh Metrics */
 
-            let mesh_peers = Family::default();
-            sub_registry.register(
-                "mesh_peer_count",
-                "Number of peers in each mesh",
-                Box::new(mesh_peers.clone()),
-            );
+        let mesh_peers = Family::default();
+        sub_registry.register(
+            "mesh_peer_count",
+            "Number of peers in each mesh",
+            Box::new(mesh_peers.clone()),
+        );
 
-            let mesh_score = Family::new_with_constructor(|| {
-                Histogram::new(exponential_buckets(-1000.0, 10.0, 100))
-            });
-            sub_registry.register(
-                "mesh_score",
-                "Score of all peers in each mesh",
-                Box::new(mesh_score.clone()),
-            );
+        let mesh_score = Family::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(-1000.0, 10.0, 100))
+        });
+        sub_registry.register(
+            "mesh_score",
+            "Score of all peers in each mesh",
+            Box::new(mesh_score.clone()),
+        );
 
-            let mesh_avg_score = Family::default();
-            sub_registry.register(
-                "mesh_avg_score",
-                "Average score of all peers in each mesh",
-                Box::new(mesh_avg_score.clone()),
-            );
+        let mesh_avg_score = Family::default();
+        sub_registry.register(
+            "mesh_avg_score",
+            "Average score of all peers in each mesh",
+            Box::new(mesh_avg_score.clone()),
+        );
 
-            let mesh_message_rx_total = Family::default();
-            sub_registry.register(
-                "mesh_message_rx_total",
-                "Total number of messages received from each mesh",
-                Box::new(mesh_message_rx_total.clone()),
-            );
+        let mesh_message_rx_total = Family::default();
+        sub_registry.register(
+            "mesh_message_rx_total",
+            "Total number of messages received from each mesh",
+            Box::new(mesh_message_rx_total.clone()),
+        );
 
-            let mesh_message_tx_total = Family::default();
-            sub_registry.register(
-                "mesh_message_tx_total",
-                "Total number of messages sent in each mesh",
-                Box::new(mesh_message_tx_total.clone()),
-            );
+        let mesh_message_tx_total = Family::default();
+        sub_registry.register(
+            "mesh_message_tx_total",
+            "Total number of messages sent in each mesh",
+            Box::new(mesh_message_tx_total.clone()),
+        );
 
-            let mesh_messages_from_non_mesh_peers = Family::default();
-            sub_registry.register(
-                "messages_from_non_mesh_peers",
-                "Number of messages received from peers not in the mesh, for each mesh",
-                Box::new(mesh_messages_from_non_mesh_peers.clone()),
-            );
+        let mesh_messages_from_non_mesh_peers = Family::default();
+        sub_registry.register(
+            "messages_from_non_mesh_peers",
+            "Number of messages received from peers not in the mesh, for each mesh",
+            Box::new(mesh_messages_from_non_mesh_peers.clone()),
+        );
 
-            let mesh_duplicates_filtered = Family::default();
-            sub_registry.register(
-                "mesh_duplicates_filtered",
-                "Total number of duplicate messages filtered in each mesh",
-                Box::new(mesh_duplicates_filtered.clone()),
-            );
+        let mesh_duplicates_filtered = Family::default();
+        sub_registry.register(
+            "mesh_duplicates_filtered",
+            "Total number of duplicate messages filtered in each mesh",
+            Box::new(mesh_duplicates_filtered.clone()),
+        );
 
-            let mesh_messages_validated = Family::default();
-            sub_registry.register(
-                "mesh_messages_validated",
-                "Total number of messages that have been validated in each mesh",
-                Box::new(mesh_messages_validated.clone()),
-            );
+        let mesh_messages_validated = Family::default();
+        sub_registry.register(
+            "mesh_messages_validated",
+            "Total number of messages that have been validated in each mesh",
+            Box::new(mesh_messages_validated.clone()),
+        );
 
-            let mesh_messages_rejected = Family::default();
-            sub_registry.register(
-                "mesh_messages_rejected",
-                "Total number of messages rejected in each mesh",
-                Box::new(mesh_messages_rejected.clone()),
-            );
+        let mesh_messages_rejected = Family::default();
+        sub_registry.register(
+            "mesh_messages_rejected",
+            "Total number of messages rejected in each mesh",
+            Box::new(mesh_messages_rejected.clone()),
+        );
 
-            let mesh_messages_ignored = Family::default();
-            sub_registry.register(
-                "mesh_messages_ignored",
-                "Total number of messages ignored in each mesh",
-                Box::new(mesh_messages_ignored.clone()),
-            );
+        let mesh_messages_ignored = Family::default();
+        sub_registry.register(
+            "mesh_messages_ignored",
+            "Total number of messages ignored in each mesh",
+            Box::new(mesh_messages_ignored.clone()),
+        );
 
-            let mesh_first_message_deliveries_per_slot = Family::default();
-            sub_registry.register(
-                "mesh_first_message_deliveries_per_slot",
-                "The number of first message deliveries per mesh slot",
-                Box::new(mesh_first_message_deliveries_per_slot.clone()),
-            );
+        let mesh_first_message_deliveries_per_slot = Family::default();
+        sub_registry.register(
+            "mesh_first_message_deliveries_per_slot",
+            "The number of first message deliveries per mesh slot",
+            Box::new(mesh_first_message_deliveries_per_slot.clone()),
+        );
 
-            let mesh_iwant_requests = Family::default();
-            sub_registry.register(
-                "mesh_iwant_requests",
-                "The number of IWANT requests per mesh",
-                Box::new(mesh_first_message_deliveries_per_slot.clone()),
-            );
+        let mesh_iwant_requests = Family::default();
+        sub_registry.register(
+            "mesh_iwant_requests",
+            "The number of IWANT requests per mesh",
+            Box::new(mesh_first_message_deliveries_per_slot.clone()),
+        );
 
-            let broken_promises = Counter::default();
-            sub_registry.register(
-                "broken_promises",
-                "Total number of broken promises per mesh",
-                Box::new(broken_promises.clone()),
-            );
+        let broken_promises = Counter::default();
+        sub_registry.register(
+            "broken_promises",
+            "Total number of broken promises per mesh",
+            Box::new(broken_promises.clone()),
+        );
 
-            /* Peer Metrics */
+        /* Peer Metrics */
 
-            let topic_peers = Family::default();
-            sub_registry.register(
-                "topic_peer_count",
-                "Number of peers subscribed to each known topic",
-                Box::new(topic_peers.clone()),
-            );
+        let topic_peers = Family::default();
+        sub_registry.register(
+            "topic_peer_count",
+            "Number of peers subscribed to each known topic",
+            Box::new(topic_peers.clone()),
+        );
 
-            let subscribed_topic_peers = Family::default();
-            sub_registry.register(
-                "subscribed_topic_peer_count",
-                "Number of peers subscribed to each subscribed topic",
-                Box::new(subscribed_topic_peers.clone()),
-            );
+        let subscribed_topic_peers = Family::default();
+        sub_registry.register(
+            "subscribed_topic_peer_count",
+            "Number of peers subscribed to each subscribed topic",
+            Box::new(subscribed_topic_peers.clone()),
+        );
 
-            /* Router Metrics */
+        /* Router Metrics */
 
-            // Invalid Topic Messages
-            let invalid_topic_messages = Counter::default();
-            sub_registry.register(
-                "invalid_topic_messages",
-                "Number of times a message has been received on a non-subscribed topic",
-                Box::new(invalid_topic_messages.clone()),
-            );
+        // Invalid Topic Messages
+        let invalid_topic_messages = Counter::default();
+        sub_registry.register(
+            "invalid_topic_messages",
+            "Number of times a message has been received on a non-subscribed topic",
+            Box::new(invalid_topic_messages.clone()),
+        );
 
-            let memcache_misses = Counter::default();
-            sub_registry.register(
+        let memcache_misses = Counter::default();
+        sub_registry.register(
                 "memcache_misses",
                 "Number of times a message has attempted to be forwarded but has already been removed from the memcache",
                 Box::new(memcache_misses.clone()),
                 );
 
-            InternalMetrics {
-                enabled: true,
-                mesh_peers,
-                mesh_score,
-                mesh_avg_score,
-                mesh_message_rx_total,
-                mesh_message_tx_total,
-                mesh_messages_from_non_mesh_peers,
-                mesh_duplicates_filtered,
-                mesh_messages_validated,
-                mesh_messages_rejected,
-                mesh_messages_ignored,
-                mesh_first_message_deliveries_per_slot,
-                mesh_iwant_requests,
-                broken_promises,
-                memcache_misses,
-                topic_peers,
-                subscribed_topic_peers,
-                invalid_topic_messages,
-                topic_metrics: HashMap::new(),
-            }
-        } else {
-            // Metrics are not enabled
-            InternalMetrics::default()
+        InternalMetrics {
+            mesh_peers,
+            mesh_score,
+            mesh_avg_score,
+            mesh_message_rx_total,
+            mesh_message_tx_total,
+            mesh_messages_from_non_mesh_peers,
+            mesh_duplicates_filtered,
+            mesh_messages_validated,
+            mesh_messages_rejected,
+            mesh_messages_ignored,
+            mesh_first_message_deliveries_per_slot,
+            mesh_iwant_requests,
+            broken_promises,
+            memcache_misses,
+            topic_peers,
+            subscribed_topic_peers,
+            invalid_topic_messages,
+            topic_metrics: HashMap::new(),
+            added_mesh_topics: HashSet::new(),
+            added_non_mesh_topics: HashSet::new(),
         }
     }
 
-    /// Returns whether metrics are enabled or not.
-    pub fn enabled(&self) -> bool {
-        self.enabled
+    /// Access to the fine-grained metrics which provide information per-peer (slot) of the
+    /// specified mesh topic.
+    pub fn slot_metrics_for_topic(
+        &self,
+        topic: &TopicHash,
+    ) -> Option<impl Iterator<Item = &SlotMetricCounts>> {
+        Some(self.topic_metrics.get(topic)?.slot_metrics_iter())
     }
 
-    // Increase the memcache misses
+    /// Reports that an attempted message to forward was no longer in the memcache.
     pub fn memcache_miss(&mut self) {
-        if self.enabled {
-            self.memcache_misses.inc();
-        }
+        self.memcache_misses.inc();
     }
 
+    /// Reports a broken promise.
     pub fn broken_promise(&mut self) {
-        if self.enabled {
-            self.broken_promises.inc();
+        self.broken_promises.inc();
+    }
+
+    /// Reports that a message was published on the specified topic.
+    pub fn message_published(&mut self, topic_hash: &TopicHash) {
+        if self.allowed_mesh_topic(topic_hash) {
+            self.mesh_message_tx_total.get_or_create(topic_hash).inc();
         }
     }
 
@@ -297,42 +288,40 @@ impl InternalMetrics {
         peer: &PeerId,
         slot_churn: SlotChurnMetric,
     ) {
-        if self.enabled {
-            if let Ok(slot) = self
-                .topic_metrics
-                .entry(topic_hash.clone())
-                .or_insert_with(|| TopicMetrics::new(topic_hash.clone()))
-                .churn_slot(peer, slot_churn)
-            {
-                self.reset_slot(topic_hash, slot);
-            }
+        if let Ok(slot) = self
+            .topic_metrics
+            .entry(topic_hash.clone())
+            .or_insert_with(|| TopicMetrics::new(topic_hash.clone()))
+            .churn_slot(peer, slot_churn)
+        {
+            self.reset_slot(topic_hash, slot);
         }
     }
 
     pub fn iwant_request(&mut self, topic_hash: &TopicHash) {
-        self.mesh_iwant_requests.get_or_create(topic_hash).inc();
-    }
-
-    pub fn message_invalid_topic(&mut self) {
-        if self.enabled {
-            self.invalid_topic_messages.inc();
+        if self.allowed_mesh_topic(topic_hash) {
+            self.mesh_iwant_requests.get_or_create(topic_hash).inc();
         }
     }
 
+    pub fn message_invalid_topic(&mut self) {
+        self.invalid_topic_messages.inc();
+    }
+
     pub fn peer_joined_topic(&mut self, topic_hash: &TopicHash) {
-        if self.enabled {
+        if self.allowed_non_mesh_topic(topic_hash) {
             self.topic_peers.get_or_create(topic_hash).inc();
         }
     }
 
     pub fn peer_joined_subscribed_topic(&mut self, topic_hash: &TopicHash) {
-        if self.enabled {
+        if self.allowed_mesh_topic(topic_hash) {
             self.subscribed_topic_peers.get_or_create(topic_hash).inc();
         }
     }
 
     pub fn peer_left_topic(&mut self, topic_hash: &TopicHash) {
-        if self.enabled {
+        if self.allowed_non_mesh_topic(topic_hash) {
             let v = self.topic_peers.get_or_create(topic_hash).get();
             self.topic_peers
                 .get_or_create(topic_hash)
@@ -341,7 +330,9 @@ impl InternalMetrics {
     }
 
     pub fn peer_left_subscribed_topic(&mut self, topic_hash: &TopicHash) {
-        if self.enabled {
+        // We use the non_mesh version here, because if we are subscribed this topic should exist
+        // in the added_mesh_topics mappings
+        if self.allowed_non_mesh_topic(topic_hash) {
             let v = self.subscribed_topic_peers.get_or_create(topic_hash).get();
             self.subscribed_topic_peers
                 .get_or_create(topic_hash)
@@ -350,16 +341,18 @@ impl InternalMetrics {
     }
 
     pub fn leave_topic(&mut self, topic_hash: &TopicHash) {
-        if self.enabled() {
-            // Remove all the peers from all slots
-            if let Some(metrics) = self.topic_metrics.get_mut(topic_hash) {
-                let total_slots = metrics.churn_all_slots(SlotChurnMetric::ChurnLeave);
-                // Remove the slot metrics
+        // Remove all the peers from all slots
+        if let Some(metrics) = self.topic_metrics.get_mut(topic_hash) {
+            let total_slots = metrics.churn_all_slots(SlotChurnMetric::ChurnLeave);
+            // Remove the slot metrics
+            if self.allowed_mesh_topic(topic_hash) {
                 for slot in 1..total_slots {
                     self.reset_slot(topic_hash, Slot { slot });
                 }
             }
+        }
 
+        if self.allowed_non_mesh_topic(topic_hash) {
             self.mesh_peers.get_or_create(topic_hash).set(0);
             self.mesh_avg_score.get_or_create(topic_hash).set(0);
             self.subscribed_topic_peers.get_or_create(topic_hash).set(0);
@@ -367,9 +360,11 @@ impl InternalMetrics {
     }
 
     fn reset_slot(&mut self, topic_hash: &TopicHash, slot: Slot) {
-        self.mesh_first_message_deliveries_per_slot
-            .get_or_create(&(topic_hash.clone(), slot))
-            .set(0);
+        if self.allowed_mesh_topic(topic_hash) {
+            self.mesh_first_message_deliveries_per_slot
+                .get_or_create(&(topic_hash.clone(), slot))
+                .set(0);
+        }
     }
 
     /// Helpful for testing and validation
@@ -385,13 +380,13 @@ impl InternalMetrics {
         peer: &PeerId,
         message_metric: SlotMessageMetric,
     ) {
-        if self.enabled {
-            if let Ok(slot) = self
-                .topic_metrics
-                .entry(topic_hash.clone())
-                .or_insert_with(|| TopicMetrics::new(topic_hash.clone()))
-                .increment_message_metric(peer, &message_metric)
-            {
+        if let Ok(slot) = self
+            .topic_metrics
+            .entry(topic_hash.clone())
+            .or_insert_with(|| TopicMetrics::new(topic_hash.clone()))
+            .increment_message_metric(peer, &message_metric)
+        {
+            if self.allowed_mesh_topic(topic_hash) {
                 match message_metric {
                     SlotMessageMetric::MessagesAll => {}
                     SlotMessageMetric::MessagesDuplicates => {
@@ -430,21 +425,50 @@ impl InternalMetrics {
     where
         U: Iterator<Item = PeerId>,
     {
-        if self.enabled {
-            self.topic_metrics
-                .entry(topic_hash.clone())
-                .or_insert_with(|| TopicMetrics::new(topic_hash.clone()))
-                .assign_slots_to_peers(peer_list);
-        }
+        self.topic_metrics
+            .entry(topic_hash.clone())
+            .or_insert_with(|| TopicMetrics::new(topic_hash.clone()))
+            .assign_slots_to_peers(peer_list);
     }
 
     /// Assigns a slot in topic to the peer if the peer doesn't already have one.
     pub fn assign_slot_if_unassigned(&mut self, topic: &TopicHash, peer: &PeerId) {
-        if self.enabled {
-            self.topic_metrics
-                .entry(topic.clone())
-                .or_insert_with(|| TopicMetrics::new(topic.clone()))
-                .assign_slot_if_unassigned(*peer);
+        self.topic_metrics
+            .entry(topic.clone())
+            .or_insert_with(|| TopicMetrics::new(topic.clone()))
+            .assign_slot_if_unassigned(*peer);
+    }
+
+    /// Limits the number of topics that can be created in each metric. If the topic hasn't already
+    /// been added to a metric and we have added less than TOPIC_LIMIT topics, this will return
+    /// true.
+    fn allowed_mesh_topic(&mut self, topic_hash: &TopicHash) -> bool {
+        // If we haven't reached the limit, record the topic.
+        if self.added_mesh_topics.len() < MESH_TOPIC_LIMIT {
+            self.added_mesh_topics.insert(topic_hash.clone());
+            true
+        } else {
+            // We've reached the topic limit, the topic is allowed if we have seen it before,
+            // otherwise we reject it.
+            self.added_mesh_topics.contains(topic_hash)
+                | self.added_non_mesh_topics.contains(topic_hash)
+        }
+    }
+
+    /// Limits the number of topics that can be created in each metric. If the topic hasn't already
+    /// been added to a metric and we have added less than TOPIC_LIMIT topics, this will return
+    /// true.
+    fn allowed_non_mesh_topic(&mut self, topic_hash: &TopicHash) -> bool {
+        // If we haven't reached the limit, record the topic.
+        if self.added_non_mesh_topics.len() < NON_MESH_TOPIC_LIMIT
+            && !self.added_mesh_topics.contains(topic_hash)
+        {
+            self.added_non_mesh_topics.insert(topic_hash.clone());
+            true
+        } else {
+            // We've reached the topic limit, the topic is allowed if we have seen it before,
+            // otherwise we reject it.
+            self.added_non_mesh_topics.contains(topic_hash)
         }
     }
 }

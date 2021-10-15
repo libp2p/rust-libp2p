@@ -112,6 +112,7 @@ mod tests {
             let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
                 MessageAuthenticity::Signed(keypair),
                 self.gs_config,
+                None,
                 self.subscription_filter,
                 self.data_transform,
             )
@@ -932,7 +933,8 @@ mod tests {
             .build()
             .unwrap();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config).unwrap();
+        let mut gs: Gossipsub =
+            Gossipsub::new(MessageAuthenticity::Anonymous, gs_config, None).unwrap();
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test").hash().clone();

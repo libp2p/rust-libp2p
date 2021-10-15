@@ -32,6 +32,7 @@ use std::{
 
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
+use open_metrics_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 use wasm_timer::{Instant, Interval};
@@ -216,7 +217,7 @@ pub struct Gossipsub<
     F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
 > {
     /// Keep track of a set of internal metrics relating to gossipsub.
-    metrics: InternalMetrics,
+    metrics: Option<InternalMetrics>,
 
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
@@ -317,13 +318,16 @@ where
 {
     /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
     /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
     pub fn new(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<&mut Registry>,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             F::default(),
             D::default(),
         )
@@ -340,11 +344,13 @@ where
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<&mut Registry>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             subscription_filter,
             D::default(),
         )
@@ -361,11 +367,13 @@ where
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<&mut Registry>,
         data_transform: D,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             F::default(),
             data_transform,
         )
@@ -382,6 +390,7 @@ where
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<&mut Registry>,
         subscription_filter: F,
         data_transform: D,
     ) -> Result<Self, &'static str> {
@@ -391,10 +400,8 @@ where
         // were received locally.
         validate_config(&privacy, config.validation_mode())?;
 
-        // Set up message publishing parameters.
-
         Ok(Gossipsub {
-            metrics: InternalMetrics::default(),
+            metrics: metrics.map(|registry| InternalMetrics::new(registry)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
@@ -747,7 +754,9 @@ where
                             "Message not in cache. Ignoring forwarding. Message Id: {}",
                             msg_id
                         );
-                        self.metrics.memcache_miss();
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.memcache_miss();
+                        }
 
                         return Ok(false);
                     }
@@ -757,19 +766,21 @@ where
                 self.forward_msg(msg_id, raw_message, Some(propagation_source))?;
 
                 // Metrics: Report validation result
-                self.metrics.increment_message_metric(
-                    &topic,
-                    propagation_source,
-                    SlotMessageMetric::MessagesValidated,
-                );
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.increment_message_metric(
+                        &topic,
+                        propagation_source,
+                        SlotMessageMetric::MessagesValidated,
+                    );
+                }
                 return Ok(true);
             }
             MessageAcceptance::Reject => {
                 // Metrics: Report validation result
-                if self.metrics.enabled() {
+                if let Some(metrics) = self.metrics.as_mut() {
                     if let Some(raw_message) = self.mcache.get(msg_id) {
                         // Increment metrics
-                        self.metrics.increment_message_metric(
+                        metrics.increment_message_metric(
                             &raw_message.topic,
                             propagation_source,
                             SlotMessageMetric::MessagesRejected,
@@ -780,10 +791,10 @@ where
             }
             MessageAcceptance::Ignore => {
                 // Metrics: Report validation result
-                if self.metrics.enabled() {
+                if let Some(metrics) = self.metrics.as_mut() {
                     if let Some(raw_message) = self.mcache.get(msg_id) {
                         // Increment metrics
-                        self.metrics.increment_message_metric(
+                        metrics.increment_message_metric(
                             &raw_message.topic,
                             propagation_source,
                             SlotMessageMetric::MessagesIgnored,
@@ -807,7 +818,9 @@ where
             Ok(true)
         } else {
             warn!("Rejected message not in cache. Message Id: {}", msg_id);
-            self.metrics.memcache_miss();
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.memcache_miss();
+            }
 
             Ok(false)
         }
@@ -906,15 +919,19 @@ where
     /// mesh and the topic_metrics. It's useful for debugging.
     #[cfg(debug_assertions)]
     fn validate_mesh_slots_for_topic(&self, topic: &TopicHash) -> Result<(), String> {
-        match self.metrics.topic_metrics().get(topic) {
-            Some(topic_metrics) => match self.mesh.get(topic) {
-                Some(mesh_peers) => topic_metrics.validate_mesh_slots(mesh_peers),
-                None => Err(format!("metrics_event[{}] no mesh_peers for topic", topic)),
-            },
-            None => Err(format!(
-                "metrics_event[{}]: no topic_metrics for topic",
-                topic
-            )),
+        if let Some(metrics) = self.metrics.as_ref() {
+            match metrics.topic_metrics().get(topic) {
+                Some(topic_metrics) => match self.mesh.get(topic) {
+                    Some(mesh_peers) => topic_metrics.validate_mesh_slots(mesh_peers),
+                    None => Err(format!("metrics_event[{}] no mesh_peers for topic", topic)),
+                },
+                None => Err(format!(
+                    "metrics_event[{}]: no topic_metrics for topic",
+                    topic
+                )),
+            }
+        } else {
+            Ok(())
         }
     }
 
@@ -993,8 +1010,9 @@ where
             mesh_peers.extend(new_peers);
         }
 
-        self.metrics
-            .assign_slots_to_peers(topic_hash, added_peers.iter().cloned());
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.assign_slots_to_peers(topic_hash, added_peers.iter().cloned());
+        }
 
         for peer_id in added_peers {
             // Send a GRAFT control message
@@ -1114,7 +1132,9 @@ where
                 );
             }
 
-            self.metrics.leave_topic(topic_hash);
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.leave_topic(topic_hash);
+            }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
     }
@@ -1253,10 +1273,10 @@ where
             );
 
             // Metrics: Add IWANT requests
-            if self.metrics.enabled() {
+            if let Some(metrics) = self.metrics.as_mut() {
                 for id in &message_ids {
                     if let Some(topic) = iwant_ids.get(id) {
-                        self.metrics.iwant_request(topic);
+                        metrics.iwant_request(topic);
                     }
                 }
             }
@@ -1423,7 +1443,9 @@ where
                     );
                     peers.insert(*peer_id);
 
-                    self.metrics.assign_slot_if_unassigned(&topic_hash, peer_id);
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        metrics.assign_slot_if_unassigned(&topic_hash, peer_id);
+                    }
 
                     // If the peer did not previously exist in any mesh, inform the handler
                     peer_added_to_mesh(
@@ -1514,7 +1536,9 @@ where
                     &mut self.events,
                     &self.connected_peers,
                 );
-                self.metrics.churn_slot(topic_hash, peer_id, churn_reason);
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.churn_slot(topic_hash, peer_id, churn_reason);
+                }
             }
         }
         if update_backoff {
@@ -1704,12 +1728,14 @@ where
     ) {
         // Report received message to metrics if we are subscribed to the topic, otherwise
         // ignore it.
-        if self.mesh.contains_key(&raw_message.topic) {
-            self.metrics.increment_message_metric(
-                &raw_message.topic,
-                propagation_source,
-                SlotMessageMetric::MessagesAll,
-            );
+        if let Some(metrics) = self.metrics.as_mut() {
+            if self.mesh.contains_key(&raw_message.topic) {
+                metrics.increment_message_metric(
+                    &raw_message.topic,
+                    propagation_source,
+                    SlotMessageMetric::MessagesAll,
+                );
+            }
         }
 
         let fast_message_id = self.config.fast_message_id(&raw_message);
@@ -1725,12 +1751,14 @@ where
                         );
                     }
                     // Metrics: Report the duplicate message, for mesh topics
-                    if self.mesh.contains_key(&raw_message.topic) {
-                        self.metrics.increment_message_metric(
-                            &raw_message.topic,
-                            propagation_source,
-                            SlotMessageMetric::MessagesDuplicates,
-                        );
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        if self.mesh.contains_key(&raw_message.topic) {
+                            metrics.increment_message_metric(
+                                &raw_message.topic,
+                                propagation_source,
+                                SlotMessageMetric::MessagesDuplicates,
+                            );
+                        }
                     }
                 }
                 return;
@@ -1776,13 +1804,15 @@ where
             }
 
             // Metrics: Report the duplicate message, for mesh topics
-            if self.mesh.contains_key(&raw_message.topic) {
-                // NOTE: Allow overflowing of a usize here
-                self.metrics.increment_message_metric(
-                    &message.topic,
-                    propagation_source,
-                    SlotMessageMetric::MessagesDuplicates,
-                );
+            if let Some(metrics) = self.metrics.as_mut() {
+                if self.mesh.contains_key(&raw_message.topic) {
+                    // NOTE: Allow overflowing of a usize here
+                    metrics.increment_message_metric(
+                        &message.topic,
+                        propagation_source,
+                        SlotMessageMetric::MessagesDuplicates,
+                    );
+                }
             }
             return;
         }
@@ -1792,12 +1822,14 @@ where
         );
 
         // Increment the first message topic, if its in our mesh.
-        if self.mesh.contains_key(&raw_message.topic) {
-            self.metrics.increment_message_metric(
-                &raw_message.topic,
-                propagation_source,
-                SlotMessageMetric::MessagesFirst,
-            );
+        if let Some(metrics) = self.metrics.as_mut() {
+            if self.mesh.contains_key(&raw_message.topic) {
+                metrics.increment_message_metric(
+                    &raw_message.topic,
+                    propagation_source,
+                    SlotMessageMetric::MessagesFirst,
+                );
+            }
         }
 
         // Tells score that message arrived (but is maybe not fully validated yet).
@@ -1826,7 +1858,9 @@ where
                 message.topic
             );
 
-            self.metrics.message_invalid_topic();
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.message_invalid_topic();
+            }
             return;
         }
 
@@ -1933,11 +1967,10 @@ where
 
                     // add to the peer_topics mapping
                     if subscribed_topics.insert(subscription.topic_hash.clone()) {
-                        if self.metrics.enabled() {
-                            self.metrics.peer_joined_topic(&subscription.topic_hash);
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.peer_joined_topic(&subscription.topic_hash);
                             if self.mesh.contains_key(&subscription.topic_hash) {
-                                self.metrics
-                                    .peer_joined_subscribed_topic(&subscription.topic_hash);
+                                metrics.peer_joined_subscribed_topic(&subscription.topic_hash);
                             }
                         }
                     }
@@ -1998,11 +2031,11 @@ where
                             propagation_source.to_string(),
                             subscription.topic_hash
                         );
-                        if self.metrics.enabled() {
-                            self.metrics.peer_left_topic(&subscription.topic_hash);
+
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.peer_left_topic(&subscription.topic_hash);
                             if self.mesh.contains_key(&subscription.topic_hash) {
-                                self.metrics
-                                    .peer_left_subscribed_topic(&subscription.topic_hash);
+                                metrics.peer_left_subscribed_topic(&subscription.topic_hash);
                             }
                         }
                     }
@@ -2044,9 +2077,10 @@ where
             );
         }
 
-        for topic in &topics_to_graft {
-            self.metrics
-                .assign_slot_if_unassigned(topic, propagation_source);
+        if let Some(metrics) = self.metrics.as_mut() {
+            for topic in &topics_to_graft {
+                metrics.assign_slot_if_unassigned(topic, propagation_source);
+            }
         }
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
@@ -2088,7 +2122,9 @@ where
                 peer_score.add_penalty(&peer, count);
 
                 // Metrics: Increment broken promises
-                self.metrics.broken_promise();
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.broken_promise();
+                }
             }
         }
     }
@@ -2166,8 +2202,9 @@ where
                 peers.remove(&peer);
 
                 // Increment ChurnScore and remove peer from the slot
-                self.metrics
-                    .churn_slot(topic_hash, &peer, SlotChurnMetric::ChurnScore);
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.churn_slot(topic_hash, &peer, SlotChurnMetric::ChurnScore);
+                }
                 #[cfg(debug_assertions)]
                 modified_topics.insert(topic_hash.clone());
             }
@@ -2203,8 +2240,9 @@ where
                     trace!("Updating mesh, adding to mesh: {:?}", peer_list);
 
                     // Metrics: Update mesh peers
-                    self.metrics
-                        .assign_slots_to_peers(topic_hash, peer_list.iter().cloned());
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        metrics.assign_slots_to_peers(topic_hash, peer_list.iter().cloned());
+                    }
                     #[cfg(debug_assertions)]
                     modified_topics.insert(topic_hash.clone());
 
@@ -2260,9 +2298,10 @@ where
                             outbound -= 1;
                         }
                     }
-                    // Metrics: increment ChurnExcess and vacate slot
-                    self.metrics
-                        .churn_slot(topic_hash, &peer, SlotChurnMetric::ChurnExcess);
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        // Metrics: increment ChurnExcess and vacate slot
+                        metrics.churn_slot(topic_hash, &peer, SlotChurnMetric::ChurnExcess);
+                    }
                     #[cfg(debug_assertions)]
                     modified_topics.insert(topic_hash.clone());
 
@@ -2303,8 +2342,9 @@ where
                         // update the mesh
                         trace!("Updating mesh, adding to mesh: {:?}", peer_list);
 
-                        self.metrics
-                            .assign_slots_to_peers(topic_hash, peer_list.iter().cloned());
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.assign_slots_to_peers(topic_hash, peer_list.iter().cloned());
+                        }
                         #[cfg(debug_assertions)]
                         modified_topics.insert(topic_hash.clone());
 
@@ -2373,8 +2413,10 @@ where
                             );
 
                             // Metrics: Update mesh peers
-                            self.metrics
-                                .assign_slots_to_peers(topic_hash, peer_list.iter().cloned());
+                            if let Some(metrics) = self.metrics.as_mut() {
+                                metrics
+                                    .assign_slots_to_peers(topic_hash, peer_list.iter().cloned());
+                            }
                             #[cfg(debug_assertions)]
                             modified_topics.insert(topic_hash.clone());
 
@@ -3114,15 +3156,16 @@ where
                         mesh_peers.remove(peer_id);
 
                         // increment churn_disconnected and vacate slot
-                        self.metrics
-                            .churn_slot(topic, peer_id, SlotChurnMetric::ChurnDisconnected);
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.churn_slot(topic, peer_id, SlotChurnMetric::ChurnDisconnected);
+                        }
                     }
                 }
 
-                if self.metrics.enabled() {
-                    self.metrics.peer_left_topic(&topic);
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.peer_left_topic(&topic);
                     if self.mesh.contains_key(&topic) {
-                        self.metrics.peer_left_subscribed_topic(&topic);
+                        metrics.peer_left_subscribed_topic(&topic);
                     }
                 }
 
@@ -3707,7 +3750,8 @@ mod local_test {
             .validation_mode(ValidationMode::Permissive)
             .build()
             .unwrap();
-        let gs: Gossipsub = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
+        let gs: Gossipsub =
+            Gossipsub::new(MessageAuthenticity::RandomAuthor, config, None).unwrap();
 
         // Message under the limit should be fine.
         let mut rpc = empty_rpc();
@@ -3755,7 +3799,8 @@ mod local_test {
                 .validation_mode(ValidationMode::Permissive)
                 .build()
                 .unwrap();
-            let gs: Gossipsub = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
+            let gs: Gossipsub =
+                Gossipsub::new(MessageAuthenticity::RandomAuthor, config, None).unwrap();
 
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);

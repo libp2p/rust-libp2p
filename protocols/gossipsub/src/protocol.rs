@@ -570,6 +570,7 @@ mod tests {
             let gs: Gossipsub = Gossipsub::new(
                 crate::MessageAuthenticity::Signed(keypair.0.clone()),
                 config,
+                None,
             )
             .unwrap();
             let data = (0..g.gen_range(10, 10024))
