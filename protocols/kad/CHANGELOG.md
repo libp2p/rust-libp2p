@@ -1,6 +1,8 @@
 # 0.32.0-rc.2 [2021-10-15]
 
-- Export `KademliaBucketInserts`.
+- Export `KademliaBucketInserts` (see [PR 2294]).
+
+[PR 2294]: https://github.com/libp2p/rust-libp2p/pull/2294
 
 # 0.32.0-rc.1 [2021-10-15]
 
