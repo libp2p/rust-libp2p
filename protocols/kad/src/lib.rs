@@ -43,9 +43,9 @@ pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
     GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
-    GetRecordOk, GetRecordResult, InboundRequest, PeerRecord, PutRecordContext, PutRecordError,
-    PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef, QueryResult,
-    QueryStats,
+    GetRecordOk, GetRecordResult, InboundRequest, KademliaBucketInserts, PeerRecord,
+    PutRecordContext, PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo,
+    QueryMut, QueryRef, QueryResult, QueryStats,
 };
 pub use behaviour::{
     Kademlia, KademliaCaching, KademliaConfig, KademliaEvent, KademliaStoreInserts, Quorum,
