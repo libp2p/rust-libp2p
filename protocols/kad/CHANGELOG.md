@@ -1,3 +1,7 @@
+# 0.32.0-rc.2 [2021-10-15]
+
+- Export `KademliaBucketInserts`.
+
 # 0.32.0-rc.1 [2021-10-15]
 
 - Make default features of `libp2p-core` optional.
