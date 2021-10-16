@@ -21,7 +21,7 @@
 //! This implements a time-based LRU cache for checking gossipsub message duplicates.
 
 use fnv::FnvHashMap;
-use libp2p_core::Instant;
+use instant::Instant;
 use std::collections::hash_map::{
     self,
     Entry::{Occupied, Vacant},

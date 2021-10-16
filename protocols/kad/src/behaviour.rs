@@ -38,9 +38,10 @@ use crate::record::{
 };
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
+use instant::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
-    ConnectedPoint, Instant, Multiaddr, PeerId,
+    ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     DialError, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,

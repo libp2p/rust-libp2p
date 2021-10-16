@@ -23,6 +23,7 @@ bimap = "0.6.1"
 sha2 = "0.9"
 rand = "0.8"
 futures-timer = "3.0.2"
+instant = "0.1.11"
 
 [dev-dependencies]
 async-trait = "0.1"

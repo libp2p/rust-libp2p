@@ -64,7 +64,8 @@
 use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
 use futures_timer::Delay;
-use libp2p_core::{Instant, PeerId};
+use instant::Instant;
+use libp2p_core::PeerId;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};

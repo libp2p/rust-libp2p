@@ -22,7 +22,7 @@ use crate::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use libp2p_core::Instant;
+use instant::Instant;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 

@@ -26,10 +26,8 @@ use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
-use libp2p_core::{
-    upgrade::{NegotiationError, UpgradeError},
-    Instant,
-};
+use instant::Instant;
+use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::{
     protocols_handler::{
         KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,

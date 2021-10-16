@@ -27,6 +27,7 @@ use crate::upgrade::SendWrapper;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
+use instant::Instant;
 use libp2p_core::{
     connection::{
         ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, Substream,
@@ -34,7 +35,7 @@ use libp2p_core::{
     },
     muxing::StreamMuxerBox,
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
-    Connected, Instant, Multiaddr,
+    Connected, Multiaddr,
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 

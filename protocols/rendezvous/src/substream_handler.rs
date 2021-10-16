@@ -27,7 +27,8 @@
 
 use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
-use libp2p_core::{InboundUpgrade, Instant, OutboundUpgrade, UpgradeInfo};
+use instant::Instant;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,

@@ -30,7 +30,7 @@ use std::{
 
 use futures::prelude::*;
 use futures_timer::Delay;
-use libp2p_core::Instant;
+use instant::Instant;
 use pin_project::pin_project;
 
 /// A stream representing notifications at fixed interval

@@ -24,10 +24,11 @@ use crate::protocol::{
 };
 use crate::record::{self, Record};
 use futures::prelude::*;
+use instant::Instant;
 use libp2p_core::{
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade},
-    ConnectedPoint, Instant, PeerId,
+    ConnectedPoint, PeerId,
 };
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,

@@ -25,9 +25,10 @@ use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
+use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::{upgrade, ConnectedPoint, Instant, Multiaddr, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,

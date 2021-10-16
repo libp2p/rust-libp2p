@@ -35,9 +35,10 @@ use log::{debug, error, trace, warn};
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
+use instant::Instant;
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
-    multiaddr::Protocol::Ip6, ConnectedPoint, Instant, Multiaddr, PeerId,
+    multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,

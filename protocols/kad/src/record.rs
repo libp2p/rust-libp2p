@@ -23,7 +23,8 @@
 pub mod store;
 
 use bytes::Bytes;
-use libp2p_core::{multihash::Multihash, Instant, Multiaddr, PeerId};
+use instant::Instant;
+use libp2p_core::{multihash::Multihash, Multiaddr, PeerId};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 
