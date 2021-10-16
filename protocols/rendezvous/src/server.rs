@@ -490,8 +490,8 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
+    use instant::SystemTime;
     use std::option::Option::None;
-    use std::time::SystemTime;
 
     use libp2p_core::{identity, PeerRecord};
 

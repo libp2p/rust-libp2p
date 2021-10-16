@@ -149,3 +149,6 @@ members = [
 [[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
+
+[patch.crates-io]
+instant = { git = "https://github.com/wngr/instant", branch = "systemtime" }
