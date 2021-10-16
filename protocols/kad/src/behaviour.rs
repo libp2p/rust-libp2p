@@ -1641,17 +1641,19 @@ where
                         return;
                     }
                 },
-                KademliaStoreInserts::FilterBoth => {
-                    self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundPutRecordRequest {
-                                source,
-                                connection,
-                                record: record.clone(),
-                            },
-                        ));
-                }
+                KademliaStoreInserts::FilterBoth => {}
             }
+
+            self.queued_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest {
+                        request: InboundRequest::PutRecord {
+                            source,
+                            connection,
+                            record: record.clone(),
+                        },
+                    },
+                ));
         }
 
         // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
@@ -1684,17 +1686,20 @@ where
             };
             match self.record_filtering {
                 KademliaStoreInserts::Unfiltered => {
-                    if let Err(e) = self.store.add_provider(record) {
+                    if let Err(e) = self.store.add_provider(record.clone()) {
                         info!("Provider record not stored: {:?}", e);
+                        return;
                     }
                 }
-                KademliaStoreInserts::FilterBoth => {
-                    self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundAddProviderRequest { record },
-                        ));
-                }
+                KademliaStoreInserts::FilterBoth => {}
             }
+
+            self.queued_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    KademliaEvent::InboundRequest {
+                        request: InboundRequest::AddProvider { record },
+                    },
+                ));
         }
     }
 
@@ -1951,7 +1956,7 @@ where
 
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequestServed {
+                        KademliaEvent::InboundRequest {
                             request: InboundRequest::FindNode {
                                 num_closer_peers: closer_peers.len(),
                             },
@@ -1982,7 +1987,7 @@ where
 
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequestServed {
+                        KademliaEvent::InboundRequest {
                             request: InboundRequest::GetProvider {
                                 num_closer_peers: closer_peers.len(),
                                 num_provider_peers: provider_peers.len(),
@@ -2039,13 +2044,6 @@ where
                 }
 
                 self.provider_received(key, provider);
-
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequestServed {
-                            request: InboundRequest::AddProvider {},
-                        },
-                    ));
             }
 
             KademliaHandlerEvent::GetRecord { key, request_id } => {
@@ -2066,7 +2064,7 @@ where
 
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequestServed {
+                        KademliaEvent::InboundRequest {
                             request: InboundRequest::GetRecord {
                                 num_closer_peers: closer_peers.len(),
                                 present_locally: record.is_some(),
@@ -2150,13 +2148,6 @@ where
 
             KademliaHandlerEvent::PutRecord { record, request_id } => {
                 self.record_received(source, connection, request_id, record);
-
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequestServed {
-                            request: InboundRequest::PutRecord {},
-                        },
-                    ));
             }
 
             KademliaHandlerEvent::PutRecordRes { user_data, .. } => {
@@ -2371,26 +2362,12 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug)]
 pub enum KademliaEvent {
-    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request and filtering is enabled.
-    ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
-    InboundPutRecordRequest {
-        source: PeerId,
-        connection: ConnectionId,
-        record: Record,
-    },
-
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request and filtering [`KademliaStoreInserts::FilterBoth`] is enabled.
-    ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
-    InboundAddProviderRequest { record: ProviderRecord },
-
     /// An inbound request has been received and handled.
     //
     // Note on the difference between 'request' and 'query': A request is a
     // single request-response style exchange with a single remote peer. A query
     // is made of multiple requests across multiple remote peers.
-    InboundRequestServed { request: InboundRequest },
+    InboundRequest { request: InboundRequest },
 
     /// An outbound query has produced a result.
     OutboundQueryCompleted {
@@ -2465,14 +2442,18 @@ pub enum InboundRequest {
         num_provider_peers: usize,
     },
     /// Request to store a peer as a provider.
-    AddProvider {},
+    AddProvider { record: ProviderRecord },
     /// Request to retrieve a record.
     GetRecord {
         num_closer_peers: usize,
         present_locally: bool,
     },
     /// Request to store a record.
-    PutRecord {},
+    PutRecord {
+        source: PeerId,
+        connection: ConnectionId,
+        record: Record,
+    },
 }
 
 /// The results of Kademlia queries.
