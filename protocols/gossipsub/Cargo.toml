@@ -2,7 +2,7 @@
 name = "libp2p-gossipsub"
 edition = "2018"
 description = "Gossipsub protocol for libp2p"
-version = "0.33.0"
+version = "0.33.0-rc.1"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,24 +10,24 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
-base64 = "0.13.0"
-byteorder = "1.3.4"
+libp2p-swarm = { version = "0.31.0-rc.1", path = "../../swarm" }
+libp2p-core = { version = "0.30.0-rc.1", path = "../../core", default-features = false }
 bytes = "1.0"
+byteorder = "1.3.4"
 fnv = "1.0.7"
 futures = "0.3.5"
-futures-timer = "3.0.2"
-hex_fmt = "0.3.0"
-libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
-log = "0.4.11"
-pin-project = "1.0.8"
-prost = "0.8"
 rand = "0.7.3"
-regex = "1.4.0"
-sha2 = "0.9.1"
-smallvec = "1.6.1"
+asynchronous-codec = "0.6"
 unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }
+log = "0.4.11"
+sha2 = "0.9.1"
+base64 = "0.13.0"
+smallvec = "1.6.1"
+prost = "0.9"
+hex_fmt = "0.3.0"
+regex = "1.4.0"
+futures-timer = "3.0.2"
+pin-project = "1.0.8"
 
 [dev-dependencies]
 async-std = "1.6.3"
@@ -41,4 +41,4 @@ hex = "0.4.2"
 derive_builder = "0.10.0"
 
 [build-dependencies]
-prost-build = "0.8"
+prost-build = "0.9"
