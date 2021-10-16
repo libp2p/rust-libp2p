@@ -602,12 +602,10 @@ fn put_record() {
                             }
                         }
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::InboundPutRecordRequest { record, .. },
+                            KademliaEvent::InboundRequest {
+                                request: InboundRequest::PutRecord { record, .. },
+                            },
                         ))) => {
-                            assert_ne!(
-                                swarm.behaviour().record_filtering,
-                                KademliaStoreInserts::Unfiltered
-                            );
                             if !drop_records {
                                 // Accept the record
                                 swarm
