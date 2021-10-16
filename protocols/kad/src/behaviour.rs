@@ -147,10 +147,6 @@ pub enum KademliaStoreInserts {
     /// Whenever a (provider) record is received,
     /// the record is forwarded immediately to the [`RecordStore`].
     Unfiltered,
-    /// Whenever a (provider) record is received, an event is emitted.
-    /// Provider records generate a [`KademliaEvent::InboundAddProviderRequest`],
-    /// normal records generate a [`KademliaEvent::InboundPutRecordRequest`].
-    ///
     /// When deemed valid, a (provider) record needs to be explicitly stored in
     /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
     /// whichever is applicable. A mutable reference to the [`RecordStore`] can
