@@ -24,7 +24,7 @@ use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Multiaddr, PeerId,
 };
-use std::{error, task::Context, task::Poll};
+use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ProtocolsHandler`].
 type THandlerInEvent<THandler> =
@@ -113,7 +113,14 @@ pub trait NetworkBehaviour: Send + 'static {
     fn inject_disconnected(&mut self, _: &PeerId) {}
 
     /// Informs the behaviour about a newly established connection to a peer.
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
+    fn inject_connection_established(
+        &mut self,
+        _peer_id: &PeerId,
+        _connection_id: &ConnectionId,
+        _endpoint: &ConnectedPoint,
+        _failed_addresses: Option<&Vec<Multiaddr>>,
+    ) {
+    }
 
     /// Informs the behaviour about a closed connection to a peer.
     ///
@@ -151,28 +158,12 @@ pub trait NetworkBehaviour: Send + 'static {
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     );
 
-    /// Indicates to the behaviour that we tried to reach an address, but failed.
-    ///
-    /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
-    /// last address to attempt for the given node, then `inject_dial_failure` is called afterwards.
-    fn inject_addr_reach_failure(
-        &mut self,
-        _peer_id: Option<&PeerId>,
-        _addr: &Multiaddr,
-        _error: &dyn error::Error,
-    ) {
-    }
-
-    /// Indicates to the behaviour that we tried to dial all the addresses known for a node, but
-    /// failed.
-    ///
-    /// The `peer_id` is guaranteed to be in a disconnected state. In other words,
-    /// `inject_connected` has not been called, or `inject_disconnected` has been called since then.
+    /// Indicates to the behaviour that the dial to a known or unknown node failed.
     fn inject_dial_failure(
         &mut self,
-        _peer_id: &PeerId,
+        _peer_id: Option<PeerId>,
         _handler: Self::ProtocolsHandler,
-        _error: DialError,
+        _error: &DialError,
     ) {
     }
 
@@ -399,9 +390,9 @@ pub enum NetworkBehaviourAction<
     ///     #
     ///     fn inject_dial_failure(
     ///         &mut self,
-    ///         _: &PeerId,
+    ///         _: Option<PeerId>,
     ///         handler: Self::ProtocolsHandler,
-    ///         _: DialError,
+    ///         _: &DialError,
     ///     ) {
     ///         // As expected, sending the message failed. But lucky us, we got the handler back, thus
     ///         // the precious message is not lost and we can return it back to the user.
@@ -707,18 +698,10 @@ pub enum DialPeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
     /// considered disconnected, i.e. there is no established connection
     /// and no ongoing dialing attempt.
-    ///
-    /// If there is an ongoing dialing attempt, the addresses reported by
-    /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
-    /// dialing attempt, ignoring duplicates.
     Disconnected,
     /// A new dialing attempt is initiated _only if_ there is currently
     /// no ongoing dialing attempt, i.e. the peer is either considered
     /// disconnected or connected but without an ongoing dialing attempt.
-    ///
-    /// If there is an ongoing dialing attempt, the addresses reported by
-    /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
-    /// dialing attempt, ignoring duplicates.
     NotDialing,
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.

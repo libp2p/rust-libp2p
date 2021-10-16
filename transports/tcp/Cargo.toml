@@ -2,7 +2,7 @@
 name = "libp2p-tcp"
 edition = "2018"
 description = "TCP/IP transport protocol for libp2p"
-version = "0.30.0"
+version = "0.30.0-rc.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,7 +17,7 @@ if-watch = { version = "0.2.0", optional = true }
 if-addrs = { version = "0.6.4", optional = true }
 ipnet = "2.0.0"
 libc = "0.2.80"
-libp2p-core = { version = "0.30.0", path = "../../core", default-features = false  }
+libp2p-core = { version = "0.30.0-rc.1", path = "../../core", default-features = false  }
 log = "0.4.11"
 socket2 = { version = "0.4.0", features = ["all"] }
 tokio-crate = { package = "tokio", version = "1.0.1", default-features = false, features = ["net"], optional = true }
