@@ -29,7 +29,11 @@ use libp2p_core::{
     Transport,
 };
 use log::{debug, trace};
-use soketto::{connection::{self, CloseReason}, extension::deflate::Deflate, handshake};
+use soketto::{
+    connection::{self, CloseReason},
+    extension::deflate::Deflate,
+    handshake,
+};
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -586,7 +590,7 @@ where
                     Some((Ok(IncomingData::Closed(reason)), (data, receiver)))
                 }
                 Err(connection::Error::Closed) => None,
-                Err(e) => Some((Err(e), (data, receiver)))
+                Err(e) => Some((Err(e), (data, receiver))),
             }
         });
         Connection {

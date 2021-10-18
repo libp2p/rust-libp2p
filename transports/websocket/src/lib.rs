@@ -167,7 +167,9 @@ where
         loop {
             if let Some(item) = ready!(self.0.try_poll_next_unpin(cx)?) {
                 if item.is_data() {
-                    let bytes = item.into_bytes().expect("Just checked that this is data, which ensures this is Some; qed");
+                    let bytes = item
+                        .into_bytes()
+                        .expect("Just checked that this is data, which ensures this is Some; qed");
                     return Poll::Ready(Some(Ok(bytes)));
                 }
             } else {
