@@ -508,28 +508,17 @@ impl IncomingData {
     }
 
     pub fn is_close(&self) -> bool {
-        if let IncomingData::Closed(_) = self { true } else { false }
+        matches!(self, IncomingData::Closed(_))
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
+    /// Extract [`IncomingData`] inner data. Note: `IncomingData::Closed` is not possible to
+    /// represent as bytes and will return `None`.
+    pub fn into_bytes(self) -> Option<Vec<u8>> {
         match self {
-            IncomingData::Binary(d) => d,
-            IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d,
-            IncomingData::Closed(CloseReason { code, ..}) => {
-                code.to_be_bytes().to_vec()
-            }
-        }
-    }
-}
-
-impl AsRef<[u8]> for IncomingData {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            IncomingData::Binary(d) => d,
-            IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d,
-            IncomingData::Closed(_) => unimplemented!(),
+            IncomingData::Binary(d) => Some(d),
+            IncomingData::Text(d) => Some(d),
+            IncomingData::Pong(d) => Some(d),
+            IncomingData::Closed(_) => None,
         }
     }
 }
