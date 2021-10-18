@@ -23,7 +23,7 @@ use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
 use crate::protocol::Peer;
 
 use asynchronous_codec::{Framed, FramedParts};
-use bytes::{BytesMut, Bytes};
+use bytes::{Bytes, BytesMut};
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -50,8 +50,7 @@ pub struct IncomingRelayReq {
     _notifier: oneshot::Sender<()>,
 }
 
-impl IncomingRelayReq
-{
+impl IncomingRelayReq {
     /// Creates a [`IncomingRelayReq`] as well as a Future that resolves once the
     /// [`IncomingRelayReq`] is dropped.
     pub(crate) fn new(

@@ -67,7 +67,7 @@ mod tests {
         F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         pub fn create_network(self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
-            let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
+            let keypair = libp2p_core::identity::Keypair::generate_ed25519();
             // create a gossipsub struct
             let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
                 MessageAuthenticity::Signed(keypair),
@@ -195,6 +195,7 @@ mod tests {
                     send_back_addr: address,
                 }
             },
+            None,
         );
         <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
@@ -533,6 +534,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 },
+                None,
             );
             gs.inject_connected(&random_peer);
 
@@ -747,7 +749,7 @@ mod tests {
 
         // check that our subscriptions are sent to each of the peers
         // collect all the SendEvents
-        let send_events: Vec<&NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>> = gs
+        let send_events: Vec<_> = gs
             .events
             .iter()
             .filter(|e| match e {
@@ -1336,13 +1338,14 @@ mod tests {
         //add peer as explicit peer
         gs.add_explicit_peer(&peer);
 
-        let dial_events: Vec<&NetworkBehaviourAction<Arc<GossipsubHandlerIn>, GossipsubEvent>> = gs
+        let dial_events: Vec<_> = gs
             .events
             .iter()
             .filter(|e| match e {
                 NetworkBehaviourAction::DialPeer {
                     peer_id,
                     condition: DialPeerCondition::Disconnected,
+                    handler: _,
                 } => peer_id == &peer,
                 _ => false,
             })
@@ -1388,6 +1391,7 @@ mod tests {
                     NetworkBehaviourAction::DialPeer {
                         peer_id,
                         condition: DialPeerCondition::Disconnected,
+                        handler: _,
                     } => peer_id == peer,
                     _ => false,
                 })
@@ -1406,6 +1410,7 @@ mod tests {
                     NetworkBehaviourAction::DialPeer {
                         peer_id,
                         condition: DialPeerCondition::Disconnected,
+                        handler: _,
                     } => peer_id == peer,
                     _ => false,
                 })
@@ -1819,6 +1824,7 @@ mod tests {
                 NetworkBehaviourAction::DialPeer {
                     peer_id,
                     condition: DialPeerCondition::Disconnected,
+                    handler: _,
                 } => Some(peer_id.clone()),
                 _ => None,
             })
@@ -4081,6 +4087,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: addr.clone(),
                 },
+                None,
             );
         }
 
@@ -4099,6 +4106,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: addr2.clone(),
                 },
+                None,
             );
         }
 
@@ -4126,6 +4134,7 @@ mod tests {
             &ConnectedPoint::Dialer {
                 address: addr.clone(),
             },
+            None,
         );
 
         //nothing changed
@@ -5227,5 +5236,37 @@ mod tests {
 
         //nobody got penalized
         assert!(gs1.peer_score.as_ref().unwrap().0.score(&p2) >= original_score);
+    }
+
+    #[test]
+    /// Test nodes that send grafts without subscriptions.
+    fn test_graft_without_subscribe() {
+        // The node should:
+        // - Create an empty vector in mesh[topic]
+        // - Send subscription request to all peers
+        // - run JOIN(topic)
+
+        let topic = String::from("test_subscribe");
+        let subscribe_topic = vec![topic.clone()];
+        let subscribe_topic_hash = vec![Topic::new(topic.clone()).hash()];
+        let (mut gs, peers, topic_hashes) = inject_nodes1()
+            .peer_no(1)
+            .topics(subscribe_topic)
+            .to_subscribe(false)
+            .create_network();
+
+        assert!(
+            gs.mesh.get(&topic_hashes[0]).is_some(),
+            "Subscribe should add a new entry to the mesh[topic] hashmap"
+        );
+
+        // The node sends a graft for the subscribe topic.
+        gs.handle_graft(&peers[0], subscribe_topic_hash);
+
+        // The node disconnects
+        gs.inject_disconnected(&peers[0]);
+
+        // We unsubscribe from the topic.
+        let _ = gs.unsubscribe(&Topic::new(topic));
     }
 }

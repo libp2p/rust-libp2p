@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::prelude::*;
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p_swarm_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -36,13 +38,13 @@ fn empty() {
 fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     #[allow(dead_code)]
@@ -55,19 +57,18 @@ fn one_field() {
 fn two_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     #[allow(dead_code)]
@@ -80,6 +81,7 @@ fn two_fields() {
 fn three_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -89,18 +91,15 @@ fn three_fields() {
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {}
     }
 
     #[allow(dead_code)]
@@ -113,6 +112,7 @@ fn three_fields() {
 fn three_fields_non_last_ignored() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         #[behaviour(ignore)]
@@ -121,13 +121,11 @@ fn three_fields_non_last_ignored() {
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {}
     }
 
     #[allow(dead_code)]
@@ -140,24 +138,33 @@ fn three_fields_non_last_ignored() {
 fn custom_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo")]
+    #[behaviour(poll_method = "foo", event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
     }
 
     impl Foo {
-        fn foo<T>(&mut self, _: &mut std::task::Context, _: &mut impl libp2p::swarm::PollParameters) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, ()>> { std::task::Poll::Pending }
+        fn foo(
+            &mut self,
+            _: &mut std::task::Context,
+            _: &mut impl libp2p::swarm::PollParameters,
+        ) -> std::task::Poll<
+            libp2p::swarm::NetworkBehaviourAction<
+                <Self as NetworkBehaviour>::OutEvent,
+                <Self as NetworkBehaviour>::ProtocolsHandler,
+            >,
+        > {
+            std::task::Poll::Pending
+        }
     }
 
     #[allow(dead_code)]
@@ -170,20 +177,18 @@ fn custom_polling() {
 fn custom_event_no_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Vec<String>")]
+    #[behaviour(out_event = "Vec<String>", event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
     }
 
     #[allow(dead_code)]
@@ -196,24 +201,33 @@ fn custom_event_no_polling() {
 fn custom_event_and_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo", out_event = "String")]
+    #[behaviour(poll_method = "foo", out_event = "String", event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
     }
 
     impl Foo {
-        fn foo<T>(&mut self, _: &mut std::task::Context, _: &mut impl libp2p::swarm::PollParameters) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, String>> { std::task::Poll::Pending }
+        fn foo(
+            &mut self,
+            _: &mut std::task::Context,
+            _: &mut impl libp2p::swarm::PollParameters,
+        ) -> std::task::Poll<
+            libp2p::swarm::NetworkBehaviourAction<
+                <Self as NetworkBehaviour>::OutEvent,
+                <Self as NetworkBehaviour>::ProtocolsHandler,
+            >,
+        > {
+            std::task::Poll::Pending
+        }
     }
 
     #[allow(dead_code)]
@@ -226,6 +240,7 @@ fn custom_event_and_polling() {
 fn where_clause() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo<T: Copy> {
         ping: libp2p::ping::Ping,
         bar: T,
@@ -238,24 +253,24 @@ fn nested_derives_with_import() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
     }
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct Bar {
         foo: Foo,
     }
 
     impl NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
-        }
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     impl NetworkBehaviourEventProcess<()> for Bar {
-        fn inject_event(&mut self, _: ()) {
-        }
+        fn inject_event(&mut self, _: ()) {}
     }
 
     #[allow(dead_code)]
@@ -268,7 +283,7 @@ fn nested_derives_with_import() {
 fn event_process_false() {
     enum BehaviourOutEvent {
         Ping(libp2p::ping::PingEvent),
-        Identify(libp2p::identify::IdentifyEvent)
+        Identify(libp2p::identify::IdentifyEvent),
     }
 
     impl From<libp2p::ping::PingEvent> for BehaviourOutEvent {
@@ -285,7 +300,7 @@ fn event_process_false() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "BehaviourOutEvent", event_process = false)]
+    #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
@@ -299,9 +314,12 @@ fn event_process_false() {
 
         // check that the event is bubbled up all the way to swarm
         let _ = async {
-            match _swarm.next().await {
-                BehaviourOutEvent::Ping(_) => {},
-                BehaviourOutEvent::Identify(_) => {},
+            loop {
+                match _swarm.select_next_some().await {
+                    SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
+                    SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
+                    _ => {}
+                }
             }
         };
     }

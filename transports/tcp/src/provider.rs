@@ -26,12 +26,12 @@ pub mod async_io;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-use futures::io::{AsyncRead, AsyncWrite};
 use futures::future::BoxFuture;
+use futures::io::{AsyncRead, AsyncWrite};
 use ipnet::IpNet;
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::task::{Context, Poll};
 use std::{fmt, io};
-use std::net::{SocketAddr, TcpListener, TcpStream};
 
 /// An event relating to a change of availability of an address
 /// on a network interface.
@@ -73,7 +73,10 @@ pub trait Provider: Clone + Send + 'static {
 
     /// Polls a [`Self::Listener`] for an incoming connection, ensuring a task wakeup,
     /// if necessary.
-    fn poll_accept(_: &mut Self::Listener, _: &mut Context<'_>) -> Poll<io::Result<Incoming<Self::Stream>>>;
+    fn poll_accept(
+        _: &mut Self::Listener,
+        _: &mut Context<'_>,
+    ) -> Poll<io::Result<Incoming<Self::Stream>>>;
 
     /// Polls a [`Self::IfWatcher`] for network interface changes, ensuring a task wakeup,
     /// if necessary.

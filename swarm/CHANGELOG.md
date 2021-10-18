@@ -1,6 +1,103 @@
-# 0.30.0 [unreleased]
+# 0.31.0-rc.1 [2021-10-15]
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
 - Update dependencies.
+
+- Provide default implementations for all functions of `NetworkBehaviour`,
+  except for `new_handler`, `inject_event` and `poll`.
+  This should make it easier to create new implementations. See [PR 2150].
+
+- Remove `Swarm` type alias and rename `ExpandedSwarm` to `Swarm`. Reduce direct
+  trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
+  through associated types on `TBehaviour`. See [PR 2182].
+
+- Require `ProtocolsHandler::{InEvent,OutEvent,Error}` to implement `Debug` (see
+  [PR 2183]).
+
+- Implement `ProtocolsHandler` on `either::Either`representing either of two
+  `ProtocolsHandler` implementations (see [PR 2192]).
+
+- Require implementation to provide handler in
+  `NetworkBehaviourAction::DialPeer` and `NetworkBehaviourAction::DialAddress`.
+  Note that the handler is returned to the `NetworkBehaviour` on connection
+  failure and connection closing. Thus it can be used to carry state, which
+  otherwise would have to be tracked in the `NetworkBehaviour` itself. E.g. a
+  message destined to an unconnected peer can be included in the handler, and
+  thus directly send on connection success or extracted by the
+  `NetworkBehaviour` on connection failure (see [PR 2191]).
+
+- Include handler in `NetworkBehaviour::inject_dial_failure`,
+  `NetworkBehaviour::inject_connection_closed`,
+  `NetworkBehaviour::inject_listen_failure` (see [PR 2191]).
+
+- Include error in `NetworkBehaviour::inject_dial_failure` and call
+  `NetworkBehaviour::inject_dial_failure` on `DialPeerCondition` evaluating to
+  false. To emulate the previous behaviour, return early within
+  `inject_dial_failure` on `DialError::DialPeerConditionFalse`. See [PR 2191].
+
+- Make `NetworkBehaviourAction` generic over `NetworkBehaviour::OutEvent` and
+  `NetworkBehaviour::ProtocolsHandler`. In most cases, change your generic type
+  parameters to `NetworkBehaviourAction<Self::OutEvent,
+  Self::ProtocolsHandler>`. See [PR 2191].
+
+- Return `bool` instead of `Result<(), ()>` for `Swarm::remove_listener`(see
+  [PR 2261]).
+
+- Concurrently dial address candidates within a single dial attempt (see [PR 2248]) configured via
+  `Swarm::dial_concurrency_factor`.
+
+  - On success of a single address, report errors of the thus far failed dials via
+    `SwarmEvent::ConnectionEstablished::outgoing`.
+
+  - On failure of all addresses, report errors via the new `SwarmEvent::OutgoingConnectionError`.
+
+  - Remove `SwarmEvent::UnreachableAddr` and `SwarmEvent::UnknownPeerUnreachableAddr` event.
+
+  - In `NetworkBehaviour::inject_connection_established` provide errors of all thus far failed addresses.
+
+  - On unknown peer dial failures, call `NetworkBehaviour::inject_dial_failure` with a peer ID of `None`.
+
+  - Remove `NetworkBehaviour::inject_addr_reach_failure`. Information is now provided via
+    `NetworkBehaviour::inject_connection_established` and `NetworkBehaviour::inject_dial_failure`.
+
+[PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
+[PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+[PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
+
+# 0.30.0 [2021-07-12]
+
+- Update dependencies.
+
+- Drive `ExpandedSwarm` via `Stream` trait only.
+
+  - Change `Stream` implementation of `ExpandedSwarm` to return all
+    `SwarmEvents` instead of only the `NetworkBehaviour`'s events.
+
+  - Remove `ExpandedSwarm::next_event`. Users can use `<ExpandedSwarm as
+    StreamExt>::next` instead.
+
+  - Remove `ExpandedSwarm::next`. Users can use `<ExpandedSwarm as
+    StreamExt>::filter_map` instead.
+
+  See [PR 2100] for details.
+
+- Add `ExpandedSwarm::disconnect_peer_id` and
+  `NetworkBehaviourAction::CloseConnection` to close connections to a specific
+  peer via an `ExpandedSwarm` or `NetworkBehaviour`. See [PR 2110] for details.
+
+- Expose the `ListenerId` in `SwarmEvent`s that are associated with a listener.
+
+  See [PR 2123] for details.
+
+[PR 2100]: https://github.com/libp2p/rust-libp2p/pull/2100
+[PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
+[PR 2123]: https://github.com/libp2p/rust-libp2p/pull/2123
 
 # 0.29.0 [2021-04-13]
 

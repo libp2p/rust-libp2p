@@ -1,8 +1,80 @@
-# 0.29.0 [unreleased]
+# 0.30.0-rc.1 [2021-10-15]
+
+- Add `ConnectionLimit::with_max_established` (see [PR 2137]).
+
+- Add `Keypair::to_protobuf_encoding` (see [PR 2142]).
+
+- Change `PublicKey::into_protobuf_encoding` to `PublicKey::to_protobuf_encoding` (see [PR 2145]).
+
+- Change `PublicKey::into_peer_id` to `PublicKey::to_peer_id` (see [PR 2145]).
+
+- Change `PeerId::from_public_key(PublicKey)` to `PeerId::from_public_key(&PublicKey)` (see [PR 2145]).
+
+- Add `From<&PublicKey> for PeerId` (see [PR 2145]).
+
+- Remove `TInEvent` and `TOutEvent` trait paramters on most public types.
+  `TInEvent` and `TOutEvent` are implied through `THandler` and thus
+  superflucious. Both are removed in favor of a derivation through `THandler`
+  (see [PR 2183]).
+
+- Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
+  (see [PR 2183]).
+
+- Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
+
+- Report `ConnectionLimit` error through `ConnectionError` and thus through
+  `NetworkEvent::ConnectionClosed` instead of previously through
+  `PendingConnectionError` and thus `NetworkEvent::{IncomingConnectionError,
+  DialError}` (see [PR 2191]).
+
+- Report abortion of pending connection through `DialError`,
+  `UnknownPeerDialError` or `IncomingConnectionError` (see [PR 2191]).
+
+- Remove deprecated functions `upgrade::write_one`, `upgrade::write_with_len_prefix`
+  and `upgrade::read_one` (see [PR 2213]).
+
+- Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003]
+  (see [PR 2107]).
+
+- Report `ListenersEvent::Closed` when dropping a listener in `ListenersStream::remove_listener`,
+  return `bool` instead of `Result<(), ()>` (see [PR 2261]).
+
+- Concurrently dial address candidates within a single dial attempt (see [PR 2248]) configured
+  via `Network::with_dial_concurrency_factor`.
+
+  - On success of a single address, provide errors of the thus far failed dials via
+    `NetworkEvent::ConnectionEstablished::outgoing`.
+
+  - On failure of all addresses, provide the errors via `NetworkEvent::DialError`.
+
+[PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
+[PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
+[PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
+[PR 2137]: https://github.com/libp2p/rust-libp2p/pull/2137
+[PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+[PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
+[PR 2107]: https://github.com/libp2p/rust-libp2p/pull/2107
+[PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
+[RFC0002]: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+[RFC0003]: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md
+
+# 0.29.0 [2021-07-12]
 
 - Switch from `parity-multiaddr` to upstream `multiaddr`.
 
 - Update dependencies.
+
+- Implement `Keypair::from_protobuf_encoding` for ed25519 keys (see [PR 2090]).
+
+- Deprecate `upgrade::write_one`.
+  Deprecate `upgrade::write_with_len_prefix`.
+  Deprecate `upgrade::read_one`.
+  Introduce `upgrade::read_length_prefixed` and `upgrade::write_length_prefixed`.
+  See [PR 2111](https://github.com/libp2p/rust-libp2p/pull/2111).
+
+[PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090
 
 # 0.28.3 [2021-04-26]
 

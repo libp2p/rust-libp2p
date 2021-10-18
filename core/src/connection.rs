@@ -19,26 +19,42 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod error;
-mod handler;
+pub(crate) mod handler;
 mod listeners;
 mod substream;
 
-pub(crate) mod manager;
 pub(crate) mod pool;
 
-pub use error::{ConnectionError, PendingConnectionError};
+pub use error::{
+    ConnectionError, PendingConnectionError, PendingInboundConnectionError,
+    PendingOutboundConnectionError,
+};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
-pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
-pub use manager::ConnectionId;
-pub use substream::{Substream, SubstreamEndpoint, Close};
+pub use listeners::{ListenerId, ListenersEvent, ListenersStream};
+pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
-pub use pool::{ConnectionLimits, ConnectionCounters};
+pub use substream::{Close, Substream, SubstreamEndpoint};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
-use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use std::hash::Hash;
+use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
+
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(usize);
+
+impl ConnectionId {
+    /// Creates a `ConnectionId` from a non-negative integer.
+    ///
+    /// This is primarily useful for creating connection IDs
+    /// in test environments. There is in general no guarantee
+    /// that all connection IDs are based on non-negative integers.
+    pub fn new(id: usize) -> Self {
+        ConnectionId(id)
+    }
+}
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -55,7 +71,7 @@ impl std::ops::Not for Endpoint {
     fn not(self) -> Self::Output {
         match self {
             Endpoint::Dialer => Endpoint::Listener,
-            Endpoint::Listener => Endpoint::Dialer
+            Endpoint::Listener => Endpoint::Dialer,
         }
     }
 }
@@ -72,7 +88,40 @@ impl Endpoint {
     }
 }
 
-/// The endpoint roles associated with a peer-to-peer connection.
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer,
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { .. } => PendingPoint::Dialer,
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
+        }
+    }
+}
+
+/// The endpoint roles associated with an established peer-to-peer connection.
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum ConnectedPoint {
     /// We dialed the node.
@@ -84,9 +133,9 @@ pub enum ConnectedPoint {
     Listener {
         /// Local connection address.
         local_addr: Multiaddr,
-        /// Stack of protocols used to send back data to the remote.
+        /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
-    }
+    },
 }
 
 impl From<&'_ ConnectedPoint> for Endpoint {
@@ -106,7 +155,7 @@ impl ConnectedPoint {
     pub fn to_endpoint(&self) -> Endpoint {
         match self {
             ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener
+            ConnectedPoint::Listener { .. } => Endpoint::Listener,
         }
     }
 
@@ -114,7 +163,7 @@ impl ConnectedPoint {
     pub fn is_dialer(&self) -> bool {
         match self {
             ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false
+            ConnectedPoint::Listener { .. } => false,
         }
     }
 
@@ -122,7 +171,7 @@ impl ConnectedPoint {
     pub fn is_listener(&self) -> bool {
         match self {
             ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true
+            ConnectedPoint::Listener { .. } => true,
         }
     }
 
@@ -229,17 +278,18 @@ where
         self.handler.inject_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning a
-    /// `Future` that resolves when connection shutdown is complete.
-    pub fn close(self) -> Close<TMuxer> {
-        self.muxing.close().0
+    /// Begins an orderly shutdown of the connection, returning the connection
+    /// handler and a `Future` that resolves when connection shutdown is complete.
+    pub fn close(self) -> (THandler, Close<TMuxer>) {
+        (self.handler, self.muxing.close().0)
     }
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
-    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>>
-    {
+    pub fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
         loop {
             let mut io_pending = false;
 
@@ -247,10 +297,13 @@ where
             // of new substreams.
             match self.muxing.poll(cx) {
                 Poll::Pending => io_pending = true,
-                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
-                    self.handler.inject_substream(substream, SubstreamEndpoint::Listener)
-                }
-                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream { user_data, substream })) => {
+                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => self
+                    .handler
+                    .inject_substream(substream, SubstreamEndpoint::Listener),
+                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream {
+                    user_data,
+                    substream,
+                })) => {
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
@@ -265,7 +318,7 @@ where
             match self.handler.poll(cx) {
                 Poll::Pending => {
                     if io_pending {
-                        return Poll::Pending // Nothing to do
+                        return Poll::Pending; // Nothing to do
                     }
                 }
                 Poll::Ready(Ok(ConnectionHandlerEvent::OutboundSubstreamRequest(user_data))) => {
@@ -285,32 +338,23 @@ where
 pub struct IncomingInfo<'a> {
     /// Local connection address.
     pub local_addr: &'a Multiaddr,
-    /// Stack of protocols used to send back data to the remote.
+    /// Address used to send back data to the remote.
     pub send_back_addr: &'a Multiaddr,
 }
 
 impl<'a> IncomingInfo<'a> {
-    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
-    pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Listener {
+    /// Builds the [`PendingPoint`] corresponding to the incoming connection.
+    pub fn to_pending_point(&self) -> PendingPoint {
+        PendingPoint::Listener {
             local_addr: self.local_addr.clone(),
             send_back_addr: self.send_back_addr.clone(),
         }
     }
-}
-
-/// Borrowed information about an outgoing connection currently being negotiated.
-#[derive(Debug, Copy, Clone)]
-pub struct OutgoingInfo<'a> {
-    pub address: &'a Multiaddr,
-    pub peer_id: Option<&'a PeerId>,
-}
-
-impl<'a> OutgoingInfo<'a> {
-    /// Builds a `ConnectedPoint` corresponding to the outgoing connection.
+    /// Builds the [`ConnectedPoint`] corresponding to the incoming connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Dialer {
-            address: self.address.clone()
+        ConnectedPoint::Listener {
+            local_addr: self.local_addr.clone(),
+            send_back_addr: self.send_back_addr.clone(),
         }
     }
 }

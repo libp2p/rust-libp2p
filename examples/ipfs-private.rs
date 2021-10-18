@@ -41,10 +41,9 @@ use libp2p::{
     identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
     multiaddr::Protocol,
-    noise,
-    ping::{self, Ping, PingConfig, PingEvent},
+    noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::NetworkBehaviourEventProcess,
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
     tcp::TcpConfig,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
@@ -164,10 +163,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
     struct MyBehaviour {
         gossipsub: Gossipsub,
         identify: Identify,
-        ping: Ping,
+        ping: ping::Behaviour,
     }
 
     impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
@@ -196,14 +196,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
+    impl NetworkBehaviourEventProcess<ping::Event> for MyBehaviour {
         // Called when `ping` produces an event.
-        fn inject_event(&mut self, event: PingEvent) {
-            use ping::handler::{PingFailure, PingSuccess};
+        fn inject_event(&mut self, event: ping::Event) {
             match event {
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Ok(PingSuccess::Ping { rtt }),
+                    result: Result::Ok(ping::Success::Ping { rtt }),
                 } => {
                     println!(
                         "ping: rtt to {} is {} ms",
@@ -211,23 +210,29 @@ fn main() -> Result<(), Box<dyn Error>> {
                         rtt.as_millis()
                     );
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Ok(PingSuccess::Pong),
+                    result: Result::Ok(ping::Success::Pong),
                 } => {
                     println!("ping: pong from {}", peer.to_base58());
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Err(PingFailure::Timeout),
+                    result: Result::Err(ping::Failure::Timeout),
                 } => {
                     println!("ping: timeout to {}", peer.to_base58());
                 }
-                PingEvent {
+                ping::Event {
                     peer,
-                    result: Result::Err(PingFailure::Other { error }),
+                    result: Result::Err(ping::Failure::Unsupported),
                 } => {
-                    println!("ping: failure with {}: {}", peer.to_base58(), error);
+                    println!("ping: {} does not support ping protocol", peer.to_base58());
+                }
+                ping::Event {
+                    peer,
+                    result: Result::Err(ping::Failure::Other { error }),
+                } => {
+                    println!("ping: ping::Failure with {}: {}", peer.to_base58(), error);
                 }
             }
         }
@@ -249,12 +254,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),
-            ping: Ping::new(PingConfig::new()),
+            ping: ping::Behaviour::new(ping::Config::new()),
         };
 
         println!("Subscribing to {:?}", gossipsub_topic);
         behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
-        Swarm::new(transport, behaviour, local_peer_id.clone())
+        Swarm::new(transport, behaviour, local_peer_id)
     };
 
     // Reach out to other nodes if specified
@@ -271,7 +276,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
@@ -287,17 +291,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Address {}/ipfs/{}", addr, local_peer_id);
-                            listening = true;
-                        }
+                Poll::Ready(Some(event)) => {
+                    if let SwarmEvent::NewListenAddr { address, .. } = event {
+                        println!("Listening on {:?}", address);
                     }
-                    break;
                 }
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending

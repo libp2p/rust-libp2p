@@ -27,15 +27,15 @@
 //! Dialing any of the other peers will propagate the new participant to all
 //! chat members and everyone will receive all messages.
 //!
-//! In order to get the nodes to connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
+//! In order to get the nodes to connect, take note of the listening addresses of the first
+//! instance and start the second with one of the addresses as the first argument. In the first
+//! terminal window, run:
 //!
 //! ```sh
 //! cargo run --example gossipsub-chat
 //! ```
 //!
-//! It will print the [`PeerId`] and the listening address, e.g. `Listening on
+//! It will print the [`PeerId`] and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
@@ -53,7 +53,7 @@ use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
-use libp2p::{gossipsub, identity, PeerId};
+use libp2p::{gossipsub, identity, swarm::SwarmEvent, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
@@ -136,7 +136,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Kick it off
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
@@ -152,27 +151,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(gossip_event)) => match gossip_event {
-                    GossipsubEvent::Message {
+                Poll::Ready(Some(event)) => match event {
+                    SwarmEvent::Behaviour(GossipsubEvent::Message {
                         propagation_source: peer_id,
                         message_id: id,
                         message,
-                    } => println!(
+                    }) => println!(
                         "Got message: {} with id: {} from peer: {:?}",
                         String::from_utf8_lossy(&message.data),
                         id,
                         peer_id
                     ),
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {:?}", address);
+                    }
                     _ => {}
                 },
                 Poll::Ready(None) | Poll::Pending => break,
-            }
-        }
-
-        if !listening {
-            for addr in libp2p::Swarm::listeners(&swarm) {
-                println!("Listening on {:?}", addr);
-                listening = true;
             }
         }
 

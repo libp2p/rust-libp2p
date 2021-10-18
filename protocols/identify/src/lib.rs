@@ -47,4 +47,3 @@ mod protocol;
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 }
-

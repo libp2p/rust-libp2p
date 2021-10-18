@@ -19,30 +19,26 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::executor::LocalPool;
-use futures::future::{poll_fn, FutureExt};
-use futures::stream::Stream;
+use futures::future::FutureExt;
+use futures::stream::{Stream, StreamExt};
 use futures::task::Spawn;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::NetworkBehaviour;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::either::EitherTransport;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{MemoryTransport, Transport, TransportError};
-use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{identity, upgrade, PeerId};
 use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
-use libp2p_ping::{Ping, PingConfig, PingEvent};
+use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
-use libp2p_swarm::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
-};
+use libp2p_swarm::protocols_handler::KeepAlive;
 use libp2p_swarm::{
-    AddressRecord, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
+    DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
     NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
 };
-use std::iter;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use void::Void;
@@ -73,17 +69,19 @@ fn src_connect_to_dst_listening_via_relay() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    dst_swarm.listen_on(dst_listen_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm
+        .listen_on(dst_listen_addr_via_relay.clone())
+        .unwrap();
 
     pool.run_until(async {
         // Destination Node dialing Relay.
-        match dst_swarm.next_event().await {
+        match dst_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id),
             e => panic!("{:?}", e),
         }
 
         // Destination Node establishing connection to Relay.
-        match dst_swarm.next_event().await {
+        match dst_swarm.select_next_some().await {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 assert_eq!(peer_id, relay_peer_id);
             }
@@ -92,8 +90,14 @@ fn src_connect_to_dst_listening_via_relay() {
 
         // Destination Node reporting listen address via relay.
         loop {
-            match dst_swarm.next_event().await {
-                SwarmEvent::NewListenAddr(addr) if addr == dst_listen_addr_via_relay => break,
+            match dst_swarm.select_next_some().await {
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener => {
+                    assert_eq!(address, dst_listen_addr_via_relay);
+                    break;
+                }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -105,7 +109,7 @@ fn src_connect_to_dst_listening_via_relay() {
         let dst = async move {
             // Destination Node receiving connection from Source Node via Relay.
             loop {
-                match dst_swarm.next_event().await {
+                match dst_swarm.select_next_some().await {
                     SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                         assert_eq!(
                             send_back_addr,
@@ -120,7 +124,7 @@ fn src_connect_to_dst_listening_via_relay() {
 
             // Destination Node establishing connection from Source Node via Relay.
             loop {
-                match dst_swarm.next_event().await {
+                match dst_swarm.select_next_some().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == src_peer_id => {
                         break;
                     }
@@ -131,7 +135,7 @@ fn src_connect_to_dst_listening_via_relay() {
 
             // Destination Node waiting for Ping from Source Node via Relay.
             loop {
-                match dst_swarm.next_event().await {
+                match dst_swarm.select_next_some().await {
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                     SwarmEvent::ConnectionClosed { peer_id, .. } => {
                         assert_eq!(peer_id, src_peer_id);
@@ -145,20 +149,20 @@ fn src_connect_to_dst_listening_via_relay() {
         src_swarm.dial_addr(dst_addr_via_relay).unwrap();
         let src = async move {
             // Source Node dialing Relay to connect to Destination Node.
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
                 e => panic!("{:?}", e),
             }
 
             // Source Node establishing connection to Relay to connect to Destination Node.
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
                 e => panic!("{:?}", e),
             }
 
             // Source Node establishing connection to destination node via Relay.
             loop {
-                match src_swarm.next_event().await {
+                match src_swarm.select_next_some().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                         break
                     }
@@ -169,8 +173,8 @@ fn src_connect_to_dst_listening_via_relay() {
 
             // Source Node waiting for Ping from Destination Node via Relay.
             loop {
-                match src_swarm.next_event().await {
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                match src_swarm.select_next_some().await {
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                         peer,
                         result: Ok(_),
                     })) => {
@@ -220,20 +224,20 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
     src_swarm.dial_addr(dst_addr_via_relay).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node establishing connection to Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node establishing connection to destination node via Relay.
         loop {
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                     break
                 }
@@ -244,8 +248,8 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
 
         // Source Node waiting for Ping from Destination Node via Relay.
         loop {
-            match src_swarm.next_event().await {
-                SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+            match src_swarm.select_next_some().await {
+                SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                     peer,
                     result: Ok(_),
                 })) => {
@@ -282,14 +286,20 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
-            match dst_swarm.next_event().await {
+            match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener => {
+                    assert_eq!(address, dst_addr_via_relay);
+                    break;
+                }
                 e => panic!("{:?}", e),
             }
         }
@@ -301,7 +311,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
 
         // Source Node establishing connection to Relay.
         loop {
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
                     break
@@ -315,7 +325,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
 
         // Source Node establishing connection to destination node via Relay.
         loop {
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                     break
                 }
@@ -326,8 +336,8 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
 
         // Source Node waiting for Ping from Destination Node via Relay.
         loop {
-            match src_swarm.next_event().await {
-                SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+            match src_swarm.select_next_some().await {
+                SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                     peer,
                     result: Ok(_),
                 })) => {
@@ -368,23 +378,24 @@ fn src_try_connect_to_offline_dst() {
     src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node establishing connection to Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         loop {
-            match src_swarm.next_event().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
-                    assert_eq!(peer_id, dst_peer_id);
+            match src_swarm.select_next_some().await {
+                SwarmEvent::OutgoingConnectionError {
+                    error: DialError::Transport(addresses),
+                    peer_id,
+                } if *addresses.iter().map(|(a, _)| a).next().unwrap() == dst_addr_via_relay => {
+                    assert_eq!(peer_id, Some(dst_peer_id));
                     break;
                 }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
@@ -425,23 +436,24 @@ fn src_try_connect_to_unsupported_dst() {
     src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node establishing connection to Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         loop {
-            match src_swarm.next_event().await {
-                SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                    if address == dst_addr_via_relay =>
-                {
-                    assert_eq!(peer_id, dst_peer_id);
+            match src_swarm.select_next_some().await {
+                SwarmEvent::OutgoingConnectionError {
+                    error: DialError::Transport(addresses),
+                    peer_id,
+                } if *addresses.iter().map(|(a, _)| a).next().unwrap() == dst_addr_via_relay => {
+                    assert_eq!(peer_id, Some(dst_peer_id));
                     break;
                 }
                 SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {}
@@ -475,23 +487,26 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
     src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node fail to reach Relay.
-        match src_swarm.next_event().await {
-            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {}
+        match src_swarm.select_next_some().await {
+            SwarmEvent::OutgoingConnectionError { peer_id, .. }
+                if peer_id == Some(relay_peer_id) => {}
             e => panic!("{:?}", e),
         }
 
         // Source Node fail to reach Destination Node due to failure reaching Relay.
-        match src_swarm.next_event().await {
-            SwarmEvent::UnreachableAddr { address, peer_id, .. }
-                if address == dst_addr_via_relay => {
-                    assert_eq!(peer_id, dst_peer_id);
-                }
+        match src_swarm.select_next_some().await {
+            SwarmEvent::OutgoingConnectionError {
+                error: DialError::Transport(addresses),
+                peer_id,
+            } if *addresses.iter().map(|(a, _)| a).next().unwrap() == dst_addr_via_relay => {
+                assert_eq!(peer_id, Some(dst_peer_id));
+            }
             e => panic!("{:?}", e),
         }
     });
@@ -531,18 +546,18 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
     spawn_swarm_on_pool(&pool, relay_swarm);
 
     // Destination Node listen via Relay.
-    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
 
     pool.run_until(async {
         // Destination Node dialing Relay.
-        match dst_swarm.next_event().await {
+        match dst_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, relay_peer_id),
             e => panic!("{:?}", e),
         }
 
         // Destination Node establishing connection to Relay.
         loop {
-            match dst_swarm.next_event().await {
+            match dst_swarm.select_next_some().await {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     assert_eq!(peer_id, relay_peer_id);
                     break;
@@ -555,8 +570,14 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
 
         // Destination Node reporting listen address via relay.
         loop {
-            match dst_swarm.next_event().await {
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+            match dst_swarm.select_next_some().await {
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener => {
+                    assert_eq!(address, dst_addr_via_relay);
+                    break;
+                }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -568,12 +589,14 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         // Destination Node bootstrapping.
         let query_id = dst_swarm.behaviour_mut().kad.bootstrap().unwrap();
         loop {
-            match dst_swarm.next_event().await {
-                SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
-                    id,
-                    result: QueryResult::Bootstrap(Ok(_)),
-                    ..
-                })) if query_id == id => {
+            match dst_swarm.select_next_some().await {
+                SwarmEvent::Behaviour(CombinedEvent::Kad(
+                    KademliaEvent::OutboundQueryCompleted {
+                        id,
+                        result: QueryResult::Bootstrap(Ok(_)),
+                        ..
+                    },
+                )) if query_id == id => {
                     if dst_swarm.behaviour_mut().kad.iter_queries().count() == 0 {
                         break;
                     }
@@ -589,7 +612,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
         let dst = async move {
             // Destination Node receiving connection from Source Node via Relay.
             loop {
-                match dst_swarm.next_event().await {
+                match dst_swarm.select_next_some().await {
                     SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                         assert_eq!(send_back_addr, Protocol::P2p(src_peer_id.into()).into());
                         break;
@@ -601,7 +624,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
 
             // Destination Node establishing connection from Source Node via Relay.
             loop {
-                match dst_swarm.next_event().await {
+                match dst_swarm.select_next_some().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == src_peer_id => {
                         break;
                     }
@@ -612,7 +635,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
 
             // Destination Node waiting for Source Node to close connection.
             loop {
-                match dst_swarm.next_event().await {
+                match dst_swarm.select_next_some().await {
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                     SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {}
                     SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == src_peer_id => {
@@ -634,7 +657,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
             // Source Node establishing connection to Relay and, given that the DHT is small, Node
             // B.
             loop {
-                match src_swarm.next_event().await {
+                match src_swarm.select_next_some().await {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                         if peer_id == relay_peer_id {
                             continue;
@@ -647,11 +670,13 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     SwarmEvent::Dialing(peer_id)
                         if peer_id == relay_peer_id || peer_id == dst_peer_id => {}
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
-                    SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::QueryResult {
-                        id,
-                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
-                        ..
-                    })) if id == query_id => {
+                    SwarmEvent::Behaviour(CombinedEvent::Kad(
+                        KademliaEvent::OutboundQueryCompleted {
+                            id,
+                            result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { .. })),
+                            ..
+                        },
+                    )) if id == query_id => {
                         tries += 1;
                         if tries > 300 {
                             panic!("Too many retries.");
@@ -668,8 +693,8 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
 
             // Source Node waiting for Ping from Destination Node via Relay.
             loop {
-                match src_swarm.next_event().await {
-                    SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                match src_swarm.select_next_some().await {
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                         peer,
                         result: Ok(_),
                     })) => {
@@ -700,7 +725,7 @@ fn inactive_connection_timeout() {
     let mut relay_swarm = build_keep_alive_swarm();
 
     // Connections only kept alive by Source Node and Destination Node.
-    relay_swarm.behaviour_mut().keep_alive.keep_alive = KeepAlive::No;
+    *relay_swarm.behaviour_mut().keep_alive.keep_alive_mut() = KeepAlive::No;
 
     let relay_peer_id = *relay_swarm.local_peer_id();
     let dst_peer_id = *dst_swarm.local_peer_id();
@@ -715,14 +740,20 @@ fn inactive_connection_timeout() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let new_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
-            match dst_swarm.next_event().await {
+            match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == new_listener => {
+                    assert_eq!(address, dst_addr_via_relay);
+                    break;
+                }
                 e => panic!("{:?}", e),
             }
         }
@@ -733,7 +764,7 @@ fn inactive_connection_timeout() {
         src_swarm.dial_addr(relay_addr).unwrap();
         // Source Node dialing Relay.
         loop {
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
                     break;
@@ -745,7 +776,7 @@ fn inactive_connection_timeout() {
         src_swarm.dial_addr(dst_addr_via_relay).unwrap();
 
         // Source Node establishing connection to destination node via Relay.
-        match src_swarm.next_event().await {
+        match src_swarm.select_next_some().await {
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {}
             e => panic!("{:?}", e),
         }
@@ -754,7 +785,7 @@ fn inactive_connection_timeout() {
         // relayed connection and eventually also close the connection to Source Node given that no
         // connections are being relayed on the connection.
         loop {
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                     if peer_id == relay_peer_id {
                         break;
@@ -789,14 +820,20 @@ fn concurrent_connection_same_relay_same_dst() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr_via_relay.clone()).unwrap();
     // Wait for destination to listen via relay.
     pool.run_until(async {
         loop {
-            match dst_swarm.next_event().await {
+            match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::NewListenAddr(addr) if addr == dst_addr_via_relay => break,
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener => {
+                    assert_eq!(address, dst_addr_via_relay);
+                    break;
+                }
                 e => panic!("{:?}", e),
             }
         }
@@ -810,7 +847,7 @@ fn concurrent_connection_same_relay_same_dst() {
         // Source Node establishing two connections to destination node via Relay.
         let mut num_established = 0;
         loop {
-            match src_swarm.next_event().await {
+            match src_swarm.select_next_some().await {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                     num_established += 1;
@@ -904,16 +941,20 @@ fn yield_incoming_connection_through_correct_listener() {
     relay_3_swarm.listen_on(relay_3_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_3_swarm);
 
-    dst_swarm.listen_on(relay_1_addr_incl_circuit.clone()).unwrap();
-    dst_swarm.listen_on(relay_2_addr_incl_circuit.clone()).unwrap();
+    let dst_listener_via_relay_1 = dst_swarm
+        .listen_on(relay_1_addr_incl_circuit.clone())
+        .unwrap();
+    let dst_listener_via_relay_2 = dst_swarm
+        .listen_on(relay_2_addr_incl_circuit.clone())
+        .unwrap();
     // Listen on own address in order for relay 3 to be able to connect to destination node.
-    dst_swarm.listen_on(dst_addr.clone()).unwrap();
+    let dst_listener = dst_swarm.listen_on(dst_addr.clone()).unwrap();
 
     // Wait for destination node to establish connections to relay 1 and 2.
     pool.run_until(async {
-        let mut established = 0;
+        let mut established = 0u8;
         loop {
-            match dst_swarm.next_event().await {
+            match dst_swarm.select_next_some().await {
                 SwarmEvent::Dialing(peer_id)
                     if peer_id == relay_1_peer_id || peer_id == relay_2_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. }
@@ -924,10 +965,22 @@ fn yield_incoming_connection_through_correct_listener() {
                         break;
                     }
                 }
-                SwarmEvent::NewListenAddr(addr)
-                    if addr == relay_1_addr_incl_circuit
-                        || addr == relay_2_addr_incl_circuit
-                        || addr == dst_addr => {}
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener_via_relay_2 => {
+                    assert_eq!(address, relay_2_addr_incl_circuit)
+                }
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener_via_relay_1 => {
+                    assert_eq!(address, relay_1_addr_incl_circuit)
+                }
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == dst_listener => assert_eq!(address, dst_addr),
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
@@ -946,7 +999,7 @@ fn yield_incoming_connection_through_correct_listener() {
         let mut src_1_ping = false;
         let mut src_2_ping = false;
         loop {
-            match dst_swarm.next_event().await {
+            match dst_swarm.select_next_some().await {
                 SwarmEvent::IncomingConnection { .. } => {}
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
@@ -966,11 +1019,11 @@ fn yield_incoming_connection_through_correct_listener() {
                         unreachable!();
                     }
                 }
-                SwarmEvent::NewListenAddr(addr)
-                    if addr == relay_1_addr_incl_circuit
-                        || addr == relay_2_addr_incl_circuit
-                        || addr == dst_addr => {}
-                SwarmEvent::Behaviour(CombinedEvent::Ping(PingEvent {
+                SwarmEvent::NewListenAddr { address, .. }
+                    if address == relay_1_addr_incl_circuit
+                        || address == relay_2_addr_incl_circuit
+                        || address == dst_addr => {}
+                SwarmEvent::Behaviour(CombinedEvent::Ping(ping::Event {
                     peer,
                     result: Ok(_),
                 })) => {
@@ -995,57 +1048,63 @@ fn yield_incoming_connection_through_correct_listener() {
     // Expect destination node to reject incoming connection from unknown relay given that
     // destination node is not listening for such connections.
     src_3_swarm.dial_addr(dst_addr_via_relay_3.clone()).unwrap();
-    pool.run_until(poll_fn(|cx| {
-        match dst_swarm.next_event().boxed().poll_unpin(cx) {
-            Poll::Ready(SwarmEvent::Behaviour(CombinedEvent::Ping(_))) => {}
-            Poll::Ready(SwarmEvent::IncomingConnection { .. }) => {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
-                if peer_id == relay_3_peer_id => {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
-                if peer_id == src_3_peer_id =>
-            {
-                panic!(
-                    "Expected destination node to reject incoming connection from unknown relay \
-                     without a catch-all listener",
-                );
+    pool.run_until(async {
+        loop {
+            futures::select! {
+                event = dst_swarm.select_next_some() => match event {
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                    SwarmEvent::IncomingConnection { .. } => {}
+                    SwarmEvent::ConnectionEstablished { peer_id, .. }
+                        if peer_id == relay_3_peer_id => {}
+                    SwarmEvent::ConnectionEstablished { peer_id, .. }
+                        if peer_id == src_3_peer_id =>
+                    {
+                        panic!(
+                            "Expected destination node to reject incoming connection from unknown relay \
+                            without a catch-all listener",
+                        );
+                    }
+                    e => panic!("{:?}", e),
+                },
+                event = src_3_swarm.select_next_some() => match event {
+                    SwarmEvent::OutgoingConnectionError {
+                        error: DialError::Transport(addresses),
+                        peer_id,
+                    } if *addresses.iter().map(|(a, _)| a).next().unwrap()
+                        == dst_addr_via_relay_3 =>
+                    {
+                        assert_eq!(peer_id, Some(dst_peer_id));
+                        break;
+                    }
+                    SwarmEvent::Dialing { .. } => {}
+                    SwarmEvent::ConnectionEstablished { peer_id, .. }
+                        if peer_id == relay_3_peer_id => {}
+                    SwarmEvent::ConnectionEstablished { peer_id, .. }
+                        if peer_id == dst_peer_id =>
+                    {
+                        panic!(
+                            "Expected destination node to reject incoming connection from unknown relay \
+                            without a catch-all listener",
+                        );
+                    }
+                    SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                    e => panic!("{:?}", e),
+                }
             }
-            Poll::Pending => {}
-            e => panic!("{:?}", e),
         }
-
-        match src_3_swarm.next_event().boxed().poll_unpin(cx) {
-            Poll::Ready(SwarmEvent::UnreachableAddr { address, peer_id, .. })
-                if address == dst_addr_via_relay_3 =>
-            {
-                assert_eq!(peer_id, dst_peer_id);
-                return Poll::Ready(());
-            }
-            Poll::Ready(SwarmEvent::Dialing { .. }) => {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
-                if peer_id == relay_3_peer_id => {}
-            Poll::Ready(SwarmEvent::ConnectionEstablished { peer_id, .. })
-                if peer_id == dst_peer_id =>
-            {
-                panic!(
-                    "Expected destination node to reject incoming connection from unknown relay \
-                     without a catch-all listener",
-                );
-            }
-            Poll::Ready(SwarmEvent::Behaviour(CombinedEvent::Ping(_))) => {}
-            Poll::Pending => {}
-            e => panic!("{:?}", e),
-        }
-
-        Poll::Pending
-    }));
+    });
 
     // Instruct destination node to listen for incoming relayed connections from unknown relay nodes.
     dst_swarm.listen_on(Protocol::P2pCircuit.into()).unwrap();
     // Wait for destination node to report new listen address.
     pool.run_until(async {
         loop {
-            match dst_swarm.next_event().await {
-                SwarmEvent::NewListenAddr(addr) if addr == Protocol::P2pCircuit.into() => break,
+            match dst_swarm.select_next_some().await {
+                SwarmEvent::NewListenAddr { address, .. }
+                    if address == Protocol::P2pCircuit.into() =>
+                {
+                    break
+                }
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                     ..
@@ -1061,7 +1120,7 @@ fn yield_incoming_connection_through_correct_listener() {
     src_3_swarm.dial_addr(dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(async move {
         loop {
-            match src_3_swarm.next_event().await {
+            match src_3_swarm.select_next_some().await {
                 SwarmEvent::Dialing(_) => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                     break
@@ -1077,10 +1136,14 @@ fn yield_incoming_connection_through_correct_listener() {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "CombinedEvent", poll_method = "poll")]
+#[behaviour(
+    out_event = "CombinedEvent",
+    poll_method = "poll",
+    event_process = true
+)]
 struct CombinedBehaviour {
     relay: Relay,
-    ping: Ping,
+    ping: ping::Behaviour,
     kad: Kademlia<MemoryStore>,
     identify: Identify,
 
@@ -1091,15 +1154,16 @@ struct CombinedBehaviour {
 #[derive(Debug)]
 enum CombinedEvent {
     Kad(KademliaEvent),
-    Ping(PingEvent),
+    Ping(ping::Event),
 }
 
 impl CombinedBehaviour {
-    fn poll<TEv>(
+    fn poll(
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<TEv, CombinedEvent>> {
+    ) -> Poll<NetworkBehaviourAction<CombinedEvent, <Self as NetworkBehaviour>::ProtocolsHandler>>
+    {
         if !self.events.is_empty() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(self.events.remove(0)));
         }
@@ -1108,8 +1172,8 @@ impl CombinedBehaviour {
     }
 }
 
-impl NetworkBehaviourEventProcess<PingEvent> for CombinedBehaviour {
-    fn inject_event(&mut self, event: PingEvent) {
+impl NetworkBehaviourEventProcess<ping::Event> for CombinedBehaviour {
+    fn inject_event(&mut self, event: ping::Event) {
         self.events.push(CombinedEvent::Ping(event));
     }
 }
@@ -1142,9 +1206,10 @@ impl NetworkBehaviourEventProcess<()> for CombinedBehaviour {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(event_process = true)]
 struct CombinedKeepAliveBehaviour {
     relay: Relay,
-    keep_alive: KeepAliveBehaviour,
+    keep_alive: DummyBehaviour,
 }
 
 impl NetworkBehaviourEventProcess<()> for CombinedKeepAliveBehaviour {
@@ -1210,7 +1275,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = MemoryTransport::default();
 
@@ -1235,7 +1300,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
 
     let combined_behaviour = CombinedBehaviour {
         relay: relay_behaviour,
-        ping: Ping::new(PingConfig::new().with_interval(Duration::from_millis(100))),
+        ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_millis(100))),
         kad: Kademlia::new(
             local_peer_id.clone(),
             MemoryStore::new(local_peer_id.clone()),
@@ -1256,7 +1321,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = MemoryTransport::default();
 
@@ -1271,19 +1336,19 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
 
     let combined_behaviour = CombinedKeepAliveBehaviour {
         relay: relay_behaviour,
-        keep_alive: KeepAliveBehaviour::default(),
+        keep_alive: DummyBehaviour::with_keep_alive(KeepAlive::Yes),
     };
 
     Swarm::new(transport, combined_behaviour, local_peer_id)
 }
 
-fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
+fn build_keep_alive_only_swarm() -> Swarm<DummyBehaviour> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let plaintext = PlainText2Config {
         local_public_key: local_public_key.clone(),
     };
-    let local_peer_id = local_public_key.clone().into_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = MemoryTransport::default();
 
@@ -1293,165 +1358,11 @@ fn build_keep_alive_only_swarm() -> Swarm<KeepAliveBehaviour> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::new(transport, KeepAliveBehaviour::default(), local_peer_id)
-}
-
-#[derive(Clone)]
-pub struct KeepAliveBehaviour {
-    keep_alive: KeepAlive,
-}
-
-impl Default for KeepAliveBehaviour {
-    fn default() -> Self {
-        Self {
-            keep_alive: KeepAlive::Yes,
-        }
-    }
-}
-
-impl libp2p_swarm::NetworkBehaviour for KeepAliveBehaviour {
-    type ProtocolsHandler = KeepAliveProtocolsHandler;
-    type OutEvent = void::Void;
-
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        KeepAliveProtocolsHandler {
-            keep_alive: self.keep_alive,
-        }
-    }
-
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()
-    }
-
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-    ) {
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
-        Poll::Pending
-    }
-}
-
-/// Implementation of `ProtocolsHandler` that doesn't handle anything.
-#[derive(Clone, Debug)]
-pub struct KeepAliveProtocolsHandler {
-    pub keep_alive: KeepAlive,
-}
-
-impl ProtocolsHandler for KeepAliveProtocolsHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
-    type Error = Void;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
-    }
-
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<
-        ProtocolsHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
-        Poll::Pending
-    }
-}
-
-struct DummyPollParameters {}
-
-impl PollParameters for DummyPollParameters {
-    type SupportedProtocolsIter = iter::Empty<Vec<u8>>;
-    type ListenedAddressesIter = iter::Empty<Multiaddr>;
-    type ExternalAddressesIter = iter::Empty<AddressRecord>;
-
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
-        unimplemented!();
-    }
-
-    /// Returns the list of the addresses we're listening on.
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        unimplemented!();
-    }
-
-    /// Returns the list of the addresses nodes can use to reach us.
-    fn external_addresses(&self) -> Self::ExternalAddressesIter {
-        unimplemented!();
-    }
-
-    /// Returns the peer id of the local node.
-    fn local_peer_id(&self) -> &PeerId {
-        unimplemented!();
-    }
+    Swarm::new(
+        transport,
+        DummyBehaviour::with_keep_alive(KeepAlive::Yes),
+        local_peer_id,
+    )
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, mut swarm: Swarm<B>) {
@@ -1459,7 +1370,7 @@ fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, mut swarm: Swarm<B
         .spawn_obj(
             async move {
                 loop {
-                    swarm.next_event().await;
+                    swarm.next().await;
                 }
             }
             .boxed()

@@ -24,28 +24,21 @@
 //! peer ID will be generated randomly.
 
 use async_std::task;
-use libp2p::{
-    Multiaddr,
-    Swarm,
-    PeerId,
-    identity,
-    development_transport
-};
-use libp2p::kad::{
-    Kademlia,
-    KademliaConfig,
-    KademliaEvent,
-    GetClosestPeersError,
-    QueryResult,
-};
+use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
+use libp2p::{
+    development_transport, identity,
+    swarm::{Swarm, SwarmEvent},
+    Multiaddr, PeerId,
+};
 use std::{env, error::Error, str::FromStr, time::Duration};
 
 const BOOTNODES: [&'static str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt"
+    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
 #[async_std::main]
@@ -64,8 +57,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let mut cfg = KademliaConfig::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        let store = MemoryStore::new(local_peer_id.clone());
-        let mut behaviour = Kademlia::with_config(local_peer_id.clone(), store, cfg);
+        let store = MemoryStore::new(local_peer_id);
+        let mut behaviour = Kademlia::with_config(local_peer_id, store, cfg);
 
         // Add the bootnodes to the local routing table. `libp2p-dns` built
         // into the `transport` resolves the `dnsaddr` when Kademlia tries
@@ -91,13 +84,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off!
     task::block_on(async move {
         loop {
-            let event = swarm.next().await;
-            if let KademliaEvent::QueryResult {
+            let event = swarm.select_next_some().await;
+            if let SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
                 result: QueryResult::GetClosestPeers(result),
                 ..
-            } = event {
+            }) = event
+            {
                 match result {
-                    Ok(ok) =>
+                    Ok(ok) => {
                         if !ok.peers.is_empty() {
                             println!("Query finished with closest peers: {:#?}", ok.peers)
                         } else {
@@ -105,7 +99,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             // should always be at least 1 reachable peer.
                             println!("Query finished with no closest peers.")
                         }
-                    Err(GetClosestPeersError::Timeout { peers, .. }) =>
+                    }
+                    Err(GetClosestPeersError::Timeout { peers, .. }) => {
                         if !peers.is_empty() {
                             println!("Query timed out with closest peers: {:#?}", peers)
                         } else {
@@ -113,6 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             // should always be at least 1 reachable peer.
                             println!("Query timed out with no closest peers.");
                         }
+                    }
                 };
 
                 break;
