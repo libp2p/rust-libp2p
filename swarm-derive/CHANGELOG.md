@@ -1,3 +1,17 @@
+# 0.25.0-rc.1 [2021-10-15]
+
+- Update to latest `libp2p-swarm` changes (see [PR 2191]).
+
+- Make `event_process = false` the default.
+
+[PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+
+# 0.24.0 [2021-07-12]
+
+- Handle `NetworkBehaviourAction::CloseConnection`. See [PR 2110] for details.
+
+[PR 2110]: https://github.com/libp2p/rust-libp2p/pull/2110/
+
 # 0.23.0 [2021-04-14]
 
 - Extend `NetworkBehaviour` callbacks, more concretely introducing new `fn

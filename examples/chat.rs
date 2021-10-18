@@ -30,15 +30,15 @@
 //!
 //! # If they don't automatically connect
 //!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
+//! If the nodes don't automatically connect, take note of the listening addresses of the first
+//! instance and start the second with one of the addresses as the first argument. In the first
+//! terminal window, run:
 //!
 //! ```sh
 //! cargo run --example chat
 //! ```
 //!
-//! It will print the PeerId and the listening address, e.g. `Listening on
+//! It will print the PeerId and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
@@ -52,16 +52,16 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    Multiaddr,
-    PeerId,
-    Swarm,
-    NetworkBehaviour,
-    identity,
     floodsub::{self, Floodsub, FloodsubEvent},
+    identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    swarm::SwarmEvent,
+    Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -83,6 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Use the derive to generate delegating NetworkBehaviour impl and require the
     // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "OutEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
         mdns: Mdns,
@@ -93,30 +94,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ignored_member: bool,
     }
 
-    impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
-        // Called when `floodsub` produces an event.
-        fn inject_event(&mut self, message: FloodsubEvent) {
-            if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
-            }
+    #[derive(Debug)]
+    enum OutEvent {
+        Floodsub(FloodsubEvent),
+        Mdns(MdnsEvent),
+    }
+
+    impl From<MdnsEvent> for OutEvent {
+        fn from(v: MdnsEvent) -> Self {
+            Self::Mdns(v)
         }
     }
 
-    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
-        // Called when `mdns` produces an event.
-        fn inject_event(&mut self, event: MdnsEvent) {
-            match event {
-                MdnsEvent::Discovered(list) =>
-                    for (peer, _) in list {
-                        self.floodsub.add_node_to_partial_view(peer);
-                    }
-                MdnsEvent::Expired(list) =>
-                    for (peer, _) in list {
-                        if !self.mdns.has_node(&peer) {
-                            self.floodsub.remove_node_from_partial_view(&peer);
-                        }
-                    }
-            }
+    impl From<FloodsubEvent> for OutEvent {
+        fn from(v: FloodsubEvent) -> Self {
+            Self::Floodsub(v)
         }
     }
 
@@ -124,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(local_peer_id.clone()),
+            floodsub: Floodsub::new(local_peer_id),
             mdns,
             ignored_member: false,
         };
@@ -147,30 +139,56 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.behaviour_mut()
+                Poll::Ready(Some(line)) => swarm
+                    .behaviour_mut()
                     .floodsub
                     .publish(floodsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break
+                Poll::Pending => break,
             }
         }
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
+                Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
+                    println!("Listening on {:?}", address);
+                }
+                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Floodsub(
+                    FloodsubEvent::Message(message),
+                )))) => {
+                    println!(
+                        "Received: '{:?}' from {:?}",
+                        String::from_utf8_lossy(&message.data),
+                        message.source
+                    );
+                }
+                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Mdns(
+                    MdnsEvent::Discovered(list),
+                )))) => {
+                    for (peer, _) in list {
+                        swarm
+                            .behaviour_mut()
+                            .floodsub
+                            .add_node_to_partial_view(peer);
+                    }
+                }
+                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Mdns(MdnsEvent::Expired(
+                    list,
+                ))))) => {
+                    for (peer, _) in list {
+                        if !swarm.behaviour_mut().mdns.has_node(&peer) {
+                            swarm
+                                .behaviour_mut()
+                                .floodsub
+                                .remove_node_from_partial_view(&peer);
                         }
                     }
-                    break
                 }
+                Poll::Ready(Some(_)) => {}
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => break,
             }
         }
         Poll::Pending

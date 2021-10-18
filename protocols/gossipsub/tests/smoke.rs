@@ -37,7 +37,7 @@ use libp2p_gossipsub::{
     ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {
@@ -49,10 +49,15 @@ impl Future for Graph {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
-            match node.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => return Poll::Ready((addr.clone(), event)),
-                Poll::Ready(None) => panic!("unexpected None when polling nodes"),
-                Poll::Pending => {}
+            loop {
+                match node.poll_next_unpin(cx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => {
+                        return Poll::Ready((addr.clone(), event))
+                    }
+                    Poll::Ready(Some(_)) => {}
+                    Poll::Ready(None) => panic!("unexpected None when polling nodes"),
+                    Poll::Pending => break,
+                }
             }
         }
 
@@ -150,7 +155,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
-    let peer_id = public_key.clone().into_peer_id();
+    let peer_id = public_key.to_peer_id();
 
     // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
     // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we
@@ -173,7 +178,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     swarm.listen_on(addr.clone()).unwrap();
 
     addr = addr.with(libp2p_core::multiaddr::Protocol::P2p(
-        public_key.into_peer_id().into(),
+        public_key.to_peer_id().into(),
     ));
 
     (addr, swarm)
@@ -223,7 +228,11 @@ fn multi_hop_propagation() {
         graph = graph.drain_poll();
 
         // Publish a single message.
-        graph.nodes[0].1.behaviour_mut().publish(topic, vec![1, 2, 3]).unwrap();
+        graph.nodes[0]
+            .1
+            .behaviour_mut()
+            .publish(topic, vec![1, 2, 3])
+            .unwrap();
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;

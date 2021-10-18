@@ -10,97 +10,73 @@ jobs:
   test-desktop:
     name: Build and test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        args: [
+          "--no-default-features",
+          "--all-features",
+          "--benches --all-features",
+        ]
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.0
+      uses: styfle/cancel-workflow-action@0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.3.4
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.6
+    - uses: Swatinem/rust-cache@v1.3.0
       with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+        key: ${{ matrix.args }}
 
-    - name: Cache cargo build
-      uses: actions/cache@v2.1.6
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
-
-    - name: Run tests, with no feature
-      run: cargo test --workspace --no-default-features
-
-    - name: Run tests, with all features
-      run: cargo test --workspace --all-features
-
-    - name: Run benches, with all features
-      run: cargo test --workspace --benches --all-features
+    - run: cargo test --workspace ${{ matrix.args }}
 
   test-wasm:
     name: Build on WASM
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: [
+          wasm32-unknown-emscripten,
+          wasm32-wasi
+        ]
     container:
       image: rust
       env:
-        CC: clang-10
+        CC: clang-11
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.0
+      uses: styfle/cancel-workflow-action@0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.3.4
 
-    - name: Install Rust wasm32-unknown-emscripten
+    - name: Install Rust ${{ matrix.toolchain }}
       uses: actions-rs/toolchain@v1.0.7
       with:
         toolchain: stable
-        target: wasm32-unknown-emscripten
-        override: true
-
-    - name: Install Rust wasm32-wasi
-      uses: actions-rs/toolchain@v1.0.7
-      with:
-        toolchain: stable
-        target: wasm32-wasi
+        target: ${{ matrix.toolchain }}
         override: true
 
     - name: Install a recent version of clang
       run: |
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" >> /etc/apt/sources.list
         apt-get update
-        apt-get install -y clang-10
+        apt-get install -y clang-11
 
     - name: Install CMake
       run: apt-get install -y cmake
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.6
+    - uses: Swatinem/rust-cache@v1.3.0
       with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
+        key: ${{ matrix.toolchain }}
 
-    - name: Cache cargo build
-      uses: actions/cache@v2.1.6
-      with:
-        path: target
-        key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
-
-    - name: Build on wasm32-unknown-emscripten
+    - name: Build on ${{ matrix.toolchain }}
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=wasm32-unknown-emscripten
-
-    - name: Build on wasm32-wasi
-      # TODO: also run `cargo test`
-      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=wasm32-wasi
+      run: cargo build --target=${{ matrix.toolchain }}
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
@@ -110,16 +86,62 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.0
+      uses: styfle/cancel-workflow-action@0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.3.4
 
+    - uses: Swatinem/rust-cache@v1.3.0
+
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
 
   check-clippy:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.9.1
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2.3.4
+
+    - uses: actions-rs/toolchain@v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: clippy
+
+    - uses: Swatinem/rust-cache@v1.3.0
+
+    - name: Run cargo clippy
+      uses: actions-rs/cargo@v1.0.3
+      with:
+        command: custom-clippy # cargo alias to allow reuse of config locally
+
+  integration-test:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    container:
+      image: rust
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.9.1
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v2.3.4
+
+    - uses: Swatinem/rust-cache@v1.3.0
+
+    - name: Run ipfs-kad example
+      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+
+  rustfmt:
     runs-on: ubuntu-latest
     steps:
 
@@ -135,51 +157,7 @@ jobs:
         profile: minimal
         toolchain: stable
         override: true
-        components: clippy
+        components: rustfmt
 
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.6
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2.1.6
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
-
-    - name: Run cargo clippy
-      uses: actions-rs/cargo@v1.0.3
-      with:
-        command: clippy
-        args: -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style
-
-  integration-test:
-    name: Integration tests
-    runs-on: ubuntu-latest
-    container:
-      image: rust
-    steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.0
-      with:
-        access_token: ${{ github.token }}
-
-    - uses: actions/checkout@v2.3.4
-
-    - name: Cache CARGO_HOME
-      uses: actions/cache@v2.1.6
-      with:
-        path: ~/.cargo
-        key: cargo-home-${{ hashFiles('Cargo.toml') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v2.1.6
-      with:
-        path: target
-        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
-
-    - name: Run ipfs-kad example
-      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+    - name: Check formatting
+      run: cargo fmt -- --check

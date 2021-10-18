@@ -21,20 +21,13 @@
 //! Network events and associated information.
 
 use crate::{
-    Multiaddr,
     connection::{
-        ConnectionId,
-        ConnectedPoint,
-        ConnectionError,
-        ConnectionHandler,
-        Connected,
-        EstablishedConnection,
-        IntoConnectionHandler,
-        ListenerId,
-        PendingConnectionError,
+        Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionId,
+        EstablishedConnection, IntoConnectionHandler, ListenerId, PendingInboundConnectionError,
+        PendingOutboundConnectionError,
     },
-    transport::Transport,
-    PeerId
+    transport::{Transport, TransportError},
+    Multiaddr, PeerId,
 };
 use std::{fmt, num::NonZeroU32};
 
@@ -60,7 +53,7 @@ where
         /// The listener that errored.
         listener_id: ListenerId,
         /// The listener error.
-        error: TTrans::Error
+        error: TTrans::Error,
     },
 
     /// One of the listeners is now listening on an additional address.
@@ -68,7 +61,7 @@ where
         /// The listener that is listening on the new address.
         listener_id: ListenerId,
         /// The new address the listener is now also listening on.
-        listen_addr: Multiaddr
+        listen_addr: Multiaddr,
     },
 
     /// One of the listeners is no longer listening on some address.
@@ -76,7 +69,7 @@ where
         /// The listener that is no longer listening on some address.
         listener_id: ListenerId,
         /// The expired address.
-        listen_addr: Multiaddr
+        listen_addr: Multiaddr,
     },
 
     /// A new connection arrived on a listener.
@@ -99,7 +92,8 @@ where
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingInboundConnectionError<TTrans::Error>,
+        handler: THandler,
     },
 
     /// A new connection to a peer has been established.
@@ -109,6 +103,10 @@ where
         /// The total number of established connections to the same peer,
         /// including the one that has just been opened.
         num_established: NonZeroU32,
+        /// [`Some`] when the new connection is an outgoing connection.
+        /// Addresses are dialed in parallel. Contains the addresses and errors
+        /// of dial attempts that failed before the one successful dial.
+        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
     },
 
     /// An established connection to a peer has been closed.
@@ -132,30 +130,27 @@ where
         error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// The remaining number of established connections to the same peer.
         num_established: u32,
+        handler: THandler::Handler,
     },
 
     /// A dialing attempt to an address of a peer failed.
     DialError {
         /// The number of remaining dialing attempts.
-        attempts_remaining: u32,
+        handler: THandler,
 
         /// Id of the peer we were trying to dial.
         peer_id: PeerId,
 
-        /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
-
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError<TTrans::Error>,
     },
 
     /// Failed to reach a peer that we were trying to dial.
     UnknownPeerDialError {
-        /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
-
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError<TTrans::Error>,
+
+        handler: THandler,
     },
 
     /// An established connection produced an event.
@@ -177,8 +172,8 @@ where
     },
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for
-    NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler>
+impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug
+    for NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler>
 where
     TInEvent: fmt::Debug,
     TOutEvent: fmt::Debug,
@@ -189,83 +184,106 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            NetworkEvent::NewListenerAddress { listener_id, listen_addr } => {
-                f.debug_struct("NewListenerAddress")
-                    .field("listener_id", listener_id)
-                    .field("listen_addr", listen_addr)
-                    .finish()
-            }
-            NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr } => {
-                f.debug_struct("ExpiredListenerAddress")
-                    .field("listener_id", listener_id)
-                    .field("listen_addr", listen_addr)
-                    .finish()
-            }
-            NetworkEvent::ListenerClosed { listener_id, addresses, reason } => {
-                f.debug_struct("ListenerClosed")
-                    .field("listener_id", listener_id)
-                    .field("addresses", addresses)
-                    .field("reason", reason)
-                    .finish()
-            }
-            NetworkEvent::ListenerError { listener_id, error } => {
-                f.debug_struct("ListenerError")
-                    .field("listener_id", listener_id)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::IncomingConnection { connection, .. } => {
-                f.debug_struct("IncomingConnection")
-                    .field("local_addr", &connection.local_addr)
-                    .field("send_back_addr", &connection.send_back_addr)
-                    .finish()
-            }
-            NetworkEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
-                f.debug_struct("IncomingConnectionError")
-                    .field("local_addr", local_addr)
-                    .field("send_back_addr", send_back_addr)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::ConnectionEstablished { connection, .. } => {
-                f.debug_struct("ConnectionEstablished")
-                    .field("connection", connection)
-                    .finish()
-            }
-            NetworkEvent::ConnectionClosed { id, connected, error, .. } => {
-                f.debug_struct("ConnectionClosed")
-                    .field("id", id)
-                    .field("connected", connected)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::DialError { attempts_remaining, peer_id, multiaddr, error } => {
-                f.debug_struct("DialError")
-                    .field("attempts_remaining", attempts_remaining)
-                    .field("peer_id", peer_id)
-                    .field("multiaddr", multiaddr)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::UnknownPeerDialError { multiaddr, error, .. } => {
-                f.debug_struct("UnknownPeerDialError")
-                    .field("multiaddr", multiaddr)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::ConnectionEvent { connection, event } => {
-                f.debug_struct("ConnectionEvent")
-                    .field("connection", connection)
-                    .field("event", event)
-                    .finish()
-            }
-            NetworkEvent::AddressChange { connection, new_endpoint, old_endpoint } => {
-                f.debug_struct("AddressChange")
-                    .field("connection", connection)
-                    .field("new_endpoint", new_endpoint)
-                    .field("old_endpoint", old_endpoint)
-                    .finish()
-            }
+            NetworkEvent::NewListenerAddress {
+                listener_id,
+                listen_addr,
+            } => f
+                .debug_struct("NewListenerAddress")
+                .field("listener_id", listener_id)
+                .field("listen_addr", listen_addr)
+                .finish(),
+            NetworkEvent::ExpiredListenerAddress {
+                listener_id,
+                listen_addr,
+            } => f
+                .debug_struct("ExpiredListenerAddress")
+                .field("listener_id", listener_id)
+                .field("listen_addr", listen_addr)
+                .finish(),
+            NetworkEvent::ListenerClosed {
+                listener_id,
+                addresses,
+                reason,
+            } => f
+                .debug_struct("ListenerClosed")
+                .field("listener_id", listener_id)
+                .field("addresses", addresses)
+                .field("reason", reason)
+                .finish(),
+            NetworkEvent::ListenerError { listener_id, error } => f
+                .debug_struct("ListenerError")
+                .field("listener_id", listener_id)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::IncomingConnection { connection, .. } => f
+                .debug_struct("IncomingConnection")
+                .field("local_addr", &connection.local_addr)
+                .field("send_back_addr", &connection.send_back_addr)
+                .finish(),
+            NetworkEvent::IncomingConnectionError {
+                local_addr,
+                send_back_addr,
+                error,
+                handler: _,
+            } => f
+                .debug_struct("IncomingConnectionError")
+                .field("local_addr", local_addr)
+                .field("send_back_addr", send_back_addr)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::ConnectionEstablished {
+                connection,
+                concurrent_dial_errors,
+                ..
+            } => f
+                .debug_struct("OutgoingConnectionEstablished")
+                .field("connection", connection)
+                .field("concurrent_dial_errors", concurrent_dial_errors)
+                .finish(),
+            NetworkEvent::ConnectionClosed {
+                id,
+                connected,
+                error,
+                ..
+            } => f
+                .debug_struct("ConnectionClosed")
+                .field("id", id)
+                .field("connected", connected)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::DialError {
+                handler: _,
+                peer_id,
+                error,
+            } => f
+                .debug_struct("DialError")
+                .field("peer_id", peer_id)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::UnknownPeerDialError {
+                // multiaddr,
+                error,
+                ..
+            } => f
+                .debug_struct("UnknownPeerDialError")
+                // .field("multiaddr", multiaddr)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::ConnectionEvent { connection, event } => f
+                .debug_struct("ConnectionEvent")
+                .field("connection", connection)
+                .field("event", event)
+                .finish(),
+            NetworkEvent::AddressChange {
+                connection,
+                new_endpoint,
+                old_endpoint,
+            } => f
+                .debug_struct("AddressChange")
+                .field("connection", connection)
+                .field("new_endpoint", new_endpoint)
+                .field("old_endpoint", old_endpoint)
+                .finish(),
         }
     }
 }

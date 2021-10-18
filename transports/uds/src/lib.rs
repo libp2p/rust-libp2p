@@ -34,12 +34,15 @@
 #![cfg(all(unix, not(target_os = "emscripten")))]
 #![cfg_attr(docsrs, doc(cfg(all(unix, not(target_os = "emscripten")))))]
 
-use futures::{prelude::*, future::{BoxFuture, Ready}};
 use futures::stream::BoxStream;
+use futures::{
+    future::{BoxFuture, Ready},
+    prelude::*,
+};
 use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{ListenerEvent, TransportError},
     Transport,
-    multiaddr::{Protocol, Multiaddr},
-    transport::{ListenerEvent, TransportError}
 };
 use log::debug;
 use std::{io, path::PathBuf};
@@ -145,14 +148,14 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
         Some(Protocol::Unix(ref path)) => {
             let path = PathBuf::from(path.as_ref());
             if !path.is_absolute() {
-                return Err(())
+                return Err(());
             }
             match protocols.next() {
                 None | Some(Protocol::P2p(_)) => Ok(path),
-                Some(_) => Err(())
+                Some(_) => Err(()),
             }
         }
-        _ => Err(())
+        _ => Err(()),
     }
 }
 
@@ -160,15 +163,17 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 mod tests {
     use super::{multiaddr_to_path, UdsConfig};
     use futures::{channel::oneshot, prelude::*};
+    use libp2p_core::{
+        multiaddr::{Multiaddr, Protocol},
+        Transport,
+    };
     use std::{self, borrow::Cow, path::Path};
-    use libp2p_core::{Transport, multiaddr::{Protocol, Multiaddr}};
     use tempfile;
 
     #[test]
     fn multiaddr_to_path_conversion() {
         assert!(
-            multiaddr_to_path(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
-                .is_err()
+            multiaddr_to_path(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err()
         );
 
         assert_eq!(
@@ -185,21 +190,27 @@ mod tests {
     fn communicating_between_dialer_and_listener() {
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
-        let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
+        let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(
+            socket.to_string_lossy().into_owned(),
+        )));
 
         let (tx, rx) = oneshot::channel();
 
         async_std::task::spawn(async move {
             let mut listener = UdsConfig::new().listen_on(addr).unwrap();
 
-            let listen_addr = listener.try_next().await.unwrap()
+            let listen_addr = listener
+                .try_next()
+                .await
+                .unwrap()
                 .expect("some event")
                 .into_new_address()
                 .expect("listen address");
 
             tx.send(listen_addr).unwrap();
 
-            let (sock, _addr) = listener.try_filter_map(|e| future::ok(e.into_upgrade()))
+            let (sock, _addr) = listener
+                .try_filter_map(|e| future::ok(e.into_upgrade()))
                 .try_next()
                 .await
                 .unwrap()
@@ -220,18 +231,16 @@ mod tests {
     }
 
     #[test]
-    #[ignore]       // TODO: for the moment unix addresses fail to parse
+    #[ignore] // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
         let uds = UdsConfig::new();
 
-        let addr = "/unix//foo/bar"
-            .parse::<Multiaddr>()
-            .unwrap();
+        let addr = "/unix//foo/bar".parse::<Multiaddr>().unwrap();
         assert!(uds.listen_on(addr).is_err());
     }
 
     #[test]
-    #[ignore]       // TODO: for the moment unix addresses fail to parse
+    #[ignore] // TODO: for the moment unix addresses fail to parse
     fn relative_addr_denied() {
         assert!("/unix/./foo/bar".parse::<Multiaddr>().is_err());
     }

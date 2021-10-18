@@ -19,17 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    NetworkBehaviour,
-    NetworkBehaviourAction,
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     ProtocolsHandler,
-    IntoProtocolsHandler,
-    PollParameters
 };
 use libp2p_core::{
-    ConnectedPoint,
-    PeerId,
     connection::{ConnectionId, ListenerId},
     multiaddr::Multiaddr,
+    ConnectedPoint, PeerId,
 };
 use std::collections::HashMap;
 use std::task::{Context, Poll};
@@ -49,12 +45,12 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<NetworkBehaviourAction<THandler::InEvent, TOutEvent>>,
+    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler
+    THandler: ProtocolsHandler,
 {
     pub fn new(handler_proto: THandler) -> Self {
         MockBehaviour {
@@ -82,18 +78,13 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
-    fn inject_connected(&mut self, _: &PeerId) {
-    }
+    fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {}
 
-    fn inject_disconnected(&mut self, _: &PeerId) {
-    }
-
-    fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {
-    }
-
-    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
-        Poll<NetworkBehaviourAction<THandler::InEvent, Self::OutEvent>>
-    {
+    fn poll(
+        &mut self,
+        _: &mut Context,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 }
@@ -112,9 +103,12 @@ where
     pub inject_disconnected: Vec<PeerId>,
     pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
     pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
-    pub inject_event: Vec<(PeerId, ConnectionId, <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent)>,
-    pub inject_addr_reach_failure: Vec<(Option<PeerId>, Multiaddr)>,
-    pub inject_dial_failure: Vec<PeerId>,
+    pub inject_event: Vec<(
+        PeerId,
+        ConnectionId,
+        <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+    )>,
+    pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
     pub inject_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub inject_new_external_addr: Vec<Multiaddr>,
@@ -127,7 +121,7 @@ where
 
 impl<TInner> CallTraceBehaviour<TInner>
 where
-    TInner: NetworkBehaviour
+    TInner: NetworkBehaviour,
 {
     pub fn new(inner: TInner) -> Self {
         Self {
@@ -138,7 +132,6 @@ where
             inject_connection_established: Vec::new(),
             inject_connection_closed: Vec::new(),
             inject_event: Vec::new(),
-            inject_addr_reach_failure: Vec::new(),
             inject_dial_failure: Vec::new(),
             inject_new_listener: Vec::new(),
             inject_new_listen_addr: Vec::new(),
@@ -158,7 +151,6 @@ where
         self.inject_connection_established = Vec::new();
         self.inject_connection_closed = Vec::new();
         self.inject_event = Vec::new();
-        self.inject_addr_reach_failure = Vec::new();
         self.inject_dial_failure = Vec::new();
         self.inject_new_listen_addr = Vec::new();
         self.inject_new_external_addr = Vec::new();
@@ -167,12 +159,17 @@ where
         self.inject_listener_closed = Vec::new();
         self.poll = 0;
     }
+
+    pub fn inner(&mut self) -> &mut TInner {
+        &mut self.inner
+    }
 }
 
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Clone,
+    <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent:
+        Clone,
 {
     type ProtocolsHandler = TInner::ProtocolsHandler;
     type OutEvent = TInner::OutEvent;
@@ -191,9 +188,16 @@ where
         self.inner.inject_connected(peer);
     }
 
-    fn inject_connection_established(&mut self, p: &PeerId, c: &ConnectionId, e: &ConnectedPoint) {
-        self.inject_connection_established.push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_established(p, c, e);
+    fn inject_connection_established(
+        &mut self,
+        p: &PeerId,
+        c: &ConnectionId,
+        e: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
+    ) {
+        self.inject_connection_established
+            .push((p.clone(), c.clone(), e.clone()));
+        self.inner.inject_connection_established(p, c, e, errors);
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
@@ -201,24 +205,36 @@ where
         self.inner.inject_disconnected(peer);
     }
 
-    fn inject_connection_closed(&mut self, p: &PeerId, c: &ConnectionId, e: &ConnectedPoint) {
-        self.inject_connection_closed.push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_closed(p, c, e);
+    fn inject_connection_closed(
+        &mut self,
+        p: &PeerId,
+        c: &ConnectionId,
+        e: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
+        self.inject_connection_closed
+            .push((p.clone(), c.clone(), e.clone()));
+        self.inner.inject_connection_closed(p, c, e, handler);
     }
 
-    fn inject_event(&mut self, p: PeerId, c: ConnectionId, e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent) {
+    fn inject_event(
+        &mut self,
+        p: PeerId,
+        c: ConnectionId,
+        e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+    ) {
         self.inject_event.push((p.clone(), c.clone(), e.clone()));
         self.inner.inject_event(p, c, e);
     }
 
-    fn inject_addr_reach_failure(&mut self, p: Option<&PeerId>, a: &Multiaddr, e: &dyn std::error::Error) {
-        self.inject_addr_reach_failure.push((p.cloned(), a.clone()));
-        self.inner.inject_addr_reach_failure(p, a, e);
-    }
-
-    fn inject_dial_failure(&mut self, p: &PeerId) {
-        self.inject_dial_failure.push(p.clone());
-        self.inner.inject_dial_failure(p);
+    fn inject_dial_failure(
+        &mut self,
+        p: Option<PeerId>,
+        handler: Self::ProtocolsHandler,
+        error: &DialError,
+    ) {
+        self.inject_dial_failure.push(p);
+        self.inner.inject_dial_failure(p, handler, error);
     }
 
     fn inject_new_listener(&mut self, id: ListenerId) {
@@ -256,12 +272,11 @@ where
         self.inner.inject_listener_closed(l, r);
     }
 
-    fn poll(&mut self, cx: &mut Context, args: &mut impl PollParameters) ->
-        Poll<NetworkBehaviourAction<
-            <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
-            Self::OutEvent
-        >>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context,
+        args: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

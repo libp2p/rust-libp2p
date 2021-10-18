@@ -23,7 +23,7 @@
 pub mod store;
 
 use bytes::Bytes;
-use libp2p_core::{PeerId, Multiaddr, multihash::Multihash};
+use libp2p_core::{multihash::Multihash, Multiaddr, PeerId};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use wasm_timer::Instant;
@@ -85,7 +85,7 @@ impl Record {
     /// Creates a new record for insertion into the DHT.
     pub fn new<K>(key: K, value: Vec<u8>) -> Self
     where
-        K: Into<Key>
+        K: Into<Key>,
     {
         Record {
             key: key.into(),
@@ -116,7 +116,7 @@ pub struct ProviderRecord {
     /// The expiration time as measured by a local, monotonic clock.
     pub expires: Option<Instant>,
     /// The known addresses that the provider may be listening on.
-    pub addresses: Vec<Multiaddr>
+    pub addresses: Vec<Multiaddr>,
 }
 
 impl Hash for ProviderRecord {
@@ -138,7 +138,7 @@ impl ProviderRecord {
     /// Creates a new provider record for insertion into a `RecordStore`.
     pub fn new<K>(key: K, provider: PeerId, addresses: Vec<Multiaddr>) -> Self
     where
-        K: Into<Key>
+        K: Into<Key>,
     {
         ProviderRecord {
             key: key.into(),
@@ -157,8 +157,8 @@ impl ProviderRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quickcheck::*;
     use libp2p_core::multihash::Code;
+    use quickcheck::*;
     use rand::Rng;
     use std::time::Duration;
 
@@ -174,7 +174,11 @@ mod tests {
             Record {
                 key: Key::arbitrary(g),
                 value: Vec::arbitrary(g),
-                publisher: if g.gen() { Some(PeerId::random()) } else { None },
+                publisher: if g.gen() {
+                    Some(PeerId::random())
+                } else {
+                    None
+                },
                 expires: if g.gen() {
                     Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
                 } else {

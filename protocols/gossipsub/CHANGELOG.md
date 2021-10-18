@@ -1,6 +1,29 @@
-# 0.32.0 [unreleased]
+# 0.33.0-rc.1 [2021-10-15]
+
+- Add an event to register peers that do not support the gossipsub protocol
+  [PR 2241](https://github.com/libp2p/rust-libp2p/pull/2241)
+
+- Make default features of `libp2p-core` optional.
+  [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
+
+- Improve internal peer tracking.
+  [PR 2175](https://github.com/libp2p/rust-libp2p/pull/2175)
 
 - Update dependencies.
+
+- Allow `message_id_fn`s to accept closures that capture variables.
+  [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
+
+- Implement std::error::Error for error types.
+  [PR 2254](https://github.com/libp2p/rust-libp2p/pull/2254)
+
+# 0.32.0 [2021-07-12]
+
+- Update dependencies.
+
+- Reduce log levels across the crate to lessen noisiness of libp2p-gossipsub (see [PR 2101]).
+
+[PR 2101]: https://github.com/libp2p/rust-libp2p/pull/2101
 
 # 0.31.0 [2021-05-17]
 

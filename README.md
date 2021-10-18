@@ -1,7 +1,6 @@
 # Central repository for work on libp2p
 
 <a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
-<a href="http://webchat.freenode.net/?channels=%23libp2p"><img src="https://img.shields.io/badge/freenode-%23libp2p-yellow.svg?style=flat-square" /></a>
 [![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg?style=flat-square)](https://deps.rs/repo/github/libp2p/rust-libp2p)
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
@@ -13,7 +12,10 @@ This repository is the central place for Rust development of the [libp2p](https:
 - The **[examples](examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
-- To **report bugs, suggest improvements or request new features** please open
+- For **security related issues** please reach out to security@ipfs.io. Please
+  do not file a public issue on GitHub.
+
+- To **report bugs, suggest improvements or request new features** please open a
   GitHub issue on this repository.
 
 - For **rust-libp2p specific questions** please use the GitHub _Discussions_
@@ -64,6 +66,11 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 > - "Too long, didn't read" is not a valid excuse for not knowing what is in
 >   this document.
 
+## Maintainers
+
+- Max Inden ([@mxinden](https://github.com/mxinden/))
+- Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
+
 ## Notable users
 
 (open a pull request if you want your project to be added here)
@@ -78,3 +85,4 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - https://github.com/ChainSafe/forest
 - https://github.com/ipfs-rust/ipfs-embed
 - https://www.actyx.com/developers/
+- https://github.com/starcoinorg/starcoin

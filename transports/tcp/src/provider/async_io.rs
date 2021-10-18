@@ -18,15 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{Provider, IfEvent, Incoming};
+use super::{IfEvent, Incoming, Provider};
 
 use async_io_crate::Async;
-use futures::{
-    future::{BoxFuture, FutureExt},
-};
+use futures::future::{BoxFuture, FutureExt};
 use std::io;
-use std::task::{Poll, Context};
 use std::net;
+use std::task::{Context, Poll};
 
 #[derive(Copy, Clone)]
 pub enum Tcp {}
@@ -49,10 +47,14 @@ impl Provider for Tcp {
             let stream = Async::new(s)?;
             stream.writable().await?;
             Ok(stream)
-        }.boxed()
+        }
+        .boxed()
     }
 
-    fn poll_accept(l: &mut Self::Listener, cx: &mut Context<'_>) -> Poll<io::Result<Incoming<Self::Stream>>> {
+    fn poll_accept(
+        l: &mut Self::Listener,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<Incoming<Self::Stream>>> {
         let (stream, remote_addr) = loop {
             match l.poll_readable(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -64,13 +66,17 @@ impl Provider for Tcp {
                         // Since it doesn't do any harm, account for false positives of
                         // `poll_readable` just in case, i.e. try again.
                     }
-                }
+                },
             }
         };
 
         let local_addr = stream.get_ref().local_addr()?;
 
-        Poll::Ready(Ok(Incoming { stream, local_addr, remote_addr }))
+        Poll::Ready(Ok(Incoming {
+            stream,
+            local_addr,
+            remote_addr,
+        }))
     }
 
     fn poll_interfaces(w: &mut Self::IfWatcher, cx: &mut Context<'_>) -> Poll<io::Result<IfEvent>> {
