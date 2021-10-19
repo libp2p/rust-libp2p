@@ -99,9 +99,8 @@ impl Stream for Interval {
 /// 427_000 years. Large enough for any interval we would use or calculate in
 /// tokio.
 fn duration_to_nanos(dur: Duration) -> Option<u64> {
-    dur.as_secs()
-        .checked_mul(1_000_000_000)
-        .and_then(|v| v.checked_add(dur.subsec_nanos() as u64))
+    let v = dur.as_secs().checked_mul(1_000_000_000)?;
+    v.checked_add(dur.subsec_nanos() as u64)
 }
 
 fn next_interval(prev: Instant, now: Instant, interval: Duration) -> Duration {
