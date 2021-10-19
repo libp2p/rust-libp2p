@@ -24,7 +24,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.3.5
 
     - uses: Swatinem/rust-cache@v1.3.0
       with:
@@ -52,7 +52,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.3.5
 
     - name: Install Rust ${{ matrix.toolchain }}
       uses: actions-rs/toolchain@v1.0.7
@@ -90,7 +90,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.3.5
 
     - uses: Swatinem/rust-cache@v1.3.0
 
@@ -106,7 +106,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.3.5
 
     - uses: actions-rs/toolchain@v1.0.7
       with:
@@ -134,7 +134,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.3.5
 
     - uses: Swatinem/rust-cache@v1.3.0
 
@@ -150,7 +150,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.3.5
 
     - uses: actions-rs/toolchain@v1.0.7
       with:
