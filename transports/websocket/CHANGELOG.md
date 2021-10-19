@@ -1,3 +1,8 @@
+# v0.32.0
+
+- Handle websocket CLOSE with reason code. [PR 2085](https://github.com/libp2p/rust-libp2p/pull/2085)
+
+
 # 0.31.0-rc.1 [2021-10-15]
 
 - Make default features of `libp2p-core` optional.
