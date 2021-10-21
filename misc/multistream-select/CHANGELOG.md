@@ -1,4 +1,4 @@
-# 0.10.4 [unreleased]
+# 0.10.4-rc.1 [2021-10-15]
 
 - Implement `From<io::Error> for ProtocolError` instead of `Into`.
   [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)
