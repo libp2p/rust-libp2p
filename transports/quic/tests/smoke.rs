@@ -376,7 +376,7 @@ async fn dial_failure_tls() -> Result<()> {
     }
 
     match b.next().await {
-        Some(SwarmEvent::UnreachableAddr { .. }) => {}
+        Some(SwarmEvent::OutgoingConnectionError { .. }) => {}
         e => panic!("{:?}", e),
     };
 
