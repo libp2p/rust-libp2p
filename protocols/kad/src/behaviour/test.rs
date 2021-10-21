@@ -313,6 +313,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
+    let _ = env_logger::try_init();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
@@ -1280,7 +1281,7 @@ fn network_behaviour_inject_address_change() {
     };
 
     // Mimick a connection being established.
-    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint);
+    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None);
     kademlia.inject_connected(&remote_peer_id);
 
     // At this point the remote is not yet known to support the
@@ -1316,4 +1317,52 @@ fn network_behaviour_inject_address_change() {
         vec![new_address.clone()],
         kademlia.addresses_of_peer(&remote_peer_id),
     );
+}
+
+#[test]
+fn get_providers() {
+    fn prop(key: record::Key) {
+        let (_, mut single_swarm) = build_node();
+        single_swarm
+            .behaviour_mut()
+            .start_providing(key.clone())
+            .expect("could not provide");
+
+        block_on(async {
+            match single_swarm.next().await.unwrap() {
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    result: QueryResult::StartProviding(Ok(_)),
+                    ..
+                }) => {}
+                SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                _ => {}
+            }
+        });
+
+        let query_id = single_swarm.behaviour_mut().get_providers(key.clone());
+
+        block_on(async {
+            match single_swarm.next().await.unwrap() {
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    id,
+                    result:
+                        QueryResult::GetProviders(Ok(GetProvidersOk {
+                            key: found_key,
+                            providers,
+                            ..
+                        })),
+                    ..
+                }) if id == query_id => {
+                    assert_eq!(key, found_key);
+                    assert_eq!(
+                        single_swarm.local_peer_id(),
+                        providers.iter().next().unwrap()
+                    );
+                }
+                SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                _ => {}
+            }
+        });
+    }
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_))
 }

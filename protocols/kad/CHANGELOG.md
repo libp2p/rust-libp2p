@@ -1,4 +1,10 @@
-# 0.32.0 [unreleased]
+# 0.32.0-rc.2 [2021-10-15]
+
+- Export `KademliaBucketInserts` (see [PR 2294]).
+
+[PR 2294]: https://github.com/libp2p/rust-libp2p/pull/2294
+
+# 0.32.0-rc.1 [2021-10-15]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
@@ -8,7 +14,10 @@
 - Introduce `KademliaStoreInserts` option, which allows to filter records (see
   [PR 2163]).
 
+- Check local store when calling `Kademlia::get_providers` (see [PR 2221]).
+
 [PR 2163]: https://github.com/libp2p/rust-libp2p/pull/2163
+[PR 2221]: https://github.com/libp2p/rust-libp2p/pull/2163
 
 # 0.31.0 [2021-07-12]
 

@@ -236,6 +236,7 @@ mod tests {
                     send_back_addr: address,
                 }
             },
+            None,
         );
         <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
@@ -574,6 +575,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 },
+                None,
             );
             gs.inject_connected(&random_peer);
 
@@ -4140,6 +4142,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: addr.clone(),
                 },
+                None,
             );
         }
 
@@ -4158,6 +4161,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: addr2.clone(),
                 },
+                None,
             );
         }
 
@@ -4185,6 +4189,7 @@ mod tests {
             &ConnectedPoint::Dialer {
                 address: addr.clone(),
             },
+            None,
         );
 
         //nothing changed

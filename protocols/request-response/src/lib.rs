@@ -58,11 +58,9 @@
 
 pub mod codec;
 pub mod handler;
-pub mod throttled;
 
 pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
-pub use throttled::Throttled;
 
 use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
@@ -248,11 +246,6 @@ impl<TResponse> ResponseChannel<TResponse> {
     pub fn is_open(&self) -> bool {
         !self.sender.is_canceled()
     }
-
-    /// Get the ID of the inbound request waiting for a response.
-    pub(crate) fn request_id(&self) -> RequestId {
-        self.request_id
-    }
 }
 
 /// The ID of an inbound or outbound request.
@@ -367,19 +360,6 @@ where
             pending_outbound_requests: HashMap::new(),
             addresses: HashMap::new(),
         }
-    }
-
-    /// Creates a `RequestResponse` which limits requests per peer.
-    ///
-    /// The behaviour is wrapped in [`Throttled`] and detects the limits
-    /// per peer at runtime which are then enforced.
-    pub fn throttled<I>(c: TCodec, protos: I, cfg: RequestResponseConfig) -> Throttled<TCodec>
-    where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
-        TCodec: Send,
-        TCodec::Protocol: Sync,
-    {
-        Throttled::new(c, protos, cfg)
     }
 
     /// Initiates sending a request.
@@ -626,6 +606,7 @@ where
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        _errors: Option<&Vec<Multiaddr>>,
     ) {
         let address = match endpoint {
             ConnectedPoint::Dialer { address } => Some(address.clone()),
@@ -686,23 +667,30 @@ where
         self.connected.remove(peer);
     }
 
-    fn inject_dial_failure(&mut self, peer: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
-        // If there are pending outgoing requests when a dial failure occurs,
-        // it is implied that we are not connected to the peer, since pending
-        // outgoing requests are drained when a connection is established and
-        // only created when a peer is not connected when a request is made.
-        // Thus these requests must be considered failed, even if there is
-        // another, concurrent dialing attempt ongoing.
-        if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-            for request in pending {
-                self.pending_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::OutboundFailure {
-                            peer: *peer,
-                            request_id: request.request_id,
-                            error: OutboundFailure::DialFailure,
-                        },
-                    ));
+    fn inject_dial_failure(
+        &mut self,
+        peer: Option<PeerId>,
+        _: Self::ProtocolsHandler,
+        _: &DialError,
+    ) {
+        if let Some(peer) = peer {
+            // If there are pending outgoing requests when a dial failure occurs,
+            // it is implied that we are not connected to the peer, since pending
+            // outgoing requests are drained when a connection is established and
+            // only created when a peer is not connected when a request is made.
+            // Thus these requests must be considered failed, even if there is
+            // another, concurrent dialing attempt ongoing.
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
+                for request in pending {
+                    self.pending_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            RequestResponseEvent::OutboundFailure {
+                                peer: peer,
+                                request_id: request.request_id,
+                                error: OutboundFailure::DialFailure,
+                            },
+                        ));
+                }
             }
         }
     }

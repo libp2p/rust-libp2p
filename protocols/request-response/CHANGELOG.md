@@ -1,4 +1,4 @@
-# 0.13.0 [unreleased]
+# 0.13.0-rc.1 [2021-10-15]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
@@ -8,7 +8,11 @@
 - Manually implement `Debug` for `RequestResponseHandlerEvent` and
   `RequestProtocol`. See [PR 2183].
 
+- Remove `RequestResponse::throttled` and the `throttled` module.
+  See [PR 2236].
+
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
+[PR 2236]: https://github.com/libp2p/rust-libp2p/pull/2236
 
 # 0.12.0 [2021-07-12]
 
