@@ -27,6 +27,7 @@ use libp2p_core::{
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
     PeerId,
 };
+use quickcheck::*;
 use rand::Rng;
 use std::task::Poll;
 use util::{test_network, TestHandler};
@@ -88,89 +89,121 @@ fn max_outgoing() {
 
 #[test]
 fn max_established_incoming() {
-    let limit = rand::thread_rng().gen_range(1, 10);
+    #[derive(Debug, Clone)]
+    struct Limit(u32);
+
+    impl Arbitrary for Limit {
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            Self(g.gen_range(1, 10))
+        }
+    }
 
     fn config(limit: u32) -> NetworkConfig {
         let limits = ConnectionLimits::default().with_max_established_incoming(Some(limit));
         NetworkConfig::default().with_connection_limits(limits)
     }
 
-    let mut network1 = test_network(config(limit));
-    let mut network2 = test_network(config(limit));
+    fn prop(limit: Limit) {
+        let limit = limit.0;
 
-    let listen_addr = multiaddr![Memory(0u64)];
-    let _ = network1.listen_on(listen_addr.clone()).unwrap();
-    let (addr_sender, addr_receiver) = futures::channel::oneshot::channel();
-    let mut addr_sender = Some(addr_sender);
+        let mut network1 = test_network(config(limit));
+        let mut network2 = test_network(config(limit));
 
-    // Spawn the listener.
-    let listener = async_std::task::spawn(poll_fn(move |cx| loop {
-        match ready!(network1.poll(cx)) {
-            NetworkEvent::NewListenerAddress { listen_addr, .. } => {
-                addr_sender.take().unwrap().send(listen_addr).unwrap();
-            }
-            NetworkEvent::IncomingConnection { connection, .. } => {
-                network1.accept(connection, TestHandler()).unwrap();
-            }
-            NetworkEvent::ConnectionEstablished { .. } => {}
-            NetworkEvent::IncomingConnectionError {
-                error: PendingConnectionError::ConnectionLimit(err),
-                ..
-            } => {
-                assert_eq!(err.limit, limit);
-                assert_eq!(err.limit, err.current);
-                let info = network1.info();
-                let counters = info.connection_counters();
-                assert_eq!(counters.num_established_incoming(), limit);
-                assert_eq!(counters.num_established(), limit);
-                return Poll::Ready(());
-            }
-            e => panic!("Unexpected network event: {:?}", e),
-        }
-    }));
+        let _ = network1.listen_on(multiaddr![Memory(0u64)]).unwrap();
+        let listen_addr =
+            async_std::task::block_on(poll_fn(|cx| match ready!(network1.poll(cx)) {
+                NetworkEvent::NewListenerAddress { listen_addr, .. } => Poll::Ready(listen_addr),
+                e => panic!("Unexpected network event: {:?}", e),
+            }));
 
-    // Spawn and block on the dialer.
-    async_std::task::block_on(async move {
-        let addr = addr_receiver.await.unwrap();
-        let mut n = 0;
-        let _ = network2.dial(&addr, TestHandler()).unwrap();
-        let mut expected_closed = None;
-        poll_fn(|cx| {
-            loop {
-                match ready!(network2.poll(cx)) {
-                    NetworkEvent::ConnectionEstablished { connection, .. } => {
-                        n += 1;
+        // Spawn and block on the dialer.
+        async_std::task::block_on({
+            let mut n = 0;
+            let _ = network2.dial(&listen_addr, TestHandler()).unwrap();
+
+            let mut expected_closed = false;
+            let mut network_1_established = false;
+            let mut network_2_established = false;
+            let mut network_1_limit_reached = false;
+            let mut network_2_limit_reached = false;
+            poll_fn(move |cx| {
+                loop {
+                    let mut network_1_pending = false;
+                    let mut network_2_pending = false;
+
+                    match network1.poll(cx) {
+                        Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
+                            network1.accept(connection, TestHandler()).unwrap();
+                        }
+                        Poll::Ready(NetworkEvent::ConnectionEstablished { .. }) => {
+                            network_1_established = true;
+                        }
+                        Poll::Ready(NetworkEvent::IncomingConnectionError {
+                            error: PendingConnectionError::ConnectionLimit(err),
+                            ..
+                        }) => {
+                            assert_eq!(err.limit, limit);
+                            assert_eq!(err.limit, err.current);
+                            let info = network1.info();
+                            let counters = info.connection_counters();
+                            assert_eq!(counters.num_established_incoming(), limit);
+                            assert_eq!(counters.num_established(), limit);
+                            network_1_limit_reached = true;
+                        }
+                        Poll::Pending => {
+                            network_1_pending = true;
+                        }
+                        e => panic!("Unexpected network event: {:?}", e),
+                    }
+
+                    match network2.poll(cx) {
+                        Poll::Ready(NetworkEvent::ConnectionEstablished { .. }) => {
+                            network_2_established = true;
+                        }
+                        Poll::Ready(NetworkEvent::ConnectionClosed { .. }) => {
+                            assert!(expected_closed);
+                            let info = network2.info();
+                            let counters = info.connection_counters();
+                            assert_eq!(counters.num_established_outgoing(), limit);
+                            assert_eq!(counters.num_established(), limit);
+                            network_2_limit_reached = true;
+                        }
+                        Poll::Pending => {
+                            network_2_pending = true;
+                        }
+                        e => panic!("Unexpected network event: {:?}", e),
+                    }
+
+                    if network_1_pending && network_2_pending {
+                        return Poll::Pending;
+                    }
+
+                    if network_1_established && network_2_established {
+                        network_1_established = false;
+                        network_2_established = false;
+
                         if n <= limit {
                             // Dial again until the limit is exceeded.
-                            let id = network2.dial(&addr, TestHandler()).unwrap();
+                            n += 1;
+                            network2.dial(&listen_addr, TestHandler()).unwrap();
+
                             if n == limit {
                                 // The the next dialing attempt exceeds the limit, this
                                 // is the connection we expected to get closed.
-                                expected_closed = Some(id);
+                                expected_closed = true;
                             }
                         } else {
-                            // This connection exceeds the limit for the listener and
-                            // is expected to close shortly. For the dialer, these connections
-                            // will first appear established before the listener closes them as
-                            // a result of the limit violation.
-                            assert_eq!(Some(connection.id()), expected_closed);
+                            panic!("Expect networks not to establish connections beyond the limit.")
                         }
                     }
-                    NetworkEvent::ConnectionClosed { id, .. } => {
-                        assert_eq!(Some(id), expected_closed);
-                        let info = network2.info();
-                        let counters = info.connection_counters();
-                        assert_eq!(counters.num_established_outgoing(), limit);
-                        assert_eq!(counters.num_established(), limit);
+
+                    if network_1_limit_reached && network_2_limit_reached {
                         return Poll::Ready(());
                     }
-                    e => panic!("Unexpected network event: {:?}", e),
                 }
-            }
-        })
-        .await
-    });
+            })
+        });
+    }
 
-    // Wait for the listener to complete.
-    async_std::task::block_on(listener);
+    quickcheck(prop as fn(_));
 }
