@@ -28,13 +28,14 @@ use libp2p_core::{
     PeerId,
 };
 use quickcheck::*;
-use rand::Rng;
 use std::task::Poll;
 use util::{test_network, TestHandler};
 
 #[test]
 fn max_outgoing() {
-    let outgoing_limit = rand::thread_rng().gen_range(1, 10);
+    use rand::Rng;
+
+    let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
     let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
     let cfg = NetworkConfig::default().with_connection_limits(limits);
@@ -89,6 +90,8 @@ fn max_outgoing() {
 
 #[test]
 fn max_established_incoming() {
+    use rand07::Rng;
+
     #[derive(Debug, Clone)]
     struct Limit(u32);
 
