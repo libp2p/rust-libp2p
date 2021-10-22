@@ -48,7 +48,7 @@ use log::debug;
 use std::{io, path::PathBuf};
 
 macro_rules! codegen {
-    ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
+    ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, ) => {
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
 #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
@@ -80,7 +80,7 @@ impl Transport for $uds_config {
                             debug!("Now listening on {}", addr);
                             Ok(ListenerEvent::NewAddress(addr))
                         }
-                    }).chain(stream::unfold(listener, move |$($mut_or_not)* listener| {
+                    }).chain(stream::unfold(listener, move |listener| {
                         let addr = addr.clone();
                         async move {
                             let (stream, _) = match listener.accept().await {
@@ -134,7 +134,6 @@ codegen!(
     TokioUdsConfig,
     |addr| async move { tokio::net::UnixListener::bind(addr) },
     tokio::net::UnixStream,
-    mut
 );
 
 /// Turns a `Multiaddr` containing a single `Unix` component into a path.
