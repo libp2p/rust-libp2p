@@ -38,7 +38,7 @@ use topic_metrics::Slot;
 use open_metrics_client::metrics::counter::Counter;
 use open_metrics_client::metrics::family::Family;
 use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::{exponential_buckets, Histogram};
+use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
 use open_metrics_client::registry::Registry;
 
 use self::topic_metrics::{SlotChurnMetric, SlotMessageMetric, SlotMetricCounts, TopicMetrics};
@@ -97,11 +97,20 @@ pub struct InternalMetrics {
     /// Current metrics for all known mesh data. See [`TopicMetrics`] for further information.
     topic_metrics: HashMap<TopicHash, TopicMetrics>,
 }
-pub struct Config {}
+
+pub struct Config {
+    pub score_histogram_buckets: Vec<f64>,
+}
+
+impl Config {
+    pub fn histogram(&self) -> Histogram {
+        Histogram::new(self.score_histogram_buckets.clone().into_iter())
+    }
+}
 
 impl InternalMetrics {
     /// Constructs and builds the internal metrics given a registry.
-    pub fn new(registry: &mut Registry, config: Config) -> Self {
+    pub fn new(registry: &mut Registry, _config: Config) -> Self {
         /* Mesh Metrics */
 
         let mesh_peers = Family::default();
@@ -111,9 +120,11 @@ impl InternalMetrics {
             Box::new(mesh_peers.clone()),
         );
 
-        let mesh_score = Family::new_with_constructor(|| {
-            Histogram::new(exponential_buckets(-1000.0, 10.0, 100))
-        });
+        // TODO: change after https://github.com/mxinden/rust-open-metrics-client/pull/21 and use
+        // for now the range -10K to 10K with 100 long intervals as reasonable default.
+        // let mesh_score = Family::new_with_constructor(config);
+        let mesh_score =
+            Family::new_with_constructor(|| Histogram::new(linear_buckets(-10_000.0, 100.0, 201)));
         registry.register(
             "mesh_score",
             "Score of all peers in each mesh",
