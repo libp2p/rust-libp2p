@@ -29,7 +29,7 @@ use libp2p_core::{
     ConnectedPoint,
 };
 use quickcheck::*;
-use rand::Rng;
+use rand07::Rng;
 use std::num::NonZeroU8;
 use std::task::Poll;
 use util::{test_network, TestHandler};
