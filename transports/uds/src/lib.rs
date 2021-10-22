@@ -49,76 +49,87 @@ use std::{io, path::PathBuf};
 
 macro_rules! codegen {
     ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, ) => {
+        /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
+        #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+        #[derive(Debug, Clone)]
+        pub struct $uds_config {}
 
-/// Represents the configuration for a Unix domain sockets transport capability for libp2p.
-#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
-#[derive(Debug, Clone)]
-pub struct $uds_config {
-}
-
-impl $uds_config {
-    /// Creates a new configuration object for Unix domain sockets.
-    pub fn new() -> $uds_config {
-        $uds_config {}
-    }
-}
-
-impl Transport for $uds_config {
-    type Output = $unix_stream;
-    type Error = io::Error;
-    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
-    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if let Ok(path) = multiaddr_to_path(&addr) {
-            Ok(async move { $build_listener(&path).await }
-                .map_ok(move |listener| {
-                    stream::once({
-                        let addr = addr.clone();
-                        async move {
-                            debug!("Now listening on {}", addr);
-                            Ok(ListenerEvent::NewAddress(addr))
-                        }
-                    }).chain(stream::unfold(listener, move |listener| {
-                        let addr = addr.clone();
-                        async move {
-                            let (stream, _) = match listener.accept().await {
-                                Ok(v) => v,
-                                Err(err) => return Some((Err(err), listener))
-                            };
-                            debug!("incoming connection on {}", addr);
-                            let event = ListenerEvent::Upgrade {
-                                upgrade: future::ok(stream),
-                                local_addr: addr.clone(),
-                                remote_addr: addr.clone()
-                            };
-                            Some((Ok(event), listener))
-                        }
-                    }))
-                })
-                .try_flatten_stream()
-                .boxed())
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
+        impl $uds_config {
+            /// Creates a new configuration object for Unix domain sockets.
+            pub fn new() -> $uds_config {
+                $uds_config {}
+            }
         }
-    }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Ok(path) = multiaddr_to_path(&addr) {
-            debug!("Dialing {}", addr);
-            Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
+        impl Transport for $uds_config {
+            type Output = $unix_stream;
+            type Error = io::Error;
+            type Listener = BoxStream<
+                'static,
+                Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>,
+            >;
+            type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+            fn listen_on(
+                self,
+                addr: Multiaddr,
+            ) -> Result<Self::Listener, TransportError<Self::Error>> {
+                if let Ok(path) = multiaddr_to_path(&addr) {
+                    Ok(async move { $build_listener(&path).await }
+                        .map_ok(move |listener| {
+                            stream::once({
+                                let addr = addr.clone();
+                                async move {
+                                    debug!("Now listening on {}", addr);
+                                    Ok(ListenerEvent::NewAddress(addr))
+                                }
+                            })
+                            .chain(stream::unfold(
+                                listener,
+                                move |listener| {
+                                    let addr = addr.clone();
+                                    async move {
+                                        let (stream, _) = match listener.accept().await {
+                                            Ok(v) => v,
+                                            Err(err) => return Some((Err(err), listener)),
+                                        };
+                                        debug!("incoming connection on {}", addr);
+                                        let event = ListenerEvent::Upgrade {
+                                            upgrade: future::ok(stream),
+                                            local_addr: addr.clone(),
+                                            remote_addr: addr.clone(),
+                                        };
+                                        Some((Ok(event), listener))
+                                    }
+                                },
+                            ))
+                        })
+                        .try_flatten_stream()
+                        .boxed())
+                } else {
+                    Err(TransportError::MultiaddrNotSupported(addr))
+                }
+            }
+
+            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+                if let Ok(path) = multiaddr_to_path(&addr) {
+                    debug!("Dialing {}", addr);
+                    Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
+                } else {
+                    Err(TransportError::MultiaddrNotSupported(addr))
+                }
+            }
+
+            fn address_translation(
+                &self,
+                _server: &Multiaddr,
+                _observed: &Multiaddr,
+            ) -> Option<Multiaddr> {
+                None
+            }
         }
-    }
-
-    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
-}
-
-};
+    };
 }
 
 #[cfg(feature = "async-std")]
