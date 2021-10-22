@@ -97,10 +97,11 @@ pub struct InternalMetrics {
     /// Current metrics for all known mesh data. See [`TopicMetrics`] for further information.
     topic_metrics: HashMap<TopicHash, TopicMetrics>,
 }
+pub struct Config {}
 
 impl InternalMetrics {
     /// Constructs and builds the internal metrics given a registry.
-    pub fn new(registry: &mut Registry) -> Self {
+    pub fn new(registry: &mut Registry, config: Config) -> Self {
         /* Mesh Metrics */
 
         let mesh_peers = Family::default();

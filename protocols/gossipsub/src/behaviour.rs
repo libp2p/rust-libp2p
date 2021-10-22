@@ -52,6 +52,10 @@ use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
+use crate::metrics::{
+    topic_metrics::{SlotChurnMetric, SlotMessageMetric},
+    Config as MetricsConfig, InternalMetrics,
+};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
@@ -68,11 +72,6 @@ use std::{cmp::Ordering::Equal, fmt::Debug};
 
 #[cfg(test)]
 mod tests;
-
-use crate::metrics::{
-    topic_metrics::{SlotChurnMetric, SlotMessageMetric},
-    InternalMetrics,
-};
 
 /// Determines if published messages should be signed or not.
 ///
@@ -339,12 +338,13 @@ where
     pub fn new_with_metrics(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
-        metrics: &mut Registry,
+        metrics_registry: &mut Registry,
+        metrics_config: MetricsConfig,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
-            Some(metrics),
+            Some((metrics_registry, metrics_config)),
             F::default(),
             D::default(),
         )
@@ -361,7 +361,7 @@ where
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
-        metrics: Option<&mut Registry>,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
@@ -384,7 +384,7 @@ where
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
-        metrics: Option<&mut Registry>,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         data_transform: D,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
@@ -407,7 +407,7 @@ where
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
-        metrics: Option<&mut Registry>,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
         data_transform: D,
     ) -> Result<Self, &'static str> {
@@ -418,7 +418,7 @@ where
         validate_config(&privacy, config.validation_mode())?;
 
         Ok(Gossipsub {
-            metrics: metrics.map(|registry| InternalMetrics::new(registry)),
+            metrics: metrics.map(|(registry, cfg)| InternalMetrics::new(registry, cfg)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
