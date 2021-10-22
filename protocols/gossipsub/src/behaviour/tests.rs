@@ -935,8 +935,7 @@ mod tests {
             .build()
             .unwrap();
         // create a gossipsub struct
-        let mut gs: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::Anonymous, gs_config, None).unwrap();
+        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config).unwrap();
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test").hash().clone();

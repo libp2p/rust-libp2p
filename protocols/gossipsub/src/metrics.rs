@@ -53,6 +53,10 @@ const NON_MESH_TOPIC_LIMIT: usize = 50;
 
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct InternalMetrics {
+    /// Keeps track of which mesh topics have been added to metrics or not.
+    added_mesh_topics: HashSet<TopicHash>,
+    /// Keeps track of which non mesh topics have been added to metrics or not.
+    added_non_mesh_topics: HashSet<TopicHash>,
     /// The current peers in each mesh.
     mesh_peers: Family<TopicHash, Gauge>,
     /// The scores for each peer in each mesh.
@@ -92,21 +96,15 @@ pub struct InternalMetrics {
     memcache_misses: Counter,
     /// Current metrics for all known mesh data. See [`TopicMetrics`] for further information.
     topic_metrics: HashMap<TopicHash, TopicMetrics>,
-    /// Keeps track of which mesh topics have been added to metrics or not.
-    added_mesh_topics: HashSet<TopicHash>,
-    /// Keeps track of which non mesh topics have been added to metrics or not.
-    added_non_mesh_topics: HashSet<TopicHash>,
 }
 
 impl InternalMetrics {
     /// Constructs and builds the internal metrics given a registry.
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry_with_prefix("gossipsub");
-
         /* Mesh Metrics */
 
         let mesh_peers = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_peer_count",
             "Number of peers in each mesh",
             Box::new(mesh_peers.clone()),
@@ -115,84 +113,84 @@ impl InternalMetrics {
         let mesh_score = Family::new_with_constructor(|| {
             Histogram::new(exponential_buckets(-1000.0, 10.0, 100))
         });
-        sub_registry.register(
+        registry.register(
             "mesh_score",
             "Score of all peers in each mesh",
             Box::new(mesh_score.clone()),
         );
 
         let mesh_avg_score = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_avg_score",
             "Average score of all peers in each mesh",
             Box::new(mesh_avg_score.clone()),
         );
 
         let mesh_message_rx_total = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_message_rx_total",
             "Total number of messages received from each mesh",
             Box::new(mesh_message_rx_total.clone()),
         );
 
         let mesh_message_tx_total = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_message_tx_total",
             "Total number of messages sent in each mesh",
             Box::new(mesh_message_tx_total.clone()),
         );
 
         let mesh_messages_from_non_mesh_peers = Family::default();
-        sub_registry.register(
+        registry.register(
             "messages_from_non_mesh_peers",
             "Number of messages received from peers not in the mesh, for each mesh",
             Box::new(mesh_messages_from_non_mesh_peers.clone()),
         );
 
         let mesh_duplicates_filtered = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_duplicates_filtered",
             "Total number of duplicate messages filtered in each mesh",
             Box::new(mesh_duplicates_filtered.clone()),
         );
 
         let mesh_messages_validated = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_messages_validated",
             "Total number of messages that have been validated in each mesh",
             Box::new(mesh_messages_validated.clone()),
         );
 
         let mesh_messages_rejected = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_messages_rejected",
             "Total number of messages rejected in each mesh",
             Box::new(mesh_messages_rejected.clone()),
         );
 
         let mesh_messages_ignored = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_messages_ignored",
             "Total number of messages ignored in each mesh",
             Box::new(mesh_messages_ignored.clone()),
         );
 
         let mesh_first_message_deliveries_per_slot = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_first_message_deliveries_per_slot",
             "The number of first message deliveries per mesh slot",
             Box::new(mesh_first_message_deliveries_per_slot.clone()),
         );
 
         let mesh_iwant_requests = Family::default();
-        sub_registry.register(
+        registry.register(
             "mesh_iwant_requests",
             "The number of IWANT requests per mesh",
             Box::new(mesh_first_message_deliveries_per_slot.clone()),
         );
 
         let broken_promises = Counter::default();
-        sub_registry.register(
+        registry.register(
             "broken_promises",
             "Total number of broken promises per mesh",
             Box::new(broken_promises.clone()),
@@ -201,14 +199,14 @@ impl InternalMetrics {
         /* Peer Metrics */
 
         let topic_peers = Family::default();
-        sub_registry.register(
+        registry.register(
             "topic_peer_count",
             "Number of peers subscribed to each known topic",
             Box::new(topic_peers.clone()),
         );
 
         let subscribed_topic_peers = Family::default();
-        sub_registry.register(
+        registry.register(
             "subscribed_topic_peer_count",
             "Number of peers subscribed to each subscribed topic",
             Box::new(subscribed_topic_peers.clone()),
@@ -218,14 +216,14 @@ impl InternalMetrics {
 
         // Invalid Topic Messages
         let invalid_topic_messages = Counter::default();
-        sub_registry.register(
+        registry.register(
             "invalid_topic_messages",
             "Number of times a message has been received on a non-subscribed topic",
             Box::new(invalid_topic_messages.clone()),
         );
 
         let memcache_misses = Counter::default();
-        sub_registry.register(
+        registry.register(
                 "memcache_misses",
                 "Number of times a message has attempted to be forwarded but has already been removed from the memcache",
                 Box::new(memcache_misses.clone()),

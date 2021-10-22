@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // NOTE: The last parameter specifies an `open_metrics_client` `Registry` which optionally
         // enables metrics for the gossipsub behaviour.
         let mut gossipsub: gossipsub::Gossipsub =
-            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config, None)
+            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
                 .expect("Correct configuration");
 
         // subscribes to our topic

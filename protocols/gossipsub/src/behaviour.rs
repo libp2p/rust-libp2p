@@ -218,9 +218,6 @@ pub struct Gossipsub<
     D: DataTransform = IdentityTransform,
     F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
 > {
-    /// Keep track of a set of internal metrics relating to gossipsub.
-    metrics: Option<InternalMetrics>,
-
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
@@ -311,6 +308,9 @@ pub struct Gossipsub<
     /// calculating the message-id and sending to the application. This is designed to allow the
     /// user to implement arbitrary topic-based compression algorithms.
     data_transform: D,
+
+    /// Keep track of a set of internal metrics relating to gossipsub.
+    metrics: Option<InternalMetrics>,
 }
 
 impl<D, F> Gossipsub<D, F>
@@ -320,16 +320,31 @@ where
 {
     /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
     /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
-    /// Metrics can be evaluated by passing a reference to a [`Registry`].
     pub fn new(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
-        metrics: Option<&mut Registry>,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
-            metrics,
+            None,
+            F::default(),
+            D::default(),
+        )
+    }
+
+    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
+    /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    pub fn new_with_metrics(
+        privacy: MessageAuthenticity,
+        config: GossipsubConfig,
+        metrics: &mut Registry,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter_and_transform(
+            privacy,
+            config,
+            Some(metrics),
             F::default(),
             D::default(),
         )
@@ -3754,8 +3769,7 @@ mod local_test {
             .validation_mode(ValidationMode::Permissive)
             .build()
             .unwrap();
-        let gs: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::RandomAuthor, config, None).unwrap();
+        let gs: Gossipsub = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
         // Message under the limit should be fine.
         let mut rpc = empty_rpc();
@@ -3803,8 +3817,7 @@ mod local_test {
                 .validation_mode(ValidationMode::Permissive)
                 .build()
                 .unwrap();
-            let gs: Gossipsub =
-                Gossipsub::new(MessageAuthenticity::RandomAuthor, config, None).unwrap();
+            let gs: Gossipsub = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);
