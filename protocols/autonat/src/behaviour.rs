@@ -28,7 +28,7 @@ use libp2p_request_response::{
     RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    AddressScore, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour,
+    AddressScore, DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour,
     NetworkBehaviourAction, PollParameters,
 };
 use std::{
@@ -140,9 +140,10 @@ impl NetworkBehaviour for Behaviour {
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
         self.inner
-            .inject_connection_established(peer, conn, endpoint);
+            .inject_connection_established(peer, conn, endpoint, failed_addresses);
 
         // Initiate a new dial request if there is none pending.
         if !self.ongoing_outbound.contains(peer) {
@@ -190,23 +191,14 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_event(peer_id, conn, event)
     }
 
-    fn inject_addr_reach_failure(
-        &mut self,
-        peer_id: Option<&PeerId>,
-        addr: &Multiaddr,
-        error: &dyn std::error::Error,
-    ) {
-        self.inner.inject_addr_reach_failure(peer_id, addr, error)
-    }
-
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         handler: Self::ProtocolsHandler,
-        error: libp2p_swarm::DialError,
+        error: &DialError,
     ) {
         self.inner.inject_dial_failure(peer_id, handler, error);
-        if let Some(channel) = self.ongoing_inbound.remove(peer_id) {
+        if let Some(channel) = peer_id.and_then(|p| self.ongoing_inbound.remove(&p)) {
             // Failed to dial any of the addresses sent by the remote peer in their dial-request.
             let _ = self
                 .inner

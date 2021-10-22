@@ -66,6 +66,11 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 > - "Too long, didn't read" is not a valid excuse for not knowing what is in
 >   this document.
 
+## Maintainers
+
+- Max Inden ([@mxinden](https://github.com/mxinden/))
+- Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
+
 ## Notable users
 
 (open a pull request if you want your project to be added here)

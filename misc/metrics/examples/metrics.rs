@@ -106,7 +106,11 @@ pub async fn metrics_server(registry: Registry) -> std::result::Result<(), std::
         .get(|req: tide::Request<Arc<Mutex<Registry>>>| async move {
             let mut encoded = Vec::new();
             encode(&mut encoded, &req.state().lock().unwrap()).unwrap();
-            Ok(String::from_utf8(encoded).unwrap())
+            let response = tide::Response::builder(200)
+                .body(encoded)
+                .content_type("application/openmetrics-text; version=1.0.0; charset=utf-8")
+                .build();
+            Ok(response)
         });
 
     app.listen("0.0.0.0:0").await?;

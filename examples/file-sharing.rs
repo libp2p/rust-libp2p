@@ -492,13 +492,8 @@ mod network {
                     }
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
-                SwarmEvent::UnreachableAddr {
-                    peer_id,
-                    attempts_remaining,
-                    error,
-                    ..
-                } => {
-                    if attempts_remaining == 0 {
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                    if let Some(peer_id) = peer_id {
                         if let Some(sender) = self.pending_dial.remove(&peer_id) {
                             let _ = sender.send(Err(Box::new(error)));
                         }
