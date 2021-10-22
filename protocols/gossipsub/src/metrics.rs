@@ -36,9 +36,9 @@ use topic_metrics::Slot;
 
 // use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::Family;
+use open_metrics_client::metrics::family::{Family, MetricConstructor};
 use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
+use open_metrics_client::metrics::histogram::Histogram;
 use open_metrics_client::registry::Registry;
 
 use self::topic_metrics::{SlotChurnMetric, SlotMessageMetric, SlotMetricCounts, TopicMetrics};
@@ -60,7 +60,7 @@ pub struct InternalMetrics {
     /// The current peers in each mesh.
     mesh_peers: Family<TopicHash, Gauge>,
     /// The scores for each peer in each mesh.
-    mesh_score: Family<TopicHash, Histogram>,
+    mesh_score: Family<TopicHash, Histogram, ScoreHistogramBuilder>,
     /// The average peer score for each mesh.
     mesh_avg_score: Family<TopicHash, Gauge>,
     /// The total number of messages received (after duplicate filter).
@@ -102,15 +102,19 @@ pub struct Config {
     pub score_histogram_buckets: Vec<f64>,
 }
 
-impl Config {
-    pub fn histogram(&self) -> Histogram {
-        Histogram::new(self.score_histogram_buckets.clone().into_iter())
+#[derive(Clone)]
+struct ScoreHistogramBuilder {
+    buckets: Vec<f64>,
+}
+impl MetricConstructor<Histogram> for ScoreHistogramBuilder {
+    fn new(&self) -> Histogram {
+        Histogram::new(self.buckets.clone().into_iter())
     }
 }
 
 impl InternalMetrics {
     /// Constructs and builds the internal metrics given a registry.
-    pub fn new(registry: &mut Registry, _config: Config) -> Self {
+    pub fn new(registry: &mut Registry, config: Config) -> Self {
         /* Mesh Metrics */
 
         let mesh_peers = Family::default();
@@ -120,11 +124,10 @@ impl InternalMetrics {
             Box::new(mesh_peers.clone()),
         );
 
-        // TODO: change after https://github.com/mxinden/rust-open-metrics-client/pull/21 and use
-        // for now the range -10K to 10K with 100 long intervals as reasonable default.
-        // let mesh_score = Family::new_with_constructor(config);
-        let mesh_score =
-            Family::new_with_constructor(|| Histogram::new(linear_buckets(-10_000.0, 100.0, 201)));
+        let score_histogram_builder = ScoreHistogramBuilder {
+            buckets: config.score_histogram_buckets.clone(),
+        };
+        let mesh_score = Family::new_with_constructor(score_histogram_builder);
         registry.register(
             "mesh_score",
             "Score of all peers in each mesh",
