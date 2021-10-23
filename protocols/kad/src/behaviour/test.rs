@@ -607,12 +607,23 @@ fn put_record() {
                             },
                         ))) => {
                             if !drop_records {
-                                // Accept the record
-                                swarm
-                                    .behaviour_mut()
-                                    .store_mut()
-                                    .put(record)
-                                    .expect("record is stored");
+                                if let Some(record) = record {
+                                    assert_eq!(
+                                        swarm.behaviour().record_filtering,
+                                        KademliaStoreInserts::FilterBoth
+                                    );
+                                    // Accept the record
+                                    swarm
+                                        .behaviour_mut()
+                                        .store_mut()
+                                        .put(record)
+                                        .expect("record is stored");
+                                } else {
+                                    assert_eq!(
+                                        swarm.behaviour().record_filtering,
+                                        KademliaStoreInserts::Unfiltered
+                                    );
+                                }
                             }
                         }
                         // Ignore any other event.
