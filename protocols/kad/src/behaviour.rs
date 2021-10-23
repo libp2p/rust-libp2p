@@ -1699,7 +1699,7 @@ where
             };
             match self.record_filtering {
                 KademliaStoreInserts::Unfiltered => {
-                    if let Err(e) = self.store.add_provider(record.clone()) {
+                    if let Err(e) = self.store.add_provider(record) {
                         info!("Provider record not stored: {:?}", e);
                         return;
                     }
