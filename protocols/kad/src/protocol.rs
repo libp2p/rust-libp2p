@@ -378,6 +378,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
         },
         KadRequestMsg::PutValue { record } => proto::Message {
             r#type: proto::message::MessageType::PutValue as i32,
+            key: record.key.to_vec(),
             record: Some(record_to_proto(record)),
             ..proto::Message::default()
         },
