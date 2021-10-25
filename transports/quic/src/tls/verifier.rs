@@ -63,7 +63,7 @@ impl rustls::ServerCertVerifier for Libp2pServerCertificateVerifier {
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Err(TLSError::PeerIncompatibleError(
-            "Only TLS 1.3 certificates are supported".to_string(),
+            "Only TLS 1.3 is supported".to_string(),
         ))
     }
 
@@ -116,7 +116,7 @@ impl rustls::ClientCertVerifier for Libp2pClientCertificateVerifier {
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Err(TLSError::PeerIncompatibleError(
-            "Only TLS 1.3 certificates are supported".to_string(),
+            "Only TLS 1.3 is supported".to_string(),
         ))
     }
 
