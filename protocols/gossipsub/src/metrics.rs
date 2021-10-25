@@ -38,57 +38,65 @@ use topic_metrics::Slot;
 use open_metrics_client::metrics::counter::Counter;
 use open_metrics_client::metrics::family::{Family, MetricConstructor};
 use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::Histogram;
+use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
 use open_metrics_client::registry::Registry;
 
 use self::topic_metrics::{SlotChurnMetric, SlotMessageMetric, SlotMetricCounts, TopicMetrics};
 
-/// This provides an upper bound to the number of mesh topics we create metrics for. It prevents
-/// unbounded labels being created in the metrics.
-const MESH_TOPIC_LIMIT: usize = 300;
-/// A separate limit is used to keep track of non-mesh topics. Mesh topics are controlled by the
-/// user via subscriptions whereas non-mesh topics are determined by users on the network.
-/// This limit permits a fixed amount of topics to allow, in-addition to the mesh topics.
-const NON_MESH_TOPIC_LIMIT: usize = 50;
-
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct InternalMetrics {
+    /* Auxiliary, defensive values */
     /// Keeps track of which mesh topics have been added to metrics or not.
     added_mesh_topics: HashSet<TopicHash>,
+    /// Maximum number of mesh topics instrumented.
+    max_measured_mesh_topics: usize,
+    /// Maximum number of non-mesh topics instrumented.
+    max_measured_non_mesh_topics: usize,
     /// Keeps track of which non mesh topics have been added to metrics or not.
     added_non_mesh_topics: HashSet<TopicHash>,
+
+    /* Mesh metrics */
     /// The current peers in each mesh.
     mesh_peers: Family<TopicHash, Gauge>,
     /// The scores for each peer in each mesh.
     mesh_score: Family<TopicHash, Histogram, ScoreHistogramBuilder>,
     /// The average peer score for each mesh.
+    // TODO: we need the median not the avg.
     mesh_avg_score: Family<TopicHash, Gauge>,
-    /// The total number of messages received (after duplicate filter).
-    mesh_message_rx_total: Family<TopicHash, Counter>,
     /// The total number of messages sent.
     mesh_message_tx_total: Family<TopicHash, Counter>,
+
+    /// The total number of messages received (after duplicate filter).
+    mesh_message_rx_total: Family<TopicHash, Counter>,
+    /// The total number of duplicate messages filtered per mesh.
+    // TODO: is this messages received?
+    mesh_duplicates_filtered: Family<TopicHash, Counter>,
     /// The number of messages received from non-mesh peers (after duplicate filter).
     mesh_messages_from_non_mesh_peers: Family<TopicHash, Counter>,
-    /// The total number of duplicate messages filtered per mesh.
-    mesh_duplicates_filtered: Family<TopicHash, Counter>,
+
+    // TODO: how do these add up wrt to the total?
     /// The total number of messages validated per mesh.
     mesh_messages_validated: Family<TopicHash, Counter>,
     /// The total number of messages rejected per mesh.
     mesh_messages_rejected: Family<TopicHash, Counter>,
     /// The total number of messages ignored per mesh.
     mesh_messages_ignored: Family<TopicHash, Counter>,
-    /// The number of first message delivers per slot per mesh.
+
+    /// The number of first message deliveries per slot per mesh.
     mesh_first_message_deliveries_per_slot: Family<(TopicHash, Slot), Gauge>,
     /// The number of IWANT requests being sent per mesh topic.
+    // TODO: do these counters not get reset?
     mesh_iwant_requests: Family<TopicHash, Counter>,
     /// Number of peers subscribed to each known topic.
     topic_peers: Family<TopicHash, Gauge>,
     /// Number of peers subscribed to each subscribed topic.
     subscribed_topic_peers: Family<TopicHash, Gauge>,
     /// The number of broken promises (this metric is indicative of nodes with invalid message-ids)
+    // TODO: why is this not per topic? because who cares?
     broken_promises: Counter,
     /// Keeps track of the number of messages we have received on topics we are not subscribed
     /// to.
+    // TODO: why is this invalid?
     invalid_topic_messages: Counter,
     /// When the user validates a message, it tries to re propagate it to its mesh peers. If the
     /// message expires from the memcache before it can be validated, we count this a cache miss
@@ -98,8 +106,33 @@ pub struct InternalMetrics {
     topic_metrics: HashMap<TopicHash, TopicMetrics>,
 }
 
+/// This provides an upper bound to the number of mesh topics we create metrics for. It prevents
+/// unbounded labels being created in the metrics.
+const DEFAULT_MESH_TOPIC_LIMIT: usize = 300;
+/// A separate limit is used to keep track of non-mesh topics. Mesh topics are controlled by the
+/// user via subscriptions whereas non-mesh topics are determined by users on the network.
+/// This limit permits a fixed amount of topics to allow, in-addition to the mesh topics.
+const DEFAULT_NON_MESH_TOPIC_LIMIT: usize = 50;
+
 pub struct Config {
     pub score_histogram_buckets: Vec<f64>,
+    /// This provides an upper bound to the number of mesh topics we create metrics for. It
+    /// prevents unbounded labels being created in the metrics.
+    pub max_measured_mesh_topics: usize,
+    /// Mesh topics are controlled by the user via subscriptions whereas non-mesh topics are
+    /// determined by users on the network.  This limit permits a fixed amount of topics to allow,
+    /// in-addition to the mesh topics.
+    pub max_measured_non_mesh_topics: usize,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            score_histogram_buckets: linear_buckets(-10_000.0, 100.0, 201).collect(),
+            max_measured_mesh_topics: DEFAULT_MESH_TOPIC_LIMIT,
+            max_measured_non_mesh_topics: DEFAULT_NON_MESH_TOPIC_LIMIT,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -115,6 +148,12 @@ impl MetricConstructor<Histogram> for ScoreHistogramBuilder {
 impl InternalMetrics {
     /// Constructs and builds the internal metrics given a registry.
     pub fn new(registry: &mut Registry, config: Config) -> Self {
+        let Config {
+            score_histogram_buckets,
+            max_measured_mesh_topics,
+            max_measured_non_mesh_topics,
+        } = config;
+
         /* Mesh Metrics */
 
         let mesh_peers = Family::default();
@@ -125,7 +164,7 @@ impl InternalMetrics {
         );
 
         let score_histogram_builder = ScoreHistogramBuilder {
-            buckets: config.score_histogram_buckets.clone(),
+            buckets: score_histogram_buckets,
         };
         let mesh_score = Family::new_with_constructor(score_histogram_builder);
         registry.register(
@@ -245,6 +284,10 @@ impl InternalMetrics {
                 );
 
         InternalMetrics {
+            added_mesh_topics: HashSet::new(),
+            added_non_mesh_topics: HashSet::new(),
+            max_measured_mesh_topics,
+            max_measured_non_mesh_topics,
             mesh_peers,
             mesh_score,
             mesh_avg_score,
@@ -257,14 +300,12 @@ impl InternalMetrics {
             mesh_messages_ignored,
             mesh_first_message_deliveries_per_slot,
             mesh_iwant_requests,
-            broken_promises,
-            memcache_misses,
             topic_peers,
             subscribed_topic_peers,
+            broken_promises,
             invalid_topic_messages,
+            memcache_misses,
             topic_metrics: HashMap::new(),
-            added_mesh_topics: HashSet::new(),
-            added_non_mesh_topics: HashSet::new(),
         }
     }
 
@@ -457,7 +498,7 @@ impl InternalMetrics {
     /// true.
     fn allowed_mesh_topic(&mut self, topic_hash: &TopicHash) -> bool {
         // If we haven't reached the limit, record the topic.
-        if self.added_mesh_topics.len() < MESH_TOPIC_LIMIT {
+        if self.added_mesh_topics.len() < self.max_measured_mesh_topics {
             self.added_mesh_topics.insert(topic_hash.clone());
             true
         } else {
@@ -473,7 +514,7 @@ impl InternalMetrics {
     /// true.
     fn allowed_non_mesh_topic(&mut self, topic_hash: &TopicHash) -> bool {
         // If we haven't reached the limit, record the topic.
-        if self.added_non_mesh_topics.len() < NON_MESH_TOPIC_LIMIT
+        if self.added_non_mesh_topics.len() < self.max_measured_non_mesh_topics
             && !self.added_mesh_topics.contains(topic_hash)
         {
             self.added_non_mesh_topics.insert(topic_hash.clone());

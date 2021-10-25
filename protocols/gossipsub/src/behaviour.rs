@@ -961,6 +961,7 @@ where
             debug!("JOIN: The topic is already in the mesh, ignoring JOIN");
             return;
         }
+        // TODO: here. No need to store the added peers twice.
 
         let mut added_peers = HashSet::new();
 
