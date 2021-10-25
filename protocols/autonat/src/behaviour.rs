@@ -28,95 +28,168 @@ use libp2p_request_response::{
     RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    AddressScore, DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters,
+    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     iter,
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-type FiniteAddrScore = u32;
-
+#[derive(Debug, Clone)]
 /// Config for the [`Behaviour`].
 pub struct Config {
     // Timeout for requests.
     timeout: Duration,
+
+    // Config if the peer should frequently re-determine its status.
+    auto_retry: Option<AutoRetry>,
+
+    // Config if the current peer also serves as server for other peers./
+    // In case of `None`, the local peer will never do dial-attempts to other peers.
+    server: Option<ServerConfig>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            timeout: Duration::from_secs(5),
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct AutoRetry {
+    interval: Duration,
+    min_peers: usize,
+    max_peers: usize,
+    required_success: usize,
 }
 
-impl Config {
-    /// Set the timeout for dial-requests.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
+#[derive(Debug, Clone)]
+pub struct ServerConfig {
+    max_addresses: usize,
+    max_ongoing: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum Reachability {
+    Public(Multiaddr),
+    Private,
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub struct Probe {
+    server_count: usize,
+    pending_servers: Vec<PeerId>,
+    addresses: HashMap<Multiaddr, usize>,
+    required_success: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum NatStatus {
+    Public {
+        address: Multiaddr,
+        server_count: usize,
+        successes: usize,
+    },
+    Private {
+        server_count: usize,
+        tried_addresses: Vec<(Multiaddr, usize)>,
+    },
 }
 
 /// Network Behaviour for AutoNAT.
 pub struct Behaviour {
     // Inner protocol for sending requests and receiving the response.
     inner: RequestResponse<AutoNatCodec>,
-    // Local listening addresses with a score indicating their reachability.
-    // The score increases each time a remote peer successfully dials this address.
-    addresses: HashMap<Multiaddr, FiniteAddrScore>,
+
     // Ongoing inbound requests, where no response has been sent back to the remote yet.
     ongoing_inbound: HashMap<PeerId, ResponseChannel<DialResponse>>,
-    // Ongoing outbound dial-requests, where no response has been received from the remote yet.
-    ongoing_outbound: HashSet<PeerId>,
-    // Recently connected peers to which we want to send a dial-request.
-    pending_requests: VecDeque<PeerId>,
-}
 
-impl Default for Behaviour {
-    fn default() -> Self {
-        Behaviour::new(Config::default())
-    }
+    // Ongoing outbound dial-requests, where no response has been received from the remote yet.
+    ongoing_outbound: Option<Probe>,
+
+    // Manually initiated probe.
+    pending_probe: Option<Probe>,
+
+    // List of trusted public peers that are probed when attempting to determine the auto-nat status.
+    static_servers: Vec<PeerId>,
+
+    connected: Vec<PeerId>,
+
+    status: Reachability,
+
+    server_config: Option<ServerConfig>,
+
+    auto_retry: Option<AutoRetry>,
+
+    last_probe: Instant,
 }
 
 impl Behaviour {
     pub fn new(config: Config) -> Self {
-        let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
+        let proto_support = match config.server {
+            Some(_) => ProtocolSupport::Full,
+            None => ProtocolSupport::Outbound,
+        };
+        let protocols = iter::once((AutoNatProtocol, proto_support));
         let mut cfg = RequestResponseConfig::default();
         cfg.set_request_timeout(config.timeout);
         let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
         Self {
             inner,
-            addresses: HashMap::default(),
             ongoing_inbound: HashMap::default(),
-            ongoing_outbound: HashSet::default(),
-            pending_requests: VecDeque::default(),
+            ongoing_outbound: None,
+            pending_probe: None,
+            static_servers: Vec::default(),
+            connected: Vec::default(),
+            status: Reachability::Unknown,
+            server_config: config.server,
+            auto_retry: None,
+            last_probe: Instant::now(),
         }
     }
 
-    /// Add a new address to the address list that is send to remote peers in a dial-request.
-    pub fn add_local_address(&mut self, address: Multiaddr) {
-        if self.addresses.get(&address).is_none() {
-            self.addresses.insert(address, 1);
+    // Manually retry determination of NAT status.
+    //
+    // Return whether there is already an ongoing Probe.
+    pub fn retry_nat_status(
+        &mut self,
+        required_success: usize,
+        mut servers: Vec<PeerId>,
+        extend_with_static: bool,
+        extend_with_connected: Option<usize>,
+    ) -> bool {
+        if extend_with_static {
+            servers.extend(self.static_servers.clone())
         }
+        if let Some(count) = extend_with_connected {
+            // TODO: use random set instead
+            for i in 0..count {
+                match self.connected.get(i) {
+                    Some(peer) => servers.push(*peer),
+                    None => break,
+                }
+            }
+        }
+        let probe = Probe {
+            server_count: servers.len(),
+            pending_servers: servers,
+            addresses: HashMap::new(),
+            required_success,
+        };
+        self.pending_probe.replace(probe);
+        self.ongoing_outbound.is_some()
     }
 
-    /// Get the list of local addresses with their current score.
-    ///
-    /// The score of an address increases each time a remote peer successfully dialed us via this address.
-    /// Therefore higher scores indicate a higher reachability.
-    pub fn address_list(&self) -> impl Iterator<Item = (&Multiaddr, &FiniteAddrScore)> {
-        self.addresses.iter()
+    pub fn reachability(&self) -> Reachability {
+        self.status.clone()
+    }
+
+    pub fn ongoing_probe(&self) -> Option<&Probe> {
+        self.ongoing_outbound.as_ref()
     }
 }
 
 impl NetworkBehaviour for Behaviour {
     type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
-    type OutEvent = ();
+    type OutEvent = NatStatus;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         self.inner.new_handler()
@@ -144,11 +217,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner
             .inject_connection_established(peer, conn, endpoint, failed_addresses);
-
-        // Initiate a new dial request if there is none pending.
-        if !self.ongoing_outbound.contains(peer) {
-            self.pending_requests.push_back(*peer);
-        }
+        self.connected.push(*peer);
 
         if let ConnectedPoint::Dialer { address } = endpoint {
             if let Some(channel) = self.ongoing_inbound.remove(peer) {
@@ -170,6 +239,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner
             .inject_connection_closed(peer, conn, endpoint, handler);
+        self.connected.retain(|p| p != peer);
     }
 
     fn inject_address_change(
@@ -222,14 +292,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
-        if !self.addresses.contains_key(addr) {
-            self.addresses.insert(addr.clone(), 0);
-        }
     }
 
     fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_expired_listen_addr(id, addr);
-        self.addresses.remove(addr);
     }
 
     fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
@@ -242,19 +308,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_new_external_addr(addr);
-        // Add the address to the local address list.
-        match self.addresses.get_mut(addr) {
-            Some(score) if *score == 0 => *score = 1,
-            Some(_) => {}
-            None => {
-                self.addresses.insert(addr.clone(), 1);
-            }
-        }
     }
 
     fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_expired_external_addr(addr);
-        self.addresses.remove(addr);
     }
 
     fn poll(
@@ -263,29 +320,41 @@ impl NetworkBehaviour for Behaviour {
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         loop {
-            if let Some(peer_id) = self.pending_requests.pop_front() {
-                let mut scores: Vec<_> = self.addresses.clone().into_iter().collect();
-                // Sort so that the address with the highest score will be dialed first by the remote.
-                scores.sort_by(|(_, score_a), (_, score_b)| score_b.cmp(score_a));
-                let addrs = scores.into_iter().map(|(a, _)| a).collect();
-                self.inner
-                    .send_request(&peer_id, DialRequest { peer_id, addrs });
-            }
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::Message { peer, message },
                 )) => match message {
                     RequestResponseMessage::Request {
                         request_id: _,
-                        request: DialRequest { peer_id, addrs },
+                        request:
+                            DialRequest {
+                                peer_id: _peer,
+                                addrs: _addrs,
+                            },
                         channel,
                     } => {
+                        let server_config = self.server_config.as_ref().unwrap();
+                        if self.ongoing_inbound.len() >= server_config.max_ongoing {
+                            let response = DialResponse::Err(ResponseError::DialRefused);
+                            let _ = self.inner.send_response(channel, response);
+                            continue;
+                        }
+                        let _observed_remote_at = todo!();
+                        let mut _addrs = valid_addresses(_addrs, _observed_remote_at);
+                        if _addrs.len() > server_config.max_addresses {
+                            _addrs.drain(server_config.max_addresses..);
+                        }
+                        if _addrs.is_empty() {
+                            let response = DialResponse::Err(ResponseError::DialRefused);
+                            let _ = self.inner.send_response(channel, response);
+                            continue;
+                        }
                         // Add all addresses to the address book.
-                        for addr in addrs {
+                        for addr in _addrs {
                             self.inner.add_address(&peer, addr)
                         }
                         // TODO: Handle if there is already a ongoing request.
-                        self.ongoing_inbound.insert(peer_id, channel);
+                        self.ongoing_inbound.insert(_peer, channel);
                         return Poll::Ready(NetworkBehaviourAction::DialPeer {
                             peer_id: peer,
                             handler: self.inner.new_handler(),
@@ -296,15 +365,46 @@ impl NetworkBehaviour for Behaviour {
                         request_id: _,
                         response,
                     } => {
-                        self.ongoing_outbound.remove(&peer);
-                        if let DialResponse::Ok(address) = response {
-                            // Increase score of the successfully dialed address.
-                            let score = self.addresses.entry(address.clone()).or_insert(1);
-                            *score += 1;
-                            return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr {
-                                address,
-                                score: AddressScore::Finite(*score),
-                            });
+                        let probe = match self.ongoing_outbound.as_mut() {
+                            Some(p) if p.pending_servers.contains(&peer) => p,
+                            _ => continue,
+                        };
+                        probe.pending_servers.retain(|p| p != &peer);
+                        match response {
+                            DialResponse::Ok(addr) => {
+                                if let Some(score) = probe.addresses.get_mut(&addr) {
+                                    *score += 1;
+                                    if *score >= probe.required_success {
+                                        let score = *score;
+                                        let probe = self.ongoing_outbound.take().unwrap();
+                                        self.last_probe = Instant::now();
+                                        let status = NatStatus::Public {
+                                            address: addr.clone(),
+                                            server_count: probe.server_count,
+                                            successes: score,
+                                        };
+                                        self.status = Reachability::Public(addr);
+                                        return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                                            status,
+                                        ));
+                                    }
+                                }
+                            }
+                            // TODO: Handle errors due to bad request, rejected, etc.
+                            DialResponse::Err(_) => {
+                                if probe.pending_servers.is_empty() {
+                                    let probe = self.ongoing_outbound.take().unwrap();
+                                    self.last_probe = Instant::now();
+                                    let status = NatStatus::Private {
+                                        server_count: probe.server_count,
+                                        tried_addresses: probe.addresses.into_iter().collect(),
+                                    };
+                                    self.status = Reachability::Private;
+                                    return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                                        status,
+                                    ));
+                                }
+                            }
                         }
                     }
                 },
@@ -314,7 +414,11 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::OutboundFailure { peer, .. },
                 )) => {
-                    self.ongoing_outbound.remove(&peer);
+                    let probe = match self.ongoing_outbound.as_mut() {
+                        Some(p) if p.pending_servers.contains(&peer) => p,
+                        _ => continue,
+                    };
+                    probe.pending_servers.retain(|p| p != &peer);
                 }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::InboundFailure { peer, .. },
@@ -363,6 +467,31 @@ impl NetworkBehaviour for Behaviour {
                 }
                 Poll::Pending => return Poll::Pending,
             }
+            if let Some(probe) = self.pending_probe.take() {
+                let mut records: Vec<_> = params.external_addresses().collect();
+                // Sort so that the address with the highest score will be dialed first by the remote.
+                records.sort_by(|record_a, record_b| record_b.score.cmp(&record_a.score));
+                let addrs: Vec<Multiaddr> = records.into_iter().map(|r| r.addr).collect();
+                for peer_id in probe.pending_servers.clone() {
+                    self.inner.send_request(
+                        &peer_id,
+                        DialRequest {
+                            peer_id,
+                            addrs: addrs.clone(),
+                        },
+                    );
+                }
+                let _ = self.ongoing_outbound.insert(probe);
+            } else if let Some(auto_retry) = self.auto_retry.as_ref() {
+                if Instant::now().duration_since(self.last_probe) > auto_retry.interval {
+                    // TODO: auto retry nat status
+                }
+            }
         }
     }
+}
+
+// Filter demanded dial addresses for validity, to prevent abuse.
+fn valid_addresses(_demanded: Vec<Multiaddr>, _observed_remote_at: Multiaddr) -> Vec<Multiaddr> {
+    todo!()
 }
