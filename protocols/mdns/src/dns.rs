@@ -23,6 +23,8 @@
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use libp2p_core::{Multiaddr, PeerId};
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
+use rand::{thread_rng, Rng};
+use rand::distributions::Alphanumeric;
 
 /// Maximum size of a DNS label as per RFC1035.
 const MAX_LABEL_LENGTH: usize = 63;
@@ -280,6 +282,14 @@ fn segment_peer_id(peer_id: String) -> String {
     out
 }
 
+fn random_string(length: usize) -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(length)
+        .map(char::from)
+        .collect()
+}
+
 /// Combines and encodes a `PeerId` and service name for a DNS query.
 fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
     // DNS-safe encoding for the Peer ID
@@ -287,7 +297,7 @@ fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
     // ensure we don't have any labels over 63 bytes long
     let encoded_peer_id = segment_peer_id(raw_peer_id);
     let service_name = str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII");
-    let peer_name = [&encoded_peer_id, service_name].join(".");
+    let peer_name = random_string(32 + thread_rng().gen_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
     let mut peer_id_bytes = Vec::with_capacity(peer_name.len() + 32);
@@ -454,6 +464,14 @@ mod tests {
             [&str_63, str_63.as_str()].join(".")
         );
         assert_eq!(segment_peer_id(str_127), [&str_63, &str_63, "x"].join("."));
+    }
+
+    #[test]
+    fn test_random_string() {
+        let varsize = thread_rng().gen_range(0..32);
+        let size = 32 + varsize;
+        let name = random_string(size);
+        assert_eq!(name.len(), size);
     }
 
     // TODO: test limits and errors
