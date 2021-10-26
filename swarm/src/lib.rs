@@ -851,7 +851,11 @@ where
                                     if let Some(event) = notify_one(&mut conn, event, cx) {
                                         let handler = PendingNotifyHandler::One(connection);
                                         this.pending_event = Some((peer_id, handler, event));
-                                        return Poll::Pending;
+                                        if network_not_ready {
+                                            return Poll::Pending;
+                                        } else {
+                                            continue;
+                                        }
                                     }
                                 }
                             }
@@ -862,7 +866,11 @@ where
                                 {
                                     let handler = PendingNotifyHandler::Any(ids);
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending;
+                                    if network_not_ready {
+                                        return Poll::Pending;
+                                    } else {
+                                        continue;
+                                    }
                                 }
                             }
                         }
