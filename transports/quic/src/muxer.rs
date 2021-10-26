@@ -187,18 +187,16 @@ impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
                 }
                 Event::Stream(StreamEvent::Readable { id }) => {
                     tracing::trace!("stream readable {}", id);
-                    if let Some(substream) = inner.substreams.get_mut(&id) {
-                        if let Some(waker) = substream.read_waker.take() {
-                            waker.wake();
-                        }
+                    let substream = inner.substreams.get_mut(&id).expect("known substream; qed");
+                    if let Some(waker) = substream.read_waker.take() {
+                        waker.wake();
                     }
                 }
                 Event::Stream(StreamEvent::Writable { id }) => {
                     tracing::trace!("stream writable {}", id);
-                    if let Some(substream) = inner.substreams.get_mut(&id) {
-                        if let Some(waker) = substream.write_waker.take() {
-                            waker.wake();
-                        }
+                    let substream = inner.substreams.get_mut(&id).expect("known substream; qed");
+                    if let Some(waker) = substream.write_waker.take() {
+                        waker.wake();
                     }
                 }
                 Event::Stream(StreamEvent::Finished { id }) => {
@@ -218,7 +216,7 @@ impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
                     return Poll::Ready(Err(QuicMuxerError::StreamStopped { id, error_code }));
                 }
                 Event::Stream(StreamEvent::Available { dir: Dir::Bi }) => {
-                    tracing::trace!("stream available");
+                    tracing::trace!("substream available");
                     if let Some(waker) = inner.pending_substreams.pop_front() {
                         waker.wake();
                     }
@@ -324,7 +322,7 @@ impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
                 waker.wake();
             }
         }
-        let substream = inner.substreams.get_mut(id).unwrap();
+        let substream = inner.substreams.get_mut(id).expect("known substream; qed");
         if pending && bytes == 0 {
             substream.read_waker = Some(cx.waker().clone());
             Poll::Pending
@@ -343,7 +341,7 @@ impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
         match inner.connection.send_stream(*id).write(buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
-                let mut substream = inner.substreams.get_mut(id).unwrap();
+                let mut substream = inner.substreams.get_mut(id).expect("known substream; qed");
                 substream.write_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
