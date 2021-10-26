@@ -142,7 +142,8 @@ impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
             inner.connection.handle_event(event);
         }
 
-        let _max_datagrams = inner.endpoint.max_datagrams();
+        // TODO: `quinn` got plans to add max_datagrams as an arg to `poll_transmit`
+        // let _max_datagrams = inner.endpoint.max_datagrams();
         while let Some(transmit) = inner.connection.poll_transmit(now) {
             inner.endpoint.send_transmit(transmit);
         }
