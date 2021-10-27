@@ -32,6 +32,7 @@ use std::{
 
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
+use open_metrics_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 use wasm_timer::{Instant, Interval};
@@ -51,6 +52,7 @@ use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
+use crate::metrics::{Config as MetricsConfig, InternalMetrics};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
@@ -302,6 +304,9 @@ pub struct Gossipsub<
     /// calculating the message-id and sending to the application. This is designed to allow the
     /// user to implement arbitrary topic-based compression algorithms.
     data_transform: D,
+
+    /// Keep track of a set of internal metrics relating to gossipsub.
+    metrics: Option<InternalMetrics>,
 }
 
 impl<D, F> Gossipsub<D, F>
@@ -318,6 +323,25 @@ where
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            None,
+            F::default(),
+            D::default(),
+        )
+    }
+
+    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
+    /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    pub fn new_with_metrics(
+        privacy: MessageAuthenticity,
+        config: GossipsubConfig,
+        metrics_registry: &mut Registry,
+        metrics_config: MetricsConfig,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter_and_transform(
+            privacy,
+            config,
+            Some((metrics_registry, metrics_config)),
             F::default(),
             D::default(),
         )
@@ -334,11 +358,13 @@ where
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             subscription_filter,
             D::default(),
         )
@@ -355,11 +381,13 @@ where
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         data_transform: D,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             F::default(),
             data_transform,
         )
@@ -376,6 +404,7 @@ where
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
         data_transform: D,
     ) -> Result<Self, &'static str> {
@@ -385,9 +414,8 @@ where
         // were received locally.
         validate_config(&privacy, config.validation_mode())?;
 
-        // Set up message publishing parameters.
-
         Ok(Gossipsub {
+            metrics: metrics.map(|(registry, cfg)| InternalMetrics::new(registry, cfg)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),

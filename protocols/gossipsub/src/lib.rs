@@ -137,6 +137,7 @@ pub mod time_cache;
 mod topic;
 mod transform;
 mod types;
+mod metrics;
 
 #[cfg(test)]
 #[macro_use]
