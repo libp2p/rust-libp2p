@@ -697,6 +697,7 @@ mod tests {
             let (pubkey, transport) = transport();
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    .with_cache_size(100)
                     .with_agent_version("b".to_string()),
             );
 
