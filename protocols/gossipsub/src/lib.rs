@@ -131,13 +131,13 @@ mod config;
 mod gossip_promises;
 mod handler;
 mod mcache;
+mod metrics;
 mod peer_score;
 pub mod subscription_filter;
 pub mod time_cache;
 mod topic;
 mod transform;
 mod types;
-mod metrics;
 
 #[cfg(test)]
 #[macro_use]

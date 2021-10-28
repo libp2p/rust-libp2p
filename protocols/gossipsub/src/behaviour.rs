@@ -899,7 +899,9 @@ where
 
         let mut added_peers = HashSet::new();
 
-        if let Some(m) = self.metrics.as_mut() { m.joined(topic_hash) }
+        if let Some(m) = self.metrics.as_mut() {
+            m.joined(topic_hash)
+        }
 
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
@@ -938,8 +940,9 @@ where
         }
 
         let fanaout_added = added_peers.len();
-        if let Some(m) = self.metrics
-            .as_mut() { m.peers_included(topic_hash, Inclusion::Fanaout, fanaout_added) }
+        if let Some(m) = self.metrics.as_mut() {
+            m.peers_included(topic_hash, Inclusion::Fanaout, fanaout_added)
+        }
 
         // check if we need to get more peers, which we randomly select
         if added_peers.len() < self.config.mesh_n() {
@@ -970,8 +973,9 @@ where
         }
 
         let random_added = added_peers.len() - fanaout_added;
-        if let Some(m) = self.metrics
-            .as_mut() { m.peers_included(topic_hash, Inclusion::Fanaout, random_added) }
+        if let Some(m) = self.metrics.as_mut() {
+            m.peers_included(topic_hash, Inclusion::Fanaout, random_added)
+        }
 
         for peer_id in added_peers {
             // Send a GRAFT control message
@@ -998,9 +1002,10 @@ where
             );
         }
 
-        let mesh_peers = self.mesh_peers(&topic_hash).count();
-        if let Some(m) = self.metrics
-            .as_mut() { m.set_mesh_peers(topic_hash, mesh_peers) }
+        let mesh_peers = self.mesh_peers(topic_hash).count();
+        if let Some(m) = self.metrics.as_mut() {
+            m.set_mesh_peers(topic_hash, mesh_peers)
+        }
 
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
@@ -1067,7 +1072,9 @@ where
 
         // If our mesh contains the topic, send prune to peers and delete it from the mesh
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
-            if let Some(m) = self.metrics.as_mut() { m.left(topic_hash) }
+            if let Some(m) = self.metrics.as_mut() {
+                m.left(topic_hash)
+            }
             for peer in peers {
                 // Send a PRUNE control message
                 debug!("LEAVE: Sending PRUNE to peer: {:?}", peer);
@@ -1384,8 +1391,9 @@ where
                     );
 
                     if peers.insert(*peer_id) {
-                        if let Some(m) = self.metrics
-                            .as_mut() { m.peers_included(&topic_hash, Inclusion::Subscribed, 1) }
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
+                        }
                     }
 
                     // If the peer did not previously exist in any mesh, inform the handler
@@ -1461,8 +1469,9 @@ where
                     peer_id.to_string(),
                     topic_hash
                 );
-                if let Some(m) = self.metrics
-                    .as_mut() { m.peers_removed(topic_hash, reason, 1) }
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_removed(topic_hash, reason, 1)
+                }
 
                 if let Some((peer_score, ..)) = &mut self.peer_score {
                     peer_score.prune(peer_id, topic_hash.clone());
@@ -1876,7 +1885,9 @@ where
                                     propagation_source.to_string(),
                                     topic_hash
                                 );
-                                if let Some(m) = self.metrics.as_mut() { m.peers_included(topic_hash, Inclusion::Subscribed, 1) }
+                                if let Some(m) = self.metrics.as_mut() {
+                                    m.peers_included(topic_hash, Inclusion::Subscribed, 1)
+                                }
                                 // send graft to the peer
                                 debug!(
                                     "Sending GRAFT to peer {} for topic {:?}",
@@ -1921,7 +1932,9 @@ where
                 }
             }
 
-            if let Some(m) = self.metrics.as_mut() { m.set_topic_peers(topic_hash, peer_list.len()); }
+            if let Some(m) = self.metrics.as_mut() {
+                m.set_topic_peers(topic_hash, peer_list.len());
+            }
         }
 
         // remove unsubscribed peers from the mesh if it exists
@@ -2051,8 +2064,9 @@ where
                 .cloned()
                 .collect();
 
-            if let Some(m) = self.metrics
-                .as_mut() { m.peers_removed(topic_hash, Churn::BadScore, to_remove.len()) }
+            if let Some(m) = self.metrics.as_mut() {
+                m.peers_removed(topic_hash, Churn::BadScore, to_remove.len())
+            }
 
             for peer in to_remove {
                 peers.remove(&peer);
@@ -2086,8 +2100,9 @@ where
                 }
                 // update the mesh
                 debug!("Updating mesh, new mesh: {:?}", peer_list);
-                if let Some(m) = self.metrics
-                    .as_mut() { m.peers_included(topic_hash, Inclusion::Random, peer_list.len()) }
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
+                }
                 peers.extend(peer_list);
             }
 
@@ -2143,8 +2158,9 @@ where
                     removed += 1;
                 }
 
-                if let Some(m) = self.metrics
-                    .as_mut() { m.peers_removed(topic_hash, Churn::Excess, removed) }
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_removed(topic_hash, Churn::Excess, removed)
+                }
             }
 
             // do we have enough outbound peers?
@@ -2174,7 +2190,9 @@ where
                     }
                     // update the mesh
                     debug!("Updating mesh, new mesh: {:?}", peer_list);
-                    if let Some(m) = self.metrics.as_mut() { m.peers_included(topic_hash, Inclusion::Outbound, peer_list.len()) }
+                    if let Some(m) = self.metrics.as_mut() {
+                        m.peers_included(topic_hash, Inclusion::Outbound, peer_list.len())
+                    }
                     peers.extend(peer_list);
                 }
             }
@@ -2234,14 +2252,17 @@ where
                             "Opportunistically graft in topic {} with peers {:?}",
                             topic_hash, peer_list
                         );
-                        if let Some(m) = self.metrics.as_mut() { m.peers_included(topic_hash, Inclusion::Random, peer_list.len()) }
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
+                        }
                         peers.extend(peer_list);
                     }
                 }
             }
             // Register the final count of peers in the mesh
-            if let Some(m) = self.metrics
-                .as_mut() { m.set_mesh_peers(topic_hash, peers.len()) }
+            if let Some(m) = self.metrics.as_mut() {
+                m.set_mesh_peers(topic_hash, peers.len())
+            }
         }
 
         // remove expired fanout topics
@@ -2958,10 +2979,10 @@ where
                 if let Some(mesh_peers) = self.mesh.get_mut(topic) {
                     // check if the peer is in the mesh and remove it
                     if mesh_peers.remove(peer_id) {
-                        self.metrics.as_mut().map(|m| {
+                        if let Some(m) = self.metrics.as_mut() {
                             m.peers_removed(topic, Churn::Dc, 1);
                             m.set_mesh_peers(topic, mesh_peers.len());
-                        });
+                        }
                     };
                 }
 
@@ -2974,8 +2995,9 @@ where
                             peer_id
                         );
                     }
-                    if let Some(m) = self.metrics
-                        .as_mut() { m.set_topic_peers(topic, peer_list.len()) }
+                    if let Some(m) = self.metrics.as_mut() {
+                        m.set_topic_peers(topic, peer_list.len())
+                    }
                 } else {
                     warn!(
                         "Disconnected node: {} with topic: {:?} not in topic_peers",

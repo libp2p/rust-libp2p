@@ -28,9 +28,7 @@ prost = "0.9"
 hex_fmt = "0.3.0"
 regex = "1.4.0"
 # Metrics dependencies
-open-metrics-client = {path = "../../../rust-open-metrics-client"}
-strum = "0.21"
-strum_macros = "0.21"
+open-metrics-client = "0.12"
 
 [dev-dependencies]
 async-std = "1.6.3"
