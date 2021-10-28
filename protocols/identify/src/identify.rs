@@ -116,6 +116,8 @@ pub struct IdentifyConfig {
 
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
+    ///
+    /// Disabled by default.
     pub cache_size: usize,
 }
 
@@ -130,7 +132,7 @@ impl IdentifyConfig {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 100,
+            cache_size: 0,
         }
     }
 
@@ -695,6 +697,7 @@ mod tests {
             let (pubkey, transport) = transport();
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    .with_cache_size(100)
                     .with_agent_version("b".to_string()),
             );
 
