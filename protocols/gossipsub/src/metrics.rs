@@ -20,24 +20,16 @@
 
 //! A set of metrics used to help track and diagnose the network behaviour of the gossipsub
 //! protocol.
-//!
-//! Note that if metrics are enabled, we store a lot of detail for each metric. Specifically, each metric is stored
-//! per "slot" of each mesh. This means each metric is counted for each peer whilst they are in the
-//! mesh. The exposed open metric values typically aggregate these into a per
-//! mesh metric. Users are able to fine-grain their access to the more detailed metrics via the
-//! [`slot_metrics_for_topic`] function.
 
-// pub mod topic_metrics;
-
-use crate::topic::TopicHash;
 use std::collections::HashMap;
 
 use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::{Family, MetricConstructor};
+use open_metrics_client::metrics::family::Family;
 use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
 use open_metrics_client::registry::Registry;
+
+use crate::topic::TopicHash;
 
 // Default value that limits how many topics for which there has been a previous or current
 // subscription do we store metrics.
@@ -68,35 +60,62 @@ impl Default for Config {
 
 // Whether we have ever been subscribed to this topic.
 type EverSubscribed = bool;
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Inclusion {
+    /// Peer was a fanaout peer.
+    Fanaout,
+    /// Included from random selection.
+    Random,
+    /// Peer subscribed.
+    Subscribed,
+    /// Peer was included to fill the outbound quota.
+    Outbound,
+}
+
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Churn {
+    /// Peer disconnected.
+    Dc,
+    /// Peer had a bad score.
+    BadScore,
+    /// Peer sent a PRUNE.
+    Prune,
+    /// Peer unsubscribed.
+    Unsub,
+    /// Too many peers.
+    Excess,
+}
 
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct InternalMetrics {
-    /*
-     * Configuration parameters
-     */
+    /* Configuration parameters */
     /// Maximum number of topics for which we store metrics. This helps keep the metrics bounded.
     max_topics: usize,
     /// Maximum number of topics for which we store metrics, where the topic in not one to which we
     /// have subscribed at some point. This helps keep the metrics bounded, since these topics come
     /// from received messages and not explicit application subscriptions.
     max_never_subscribed_topics: usize,
-    /*
-     * Auxiliary variables
-     */
+
+    /* Auxiliary variables */
     /// Information needed to decide if a topic is allowed or not.
     topic_info: HashMap<TopicHash, EverSubscribed>,
-    /*
-     * Metrics per topic
-     */
-    /// Status of our subscription to this topic. This metric allows anallyzing other topic metrics
+
+    /* Metrics per known topic */
+    /// Status of our subscription to this topic. This metric allows analyzing other topic metrics
     /// filtered by our current subscription status.
     topic_subscription_status: Family<TopicHash, Gauge>,
-    /// Number of peers subscribed to each topic.
+    /// Number of peers subscribed to each topic. This allows us to analyze a topic's behaviour
+    /// regardless of our subscription status.
     topic_peers_count: Family<TopicHash, Gauge>,
-    /// Number of iwant requests that we have sent for each topic. A large number indicates the
-    /// mesh isn't performing as optimally as we would like and we have had to request extra
-    /// messages via gossip.
-    iwant_sent_requests: Family<TopicHash, Counter>,
+
+    /* Metrics regarding mesh state */
+    /// Number of peers in our mesh. This metric should be updated with the count of peers for a
+    /// topic in the mesh regardless of inclusion and churn events.
+    mesh_peer_counts: Family<TopicHash, Gauge>,
+    /// Number of times we include peers in a topic mesh for different reasons.
+    mesh_peer_inclusion_events: Family<(TopicHash, Inclusion), Counter>,
+    /// Number of times we remove peers in a topic mesh for different reasons.
+    mesh_peer_churn_events: Family<(TopicHash, Churn), Counter>,
 }
 
 impl InternalMetrics {
@@ -107,25 +126,33 @@ impl InternalMetrics {
             max_never_subscribed_topics,
         } = config;
 
-        let topic_subscription_status = Family::default();
-        registry.register(
+        macro_rules! register_family {
+            ($name:expr, $help:expr) => {{
+                let fam = Family::default();
+                registry.register($name, $help, Box::new(fam.clone()));
+                fam
+            }};
+        }
+
+        let topic_subscription_status = register_family!(
             "topic_subscription_status",
-            "Subscription status per topic",
-            Box::new(topic_subscription_status.clone()),
+            "Subscription status per known topic"
         );
-
-        let topic_peers_count = Family::default();
-        registry.register(
+        let topic_peers_count = register_family!(
             "topic_peers_counts",
-            "Number of peers subscribed to each topic",
-            Box::new(topic_peers_count.clone()),
+            "Number of peers subscribed to each topic"
         );
-
-        let iwant_sent_requests = Family::default();
-        registry.register(
-            "iwant_sent_requests",
-            "The number of IWANT requests we have sent per mesh",
-            Box::new(iwant_sent_requests.clone()),
+        let mesh_peer_counts = register_family!(
+            "mesh_peer_counts",
+            "Number of peers in each topic in our mesh"
+        );
+        let mesh_peer_inclusion_events = register_family!(
+            "mesh_peer_inclusion_events",
+            "Number of times a peer gets added to our mesh for different reasons"
+        );
+        let mesh_peer_churn_events = register_family!(
+            "mesh_peer_churn_events",
+            "Number of times a peer gets removed from our mesh for different reasons"
         );
 
         Self {
@@ -134,7 +161,9 @@ impl InternalMetrics {
             topic_info: HashMap::default(),
             topic_subscription_status,
             topic_peers_count,
-            iwant_sent_requests,
+            mesh_peer_counts,
+            mesh_peer_inclusion_events,
+            mesh_peer_churn_events,
         }
     }
 
@@ -147,59 +176,80 @@ impl InternalMetrics {
 
     /// Registers a topic if not already known and if the bounds allow it.
     fn register_topic(&mut self, topic: &TopicHash) -> Result<(), ()> {
-        // Get the topic if we have seem it before. If not, this is as topic without an explicit
-        // subscription and we register it if we are whithin the configured bounds.
-        if self.topic_info.contains_key(topic)
-            || self.non_subscription_topics_count() < self.max_never_subscribed_topics
-        {
+        if self.topic_info.contains_key(topic) {
+            Ok(())
+        } else if self.non_subscription_topics_count() < self.max_never_subscribed_topics {
+            // This is as topic without an explicit subscription and we register it if we are
+            // whithin the configured bounds.
             self.topic_info.entry(topic.clone()).or_insert(false);
             self.topic_subscription_status.get_or_create(topic).set(0);
             Ok(())
         } else {
+            // We don't know this topic and there is no space left to store it
             Err(())
         }
     }
 
-    /// Registers a peer's subscription to a topic.
-    pub fn peer_joined_topic(&mut self, topic: &TopicHash) {
-        if let Ok(info) = self.register_topic(topic) {}
-    }
-
-    /// Register an iwant sent request for a topic.
-    pub fn iwant_sent(&mut self, topic: &TopicHash) {
+    /// Register how many peers do we known are subscribed to this topic.
+    pub fn set_topic_peers(&mut self, topic: &TopicHash, count: usize) {
         if self.register_topic(topic).is_ok() {
-            self.iwant_sent_requests.get_or_create(topic).inc();
+            self.topic_peers_count
+                .get_or_create(topic)
+                .set(count as u64);
         }
     }
 
-    /// Registers the subscription to a topic if the configured limits allow it.
-    pub fn subscribed(&mut self, topic: &TopicHash) {
-        let allowed = if let Some(ever_subscribed) = self.topic_info.get_mut(topic) {
-            *ever_subscribed = true;
-            true
-        } else
-        // First time we see, check if we allow it
-        if self.topic_info.len() < self.max_topics {
-            self.topic_info.insert(topic.clone(), true);
-            true
-        } else {
-            false
-        };
+    /// Register the current number of peers in our mesh for this topic.
+    pub fn set_mesh_peers(&mut self, topic: &TopicHash, count: usize) {
+        if self.register_topic(topic).is_ok() {
+            // Due to limits, this topic could have not been allowed, so we check.
+            self.mesh_peer_counts.get_or_create(topic).set(count as u64);
+        }
+    }
 
-        if allowed {
+    /* Mesh related methods */
+
+    /// Registers the subscription to a topic if the configured limits allow it.
+    /// Sets the registered number of peers in the mesh to 0.
+    pub fn joined(&mut self, topic: &TopicHash) {
+        // NOTE: changed the limit to inforce over the total topics, since, if a topic is a
+        // subscription topic we want to have metrisc for it even if it was a non subscription
+        // topic before.
+        if self.topic_info.contains_key(topic) || self.topic_info.len() < self.max_topics {
+            self.topic_info.insert(topic.clone(), true);
             let was_subscribed = self.topic_subscription_status.get_or_create(topic).set(1);
             debug_assert_eq!(was_subscribed, 0);
+            self.mesh_peer_counts.get_or_create(topic).set(0);
         }
     }
 
     /// Registers the unsubscription to a topic if the topic was previously allowed.
-    pub fn unsubscribed(&mut self, topic: &TopicHash) {
+    /// Sets the registered number of peers in the mesh to 0.
+    pub fn left(&mut self, topic: &TopicHash) {
         if self.topic_info.contains_key(topic) {
-            // Depending on the configured topic bounds we could miss a mesh topic's subscription.
+            // Depending on the configured topic bounds we could miss a mesh topic.
             // So, check first if the topic was previously allowed.
             let was_subscribed = self.topic_subscription_status.get_or_create(topic).set(0);
             debug_assert_eq!(was_subscribed, 1);
+            self.mesh_peer_counts.get_or_create(topic).set(0);
         }
     }
 
+    /// Register the inclusion of peers in our mesh due to some reason.
+    pub fn peers_included(&mut self, topic: &TopicHash, reason: Inclusion, count: usize) {
+        if self.register_topic(topic).is_ok() {
+            self.mesh_peer_inclusion_events
+                .get_or_create(&(topic.clone(), reason))
+                .inc_by(count as u64);
+        }
+    }
+
+    /// Register the removal of peers in our mesh due to some reason.
+    pub fn peers_removed(&mut self, topic: &TopicHash, reason: Churn, count: usize) {
+        if self.register_topic(topic).is_ok() {
+            self.mesh_peer_churn_events
+                .get_or_create(&(topic.clone(), reason))
+                .inc_by(count as u64);
+        }
+    }
 }

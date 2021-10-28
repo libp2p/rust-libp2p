@@ -46,8 +46,6 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters,
 };
 
-use crate::backoff::BackoffStorage;
-use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
@@ -64,6 +62,11 @@ use crate::types::{
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
+use crate::{backoff::BackoffStorage, metrics::Inclusion};
+use crate::{
+    config::{GossipsubConfig, ValidationMode},
+    metrics::Churn,
+};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 
@@ -896,6 +899,8 @@ where
 
         let mut added_peers = HashSet::new();
 
+        self.metrics.as_mut().map(|m| m.joined(topic_hash));
+
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
         if let Some((_, mut peers)) = self.fanout.remove_entry(topic_hash) {
@@ -927,9 +932,15 @@ where
                 topic_hash.clone(),
                 peers.into_iter().take(add_peers).collect(),
             );
+
             // remove the last published time
             self.fanout_last_pub.remove(topic_hash);
         }
+
+        let fanaout_added = added_peers.len();
+        self.metrics
+            .as_mut()
+            .map(|m| m.peers_included(topic_hash, Inclusion::Fanaout, fanaout_added));
 
         // check if we need to get more peers, which we randomly select
         if added_peers.len() < self.config.mesh_n() {
@@ -959,6 +970,11 @@ where
             mesh_peers.extend(new_peers);
         }
 
+        let random_added = added_peers.len() - fanaout_added;
+        self.metrics
+            .as_mut()
+            .map(|m| m.peers_included(topic_hash, Inclusion::Fanaout, random_added));
+
         for peer_id in added_peers {
             // Send a GRAFT control message
             debug!("JOIN: Sending Graft message to peer: {:?}", peer_id);
@@ -983,6 +999,12 @@ where
                 &self.connected_peers,
             );
         }
+
+        let mesh_peers = self.mesh_peers(&topic_hash).count();
+        self.metrics
+            .as_mut()
+            .map(|m| m.set_mesh_peers(topic_hash, mesh_peers));
+
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
@@ -1048,6 +1070,7 @@ where
 
         // If our mesh contains the topic, send prune to peers and delete it from the mesh
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
+            self.metrics.as_mut().map(|m| m.left(topic_hash));
             for peer in peers {
                 // Send a PRUNE control message
                 debug!("LEAVE: Sending PRUNE to peer: {:?}", peer);
@@ -1275,6 +1298,7 @@ where
 
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
+        // TODO: `topic_peers` doesn't get updated.
         for topic in &topics {
             self.peer_topics
                 .entry(*peer_id)
@@ -1361,7 +1385,13 @@ where
                         "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
                         peer_id, &topic_hash
                     );
-                    peers.insert(*peer_id);
+
+                    if peers.insert(*peer_id) {
+                        self.metrics
+                            .as_mut()
+                            .map(|m| m.peers_included(&topic_hash, Inclusion::Subscribed, 1));
+                    }
+
                     // If the peer did not previously exist in any mesh, inform the handler
                     peer_added_to_mesh(
                         *peer_id,
@@ -1424,6 +1454,7 @@ where
         topic_hash: &TopicHash,
         backoff: Option<u64>,
         always_update_backoff: bool,
+        reason: Churn,
     ) {
         let mut update_backoff = always_update_backoff;
         if let Some(peers) = self.mesh.get_mut(topic_hash) {
@@ -1434,6 +1465,9 @@ where
                     peer_id.to_string(),
                     topic_hash
                 );
+                self.metrics
+                    .as_mut()
+                    .map(|m| m.peers_removed(topic_hash, reason, 1));
 
                 if let Some((peer_score, ..)) = &mut self.peer_score {
                     peer_score.prune(peer_id, topic_hash.clone());
@@ -1473,7 +1507,7 @@ where
         let (below_threshold, score) =
             self.score_below_threshold(peer_id, |pst| pst.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
-            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true);
+            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
                 //connect to px peers
@@ -1801,9 +1835,10 @@ where
 
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
+            let topic_hash = &subscription.topic_hash;
             let peer_list = self
                 .topic_peers
-                .entry(subscription.topic_hash.clone())
+                .entry(topic_hash.clone())
                 .or_insert_with(Default::default);
 
             match subscription.action {
@@ -1812,12 +1847,12 @@ where
                         debug!(
                             "SUBSCRIPTION: Adding gossip peer: {} to topic: {:?}",
                             propagation_source.to_string(),
-                            subscription.topic_hash
+                            topic_hash
                         );
                     }
 
                     // add to the peer_topics mapping
-                    subscribed_topics.insert(subscription.topic_hash.clone());
+                    subscribed_topics.insert(topic_hash.clone());
 
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source)
@@ -1835,28 +1870,30 @@ where
                         .0
                         && !self
                             .backoffs
-                            .is_backoff_with_slack(&subscription.topic_hash, propagation_source)
+                            .is_backoff_with_slack(topic_hash, propagation_source)
                     {
-                        if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
+                        if let Some(peers) = self.mesh.get_mut(topic_hash) {
                             if peers.len() < self.config.mesh_n_low()
                                 && peers.insert(*propagation_source)
                             {
                                 debug!(
                                     "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
                                     propagation_source.to_string(),
-                                    subscription.topic_hash
+                                    topic_hash
                                 );
+                                self.metrics.as_mut().map(|m| {
+                                    m.peers_included(topic_hash, Inclusion::Subscribed, 1)
+                                });
                                 // send graft to the peer
                                 debug!(
                                     "Sending GRAFT to peer {} for topic {:?}",
                                     propagation_source.to_string(),
-                                    subscription.topic_hash
+                                    topic_hash
                                 );
                                 if let Some((peer_score, ..)) = &mut self.peer_score {
-                                    peer_score
-                                        .graft(propagation_source, subscription.topic_hash.clone());
+                                    peer_score.graft(propagation_source, topic_hash.clone());
                                 }
-                                topics_to_graft.push(subscription.topic_hash.clone());
+                                topics_to_graft.push(topic_hash.clone());
                             }
                         }
                     }
@@ -1864,7 +1901,7 @@ where
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Subscribed {
                             peer_id: *propagation_source,
-                            topic: subscription.topic_hash.clone(),
+                            topic: topic_hash.clone(),
                         },
                     ));
                 }
@@ -1873,26 +1910,32 @@ where
                         debug!(
                             "SUBSCRIPTION: Removing gossip peer: {} from topic: {:?}",
                             propagation_source.to_string(),
-                            subscription.topic_hash
+                            topic_hash
                         );
                     }
+
                     // remove topic from the peer_topics mapping
-                    subscribed_topics.remove(&subscription.topic_hash);
-                    unsubscribed_peers.push((*propagation_source, subscription.topic_hash.clone()));
+                    subscribed_topics.remove(topic_hash);
+
+                    unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Unsubscribed {
                             peer_id: *propagation_source,
-                            topic: subscription.topic_hash.clone(),
+                            topic: topic_hash.clone(),
                         },
                     ));
                 }
             }
+
+            self.metrics.as_mut().map(|m| {
+                m.set_topic_peers(topic_hash, peer_list.len());
+            });
         }
 
         // remove unsubscribed peers from the mesh if it exists
         for (peer_id, topic_hash) in unsubscribed_peers {
-            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false);
+            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
         }
 
         // Potentially inform the handler if we have added this peer to a mesh for the first time.
@@ -2016,6 +2059,11 @@ where
                 })
                 .cloned()
                 .collect();
+
+            self.metrics
+                .as_mut()
+                .map(|m| m.peers_removed(topic_hash, Churn::BadScore, to_remove.len()));
+
             for peer in to_remove {
                 peers.remove(&peer);
             }
@@ -2048,6 +2096,9 @@ where
                 }
                 // update the mesh
                 debug!("Updating mesh, new mesh: {:?}", peer_list);
+                self.metrics
+                    .as_mut()
+                    .map(|m| m.peers_included(topic_hash, Inclusion::Random, peer_list.len()));
                 peers.extend(peer_list);
             }
 
@@ -2102,6 +2153,10 @@ where
                     current_topic.push(topic_hash.clone());
                     removed += 1;
                 }
+
+                self.metrics
+                    .as_mut()
+                    .map(|m| m.peers_removed(topic_hash, Churn::Excess, removed));
             }
 
             // do we have enough outbound peers?
@@ -2131,6 +2186,9 @@ where
                     }
                     // update the mesh
                     debug!("Updating mesh, new mesh: {:?}", peer_list);
+                    self.metrics.as_mut().map(|m| {
+                        m.peers_included(topic_hash, Inclusion::Outbound, peer_list.len())
+                    });
                     peers.extend(peer_list);
                 }
             }
@@ -2190,10 +2248,17 @@ where
                             "Opportunistically graft in topic {} with peers {:?}",
                             topic_hash, peer_list
                         );
+                        self.metrics.as_mut().map(|m| {
+                            m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
+                        });
                         peers.extend(peer_list);
                     }
                 }
             }
+            // Register the final count of peers in the mesh
+            self.metrics
+                .as_mut()
+                .map(|m| m.set_mesh_peers(topic_hash, peers.len()));
         }
 
         // remove expired fanout topics
@@ -2909,7 +2974,12 @@ where
                 // check the mesh for the topic
                 if let Some(mesh_peers) = self.mesh.get_mut(topic) {
                     // check if the peer is in the mesh and remove it
-                    mesh_peers.remove(peer_id);
+                    if mesh_peers.remove(peer_id) {
+                        self.metrics.as_mut().map(|m| {
+                            m.peers_removed(topic, Churn::Dc, 1);
+                            m.set_mesh_peers(topic, mesh_peers.len());
+                        });
+                    };
                 }
 
                 // remove from topic_peers
@@ -2921,6 +2991,9 @@ where
                             peer_id
                         );
                     }
+                    self.metrics
+                        .as_mut()
+                        .map(|m| m.set_topic_peers(topic, peer_list.len()));
                 } else {
                     warn!(
                         "Disconnected node: {} with topic: {:?} not in topic_peers",
