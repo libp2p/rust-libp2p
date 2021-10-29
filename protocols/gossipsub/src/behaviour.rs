@@ -46,11 +46,13 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters,
 };
 
+use crate::backoff::BackoffStorage;
+use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
-use crate::metrics::{Config as MetricsConfig, Metrics};
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
@@ -62,11 +64,6 @@ use crate::types::{
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
-use crate::{backoff::BackoffStorage, metrics::Inclusion};
-use crate::{
-    config::{GossipsubConfig, ValidationMode},
-    metrics::Churn,
-};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 
