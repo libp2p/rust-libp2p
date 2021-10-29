@@ -861,56 +861,14 @@ where
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     return Poll::Ready(SwarmEvent::Behaviour(event))
                 }
-                // Poll::Ready(NetworkBehaviourAction::DialAddress { address, handler }) => {
-                //     let _ = Swarm::dial_addr_with_handler(&mut *this, address, handler);
-                // }
                 Poll::Ready(NetworkBehaviourAction::Dial { opts, handler }) => {
+                    let peer_id = opts.get_peer_id();
                     if let Ok(()) = this.dial_with_handler(opts, handler) {
-                        // TODO
-                        // return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                        if Some(peer_id) = peer_id {
+                            return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                        }
                     }
                 }
-                // Poll::Ready(NetworkBehaviourAction::DialPeer {
-                //     peer_id,
-                //     condition,
-                //     handler,
-                // }) => {
-                //     let condition_matched = match condition {
-                //         DialPeerCondition::Disconnected => this.network.is_disconnected(&peer_id),
-                //         DialPeerCondition::NotDialing => !this.network.is_dialing(&peer_id),
-                //         DialPeerCondition::Always => true,
-                //     };
-                //     if condition_matched {
-                //         if Swarm::dial_with_handler(this, &peer_id, handler).is_ok() {
-                //             return Poll::Ready(SwarmEvent::Dialing(peer_id));
-                //         }
-                //     } else {
-                //         // Even if the condition for a _new_ dialing attempt is not met,
-                //         // we always add any potentially new addresses of the peer to an
-                //         // ongoing dialing attempt, if there is one.
-                //         log::trace!(
-                //             "Condition for new dialing attempt to {:?} not met: {:?}",
-                //             peer_id,
-                //             condition
-                //         );
-                //         let self_listening = &this.listened_addrs;
-                //         if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
-                //             let addrs = this.behaviour.addresses_of_peer(peer.id());
-                //             let mut attempt = peer.some_attempt();
-                //             for a in addrs {
-                //                 if !self_listening.contains(&a) {
-                //                     attempt.add_address(a);
-                //                 }
-                //             }
-                //         }
-
-                //         this.behaviour.inject_dial_failure(
-                //             &peer_id,
-                //             handler,
-                //             DialError::DialPeerConditionFalse(condition),
-                //         );
-                //     }
-                // }
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
                     handler,
@@ -1841,6 +1799,16 @@ pub mod dial_opts {
 
         pub fn unknown_peer_id() -> WithoutPeerId {
             WithoutPeerId {}
+        }
+
+        pub fn get_peer_id(&self) -> Option<PeerId> {
+            match self {
+                DialOpts::WithPeerId(WithPeerId { peer_id, .. }) => Some(peer_id),
+                DialOpts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { peer_id, .. }) => {
+                    Some(peer_id)
+                }
+                DialOpts::WithoutPeerIdWithAddress(_) => None,
+            }
         }
     }
 
