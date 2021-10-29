@@ -252,31 +252,4 @@ impl Metrics {
             self.mesh_peer_counts.get_or_create(topic).set(count as u64);
         }
     }
-
-    /* Metrics public access methods */
-
-    /// Status of subscription to a topic.
-    pub fn topic_subscription_status(&self) -> &Family<TopicHash, Gauge> {
-        &self.topic_subscription_status
-    }
-
-    /// Known number of peers subscribed to a topic.
-    pub fn topic_peers_count(&self) -> &Family<TopicHash, Gauge> {
-        &self.topic_peers_count
-    }
-
-    /// Number of peers in our mesh.
-    pub fn mesh_peer_counts(&self) -> &Family<TopicHash, Gauge> {
-        &self.mesh_peer_counts
-    }
-
-    /// Inclusion events in the mesh for different reasons.
-    pub fn mesh_peer_inclusion_events(&self) -> &Family<(TopicHash, Inclusion), Counter> {
-        &self.mesh_peer_inclusion_events
-    }
-
-    /// Churn events in the mesh for different reasons.
-    pub fn mesh_peer_churn_events(&self) -> &Family<(TopicHash, Churn), Counter> {
-        &self.mesh_peer_churn_events
-    }
 }
