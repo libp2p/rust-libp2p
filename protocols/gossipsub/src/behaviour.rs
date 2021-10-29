@@ -971,7 +971,7 @@ where
 
         let random_added = added_peers.len() - fanaout_added;
         if let Some(m) = self.metrics.as_mut() {
-            m.peers_included(topic_hash, Inclusion::Fanaout, random_added)
+            m.peers_included(topic_hash, Inclusion::Random, random_added)
         }
 
         for peer_id in added_peers {
@@ -1299,7 +1299,6 @@ where
 
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
-        // TODO: `topic_peers` doesn't get updated.
         for topic in &topics {
             self.peer_topics
                 .entry(*peer_id)
@@ -1917,7 +1916,6 @@ where
 
                     // remove topic from the peer_topics mapping
                     subscribed_topics.remove(topic_hash);
-
                     unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(

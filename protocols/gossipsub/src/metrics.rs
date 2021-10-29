@@ -58,8 +58,10 @@ impl Default for Config {
     }
 }
 
-// Whether we have ever been subscribed to this topic.
+/// Whether we have ever been subscribed to this topic.
 type EverSubscribed = bool;
+
+/// Reasons why a peer was included in the mesh.
 #[derive(PartialEq, Eq, Hash, Encode, Clone)]
 pub enum Inclusion {
     /// Peer was a fanaout peer.
@@ -72,6 +74,7 @@ pub enum Inclusion {
     Outbound,
 }
 
+/// Reasons why a peer was removed from the mesh.
 #[derive(PartialEq, Eq, Hash, Encode, Clone)]
 pub enum Churn {
     /// Peer disconnected.
@@ -179,8 +182,8 @@ impl Metrics {
         if self.topic_info.contains_key(topic) {
             Ok(())
         } else if self.non_subscription_topics_count() < self.max_never_subscribed_topics {
-            // This is as topic without an explicit subscription and we register it if we are
-            // within the configured bounds.
+            // This is a topic without an explicit subscription and we register it if we are within
+            // the configured bounds.
             self.topic_info.entry(topic.clone()).or_insert(false);
             self.topic_subscription_status.get_or_create(topic).set(0);
             Ok(())
