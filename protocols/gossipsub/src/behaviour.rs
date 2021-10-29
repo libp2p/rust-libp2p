@@ -50,7 +50,7 @@ use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
-use crate::metrics::{Config as MetricsConfig, InternalMetrics};
+use crate::metrics::{Config as MetricsConfig, Metrics};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
@@ -309,7 +309,7 @@ pub struct Gossipsub<
     data_transform: D,
 
     /// Keep track of a set of internal metrics relating to gossipsub.
-    metrics: Option<InternalMetrics>,
+    metrics: Option<Metrics>,
 }
 
 impl<D, F> Gossipsub<D, F>
@@ -418,7 +418,7 @@ where
         validate_config(&privacy, config.validation_mode())?;
 
         Ok(Gossipsub {
-            metrics: metrics.map(|(registry, cfg)| InternalMetrics::new(registry, cfg)),
+            metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
@@ -501,6 +501,11 @@ where
         self.peer_score
             .as_ref()
             .map(|(score, ..)| score.score(peer_id))
+    }
+
+    /// Get access to the stored metrics if enabled.
+    pub fn metrics(&self) -> Option<&Metrics> {
+        self.metrics.as_ref()
     }
 
     /// Subscribe to a topic.
