@@ -500,11 +500,6 @@ where
             .map(|(score, ..)| score.score(peer_id))
     }
 
-    /// Get access to the stored metrics if enabled.
-    pub fn metrics(&self) -> Option<&Metrics> {
-        self.metrics.as_ref()
-    }
-
     /// Subscribe to a topic.
     ///
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
