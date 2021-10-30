@@ -75,7 +75,7 @@ libp2p-core = { version = "0.30.0-rc.2", path = "core",  default-features = fals
 libp2p-floodsub = { version = "0.31.0-rc.1", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.33.0-rc.1", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.31.0-rc.2", path = "protocols/identify", optional = true }
-libp2p-kad = { version = "0.32.0-rc.2", path = "protocols/kad", optional = true }
+libp2p-kad = { version = "0.33.0", path = "protocols/kad", optional = true }
 libp2p-metrics = { version = "0.1.0-rc.1", path = "misc/metrics", optional = true }
 libp2p-mplex = { version = "0.30.0-rc.1", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.33.0-rc.1", path = "transports/noise", optional = true }

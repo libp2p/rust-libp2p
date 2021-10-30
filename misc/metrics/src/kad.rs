@@ -258,7 +258,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                 }
             }
 
-            libp2p_kad::KademliaEvent::InboundRequestServed { request } => {
+            libp2p_kad::KademliaEvent::InboundRequest { request } => {
                 self.kad
                     .inbound_requests
                     .get_or_create(&request.into())
