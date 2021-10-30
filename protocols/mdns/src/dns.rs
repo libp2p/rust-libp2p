@@ -26,9 +26,6 @@ use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
 
-/// Maximum size of a DNS label as per RFC1035.
-const MAX_LABEL_LENGTH: usize = 63;
-
 /// DNS TXT records can have up to 255 characters as a single string value.
 ///
 /// Current values are usually around 170-190 bytes long, varying primarily
@@ -118,7 +115,7 @@ pub fn build_query_response(
     // Add a limit to 2^16-1 addresses, as the protocol limits to this number.
     let addresses = addresses.take(65535);
 
-    let peer_id_bytes = encode_peer_id(&peer_id);
+    let peer_id_bytes = generate_peer_id();
     debug_assert!(peer_id_bytes.len() <= 0xffff);
 
     // The accumulated response packets.
@@ -262,26 +259,7 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
     out.push((value & 0xff) as u8);
 }
 
-/// If a peer ID is longer than 63 characters, split it into segments to
-/// be compatible with RFC 1035.
-fn segment_peer_id(peer_id: String) -> String {
-    // Guard for the most common case
-    if peer_id.len() <= MAX_LABEL_LENGTH {
-        return peer_id;
-    }
-
-    // This will only perform one allocation except in extreme circumstances.
-    let mut out = String::with_capacity(peer_id.len() + 8);
-
-    for (idx, chr) in peer_id.chars().enumerate() {
-        if idx > 0 && idx % MAX_LABEL_LENGTH == 0 {
-            out.push('.');
-        }
-        out.push(chr);
-    }
-    out
-}
-
+/// Generates and returns a random alphanumeric string of `length` size.
 fn random_string(length: usize) -> String {
     thread_rng()
         .sample_iter(&Alphanumeric)
@@ -290,13 +268,10 @@ fn random_string(length: usize) -> String {
         .collect()
 }
 
-/// Combines and encodes a `PeerId` and service name for a DNS query.
-fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
-    // DNS-safe encoding for the Peer ID
-    let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.to_bytes());
-    // ensure we don't have any labels over 63 bytes long
-    let encoded_peer_id = segment_peer_id(raw_peer_id);
-    let service_name = str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII");
+/// Generates a peer ID bytes for a DNS query.
+fn generate_peer_id() -> Vec<u8> {
+    // Use a variable-length random string for mDNS peer name.
+    // See discussion: https://github.com/libp2p/go-libp2p/pull/1222
     let peer_name = random_string(32 + thread_rng().gen_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
@@ -445,25 +420,6 @@ mod tests {
     fn build_service_discovery_response_correct() {
         let query = build_service_discovery_response(0x1234, Duration::from_secs(120));
         assert!(Packet::parse(&query).is_ok());
-    }
-
-    #[test]
-    fn test_segment_peer_id() {
-        let str_32 = String::from_utf8(vec![b'x'; 32]).unwrap();
-        let str_63 = String::from_utf8(vec![b'x'; 63]).unwrap();
-        let str_64 = String::from_utf8(vec![b'x'; 64]).unwrap();
-        let str_126 = String::from_utf8(vec![b'x'; 126]).unwrap();
-        let str_127 = String::from_utf8(vec![b'x'; 127]).unwrap();
-
-        assert_eq!(segment_peer_id(str_32.clone()), str_32);
-        assert_eq!(segment_peer_id(str_63.clone()), str_63);
-
-        assert_eq!(segment_peer_id(str_64), [&str_63, "x"].join("."));
-        assert_eq!(
-            segment_peer_id(str_126),
-            [&str_63, str_63.as_str()].join(".")
-        );
-        assert_eq!(segment_peer_id(str_127), [&str_63, &str_63, "x"].join("."));
     }
 
     #[test]
