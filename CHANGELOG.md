@@ -46,6 +46,7 @@
 
 - Update individual crates.
     - `libp2p-websocket`
+- Forward `wasm-bindgen` feature to `futures-timer`, `instant`, `parking_lot`, `getrandom/js` and `rand/wasm-bindgen`.
 
 ## Version 0.40.0-rc.3 [2021-10-27]
 

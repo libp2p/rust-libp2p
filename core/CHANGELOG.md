@@ -1,3 +1,9 @@
+# 0.30.1 [unreleased]
+
+- Use `instant` instead of `wasm-timer` (see [PR 2245]).
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+
 # 0.30.0-rc.2 [2021-10-27]
 
 - Add `ConnectionLimit::with_max_established` (see [PR 2137]).

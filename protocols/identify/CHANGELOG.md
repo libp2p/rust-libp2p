@@ -1,3 +1,9 @@
+# 0.31.1 [unreleased]
+
+- Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+
 # 0.31.0-rc.2 [2021-10-27]
 
 - Make default features of `libp2p-core` optional.

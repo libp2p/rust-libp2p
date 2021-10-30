@@ -38,6 +38,7 @@ use crate::record::{
 };
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
+use instant::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Multiaddr, PeerId,
@@ -54,7 +55,6 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
 use std::{borrow::Cow, time::Duration};
-use wasm_timer::Instant;
 
 pub use crate::query::QueryStats;
 
