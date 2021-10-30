@@ -42,6 +42,11 @@
 
 # `libp2p` facade crate
 
+## Version 0.41.0 [unreleased]
+
+- Update individual crates.
+    - `libp2p-websocket`
+
 ## Version 0.40.0-rc.3 [2021-10-27]
 
 - Update individual crates.
