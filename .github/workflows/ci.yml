@@ -41,6 +41,9 @@ jobs:
           wasm32-unknown-emscripten,
           wasm32-wasi
         ]
+        include:
+          - toolchain: wasm32-unknown-unknown
+            args: "--features wasm-bindgen"
     container:
       image: rust
       env:
@@ -76,7 +79,7 @@ jobs:
     - name: Build on ${{ matrix.toolchain }}
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=${{ matrix.toolchain }}
+      run: cargo build --target=${{ matrix.toolchain }} ${{ matrix.args }}
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links

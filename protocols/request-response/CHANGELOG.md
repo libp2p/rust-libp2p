@@ -1,3 +1,9 @@
+# 0.13.1 [unreleased]
+
+- Use `instant` instead of `wasm-timer` (see [PR 2245]).
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+
 # 0.13.0-rc.1 [2021-10-15]
 
 - Make default features of `libp2p-core` optional.

@@ -81,7 +81,7 @@ where
         let dials = FuturesUnordered::new();
         while let Some(dial) = pending_dials.next() {
             dials.push(dial);
-            if dials.len() == concurrency_factor.get().into() {
+            if dials.len() == concurrency_factor.get() as usize {
                 break;
             }
         }

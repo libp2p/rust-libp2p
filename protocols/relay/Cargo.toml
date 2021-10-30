@@ -2,7 +2,7 @@
 name = "libp2p-relay"
 edition = "2018"
 description = "Communications relaying for libp2p"
-version = "0.4.0-rc.1"
+version = "0.4.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,6 +14,7 @@ asynchronous-codec = "0.6"
 bytes = "1"
 futures = "0.3.1"
 futures-timer = "3"
+instant = "0.1.11"
 libp2p-core = { version = "0.30.0-rc.1", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.31.0-rc.1", path = "../../swarm" }
 log = "0.4"
@@ -23,7 +24,6 @@ rand = "0.7"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
-wasm-timer = "0.2"
 
 [build-dependencies]
 prost-build = "0.9"
