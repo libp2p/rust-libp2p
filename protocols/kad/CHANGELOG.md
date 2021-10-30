@@ -1,6 +1,10 @@
-# 0.32.1 [unreleased]
+# 0.33.0 [unreleased]
 
 - Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Rename `KademliaEvent::InboundRequestServed` to `KademliaEvent::InboundRequest` and move
+  `InboundPutRecordRequest` into `InboundRequest::PutRecord` and `InboundAddProviderRequest` into
+  `InboundRequest::AddProvider`
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
 
