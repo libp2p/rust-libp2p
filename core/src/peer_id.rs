@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::PublicKey;
-use multihash::{Code, Error, Multihash, MultihashDigest};
+use cid::multibase::Base;
+use cid::{Cid, CidGeneric, Error as CidError, Version};
+use multihash::{Code, Error as MhError, Multihash, MultihashDigest};
 use rand::Rng;
 use std::{convert::TryFrom, fmt, str::FromStr};
 use thiserror::Error;
@@ -28,12 +30,15 @@ use thiserror::Error;
 /// automatically used as the peer id using an identity multihash.
 const MAX_INLINE_KEY_LENGTH: usize = 42;
 
+/// CIDv1 MUST use the libp2p key codec to identify the content of the CID.
+const LIBP2P_KEY_CODEC: u64 = 0x72;
+
 /// Identifier of a peer of the network.
 ///
-/// The data is a multihash of the public key of the peer.
+/// The data is a cid of the public key of the peer.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeerId {
-    multihash: Multihash,
+    cid: Cid,
 }
 
 impl fmt::Debug for PeerId {
@@ -61,13 +66,33 @@ impl PeerId {
 
         let multihash = hash_algorithm.digest(&key_enc);
 
-        PeerId { multihash }
+        let cid = Cid::new_v1(LIBP2P_KEY_CODEC, multihash);
+
+        PeerId { cid }
     }
 
     /// Parses a `PeerId` from bytes.
-    pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
-        PeerId::from_multihash(Multihash::from_bytes(data)?)
-            .map_err(|mh| Error::UnsupportedCode(mh.code()))
+    ///
+    /// In the case that the bytes cannot be
+    /// interpreted as a multihash or a CID,
+    /// a `PeerIdError` will be returned.
+    pub fn from_bytes(data: &[u8]) -> Result<PeerId, PeerIdError> {
+        if PeerId::is_data_multihash(data) {
+            PeerId::from_multihash(Multihash::from_bytes(data)?)
+                .map_err(|mh| PeerIdError::from(MhError::UnsupportedCode(mh.code())))
+        } else {
+            PeerId::from_cid(CidGeneric::try_from(data)?)
+                .map_err(|_| PeerIdError::from(CidError::ParsingError))
+        }
+    }
+
+    /// Check whether the raw bytes is
+    /// a multihash in the form of `CIDv0`
+    /// or in the form of an `identity` multihash
+    fn is_data_multihash(data: &[u8]) -> bool {
+        let is_cid_v0 = data.len() == 34 && data[0] == 0x12 && data[1] == 0x20;
+        let is_identity_multihash = data[0] == 0x00;
+        is_cid_v0 || is_identity_multihash
     }
 
     /// Tries to turn a `Multihash` into a `PeerId`.
@@ -77,11 +102,42 @@ impl PeerId {
     /// peer ID, it is returned as an `Err`.
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
         match Code::try_from(multihash.code()) {
-            Ok(Code::Sha2_256) => Ok(PeerId { multihash }),
-            Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH => {
-                Ok(PeerId { multihash })
-            }
+            Ok(Code::Sha2_256) => Ok(PeerId {
+                cid: Cid::new_v1(LIBP2P_KEY_CODEC, multihash),
+            }),
+            Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH => Ok(PeerId {
+                cid: Cid::new_v1(LIBP2P_KEY_CODEC, multihash),
+            }),
             _ => Err(multihash),
+        }
+    }
+
+    /// Tries to turn a `Cid` into a `PeerId`.
+    ///
+    /// If the CID's multihash does not fit the specifications:
+    ///
+    /// * use a valid hashing algorithm for peer IDs, or
+    /// * the value does not satisfy the constraints for a hashed peerID,
+    ///
+    /// or, if the CID does not fit the specifications:
+    ///
+    /// * is a CIDv0 with a multihash that fits the specifications
+    /// for multihash, or
+    /// * is a CIDv1 with the proper codec (LIBP2P_KEY_CODEC),
+    ///
+    /// then the CID will be returned as an `Err`.
+    pub fn from_cid(cid: Cid) -> Result<PeerId, Cid> {
+        let multihash = *cid.hash();
+
+        match cid.version() {
+            Version::V0 => PeerId::from_multihash(multihash).map_err(|_| cid),
+            Version::V1 => {
+                if cid.codec() == LIBP2P_KEY_CODEC {
+                    PeerId::from_multihash(multihash).map_err(|_| cid)
+                } else {
+                    Err(cid)
+                }
+            }
         }
     }
 
@@ -90,20 +146,31 @@ impl PeerId {
     /// This is useful for randomly walking on a DHT, or for testing purposes.
     pub fn random() -> PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
+        let multihash = Multihash::wrap(Code::Identity.into(), &peer_id)
+            .expect("The digest size is never too large");
         PeerId {
-            multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
-                .expect("The digest size is never too large"),
+            cid: Cid::new_v1(LIBP2P_KEY_CODEC, multihash),
         }
     }
 
-    /// Returns a raw bytes representation of this `PeerId`.
+    /// Returns a raw bytes representation of the contents of the `PeerId`.
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.multihash.to_bytes()
+        self.cid.hash().to_bytes()
     }
 
-    /// Returns a base-58 encoded string of this `PeerId`.
+    /// Returns a raw bytes representation of the `PeerId`.
+    pub fn to_cidv1_bytes(&self) -> Vec<u8> {
+        self.cid.to_bytes()
+    }
+
+    /// Returns a base-58 raw encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
         bs58::encode(self.to_bytes()).into_string()
+    }
+
+    /// Returns a `base32` encoded string of this `PeerId`.
+    pub fn to_base32(&self) -> String {
+        self.cid.to_string_of_base(Base::Base32Lower).unwrap()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
@@ -111,10 +178,10 @@ impl PeerId {
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
-        let alg = Code::try_from(self.multihash.code())
+        let alg = Code::try_from(self.cid.hash().code())
             .expect("Internal multihash is always a valid `Code`");
         let enc = public_key.to_protobuf_encoding();
-        Some(alg.digest(&enc) == self.multihash)
+        Some(alg.digest(&enc) == *self.cid.hash())
     }
 }
 
@@ -148,13 +215,13 @@ impl TryFrom<Multihash> for PeerId {
 
 impl AsRef<Multihash> for PeerId {
     fn as_ref(&self) -> &Multihash {
-        &self.multihash
+        self.cid.hash()
     }
 }
 
 impl From<PeerId> for Multihash {
     fn from(peer_id: PeerId) -> Self {
-        peer_id.multihash
+        *peer_id.cid.hash()
     }
 }
 
@@ -164,12 +231,54 @@ impl From<PeerId> for Vec<u8> {
     }
 }
 
+#[derive(Debug)]
+pub enum PeerIdError {
+    // Variant to group errors produced by `multihash`
+    MultihashError(MhError),
+    // Variant to group errors produced by `cid`
+    CidError(CidError),
+}
+
+impl fmt::Display for PeerIdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MultihashError(_) => write!(f, "Bytes cannot be decoded as a multihash"),
+            Self::CidError(_) => write!(f, "Bytes cannot be decoded as a CID"),
+        }
+    }
+}
+
+impl std::error::Error for PeerIdError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::MultihashError(inner) => Some(inner),
+            Self::CidError(inner) => Some(inner),
+        }
+    }
+}
+
+impl From<MhError> for PeerIdError {
+    fn from(e: MhError) -> Self {
+        Self::MultihashError(e)
+    }
+}
+
+impl From<CidError> for PeerIdError {
+    fn from(e: CidError) -> Self {
+        Self::CidError(e)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("base-58 decode error: {0}")]
     B58(#[from] bs58::decode::Error),
+    #[error("cid decoding error: {0}")]
+    CidStr(#[from] cid::Error),
     #[error("decoding multihash failed")]
     MultiHash,
+    #[error("decoding cid failed")]
+    Cid,
 }
 
 impl FromStr for PeerId {
@@ -177,8 +286,13 @@ impl FromStr for PeerId {
 
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = bs58::decode(s).into_vec()?;
-        PeerId::from_bytes(&bytes).map_err(|_| ParseError::MultiHash)
+        if s.starts_with("Qm") || s.starts_with('1') {
+            let bytes = bs58::decode(s).into_vec()?;
+            PeerId::from_bytes(&bytes).map_err(|_| ParseError::MultiHash)
+        } else {
+            let cid = Cid::from_str(s)?;
+            PeerId::from_cid(cid).map_err(|_| ParseError::Cid)
+        }
     }
 }
 
@@ -213,5 +327,63 @@ mod tests {
             let peer_id = PeerId::random();
             assert_eq!(peer_id, PeerId::from_bytes(&peer_id.to_bytes()).unwrap());
         }
+    }
+
+    #[test]
+    fn peer_id_to_base32_then_back() {
+        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+        let second: PeerId = peer_id.to_base32().parse().unwrap();
+        assert_eq!(peer_id, second);
+    }
+
+    #[test]
+    fn peer_id_to_cidv1_bytes_then_back() {
+        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+        let second: PeerId = PeerId::from_bytes(&peer_id.to_cidv1_bytes()).unwrap();
+        assert_eq!(peer_id, second);
+    }
+
+    #[test]
+    fn cid_string_to_peer_id() {
+        use std::str::FromStr;
+
+        let cid_base32 = "bafzbeie5745rpv2m6tjyuugywy4d5ewrqgqqhfnf445he3omzpjbx5xqxe";
+        let peer_id = PeerId::from_str(cid_base32).unwrap();
+
+        assert_eq!(cid_base32, peer_id.to_base32());
+    }
+
+    #[test]
+    fn identity_multihash_string_to_peer_id() {
+        use std::str::FromStr;
+
+        let identity_multihash_base58 = "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA";
+        let peer_id = PeerId::from_str(identity_multihash_base58).unwrap();
+
+        assert_eq!(identity_multihash_base58, peer_id.to_base58());
+    }
+
+    #[test]
+    fn sha256_multihash_string_to_peer_id() {
+        use std::str::FromStr;
+
+        let sha256_multihash_base58 = "QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N";
+        let peer_id = PeerId::from_str(sha256_multihash_base58).unwrap();
+
+        assert_eq!(sha256_multihash_base58, peer_id.to_base58());
+    }
+
+    #[test]
+    fn cid_bytes_to_peer_id() {
+        use cid::Cid;
+        use std::str::FromStr;
+
+        let cid_bytes =
+            Cid::from_str("bafzbeie5745rpv2m6tjyuugywy4d5ewrqgqqhfnf445he3omzpjbx5xqxe")
+                .unwrap()
+                .to_bytes();
+        let peer_id = PeerId::from_bytes(&cid_bytes).unwrap();
+
+        assert_eq!(cid_bytes, peer_id.to_cidv1_bytes());
     }
 }

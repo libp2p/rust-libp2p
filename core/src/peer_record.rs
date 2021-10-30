@@ -1,7 +1,7 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
-use crate::{peer_record_proto, signed_envelope, Multiaddr, PeerId};
+use crate::{peer_id::PeerIdError, peer_record_proto, signed_envelope, Multiaddr, PeerId};
 use instant::SystemTime;
 use std::convert::TryInto;
 use std::fmt;
@@ -125,7 +125,7 @@ pub enum FromEnvelopeError {
     /// Failed to decode the provided bytes as a [`PeerRecord`].
     InvalidPeerRecord(prost::DecodeError),
     /// Failed to decode the peer ID.
-    InvalidPeerId(multihash::Error),
+    InvalidPeerId(PeerIdError),
     /// Failed to decode a multi-address.
     InvalidMultiaddr(multiaddr::Error),
 }
@@ -142,8 +142,8 @@ impl From<prost::DecodeError> for FromEnvelopeError {
     }
 }
 
-impl From<multihash::Error> for FromEnvelopeError {
-    fn from(e: multihash::Error) -> Self {
+impl From<PeerIdError> for FromEnvelopeError {
+    fn from(e: PeerIdError) -> Self {
         Self::InvalidPeerId(e)
     }
 }
