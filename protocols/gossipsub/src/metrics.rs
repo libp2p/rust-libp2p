@@ -88,6 +88,20 @@ pub enum Churn {
     Excess,
 }
 
+/// Label for the mesh inclusion event metrics.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct InclusionLabel {
+    topic: TopicHash,
+    reason: Inclusion,
+}
+
+/// Label for the mesh churn event metrics.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct ChurnLabel {
+    topic: TopicHash,
+    reason: Churn,
+}
+
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct Metrics {
     /* Configuration parameters */
@@ -115,9 +129,9 @@ pub struct Metrics {
     /// topic in the mesh regardless of inclusion and churn events.
     mesh_peer_counts: Family<TopicHash, Gauge>,
     /// Number of times we include peers in a topic mesh for different reasons.
-    mesh_peer_inclusion_events: Family<(TopicHash, Inclusion), Counter>,
+    mesh_peer_inclusion_events: Family<InclusionLabel, Counter>,
     /// Number of times we remove peers in a topic mesh for different reasons.
-    mesh_peer_churn_events: Family<(TopicHash, Churn), Counter>,
+    mesh_peer_churn_events: Family<ChurnLabel, Counter>,
 }
 
 impl Metrics {
@@ -230,7 +244,10 @@ impl Metrics {
     pub fn peers_included(&mut self, topic: &TopicHash, reason: Inclusion, count: usize) {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_inclusion_events
-                .get_or_create(&(topic.clone(), reason))
+                .get_or_create(&InclusionLabel {
+                    topic: topic.clone(),
+                    reason,
+                })
                 .inc_by(count as u64);
         }
     }
@@ -239,7 +256,10 @@ impl Metrics {
     pub fn peers_removed(&mut self, topic: &TopicHash, reason: Churn, count: usize) {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_churn_events
-                .get_or_create(&(topic.clone(), reason))
+                .get_or_create(&ChurnLabel {
+                    topic: topic.clone(),
+                    reason,
+                })
                 .inc_by(count as u64);
         }
     }
