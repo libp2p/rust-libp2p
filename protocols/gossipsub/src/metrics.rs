@@ -194,7 +194,9 @@ impl Metrics {
     fn register_topic(&mut self, topic: &TopicHash) -> Result<(), ()> {
         if self.topic_info.contains_key(topic) {
             Ok(())
-        } else if self.non_subscription_topics_count() < self.max_never_subscribed_topics {
+        } else if self.topic_info.len() < self.max_topics
+            && self.non_subscription_topics_count() < self.max_never_subscribed_topics
+        {
             // This is a topic without an explicit subscription and we register it if we are within
             // the configured bounds.
             self.topic_info.entry(topic.clone()).or_insert(false);
