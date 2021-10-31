@@ -31,9 +31,8 @@ use open_metrics_client::registry::Registry;
 
 use crate::topic::TopicHash;
 
-// Default value that limits how many topics for which there has been a previous or current
-// subscription do we store metrics.
-const DEFAULT_MAX_EXPLICITLY_SUBSCRIBED_TOPICS: usize = 300;
+// Default value that limits for how many topics do we store metrics.
+const DEFAULT_MAX_TOPICS: usize = 300;
 
 // Default value that limits how many topics for which there has never been a subscription do we
 // store metrics.
@@ -52,7 +51,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            max_topics: DEFAULT_MAX_EXPLICITLY_SUBSCRIBED_TOPICS,
+            max_topics: DEFAULT_MAX_TOPICS,
             max_never_subscribed_topics: DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS,
         }
     }
