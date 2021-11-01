@@ -34,8 +34,8 @@ use futures::StreamExt;
 use log::{debug, error, trace, warn};
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
-use wasm_timer::{Instant, Interval};
 
+use instant::Instant;
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
@@ -45,7 +45,6 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters,
 };
 
-use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
@@ -62,6 +61,7 @@ use crate::types::{
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
+use crate::{backoff::BackoffStorage, interval::Interval};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 
@@ -139,6 +139,8 @@ pub enum GossipsubEvent {
         /// The topic it has subscribed from.
         topic: TopicHash,
     },
+    /// A peer that does not support gossipsub has connected.
+    GossipsubNotSupported { peer_id: PeerId },
 }
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
@@ -404,8 +406,8 @@ where
                 config.backoff_slack(),
             ),
             mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Interval::new_at(
-                Instant::now() + config.heartbeat_initial_delay(),
+            heartbeat: Interval::new_initial(
+                config.heartbeat_initial_delay(),
                 config.heartbeat_interval(),
             ),
             heartbeat_ticks: 0,
@@ -2925,6 +2927,7 @@ where
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
     ) {
         // Check if the peer is an outbound peer
         if let ConnectedPoint::Dialer { .. } = endpoint {
@@ -2995,9 +2998,7 @@ where
                 .connections
                 .iter()
                 .position(|v| v == connection_id)
-                .expect(
-                    "Previously established connection to a non-black-listed peer to be present",
-                );
+                .expect("Previously established connection to peer must be present");
             connections.connections.remove(index);
 
             // If there are more connections and this peer is in a mesh, inform the first connection
@@ -3066,8 +3067,11 @@ where
                         "Peer does not support gossipsub protocols. {}",
                         propagation_source
                     );
-                    // We treat this peer as disconnected
-                    self.inject_disconnected(&propagation_source);
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        GossipsubEvent::GossipsubNotSupported {
+                            peer_id: propagation_source,
+                        },
+                    ));
                 } else if let Some(conn) = self.connected_peers.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
                     // inject_connected). All other PeerKind changes are ignored.

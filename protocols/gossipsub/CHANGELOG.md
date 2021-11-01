@@ -1,4 +1,13 @@
-# 0.33.0 [unreleased]
+# 0.33.1 [unreleased]
+
+- Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+
+# 0.33.0-rc.1 [2021-10-15]
+
+- Add an event to register peers that do not support the gossipsub protocol
+  [PR 2241](https://github.com/libp2p/rust-libp2p/pull/2241)
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
@@ -10,6 +19,9 @@
 
 - Allow `message_id_fn`s to accept closures that capture variables.
   [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
+
+- Implement std::error::Error for error types.
+  [PR 2254](https://github.com/libp2p/rust-libp2p/pull/2254)
 
 # 0.32.0 [2021-07-12]
 

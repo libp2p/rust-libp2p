@@ -1,9 +1,19 @@
-# 0.31.0 [unreleased]
+# 0.31.1 [unreleased]
+
+- Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+
+# 0.31.0-rc.2 [2021-10-27]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
 - Update dependencies.
+
+- Assist in peer discovery by optionally returning reported listen addresses
+  of other peers from `addresses_of_peer` (see [PR
+  2232](https://github.com/libp2p/rust-libp2p/pull/2232)), disabled by default.
 
 # 0.30.0 [2021-07-12]
 
