@@ -1,4 +1,4 @@
-# 0.25.0-rc.1 [2021-10-15]
+# 0.25.0 [2021-11-01]
 
 - Update to latest `libp2p-swarm` changes (see [PR 2191]).
 
