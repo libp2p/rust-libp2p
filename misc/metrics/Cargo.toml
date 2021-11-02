@@ -2,7 +2,7 @@
 name = "libp2p-metrics"
 edition = "2018"
 description = "Metrics for libp2p"
-version = "0.1.0-rc.1"
+version = "0.1.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,11 +15,11 @@ kad = ["libp2p-kad"]
 ping = ["libp2p-ping"]
 
 [dependencies]
-libp2p-core=  { version = "0.30.0-rc.1", path = "../../core" }
-libp2p-identify =  { version = "0.31.0-rc.1", path = "../../protocols/identify", optional = true }
+libp2p-core=  { version = "0.30.0", path = "../../core" }
+libp2p-identify =  { version = "0.31.0", path = "../../protocols/identify", optional = true }
 libp2p-kad =  { version = "0.33.0", path = "../../protocols/kad", optional = true }
-libp2p-ping =  { version = "0.31.0-rc.1", path = "../../protocols/ping", optional = true }
-libp2p-swarm =  { version = "0.31.0-rc.1", path = "../../swarm" }
+libp2p-ping =  { version = "0.31.0", path = "../../protocols/ping", optional = true }
+libp2p-swarm =  { version = "0.31.0", path = "../../swarm" }
 open-metrics-client = "0.12.0"
 
 [dev-dependencies]
