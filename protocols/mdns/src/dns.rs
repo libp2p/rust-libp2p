@@ -271,7 +271,7 @@ fn random_string(length: usize) -> String {
 /// Generates a peer ID bytes for a DNS query.
 fn generate_peer_id() -> Vec<u8> {
     // Use a variable-length random string for mDNS peer name.
-    // See discussion: https://github.com/libp2p/go-libp2p/pull/1222
+    // See https://github.com/libp2p/rust-libp2p/pull/2311/
     let peer_name = random_string(32 + thread_rng().gen_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
