@@ -115,8 +115,8 @@ pub fn build_query_response(
     // Add a limit to 2^16-1 addresses, as the protocol limits to this number.
     let addresses = addresses.take(65535);
 
-    let peer_id_bytes = generate_peer_id();
-    debug_assert!(peer_id_bytes.len() <= 0xffff);
+    let peer_name_bytes = generate_peer_name();
+    debug_assert!(peer_name_bytes.len() <= 0xffff);
 
     // The accumulated response packets.
     let mut packets = Vec::new();
@@ -129,7 +129,7 @@ pub fn build_query_response(
     for addr in addresses {
         let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
         let mut txt_record = Vec::with_capacity(txt_to_send.len());
-        match append_txt_record(&mut txt_record, &peer_id_bytes, ttl, &txt_to_send) {
+        match append_txt_record(&mut txt_record, &peer_name_bytes, ttl, &txt_to_send) {
             Ok(()) => {
                 records.push(txt_record);
             }
@@ -139,7 +139,7 @@ pub fn build_query_response(
         }
 
         if records.len() == MAX_RECORDS_PER_PACKET {
-            packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+            packets.push(query_response_packet(id, &peer_name_bytes, &records, ttl));
             records.clear();
         }
     }
@@ -147,13 +147,13 @@ pub fn build_query_response(
     // If there are still unpacked records, i.e. if the number of records is not
     // a multiple of `MAX_RECORDS_PER_PACKET`, create a final packet.
     if !records.is_empty() {
-        packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+        packets.push(query_response_packet(id, &peer_name_bytes, &records, ttl));
     }
 
     // If no packets have been built at all, because `addresses` is empty,
     // construct an empty response packet.
     if packets.is_empty() {
-        packets.push(query_response_packet(id, &peer_id_bytes, &Vec::new(), ttl));
+        packets.push(query_response_packet(id, &peer_name_bytes, &Vec::new(), ttl));
     }
 
     packets
@@ -268,17 +268,17 @@ fn random_string(length: usize) -> String {
         .collect()
 }
 
-/// Generates a peer ID bytes for a DNS query.
-fn generate_peer_id() -> Vec<u8> {
+/// Generates a random peer name as bytes for a DNS query.
+fn generate_peer_name() -> Vec<u8> {
     // Use a variable-length random string for mDNS peer name.
     // See https://github.com/libp2p/rust-libp2p/pull/2311/
     let peer_name = random_string(32 + thread_rng().gen_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
-    let mut peer_id_bytes = Vec::with_capacity(peer_name.len() + 32);
-    append_qname(&mut peer_id_bytes, peer_name.as_bytes());
+    let mut peer_name_bytes = Vec::with_capacity(peer_name.len() + 32);
+    append_qname(&mut peer_name_bytes, peer_name.as_bytes());
 
-    peer_id_bytes
+    peer_name_bytes
 }
 
 /// Appends a `QNAME` (as defined by RFC1035) to the `Vec`.
