@@ -164,6 +164,10 @@ impl PeerId {
     }
 
     /// Returns a base-58 raw encoded string of this `PeerId`.
+    ///
+    /// This corresponds to the old peer ID [representation].
+    ///
+    /// [representation]: https://github.com/libp2p/specs/blob/master/RFC/0001-text-peerid-cid.md
     pub fn to_base58(&self) -> String {
         bs58::encode(self.to_bytes()).into_string()
     }
