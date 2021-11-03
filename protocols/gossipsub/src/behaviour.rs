@@ -228,7 +228,7 @@ pub struct Gossipsub<
     /// duplicates from being propagated to the application and on the network.
     duplicate_cache: DuplicateCache<MessageId>,
 
-    /// A set of connected peers, indexed by their [`PeerId`]. tracking both the [`PeerKind`] and
+    /// A set of connected peers, indexed by their [`PeerId`] tracking both the [`PeerKind`] and
     /// the set of [`ConnectionId`]s.
     connected_peers: HashMap<PeerId, PeerConnections>,
 
@@ -292,12 +292,12 @@ pub struct Gossipsub<
     /// This is used to prevent sending duplicate IWANT messages for the same message.
     pending_iwant_msgs: HashSet<MessageId>,
 
-    /// Short term cache for published messsage ids. This is used for penalizing peers sending
+    /// Short term cache for published message ids. This is used for penalizing peers sending
     /// our own messages back if the messages are anonymous or use a random author.
     published_message_ids: DuplicateCache<MessageId>,
 
     /// Short term cache for fast message ids mapping them to the real message ids
-    fast_messsage_id_cache: TimeCache<FastMessageId, MessageId>,
+    fast_message_id_cache: TimeCache<FastMessageId, (MessageId, HashSet<PeerId>)>,
 
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
@@ -396,7 +396,7 @@ where
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
-            fast_messsage_id_cache: TimeCache::new(config.duplicate_cache_time()),
+            fast_message_id_cache: TimeCache::new(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
@@ -1624,13 +1624,37 @@ where
         propagation_source: &PeerId,
     ) {
         let fast_message_id = self.config.fast_message_id(&raw_message);
+
         if let Some(fast_message_id) = fast_message_id.as_ref() {
-            if let Some(msg_id) = self.fast_messsage_id_cache.get(fast_message_id) {
-                let msg_id = msg_id.clone();
-                self.message_is_valid(&msg_id, &mut raw_message, propagation_source);
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.duplicated_message(propagation_source, &msg_id, &raw_message.topic);
+            // Update the cache, informing that we have received a duplicate from another peer.
+            // The peers in this cache are used to prevent us forwarding redundant messages onto
+            // these peers.
+            let msg_id = {
+                if let Some((msg_id, past_peers)) =
+                    self.fast_message_id_cache.get_mut(fast_message_id)
+                {
+                    past_peers.insert(*propagation_source);
+                    Some(msg_id.clone())
+                } else {
+                    // This message has not been seen before, it will not be filtered
+                    None
                 }
+            };
+
+            // These statements are separated to prevent holding a mutable borrow of self.
+            if let Some(msg_id) = msg_id {
+                // Report the duplicate
+                if self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
+                    if let Some((peer_score, ..)) = &mut self.peer_score {
+                        peer_score.duplicated_message(
+                            propagation_source,
+                            &msg_id,
+                            &raw_message.topic,
+                        );
+                    }
+                }
+
+                // This message has been seen previously. Ignore it
                 return;
             }
         }
@@ -1663,9 +1687,13 @@ where
         // Add the message to the duplicate caches
         if let Some(fast_message_id) = fast_message_id {
             // add id to cache
-            self.fast_messsage_id_cache
+            self.fast_message_id_cache
                 .entry(fast_message_id)
-                .or_insert_with(|| msg_id.clone());
+                .or_insert_with(|| {
+                    let mut past_peers = HashSet::new();
+                    past_peers.insert(*propagation_source);
+                    (msg_id.clone(), past_peers)
+                });
         }
         if !self.duplicate_cache.insert(msg_id.clone()) {
             debug!("Message already received, ignoring. Message: {}", msg_id);
@@ -1728,8 +1756,8 @@ where
     ) {
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             let reason = RejectReason::ValidationError(validation_error);
-            let fast_message_id_cache = &self.fast_messsage_id_cache;
-            if let Some(msg_id) = self
+            let fast_message_id_cache = &self.fast_message_id_cache;
+            if let Some((msg_id, _past_peers)) = self
                 .config
                 .fast_message_id(&raw_message)
                 .and_then(|id| fast_message_id_cache.get(&id))
@@ -2502,25 +2530,52 @@ where
         debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
 
-        // add mesh peers
-        let topic = &message.topic;
-        // mesh
-        if let Some(mesh_peers) = self.mesh.get(topic) {
-            for peer_id in mesh_peers {
-                if Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref() {
-                    recipient_peers.insert(*peer_id);
+        {
+            // Populate the recipient peers mapping
+
+            // Filter peers that have already sent us this message.
+            let peers_that_have_seen_this_message = {
+                if let Some(fast_message_id) = self.config.fast_message_id(&message).as_ref() {
+                    if let Some((_msg_id, past_peers)) =
+                        self.fast_message_id_cache.get(fast_message_id)
+                    {
+                        Some(past_peers)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            // Add explicit peers
+            for peer_id in &self.explicit_peers {
+                if let Some(topics) = self.peer_topics.get(peer_id) {
+                    if Some(peer_id) != propagation_source
+                        && Some(peer_id) != message.source.as_ref()
+                        && topics.contains(&message.topic)
+                        && peers_that_have_seen_this_message
+                            .map(|peers| !peers.contains(peer_id))
+                            .unwrap_or(true)
+                    {
+                        recipient_peers.insert(*peer_id);
+                    }
                 }
             }
-        }
 
-        // Add explicit peers
-        for p in &self.explicit_peers {
-            if let Some(topics) = self.peer_topics.get(p) {
-                if Some(p) != propagation_source
-                    && Some(p) != message.source.as_ref()
-                    && topics.contains(&message.topic)
-                {
-                    recipient_peers.insert(*p);
+            // add mesh peers
+            let topic = &message.topic;
+            // mesh
+            if let Some(mesh_peers) = self.mesh.get(topic) {
+                for peer_id in mesh_peers {
+                    if Some(peer_id) != propagation_source
+                        && Some(peer_id) != message.source.as_ref()
+                        && peers_that_have_seen_this_message
+                            .map(|peers| !peers.contains(peer_id))
+                            .unwrap_or(true)
+                    {
+                        recipient_peers.insert(*peer_id);
+                    }
                 }
             }
         }
