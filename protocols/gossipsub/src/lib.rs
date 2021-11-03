@@ -130,6 +130,7 @@ mod behaviour;
 mod config;
 mod gossip_promises;
 mod handler;
+mod interval;
 mod mcache;
 pub mod metrics;
 mod peer_score;
