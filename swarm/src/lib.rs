@@ -390,6 +390,17 @@ where
                     return Err(error);
                 };
 
+                // TODO: Filter out addresses we are listening on ourself.
+                // let self_listening = self.listened_addrs.clone();
+                // let mut addrs = self
+                //     .behaviour
+                //     .addresses_of_peer(peer_id)
+                //     .into_iter()
+                //     .filter(move |a| !self_listening.contains(a))
+                //     .peekable();
+
+                // TODO: Deduplicate the addresses?
+
                 let handler = handler
                     .into_node_handler_builder()
                     .with_substream_upgrade_protocol_override(
@@ -1766,6 +1777,7 @@ mod tests {
     }
 }
 
+// TODO: Move above tests or into separate module.
 pub mod dial_opts {
     use libp2p_core::{Multiaddr, PeerId};
 
