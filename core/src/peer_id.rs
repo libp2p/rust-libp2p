@@ -168,7 +168,7 @@ impl PeerId {
         bs58::encode(self.to_bytes()).into_string()
     }
 
-    /// Returns a `base32` encoded string of this `PeerId`.
+    /// Returns a `base32` multibase encoded string of this `PeerId`.
     pub fn to_base32(&self) -> String {
         self.cid.to_string_of_base(Base::Base32Lower).unwrap()
     }
