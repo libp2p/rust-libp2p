@@ -25,6 +25,7 @@ use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
+use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, NegotiationError, OutboundUpgrade, UpgradeError};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -39,7 +40,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use wasm_timer::Instant;
 
 /// The initial time (in seconds) we set the keep alive for protocol negotiations to occur.
 const INITIAL_KEEP_ALIVE: u64 = 30;
