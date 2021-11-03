@@ -1,6 +1,6 @@
 # 0.33.1 [unreleased]
 
-- Fix bug in internal peer's topics tracking (see [PR 2325])
+- Fix bug in internal peer's topics tracking (see [PR 2325]).
 
 - Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
 
