@@ -73,7 +73,7 @@ pub use protocols_handler::{
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use dial_opts::DialOpts;
+use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::{
     connection::{
@@ -332,9 +332,6 @@ where
         opts: DialOpts,
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
-        // TODO: Remove Import
-        use dial_opts::PeerCondition;
-
         match opts {
             DialOpts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
             | DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
@@ -342,12 +339,12 @@ where
                 condition,
                 ..
             }) => {
+                // Check [`PeerCondition`] if provided.
                 let condition_matched = match condition {
                     PeerCondition::Disconnected => self.network.is_disconnected(&peer_id),
                     PeerCondition::NotDialing => !self.network.is_dialing(&peer_id),
                     PeerCondition::Always => true,
                 };
-
                 if !condition_matched {
                     self.behaviour.inject_dial_failure(
                         Some(peer_id),
@@ -357,16 +354,8 @@ where
 
                     return Err(DialError::DialPeerConditionFalse(condition));
                 }
-            }
-            DialOpts::WithoutPeerIdWithAddress { .. } => {}
-        }
 
-        match opts {
-            DialOpts::WithPeerId(dial_opts::WithPeerId { peer_id, .. })
-            | DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
-                peer_id,
-                ..
-            }) => {
+                // Check if peer is banned.
                 if self.banned_peers.contains(&peer_id) {
                     let error = DialError::Banned;
                     self.behaviour
@@ -374,6 +363,7 @@ where
                     return Err(error);
                 }
 
+                // Retrieve the addresses to dial.
                 let addresses = match opts {
                     DialOpts::WithPeerId(dial_opts::WithPeerId { .. }) => {
                         self.behaviour.addresses_of_peer(&peer_id)
@@ -393,7 +383,6 @@ where
                         unreachable!("Due to outer match.")
                     }
                 };
-
                 if addresses.is_empty() {
                     let error = DialError::NoAddresses;
                     self.behaviour
@@ -430,7 +419,6 @@ where
                 match self.network.dial(&address, handler).map(|_id| ()) {
                     Ok(_connection_id) => Ok(()),
                     Err(error) => {
-                        // TODO: Deduplicate with the above?
                         let (error, handler) = DialError::from_network_dial_error(error);
                         self.behaviour.inject_dial_failure(
                             None,
@@ -864,7 +852,7 @@ where
                 Poll::Ready(NetworkBehaviourAction::Dial { opts, handler }) => {
                     let peer_id = opts.get_peer_id();
                     if let Ok(()) = this.dial_with_handler(opts, handler) {
-                        if Some(peer_id) = peer_id {
+                        if let Some(peer_id) = peer_id {
                             return Poll::Ready(SwarmEvent::Dialing(peer_id));
                         }
                     }
@@ -1803,9 +1791,9 @@ pub mod dial_opts {
 
         pub fn get_peer_id(&self) -> Option<PeerId> {
             match self {
-                DialOpts::WithPeerId(WithPeerId { peer_id, .. }) => Some(peer_id),
+                DialOpts::WithPeerId(WithPeerId { peer_id, .. }) => Some(*peer_id),
                 DialOpts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { peer_id, .. }) => {
-                    Some(peer_id)
+                    Some(*peer_id)
                 }
                 DialOpts::WithoutPeerIdWithAddress(_) => None,
             }
