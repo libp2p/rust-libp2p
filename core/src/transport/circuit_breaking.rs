@@ -23,6 +23,7 @@ use crate::{transport::TransportError, Multiaddr, Transport};
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures_timer::Delay;
+use multiaddr::Protocol;
 use parking_lot::Mutex;
 use pin_project::pin_project;
 use std::{
@@ -44,10 +45,13 @@ const MAX_TIMEOUT: Duration = Duration::from_secs(300);
 /// for addresses that cannot be dialed. The circuit breaker pattern aims to
 /// save resources by delaying an operation which is likely to fail.
 ///
-/// If [`Transport::dial`] fails, a circuit is opened for the dialed address
-/// `addr`. When dialing `addr` again while the circuit is open,
-/// [`CircuitBreakingDial`] adds a delay before calling `dial` on the underlying
-/// `Transport`. The delay for `addr` increases if dialing it fails repeatedly.
+/// If [`Transport::dial`] fails, a circuit is opened for the [`CircuitAddr`]
+/// corresponding to the dialed address. When dialing an address whose
+/// `CircuitAddr` has an open circuit, [`CircuitBreakingDial`] adds a delay
+/// before calling `dial` on the underlying `Transport`. The delay increases if
+/// dialing fails repeatedly.
+///
+/// To understand why circuits are not opened for `MultiAddr`, see [`CircuitAddr`].
 ///
 /// Open circuits are closed automatically after some time. In addition, an open
 /// circuit for an address is closed after successfully dialing that address.
@@ -60,7 +64,7 @@ pub struct CircuitBreaking<TInner> {
 
 /// Represents open circuits.
 struct CircuitBreakerState {
-    addresses: Mutex<FnvHashMap<Multiaddr, AddrInfo>>,
+    addresses: Mutex<FnvHashMap<CircuitAddr, AddrInfo>>,
 }
 
 #[derive(Debug)]
@@ -80,14 +84,16 @@ impl CircuitBreakerState {
 
     /// Returns `None` if circuit of `addr` is closed.
     fn get_wait_duration(&self, addr: &Multiaddr) -> Option<Duration> {
+        let circuit_addr = CircuitAddr::from(addr.clone());
         self.addresses
             .lock()
-            .get(addr)
+            .get(&circuit_addr)
             .map(|addr_info| addr_info.wait_duration)
     }
 
     fn open_or_extend_circuit(&self, addr: Multiaddr) {
-        match self.addresses.lock().entry(addr) {
+        let circuit_addr = CircuitAddr::from(addr);
+        match self.addresses.lock().entry(circuit_addr) {
             Entry::Vacant(entry) => {
                 entry.insert(AddrInfo {
                     wait_duration: INITIAL_TIMEOUT,
@@ -105,12 +111,47 @@ impl CircuitBreakerState {
 
     /// Closes the circuit of `addr` even if the circuit has not yet expired.
     fn close_circuit(&self, addr: &Multiaddr) {
-        self.addresses.lock().remove(addr);
+        let circuit_addr = CircuitAddr::from(addr.clone());
+        self.addresses.lock().remove(&circuit_addr);
     }
 
     fn close_expired_circuits(&self) {
         let mut addresses = self.addresses.lock();
         addresses.retain(move |_, a| (&mut a.expiration).now_or_never().is_none());
+    }
+}
+
+/// Wraps a `Multiaddr` whose `PeerId` (if any) has been
+/// [decapsulated](https://github.com/libp2p/specs/blob/master/addressing/README.md#decapsulation).
+///
+/// In large public networks (e.g. IPFS) many nodes advertise LAN local
+/// addresses. In most cases nodes don't share the same LAN and thus dialing
+/// these addresses fails.
+///
+/// Ignoring the `PeerId` in addresses prevents dialing e.g. `192.168.2.108`
+/// multiple times in a row.
+#[derive(PartialEq, Eq, Hash)]
+struct CircuitAddr(Multiaddr);
+
+impl From<Multiaddr> for CircuitAddr {
+    fn from(mut addr: Multiaddr) -> Self {
+        // Check if `addr` contains `Protocol::P2p(_)`.
+        let contained_p2p = addr.iter().find(|protocol| match protocol {
+            Protocol::P2p(_) => true,
+            _ => false,
+        });
+        if contained_p2p == None {
+            return Self(addr);
+        }
+
+        // Decapsulate `Protocol::P2p(_)`.
+        loop {
+            match addr.pop() {
+                Some(Protocol::P2p(_)) | None => break,
+                _ => {}
+            }
+        }
+        Self(addr)
     }
 }
 
@@ -265,8 +306,25 @@ mod tests {
 
     impl CircuitBreakerState {
         pub fn circuit_is_open_for(&self, addr: &Multiaddr) -> bool {
-            self.addresses.lock().get(addr).is_some()
+            let circuit_addr = CircuitAddr::from(addr.clone());
+            self.addresses.lock().get(&circuit_addr).is_some()
         }
+    }
+
+    #[test]
+    fn circuit_addr_from_multi_addr() {
+        let empty = CircuitAddr::from(Multiaddr::empty());
+        assert_eq!(empty.0.to_string(), "");
+
+        let without_p2p = CircuitAddr::from("/ip4/7.7.7.7/tcp/1234".parse::<Multiaddr>().unwrap());
+        assert_eq!(without_p2p.0.to_string(), "/ip4/7.7.7.7/tcp/1234");
+
+        let with_p2p = CircuitAddr::from(
+            "/ip4/7.7.7.7/tcp/1234/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
+                .parse::<Multiaddr>()
+                .unwrap(),
+        );
+        assert_eq!(with_p2p.0.to_string(), "/ip4/7.7.7.7/tcp/1234");
     }
 
     /// A [`Transport`] with [`Transport::dial`] always resolving to `Err`.
