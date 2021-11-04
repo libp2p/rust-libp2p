@@ -32,7 +32,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// Timeout set when opening CircuitBreaker.
@@ -72,7 +72,7 @@ struct AddrInfo {
     /// The delay to add before calling [`Transport::dial`].
     wait_duration: Duration,
     /// After `expiration` the circuit can be closed.
-    expiration: Delay,
+    expiration: Instant,
 }
 
 impl CircuitBreakerState {
@@ -97,14 +97,14 @@ impl CircuitBreakerState {
             Entry::Vacant(entry) => {
                 entry.insert(AddrInfo {
                     wait_duration: INITIAL_TIMEOUT,
-                    expiration: Delay::new(INITIAL_TIMEOUT * 2),
+                    expiration: Instant::now() + INITIAL_TIMEOUT * 2,
                 });
             }
 
             Entry::Occupied(entry) => {
                 let addr_info = entry.into_mut();
                 addr_info.wait_duration = cmp::min(addr_info.wait_duration * 2, MAX_TIMEOUT);
-                addr_info.expiration = Delay::new(addr_info.wait_duration * 2);
+                addr_info.expiration = Instant::now() + addr_info.wait_duration * 2;
             }
         }
     }
@@ -116,8 +116,9 @@ impl CircuitBreakerState {
     }
 
     fn close_expired_circuits(&self) {
+        let now = Instant::now();
         let mut addresses = self.addresses.lock();
-        addresses.retain(move |_, a| (&mut a.expiration).now_or_never().is_none());
+        addresses.retain(|_, a| a.expiration > now);
     }
 }
 
