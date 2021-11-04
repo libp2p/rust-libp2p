@@ -114,18 +114,22 @@ impl PeerId {
 
     /// Tries to turn a `Cid` into a `PeerId`.
     ///
-    /// If the CID's multihash does not fit the specifications:
-    ///
-    /// * use a valid hashing algorithm for peer IDs, or
-    /// * the value does not satisfy the constraints for a hashed peerID,
-    ///
-    /// or, if the CID does not fit the specifications:
-    ///
-    /// * is a CIDv0 with a multihash that fits the specifications
-    /// for multihash, or
-    /// * is a CIDv1 with the proper codec (LIBP2P_KEY_CODEC),
-    ///
-    /// then the CID will be returned as an `Err`.
+    /// If the `Cid` is valid, then a `Some(PeerId)` will be
+    /// returned, otherwise, `Err(Cid)` is returned.
+    /// 
+    /// A `Cid` is considered valid if and only if:
+    /// * the `Cid` is a [`Cidv0`] with a valid `multihash`, or
+    /// * the `Cid` is a [`Cidv1`] with:
+    ///  1. a valid `multihash`, and
+    ///  2. the codec for [`libp2p-key`].
+    /// 
+    /// A `multihash` is considered valid if and only if:
+    /// 1. it uses a valid hashing algorithm for peer IDs, and
+    /// 2. it satisfies the constraints for a hashed peerID.
+    /// 
+    /// [`Cidv0`]: https://github.com/multiformats/cid#cidv0
+    /// [`Cidv1`]: https://github.com/multiformats/cid#cidv1
+    /// [`libp2p-key`]: https://github.com/multiformats/multicodec/blob/master/table.csv
     pub fn from_cid(cid: Cid) -> Result<PeerId, Cid> {
         let multihash = *cid.hash();
 
