@@ -632,6 +632,7 @@ where
         debug!("Publishing message: {:?}", msg_id);
 
         let topic_hash = raw_message.topic.clone();
+        let msg_bytes = raw_message.data.len();
 
         // If we are not flood publishing forward the message to mesh peers.
         let mesh_peers_sent =
@@ -728,6 +729,10 @@ where
         for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);
             self.send_message(*peer_id, event.clone())?;
+
+            if let Some(m) = self.metrics.as_mut() {
+                m.msg_sent(&topic_hash, msg_bytes);
+            }
         }
 
         debug!("Published message: {:?}", &msg_id);
@@ -1269,7 +1274,18 @@ where
         if !cached_messages.is_empty() {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
-            let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
+            let message_list: Vec<_> = cached_messages.into_iter().map(|entry| entry.1).collect();
+
+            let mut topic_msgs = HashMap::<TopicHash, Vec<usize>>::default();
+            if self.metrics.is_some() {
+                for msg in message_list.iter() {
+                    topic_msgs
+                        .entry(msg.topic.clone())
+                        .or_default()
+                        .push(msg.data.len());
+                }
+            }
+
             if self
                 .send_message(
                     *peer_id,
@@ -1283,6 +1299,13 @@ where
                 .is_err()
             {
                 error!("Failed to send cached messages. Messages too large");
+            } else if let Some(m) = self.metrics.as_mut() {
+                // Sending of messages succeeded, register them on the internal metrics.
+                for (topic, msg_bytes_vec) in topic_msgs.into_iter() {
+                    for msg_bytes in msg_bytes_vec {
+                        m.msg_sent(&topic, msg_bytes);
+                    }
+                }
             }
         }
         debug!("Completed IWANT handling for peer: {}", peer_id);
@@ -2609,6 +2632,9 @@ where
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
+                if let Some(m) = self.metrics.as_mut() {
+                    m.msg_sent(&message.topic, message.data.len());
+                }
             }
             debug!("Completed forwarding message");
             Ok(true)

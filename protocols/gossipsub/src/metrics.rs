@@ -132,6 +132,12 @@ pub struct Metrics {
     mesh_peer_inclusion_events: Family<InclusionLabel, Counter>,
     /// Number of times we remove peers in a topic mesh for different reasons.
     mesh_peer_churn_events: Family<ChurnLabel, Counter>,
+
+    /* Metrics regarding messages sent */
+    /// Number of gossip messages sent to each topic.
+    topic_msg_sent_counts: Family<TopicHash, Counter>,
+    /// Bytes from gossip messages sent to each topic .
+    topic_msg_sent_bytes: Family<TopicHash, Counter>,
 }
 
 impl Metrics {
@@ -158,6 +164,7 @@ impl Metrics {
             "topic_peers_counts",
             "Number of peers subscribed to each topic"
         );
+
         let mesh_peer_counts = register_family!(
             "mesh_peer_counts",
             "Number of peers in each topic in our mesh"
@@ -171,6 +178,15 @@ impl Metrics {
             "Number of times a peer gets removed from our mesh for different reasons"
         );
 
+        let topic_msg_sent_counts = register_family!(
+            "topic_msg_sent_counts",
+            "Number of gossip messages sent to each topic."
+        );
+        let topic_msg_sent_bytes = register_family!(
+            "topic_msg_sent_bytes",
+            "Bytes from gossip messages sent to each topic."
+        );
+
         Self {
             max_topics,
             max_never_subscribed_topics,
@@ -180,6 +196,8 @@ impl Metrics {
             mesh_peer_counts,
             mesh_peer_inclusion_events,
             mesh_peer_churn_events,
+            topic_msg_sent_counts,
+            topic_msg_sent_bytes,
         }
     }
 
@@ -271,6 +289,16 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             // Due to limits, this topic could have not been allowed, so we check.
             self.mesh_peer_counts.get_or_create(topic).set(count as u64);
+        }
+    }
+
+    /// Register sending a message over a topic.
+    pub fn msg_sent(&mut self, topic: &TopicHash, bytes: usize) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_sent_counts.get_or_create(topic).inc();
+            self.topic_msg_sent_bytes
+                .get_or_create(topic)
+                .inc_by(bytes as u64);
         }
     }
 }
