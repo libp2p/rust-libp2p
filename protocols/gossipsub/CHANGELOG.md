@@ -1,8 +1,11 @@
 # 0.33.1 [unreleased]
 
+- Fix bug in internal peer's topics tracking (see [PR 2325]).
+
 - Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2325]: https://github.com/libp2p/rust-libp2p/pull/2325
 
 # 0.33.0 [2021-11-01]
 
