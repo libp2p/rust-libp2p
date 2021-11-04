@@ -394,4 +394,26 @@ mod tests {
 
         assert_eq!(cid_bytes, peer_id.to_cidv1_bytes());
     }
+
+    #[test]
+    fn peer_ids_from_base58_and_from_base32_are_equal() {
+        use std::str::FromStr;
+
+        let peer_id_as_base58_str = "QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N";
+        let peer_id_as_base32_str = "bafzbeie5745rpv2m6tjyuugywy4d5ewrqgqqhfnf445he3omzpjbx5xqxe";
+
+        let peer_id_from_base58_str = PeerId::from_str(peer_id_as_base58_str).unwrap();
+        let peer_id_from_base32_str = PeerId::from_str(peer_id_as_base32_str).unwrap();
+
+        assert_eq!(peer_id_from_base58_str, peer_id_from_base32_str);
+    }
+
+    #[test]
+    fn peer_id_from_base58_str_then_back() {
+        use std::str::FromStr;
+
+        let cidv1_peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+
+        assert_eq!(cidv1_peer_id, PeerId::from_str(&cidv1_peer_id.to_base58()).unwrap());
+    }
 }
