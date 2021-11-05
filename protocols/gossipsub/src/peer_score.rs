@@ -23,11 +23,12 @@
 
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
+use instant::Instant;
 use libp2p_core::PeerId;
 use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 mod params;
 use crate::error::ValidationError;

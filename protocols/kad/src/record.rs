@@ -23,10 +23,10 @@
 pub mod store;
 
 use bytes::Bytes;
+use instant::Instant;
 use libp2p_core::{multihash::Multihash, Multiaddr, PeerId};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
-use wasm_timer::Instant;
 
 /// The (opaque) key of a record.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
