@@ -52,7 +52,7 @@ const MAX_TIMEOUT: Duration = Duration::from_secs(300);
 /// before calling `dial` on the underlying `Transport`. The delay increases if
 /// dialing fails repeatedly.
 ///
-/// To understand why circuits are not opened for `MultiAddr`, see [`CircuitAddr`].
+/// To understand why circuits are not opened for `Multiaddr`, see [`CircuitAddr`].
 ///
 /// Open circuits are closed automatically after some time. In addition, an open
 /// circuit for an address is closed after successfully dialing that address.
