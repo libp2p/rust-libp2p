@@ -11,8 +11,8 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-libp2p-core = { version = "0.30.0-rc.1", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.31.0-rc.1", path = "../../swarm" }
+libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.31.0", path = "../../swarm" }
 prost = "0.9"
 void = "1"
 log = "0.4"

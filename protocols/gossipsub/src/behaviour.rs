@@ -1252,6 +1252,10 @@ where
                 .entry(*peer_id)
                 .or_default()
                 .insert(topic.clone());
+            self.topic_peers
+                .entry(topic.clone())
+                .or_default()
+                .insert(*peer_id);
         }
 
         // we don't GRAFT to/from explicit peers; complain loudly if this happens

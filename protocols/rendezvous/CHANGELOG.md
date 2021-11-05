@@ -4,6 +4,6 @@
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
 
-# 0.1.0-rc.1 [2021-10-15]
+# 0.1.0 [2021-11-01]
 
 - Initial release.
