@@ -23,6 +23,7 @@ use crate::{transport::TransportError, Multiaddr, Transport};
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures_timer::Delay;
+use log::debug;
 use multiaddr::Protocol;
 use parking_lot::Mutex;
 use pin_project::pin_project;
@@ -95,16 +96,19 @@ impl CircuitBreakerState {
         let circuit_addr = CircuitAddr::from(addr);
         match self.addresses.lock().entry(circuit_addr) {
             Entry::Vacant(entry) => {
-                entry.insert(AddrInfo {
+                let inserted = entry.insert(AddrInfo {
                     wait_duration: INITIAL_TIMEOUT,
                     expiration: Instant::now() + INITIAL_TIMEOUT * 2,
                 });
+                debug!("Opened circuit: {:?}", inserted);
             }
 
             Entry::Occupied(entry) => {
+                let addr = entry.key().clone();
                 let addr_info = entry.into_mut();
                 addr_info.wait_duration = cmp::min(addr_info.wait_duration * 2, MAX_TIMEOUT);
                 addr_info.expiration = Instant::now() + addr_info.wait_duration * 2;
+                debug!("Extended circuit {:?}: {:?}", addr, addr_info);
             }
         }
     }
@@ -112,13 +116,15 @@ impl CircuitBreakerState {
     /// Closes the circuit of `addr` even if the circuit has not yet expired.
     fn close_circuit(&self, addr: &Multiaddr) {
         let circuit_addr = CircuitAddr::from(addr.clone());
-        self.addresses.lock().remove(&circuit_addr);
+        let removed = self.addresses.lock().remove(&circuit_addr);
+        debug!("Closed circuit {:?}", removed);
     }
 
     fn close_expired_circuits(&self) {
         let now = Instant::now();
         let mut addresses = self.addresses.lock();
         addresses.retain(|_, a| a.expiration > now);
+        debug!("Closed expired circuits")
     }
 }
 
@@ -131,7 +137,7 @@ impl CircuitBreakerState {
 ///
 /// Ignoring the `PeerId` in addresses prevents dialing e.g. `192.168.2.108`
 /// multiple times in a row.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 struct CircuitAddr(Multiaddr);
 
 impl From<Multiaddr> for CircuitAddr {
@@ -186,7 +192,7 @@ where
 
         let inner = match self.state.get_wait_duration(&addr) {
             None => {
-                // There is no open circuit for `addr`. Dial immediately.
+                debug!("Dialing address immediately (no open circuit): {:?}", addr);
                 let future = match self.inner.dial(addr.clone()) {
                     Ok(f) => Ok(f),
                     Err(TransportError::MultiaddrNotSupported(err)) => {
@@ -202,7 +208,7 @@ where
             }
 
             Some(wait_duration) => {
-                // Wait before dialing.
+                debug!("Wait before dialing address (open circuit): {:?}", addr);
                 let timer = Delay::new(wait_duration);
                 CircuitBreakingDialInner::Waiting(timer, Some(self.inner))
             }
@@ -262,6 +268,10 @@ where
                     match delay.poll(cx) {
                         Poll::Pending => return Poll::Pending,
                         Poll::Ready(()) => {
+                            debug!(
+                                "Dialing address after circuit breaking wait expired: {:?}",
+                                this.addr
+                            );
                             let transport = transport
                                 .take()
                                 .expect("future called after being finished");
@@ -285,6 +295,7 @@ where
                         Poll::Pending => return Poll::Pending,
                         Poll::Ready(Ok(output)) => {
                             // On success, remove the address.
+                            debug!("Successfully dialed addr: {:?}", this.addr);
                             this.state.close_circuit(&this.addr);
                             return Poll::Ready(Ok(output));
                         }
