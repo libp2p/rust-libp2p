@@ -25,6 +25,7 @@ use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
+use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
@@ -36,7 +37,6 @@ use log::warn;
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use wasm_timer::Instant;
 
 pub struct RelayHandlerConfig {
     pub connection_idle_timeout: Duration,

@@ -24,6 +24,7 @@ use crate::protocol::{
 };
 use crate::record::{self, Record};
 use futures::prelude::*;
+use instant::Instant;
 use libp2p_core::{
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade},
@@ -37,7 +38,6 @@ use log::trace;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
-use wasm_timer::Instant;
 
 /// A prototype from which [`KademliaHandler`]s can be constructed.
 pub struct KademliaHandlerProto<T> {
