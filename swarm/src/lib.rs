@@ -332,9 +332,9 @@ where
         opts: DialOpts,
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
-        match opts {
-            DialOpts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
-            | DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
+        match opts.0 {
+            dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
+            | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
                 peer_id,
                 condition,
                 ..
@@ -364,22 +364,24 @@ where
                 }
 
                 // Retrieve the addresses to dial.
-                let addresses = match opts {
-                    DialOpts::WithPeerId(dial_opts::WithPeerId { .. }) => {
+                let addresses = match opts.0 {
+                    dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { .. }) => {
                         self.behaviour.addresses_of_peer(&peer_id)
                     }
-                    DialOpts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
-                        peer_id,
-                        mut addresses,
-                        extend_addresses_through_behaviour,
-                        ..
-                    }) => {
+                    dial_opts::Opts::WithPeerIdWithAddresses(
+                        dial_opts::WithPeerIdWithAddresses {
+                            peer_id,
+                            mut addresses,
+                            extend_addresses_through_behaviour,
+                            ..
+                        },
+                    ) => {
                         if extend_addresses_through_behaviour {
                             addresses.extend(self.behaviour.addresses_of_peer(&peer_id))
                         }
                         addresses
                     }
-                    DialOpts::WithoutPeerIdWithAddress { .. } => {
+                    dial_opts::Opts::WithoutPeerIdWithAddress { .. } => {
                         unreachable!("Due to outer match.")
                     }
                 };
@@ -420,7 +422,9 @@ where
                     }
                 }
             }
-            DialOpts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress { address }) => {
+            dial_opts::Opts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress {
+                address,
+            }) => {
                 let handler = handler
                     .into_node_handler_builder()
                     .with_substream_upgrade_protocol_override(
@@ -1487,7 +1491,11 @@ mod tests {
 
         for _ in 0..num_connections {
             swarm1
-                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
+                .dial(
+                    dial_opts::Opts::unknown_peer_id()
+                        .address(addr2.clone())
+                        .build(),
+                )
                 .unwrap();
         }
         let mut state = State::Connecting;
@@ -1522,7 +1530,9 @@ mod tests {
                             for _ in 0..num_connections {
                                 swarm2
                                     .dial(
-                                        DialOpts::unknown_peer_id().address(addr1.clone()).build(),
+                                        dialDialOpts::unknown_peer_id()
+                                            .address(addr1.clone())
+                                            .build(),
                                     )
                                     .unwrap();
                             }
@@ -1782,12 +1792,7 @@ pub mod dial_opts {
     use libp2p_core::{Multiaddr, PeerId};
 
     #[derive(Debug)]
-    pub enum DialOpts {
-        // TODO:  How about folding these structs into the enum variants?
-        WithPeerId(WithPeerId),
-        WithPeerIdWithAddresses(WithPeerIdWithAddresses),
-        WithoutPeerIdWithAddress(WithoutPeerIdWithAddress),
-    }
+    pub struct DialOpts(pub(super) Opts);
 
     impl DialOpts {
         pub fn peer_id(peer_id: PeerId) -> WithPeerId {
@@ -1803,13 +1808,22 @@ pub mod dial_opts {
 
         pub fn get_peer_id(&self) -> Option<PeerId> {
             match self {
-                DialOpts::WithPeerId(WithPeerId { peer_id, .. }) => Some(*peer_id),
-                DialOpts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { peer_id, .. }) => {
-                    Some(*peer_id)
-                }
-                DialOpts::WithoutPeerIdWithAddress(_) => None,
+                DialOpts(Opts::WithPeerId(WithPeerId { peer_id, .. })) => Some(*peer_id),
+                DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                    peer_id,
+                    ..
+                })) => Some(*peer_id),
+                DialOpts(Opts::WithoutPeerIdWithAddress(_)) => None,
             }
         }
+    }
+
+    #[derive(Debug)]
+    pub(super) enum Opts {
+        // TODO:  How about folding these structs into the enum variants?
+        WithPeerId(WithPeerId),
+        WithPeerIdWithAddresses(WithPeerIdWithAddresses),
+        WithoutPeerIdWithAddress(WithoutPeerIdWithAddress),
     }
 
     #[derive(Debug)]
@@ -1834,7 +1848,7 @@ pub mod dial_opts {
         }
 
         pub fn build(self) -> DialOpts {
-            DialOpts::WithPeerId(self)
+            DialOpts(Opts::WithPeerId(self))
         }
     }
 
@@ -1853,7 +1867,7 @@ pub mod dial_opts {
         }
 
         pub fn build(self) -> DialOpts {
-            DialOpts::WithPeerIdWithAddresses(self)
+            DialOpts(Opts::WithPeerIdWithAddresses(self))
         }
     }
 
@@ -1873,7 +1887,7 @@ pub mod dial_opts {
 
     impl WithoutPeerIdWithAddress {
         pub fn build(self) -> DialOpts {
-            DialOpts::WithoutPeerIdWithAddress(self)
+            DialOpts(Opts::WithoutPeerIdWithAddress(self))
         }
     }
 
