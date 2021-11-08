@@ -554,10 +554,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
-        // `DialPeer` and `DialAddress` each provide a handler of the specific
-        // behaviour triggering the event. Though in order for the final handler
-        // to be able to handle protocols of all behaviours, the provided
-        // handler needs to be combined with handlers of all other behaviours.
+        // `Dial` provides a handler of the specific behaviour triggering the
+        // event. Though in order for the final handler to be able to handle
+        // protocols of all behaviours, the provided handler needs to be
+        // combined with handlers of all other behaviours.
         let provided_handler_and_new_handlers = {
             let mut out_handler = None;
 
@@ -608,11 +608,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
                     #generate_event_match_arm
-                    std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: provided_handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: #provided_handler_and_new_handlers });
-                    }
-                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: provided_handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: #provided_handler_and_new_handlers });
+                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: provided_handler }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: #provided_handler_and_new_handlers });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {

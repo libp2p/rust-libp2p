@@ -224,7 +224,7 @@
 //! use futures::executor::block_on;
 //! use libp2p::{identity, PeerId};
 //! use libp2p::ping::{Ping, PingConfig};
-//! use libp2p::swarm::Swarm;
+//! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
@@ -251,7 +251,7 @@
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote = addr.parse()?;
-//!         swarm.dial_addr(remote)?;
+//!         swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!
@@ -269,7 +269,7 @@
 //! use futures::executor::block_on;
 //! use futures::prelude::*;
 //! use libp2p::ping::{Ping, PingConfig};
-//! use libp2p::swarm::{Swarm, SwarmEvent};
+//! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
 //! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //! use std::task::Poll;
@@ -298,7 +298,7 @@
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote = addr.parse()?;
-//!         swarm.dial_addr(remote)?;
+//!         swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!

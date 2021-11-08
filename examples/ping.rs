@@ -42,7 +42,7 @@
 
 use futures::executor::block_on;
 use futures::prelude::*;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{dial_opts::DialOpts, Swarm, SwarmEvent};
 use libp2p::{identity, ping, PeerId};
 use std::error::Error;
 use std::task::Poll;
@@ -71,7 +71,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // command-line argument, if any.
     if let Some(addr) = std::env::args().nth(1) {
         let remote = addr.parse()?;
-        swarm.dial_addr(remote)?;
+        swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
         println!("Dialed {}", addr)
     }
 

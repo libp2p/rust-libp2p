@@ -23,7 +23,7 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{dial_opts::DialOpts, SwarmEvent};
 use libp2p::Swarm;
 use libp2p::{development_transport, rendezvous, Multiaddr};
 use std::time::Duration;
@@ -55,7 +55,13 @@ async fn main() {
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
-    let _ = swarm.dial_addr(rendezvous_point_address.clone());
+    let _ = swarm
+        .dial(
+            DialOpts::unknown_peer_id()
+                .address(rendezvous_point_address.clone())
+                .build(),
+        )
+        .unwrap();
 
     let mut discover_tick = tokio::time::interval(Duration::from_secs(30));
     let mut cookie = None;
@@ -96,7 +102,7 @@ async fn main() {
                                         address.clone()
                                     };
 
-                                swarm.dial_addr(address_with_p2p).unwrap()
+                                swarm.dial(DialOpts::unknown_peer_id().address(address_with_p2p).build()).unwrap()
                             }
                         }
                     }

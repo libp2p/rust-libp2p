@@ -55,7 +55,7 @@ use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::SwarmEvent,
+    swarm::{dial_opts::DialOpts, SwarmEvent},
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
 use std::{
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
-        swarm.dial_addr(addr)?;
+        swarm.dial(DialOpts::unknown_peer_id().address(addr).build())?;
         println!("Dialed {:?}", to_dial)
     }
 

@@ -52,7 +52,7 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::ping::{Ping, PingConfig};
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{dial_opts::DialOpts, SwarmEvent};
 use libp2p::{identity, PeerId, Swarm};
 use open_metrics_client::encoding::text::encode;
 use open_metrics_client::registry::Registry;
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     if let Some(addr) = std::env::args().nth(1) {
         let remote = addr.parse()?;
-        swarm.dial_addr(remote)?;
+        swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
         tide::log::info!("Dialed {}", addr)
     }
 

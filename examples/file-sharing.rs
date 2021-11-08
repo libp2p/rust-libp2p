@@ -217,7 +217,7 @@ mod network {
         ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
         RequestResponseMessage, ResponseChannel,
     };
-    use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
+    use libp2p::swarm::{dial_opts::DialOpts, ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
     use libp2p::{NetworkBehaviour, Swarm};
     use std::collections::{HashMap, HashSet};
     use std::iter;
@@ -523,10 +523,11 @@ mod network {
                             .behaviour_mut()
                             .kademlia
                             .add_address(&peer_id, peer_addr.clone());
-                        match self
-                            .swarm
-                            .dial_addr(peer_addr.with(Protocol::P2p(peer_id.into())))
-                        {
+                        match self.swarm.dial(
+                            DialOpts::unknown_peer_id()
+                                .address(peer_addr.with(Protocol::P2p(peer_id.into())))
+                                .build(),
+                        ) {
                             Ok(()) => {
                                 self.pending_dial.insert(peer_id, sender);
                             }

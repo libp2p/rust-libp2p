@@ -43,7 +43,7 @@ use libp2p::{
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    swarm::{dial_opts::DialOpts, NetworkBehaviourEventProcess, SwarmEvent},
     tcp::TcpConfig,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
@@ -265,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to other nodes if specified
     for to_dial in std::env::args().skip(1) {
         let addr: Multiaddr = parse_legacy_multiaddr(&to_dial)?;
-        swarm.dial_addr(addr)?;
+        swarm.dial(DialOpts::unknown_peer_id().address(addr).build())?;
         println!("Dialed {:?}", to_dial)
     }
 

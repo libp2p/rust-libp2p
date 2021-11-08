@@ -62,7 +62,7 @@ use futures::stream::StreamExt;
 use libp2p::dns::DnsConfig;
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{dial_opts::DialOpts, SwarmEvent};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{core::upgrade, identity::ed25519, ping};
@@ -130,7 +130,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Mode::ClientDial => {
             let client_listen_address = get_client_listen_address(&opt);
-            swarm.dial_addr(client_listen_address.parse()?)?;
+            swarm.dial(
+                DialOpts::unknown_peer_id()
+                    .address(client_listen_address.parse()?)
+                    .build(),
+            )?;
             println!("starting as client dialer on {}", client_listen_address);
         }
     }

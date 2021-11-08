@@ -1491,11 +1491,7 @@ mod tests {
 
         for _ in 0..num_connections {
             swarm1
-                .dial(
-                    dial_opts::Opts::unknown_peer_id()
-                        .address(addr2.clone())
-                        .build(),
-                )
+                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
                 .unwrap();
         }
         let mut state = State::Connecting;
@@ -1530,9 +1526,7 @@ mod tests {
                             for _ in 0..num_connections {
                                 swarm2
                                     .dial(
-                                        dialDialOpts::unknown_peer_id()
-                                            .address(addr1.clone())
-                                            .build(),
+                                        DialOpts::unknown_peer_id().address(addr1.clone()).build(),
                                     )
                                     .unwrap();
                             }
