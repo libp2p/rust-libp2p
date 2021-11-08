@@ -1861,6 +1861,11 @@ pub mod dial_opts {
     }
 
     impl WithPeerIdWithAddresses {
+        pub fn condition(mut self, condition: PeerCondition) -> Self {
+            self.condition = condition;
+            self
+        }
+
         pub fn extend_addresses_through_behaviour(mut self) -> Self {
             self.extend_addresses_through_behaviour = true;
             self
