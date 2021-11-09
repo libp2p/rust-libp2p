@@ -1,8 +1,46 @@
-# 0.31.1 [unreleased]
+# 0.32.0 [unreleased]
 
 - Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
 
+- Enable advanced dialing requests both on `Swarm::dial` and via
+  `NetworkBehaviourAction::Dial`. Users can now trigger a dial with a specific
+  set of addresses, optionally extended via
+  `NetworkBehaviour::addresses_of_peer`.
+
+   Changes required to maintain status quo:
+
+   - Previously `swarm.dial(peer_id)`
+     Now `swarm.dial(DialOpts::peer_id(swarm1_peer_id).build())`
+
+   - Previously `swarm.dial_addr(addr)`
+     Now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
+
+   - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
+     Now
+     ```rust
+     NetworkBehaviourAction::Dial {
+       opts: DialOpts::peer_id(peer_id)
+         .condition(condition)
+         .build(),
+       handler,
+     }
+     ```
+
+   - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
+     Now
+     ```rust
+     NetworkBehaviourAction::Dial {
+       opts: DialOpts::unknown_peer_id()
+         .address(address)
+         .build(),
+       handler,
+     }
+     ```
+
+   See [PR 2317].
+
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2317]: https://github.com/libp2p/rust-libp2p/pull/2317
 
 # 0.31.0 [2021-11-01]
 
