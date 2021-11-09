@@ -5150,7 +5150,7 @@ mod tests {
             gs.handle_received_message(message.clone(), &PeerId::random());
         }
 
-        assert_eq!(counters.fast_counter, 6);
+        assert_eq!(counters.fast_counter, 5);
         assert_eq!(counters.slow_counter, 1);
     }
 
