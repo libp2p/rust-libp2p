@@ -188,18 +188,10 @@ pub enum PeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
     /// considered disconnected, i.e. there is no established connection
     /// and no ongoing dialing attempt.
-    ///
-    /// If there is an ongoing dialing attempt, the addresses reported by
-    /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer)
-    /// are added to the ongoing dialing attempt, ignoring duplicates.
     Disconnected,
     /// A new dialing attempt is initiated _only if_ there is currently
     /// no ongoing dialing attempt, i.e. the peer is either considered
     /// disconnected or connected but without an ongoing dialing attempt.
-    ///
-    /// If there is an ongoing dialing attempt, the addresses reported by
-    /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer)
-    /// are added to the ongoing dialing attempt, ignoring duplicates.
     NotDialing,
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.
