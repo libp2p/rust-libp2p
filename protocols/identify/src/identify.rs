@@ -738,7 +738,7 @@ mod tests {
             .dial(DialOpts::unknown_peer_id().address(listen_addr).build())
             .unwrap();
 
-        // wait until we identified
+        // Wait until we identified.
         async_std::task::block_on(async {
             loop {
                 if let SwarmEvent::Behaviour(IdentifyEvent::Received { .. }) =
@@ -751,7 +751,18 @@ mod tests {
 
         swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
 
-        // we should still be able to dial now!
+        // Wait for connection to close.
+        async_std::task::block_on(async {
+            loop {
+                if let SwarmEvent::ConnectionClosed { peer_id, .. } =
+                    swarm2.select_next_some().await
+                {
+                    break peer_id;
+                }
+            }
+        });
+
+        // We should still be able to dial now!
         swarm2
             .dial(DialOpts::peer_id(swarm1_peer_id).build())
             .unwrap();
