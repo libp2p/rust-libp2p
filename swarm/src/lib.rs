@@ -322,6 +322,36 @@ where
         self.network.remove_listener(id)
     }
 
+    /// Dial a known or unknown peer.
+    ///
+    /// See also [`DialOpts`].
+    ///
+    /// ```
+    /// # use libp2p_swarm::Swarm;
+    /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+    /// # use libp2p_core::{PeerId, Transport};
+    /// # use libp2p_core::transport::dummy::DummyTransport;
+    /// # use libp2p_swarm::DummyBehaviour;
+    /// #
+    /// let mut swarm = Swarm::new(
+    ///   DummyTransport::new().boxed(),
+    ///   DummyBehaviour::default(),
+    ///   PeerId::random(),
+    /// );
+    ///
+    /// // Dial a known peer.
+    /// swarm.dial(
+    ///   DialOpts::peer_id(PeerId::random())
+    ///      .build()
+    /// );
+    ///
+    /// // Dial an unknown peer.
+    /// swarm.dial(
+    ///   DialOpts::unknown_peer_id()
+    ///      .address("/ip6/::1/tcp/12345".parse().unwrap())
+    ///      .build()
+    /// );
+    /// ```
     pub fn dial(&mut self, opts: DialOpts) -> Result<(), DialError> {
         let handler = self.behaviour.new_handler();
         self.dial_with_handler(opts, handler)
@@ -1247,7 +1277,8 @@ pub enum DialError {
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
-    /// The provided [`DialPeerCondition`] evaluated to false and thus the dial was aborted.
+    /// The provided [`dial_opts::PeerCondition`] evaluated to false and thus
+    /// the dial was aborted.
     DialPeerConditionFalse(dial_opts::PeerCondition),
     /// Pending connection attempt has been aborted.
     Aborted,
@@ -1785,10 +1816,31 @@ mod tests {
 pub mod dial_opts {
     use libp2p_core::{Multiaddr, PeerId};
 
+    /// Options to configure a dial to a known or unknown peer.
+    ///
+    /// Used in [`Swarm::dial`](crate::Swarm::dial) and
+    /// [`NetworkBehaviourAction::Dial`](crate::behaviour::NetworkBehaviourAction::Dial).
+    ///
+    /// To construct use either of:
+    ///
+    /// - [`DialOpts::peer_id`] dialing a known peer
+    ///
+    /// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
     #[derive(Debug)]
     pub struct DialOpts(pub(super) Opts);
 
     impl DialOpts {
+        /// Dial a known peer.
+        ///
+        ///   ```
+        ///   # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+        ///   # use libp2p_core::PeerId;
+        ///   DialOpts::peer_id(PeerId::random())
+        ///      .condition(PeerCondition::Disconnected)
+        ///      .addresses(vec!["/ip6/::1/tcp/12345".parse().unwrap()])
+        ///      .extend_addresses_through_behaviour()
+        ///      .build();
+        ///   ```
         pub fn peer_id(peer_id: PeerId) -> WithPeerId {
             WithPeerId {
                 peer_id,
@@ -1796,10 +1848,19 @@ pub mod dial_opts {
             }
         }
 
+        /// Dial an unknown peer.
+        ///
+        ///   ```
+        ///   # use libp2p_swarm::dial_opts::DialOpts;
+        ///   DialOpts::unknown_peer_id()
+        ///      .address("/ip6/::1/tcp/12345".parse().unwrap())
+        ///      .build();
+        ///   ```
         pub fn unknown_peer_id() -> WithoutPeerId {
             WithoutPeerId {}
         }
 
+        /// Get the [`PeerId`] specified in a [`DialOpts`] if any.
         pub fn get_peer_id(&self) -> Option<PeerId> {
             match self {
                 DialOpts(Opts::WithPeerId(WithPeerId { peer_id, .. })) => Some(*peer_id),
@@ -1812,9 +1873,14 @@ pub mod dial_opts {
         }
     }
 
+    /// Internal options type.
+    ///
+    /// Not to be constructed manually. Use either of the below instead:
+    ///
+    /// - [`DialOpts::peer_id`] dialing a known peer
+    /// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
     #[derive(Debug)]
     pub(super) enum Opts {
-        // TODO:  How about folding these structs into the enum variants?
         WithPeerId(WithPeerId),
         WithPeerIdWithAddresses(WithPeerIdWithAddresses),
         WithoutPeerIdWithAddress(WithoutPeerIdWithAddress),
@@ -1827,11 +1893,13 @@ pub mod dial_opts {
     }
 
     impl WithPeerId {
+        /// Specify a [`PeerCondition`] for the dial.
         pub fn condition(mut self, condition: PeerCondition) -> Self {
             self.condition = condition;
             self
         }
 
+        /// Specify a set of addresses to be used to dial the known peer.
         pub fn addresses(self, addresses: Vec<Multiaddr>) -> WithPeerIdWithAddresses {
             WithPeerIdWithAddresses {
                 peer_id: self.peer_id,
@@ -1841,6 +1909,10 @@ pub mod dial_opts {
             }
         }
 
+        /// Build the final [`DialOpts`].
+        ///
+        /// Addresses to dial the peer are retrieved via
+        /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer).
         pub fn build(self) -> DialOpts {
             DialOpts(Opts::WithPeerId(self))
         }
@@ -1855,16 +1927,20 @@ pub mod dial_opts {
     }
 
     impl WithPeerIdWithAddresses {
+        /// Specify a [`PeerCondition`] for the dial.
         pub fn condition(mut self, condition: PeerCondition) -> Self {
             self.condition = condition;
             self
         }
 
+        /// In addition to the provided addresses, extend the set via
+        /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer).
         pub fn extend_addresses_through_behaviour(mut self) -> Self {
             self.extend_addresses_through_behaviour = true;
             self
         }
 
+        /// Build the final [`DialOpts`].
         pub fn build(self) -> DialOpts {
             DialOpts(Opts::WithPeerIdWithAddresses(self))
         }
@@ -1874,6 +1950,7 @@ pub mod dial_opts {
     pub struct WithoutPeerId {}
 
     impl WithoutPeerId {
+        /// Specify a single address to dial the unknown peer.
         pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
             WithoutPeerIdWithAddress { address }
         }
@@ -1885,13 +1962,23 @@ pub mod dial_opts {
     }
 
     impl WithoutPeerIdWithAddress {
+        /// Build the final [`DialOpts`].
         pub fn build(self) -> DialOpts {
             DialOpts(Opts::WithoutPeerIdWithAddress(self))
         }
     }
 
     /// The available conditions under which a new dialing attempt to
-    /// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].
+    /// a known peer is initiated.
+    ///
+    /// ```
+    /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+    /// # use libp2p_core::PeerId;
+    /// #
+    /// DialOpts::peer_id(PeerId::random())
+    ///    .condition(PeerCondition::Disconnected)
+    ///    .build();
+    /// ```
     #[derive(Debug, Copy, Clone)]
     pub enum PeerCondition {
         /// A new dialing attempt is initiated _only if_ the peer is currently
@@ -1899,16 +1986,16 @@ pub mod dial_opts {
         /// and no ongoing dialing attempt.
         ///
         /// If there is an ongoing dialing attempt, the addresses reported by
-        /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
-        /// dialing attempt, ignoring duplicates.
+        /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer)
+        /// are added to the ongoing dialing attempt, ignoring duplicates.
         Disconnected,
         /// A new dialing attempt is initiated _only if_ there is currently
         /// no ongoing dialing attempt, i.e. the peer is either considered
         /// disconnected or connected but without an ongoing dialing attempt.
         ///
         /// If there is an ongoing dialing attempt, the addresses reported by
-        /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
-        /// dialing attempt, ignoring duplicates.
+        /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer)
+        /// are added to the ongoing dialing attempt, ignoring duplicates.
         NotDialing,
         /// A new dialing attempt is always initiated, only subject to the
         /// configured connection limits.

@@ -277,7 +277,7 @@ pub enum NetworkBehaviourAction<
     /// can be included in the handler, and thus directly send on connection success or extracted by
     /// the [`NetworkBehaviour`] on connection failure.
     ///
-    /// # Example
+    /// # Example carrying state in the handler
     ///
     /// ```rust
     /// # use futures::executor::block_on;
@@ -328,22 +328,22 @@ pub enum NetworkBehaviourAction<
     ///     );
     /// });
     ///
-    /// # #[derive(Default)]
-    /// # struct MyBehaviour {
-    /// #     outbox_to_swarm: VecDeque<NetworkBehaviourAction<PreciousMessage, MyHandler>>,
-    /// # }
-    /// #
-    /// # impl MyBehaviour {
-    /// #     fn send(&mut self, peer_id: PeerId, msg: PreciousMessage) {
-    /// #         self.outbox_to_swarm
-    /// #             .push_back(NetworkBehaviourAction::Dial {
-    /// #                 opts: DialOpts::peer_id(peer_id)
-    /// #                           .condition(PeerCondition::Always)
-    /// #                           .build(),
-    /// #                 handler: MyHandler { message: Some(msg) },
-    /// #             });
-    /// #     }
-    /// # }
+    /// #[derive(Default)]
+    /// struct MyBehaviour {
+    ///     outbox_to_swarm: VecDeque<NetworkBehaviourAction<PreciousMessage, MyHandler>>,
+    /// }
+    ///
+    /// impl MyBehaviour {
+    ///     fn send(&mut self, peer_id: PeerId, msg: PreciousMessage) {
+    ///         self.outbox_to_swarm
+    ///             .push_back(NetworkBehaviourAction::Dial {
+    ///                 opts: DialOpts::peer_id(peer_id)
+    ///                           .condition(PeerCondition::Always)
+    ///                           .build(),
+    ///                 handler: MyHandler { message: Some(msg) },
+    ///             });
+    ///     }
+    /// }
     /// #
     /// impl NetworkBehaviour for MyBehaviour {
     ///     # type ProtocolsHandler = MyHandler;
