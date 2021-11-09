@@ -363,6 +363,7 @@ where
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
         match opts.0 {
+            // Dial a known peer.
             dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
             | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
                 peer_id,
@@ -394,44 +395,43 @@ where
                 }
 
                 // Retrieve the addresses to dial.
-                let addresses = match opts.0 {
-                    dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { .. }) => {
-                        self.behaviour.addresses_of_peer(&peer_id)
-                    }
-                    dial_opts::Opts::WithPeerIdWithAddresses(
-                        dial_opts::WithPeerIdWithAddresses {
-                            peer_id,
-                            mut addresses,
-                            extend_addresses_through_behaviour,
-                            ..
-                        },
-                    ) => {
-                        if extend_addresses_through_behaviour {
-                            addresses.extend(self.behaviour.addresses_of_peer(&peer_id))
+                let addresses = {
+                    let mut addresses = match opts.0 {
+                        dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { .. }) => {
+                            self.behaviour.addresses_of_peer(&peer_id)
                         }
-                        addresses
-                    }
-                    dial_opts::Opts::WithoutPeerIdWithAddress { .. } => {
-                        unreachable!("Due to outer match.")
-                    }
-                };
-                if addresses.is_empty() {
-                    let error = DialError::NoAddresses;
-                    self.behaviour
-                        .inject_dial_failure(Some(peer_id), handler, &error);
-                    return Err(error);
-                };
+                        dial_opts::Opts::WithPeerIdWithAddresses(
+                            dial_opts::WithPeerIdWithAddresses {
+                                peer_id,
+                                mut addresses,
+                                extend_addresses_through_behaviour,
+                                ..
+                            },
+                        ) => {
+                            if extend_addresses_through_behaviour {
+                                addresses.extend(self.behaviour.addresses_of_peer(&peer_id))
+                            }
+                            addresses
+                        }
+                        dial_opts::Opts::WithoutPeerIdWithAddress { .. } => {
+                            unreachable!("Due to outer match.")
+                        }
+                    };
 
-                // TODO: Filter out addresses we are listening on ourself.
-                // let self_listening = self.listened_addrs.clone();
-                // let mut addrs = self
-                //     .behaviour
-                //     .addresses_of_peer(peer_id)
-                //     .into_iter()
-                //     .filter(move |a| !self_listening.contains(a))
-                //     .peekable();
+                    let mut unique_addresses = HashSet::new();
+                    addresses.retain(|a| {
+                        !self.listened_addrs.contains(a) && unique_addresses.insert(a.clone())
+                    });
 
-                // TODO: Deduplicate the addresses?
+                    if addresses.is_empty() {
+                        let error = DialError::NoAddresses;
+                        self.behaviour
+                            .inject_dial_failure(Some(peer_id), handler, &error);
+                        return Err(error);
+                    };
+
+                    addresses
+                };
 
                 let handler = handler
                     .into_node_handler_builder()
@@ -452,6 +452,7 @@ where
                     }
                 }
             }
+            // Dial an unknown peer.
             dial_opts::Opts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress {
                 address,
             }) => {
