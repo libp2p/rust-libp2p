@@ -90,32 +90,36 @@ impl Metrics {
             Box::new(query_result_get_providers_error.clone()),
         );
 
-        let query_result_num_requests =
-            Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
+        let query_result_num_requests = Family::<QueryResult, _>::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(1.0, 2.0, 10))
+        });
         sub_registry.register(
             "query_result_num_requests",
             "Number of requests started for a Kademlia query.",
             Box::new(query_result_num_requests.clone()),
         );
 
-        let query_result_num_success =
-            Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
+        let query_result_num_success = Family::<QueryResult, _>::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(1.0, 2.0, 10))
+        });
         sub_registry.register(
             "query_result_num_success",
             "Number of successful requests of a Kademlia query.",
             Box::new(query_result_num_success.clone()),
         );
 
-        let query_result_num_failure =
-            Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
+        let query_result_num_failure = Family::<QueryResult, _>::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(1.0, 2.0, 10))
+        });
         sub_registry.register(
             "query_result_num_failure",
             "Number of failed requests of a Kademlia query.",
             Box::new(query_result_num_failure.clone()),
         );
 
-        let query_result_duration =
-            Family::new_with_constructor(|| Histogram::new(exponential_buckets(0.1, 2.0, 10)));
+        let query_result_duration = Family::<QueryResult, _>::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(0.1, 2.0, 10))
+        });
         sub_registry.register_with_unit(
             "query_result_duration",
             "Duration of a Kademlia query.",
