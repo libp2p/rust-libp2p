@@ -41,8 +41,7 @@ pub struct QuicTransport {
     inner: Arc<Mutex<QuicTransportInner>>,
 }
 
-impl QuicTransport
-{
+impl QuicTransport {
     /// Creates a new quic transport.
     pub async fn new(
         config: QuicConfig,
@@ -93,8 +92,7 @@ enum Addresses {
     Ip(Option<IpAddr>),
 }
 
-impl Transport for QuicTransport
-{
+impl Transport for QuicTransport {
     type Output = (PeerId, QuicMuxer);
     type Error = QuicError;
     type Listener = Self;
@@ -102,8 +100,7 @@ impl Transport for QuicTransport
     type Dial = QuicDial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        multiaddr_to_socketaddr(&addr)
-            .map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
+        multiaddr_to_socketaddr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
         Ok(self)
     }
 
@@ -187,8 +184,7 @@ pub enum QuicDial {
     Upgrade(QuicUpgrade),
 }
 
-impl Future for QuicDial
-{
+impl Future for QuicDial {
     type Output = Result<(PeerId, QuicMuxer), QuicError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -218,8 +214,7 @@ impl QuicUpgrade {
     }
 }
 
-impl Future for QuicUpgrade
-{
+impl Future for QuicUpgrade {
     type Output = Result<(PeerId, QuicMuxer), QuicError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -247,9 +242,7 @@ impl Future for QuicUpgrade
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns an error if the format
 /// of the multiaddr is wrong.
-fn multiaddr_to_socketaddr(
-    addr: &Multiaddr,
-) -> Result<(SocketAddr, Option<PublicKey>), ()> {
+fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<(SocketAddr, Option<PublicKey>), ()> {
     let mut iter = addr.iter().peekable();
     let proto1 = iter.next().ok_or(())?;
     let proto2 = iter.next().ok_or(())?;
@@ -298,10 +291,10 @@ mod tests {
     fn multiaddr_to_udp_conversion() {
         use std::net::{Ipv4Addr, Ipv6Addr};
 
-        assert!(multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()
-        )
-        .is_err());
+        assert!(
+            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
+                .is_err()
+        );
 
         assert_eq!(
             multiaddr_to_socketaddr(

@@ -23,12 +23,12 @@ use crate::muxer::QuicMuxer;
 use crate::{QuicConfig, QuicError};
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
-use quinn_proto::{ServerConfig as QuinnServerConfig};
-use quinn_proto::generic::{ClientConfig as QuinnClientConfig};
+use libp2p_core::identity::PublicKey;
+use quinn_proto::generic::ClientConfig as QuinnClientConfig;
+use quinn_proto::ServerConfig as QuinnServerConfig;
 use quinn_proto::{
     ConnectionEvent, ConnectionHandle, DatagramEvent, EcnCodepoint, EndpointEvent, Transmit,
 };
-use libp2p_core::identity::PublicKey;
 use std::collections::{HashMap, VecDeque};
 use std::io::IoSliceMut;
 use std::mem::MaybeUninit;
@@ -199,8 +199,10 @@ impl EndpointConfig {
         server_config.crypto = TlsCrypto::new_server_config(&crypto_config);
 
         let mut endpoint_config = QuinnEndpointConfig::default();
-        endpoint_config
-            .supported_versions(TlsCrypto::supported_quic_versions(), TlsCrypto::default_quic_version())?;
+        endpoint_config.supported_versions(
+            TlsCrypto::supported_quic_versions(),
+            TlsCrypto::default_quic_version(),
+        )?;
 
         let socket = UdpSocket::bind(addr)?;
         let port = socket.local_addr()?.port();
@@ -218,8 +220,7 @@ impl EndpointConfig {
         })
     }
 
-    pub fn spawn(self) -> TransportChannel
-    {
+    pub fn spawn(self) -> TransportChannel {
         let (tx1, rx1) = mpsc::unbounded();
         let (tx2, rx2) = mpsc::channel(1);
         let transport = TransportChannel {
@@ -325,8 +326,7 @@ impl Endpoint {
     }
 }
 
-impl Future for Endpoint
-{
+impl Future for Endpoint {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {

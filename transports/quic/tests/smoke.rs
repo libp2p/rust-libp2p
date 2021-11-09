@@ -18,10 +18,7 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }
 
-async fn create_swarm(
-    keylog: bool,
-) -> Result<Swarm<RequestResponse<PingCodec>>>
-{
+async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let mut transport = QuicConfig::new(keypair);

@@ -29,9 +29,9 @@ pub use crate::muxer::{QuicMuxer, QuicMuxerError};
 pub use crate::transport::{QuicDial, QuicTransport};
 pub use quinn_proto::{ConfigError, ConnectError, ConnectionError, TransportConfig};
 
+use libp2p_core::identity::Keypair;
 use libp2p_core::transport::TransportError;
 use libp2p_core::Multiaddr;
-use libp2p_core::identity::Keypair;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -51,8 +51,7 @@ impl std::fmt::Debug for QuicConfig {
     }
 }
 
-impl QuicConfig
-{
+impl QuicConfig {
     /// Creates a new config from a keypair.
     pub fn new(keypair: Keypair) -> Self {
         Self {

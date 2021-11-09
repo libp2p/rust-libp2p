@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::identity::{PublicKey, Keypair};
+use libp2p_core::identity::{Keypair, PublicKey};
 use quinn_proto::crypto::Session;
 use quinn_proto::TransportConfig;
 use std::sync::Arc;
@@ -33,7 +33,6 @@ pub struct CryptoConfig {
 pub(crate) struct TlsCrypto;
 
 impl TlsCrypto {
-
     pub fn new_server_config(
         config: &CryptoConfig,
     ) -> <quinn_proto::crypto::rustls::TlsSession as Session>::ServerConfig {
