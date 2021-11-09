@@ -21,6 +21,8 @@
 use crate::codec::MAX_FRAME_SIZE;
 use std::cmp;
 
+pub(crate) const DEFAULT_MPLEX_PROTOCOL: &'static [u8] = b"/mplex/6.7.0";
+
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone)]
 pub struct MplexConfig {
@@ -33,6 +35,8 @@ pub struct MplexConfig {
     /// When sending data, split it into frames whose maximum size is this value
     /// (max 1MByte, as per the Mplex spec).
     pub(crate) split_send_size: usize,
+    /// Protocol defaults to b"/mplex/6.7.0"
+    pub(crate) protocol: &'static [u8],
 }
 
 impl MplexConfig {
@@ -84,6 +88,17 @@ impl MplexConfig {
         self.split_send_size = size;
         self
     }
+
+    /// Gets protocol
+    pub fn protocol(&self) -> &[u8] {
+        self.protocol
+    }
+
+    /// Sets protocol, muxer.set_protocol(b"/mplex/6.7.0")
+    pub fn set_protocol(&mut self, protocol: &'static [u8]) -> &mut Self {
+        self.protocol = protocol;
+        self
+    }
 }
 
 /// Behaviour when the maximum length of the buffer is reached.
@@ -120,6 +135,7 @@ impl Default for MplexConfig {
             max_buffer_len: 32,
             max_buffer_behaviour: MaxBufferBehaviour::Block,
             split_send_size: 8 * 1024,
+            protocol: DEFAULT_MPLEX_PROTOCOL,
         }
     }
 }
