@@ -21,47 +21,40 @@
 mod crypto;
 mod endpoint;
 mod muxer;
-#[cfg(feature = "tls")]
 mod tls;
 mod transport;
 
-pub use crate::crypto::Crypto;
-#[cfg(feature = "tls")]
-pub use crate::crypto::TlsCrypto;
-pub use crate::crypto::ToLibp2p;
+use crate::crypto::TlsCrypto;
 pub use crate::muxer::{QuicMuxer, QuicMuxerError};
 pub use crate::transport::{QuicDial, QuicTransport};
 pub use quinn_proto::{ConfigError, ConnectError, ConnectionError, TransportConfig};
 
 use libp2p_core::transport::TransportError;
 use libp2p_core::Multiaddr;
-use quinn_proto::crypto::Session;
+use libp2p_core::identity::Keypair;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Quic configuration.
-pub struct QuicConfig<C: Crypto> {
-    pub keypair: C::Keypair,
+pub struct QuicConfig {
+    pub keypair: Keypair,
     pub transport: TransportConfig,
-    pub keylogger: Option<C::Keylogger>,
+    pub keylogger: Option<Arc<dyn rustls::KeyLog>>,
 }
 
-impl<C: Crypto> std::fmt::Debug for QuicConfig<C> {
+impl std::fmt::Debug for QuicConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("QuicConfig")
-            .field("keypair", &self.keypair.to_public())
+            .field("keypair", &self.keypair.public())
             .field("transport", &self.transport)
             .finish()
     }
 }
 
-impl<C: Crypto> QuicConfig<C>
-where
-    <C::Session as Session>::ClientConfig: Send + Unpin,
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
+impl QuicConfig
 {
     /// Creates a new config from a keypair.
-    pub fn new(keypair: C::Keypair) -> Self {
+    pub fn new(keypair: Keypair) -> Self {
         Self {
             keypair,
             transport: TransportConfig::default(),
@@ -71,7 +64,7 @@ where
 
     /// Enable keylogging.
     pub fn enable_keylogger(&mut self) -> &mut Self {
-        self.keylogger = Some(C::keylogger());
+        self.keylogger = Some(TlsCrypto::keylogger());
         self
     }
 
@@ -79,7 +72,7 @@ where
     pub async fn listen_on(
         self,
         addr: Multiaddr,
-    ) -> Result<QuicTransport<C>, TransportError<QuicError>> {
+    ) -> Result<QuicTransport, TransportError<QuicError>> {
         QuicTransport::new(self, addr).await
     }
 }

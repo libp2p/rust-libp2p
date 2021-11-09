@@ -10,44 +10,21 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p_quic::{Crypto, QuicConfig, ToLibp2p};
-use quinn_proto::crypto::Session;
+use libp2p_quic::QuicConfig;
 use rand::RngCore;
 use std::{io, iter};
 
-#[cfg(feature = "tls")]
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }
 
-#[cfg(feature = "tls")]
-#[async_std::test]
-async fn smoke_tls() -> Result<()> {
-    smoke::<libp2p_quic::TlsCrypto>().await
-}
-
-trait GenerateKeypair: Crypto {
-    fn generate_keypair() -> Self::Keypair;
-}
-
-#[cfg(feature = "tls")]
-impl GenerateKeypair for libp2p_quic::TlsCrypto {
-    fn generate_keypair() -> Self::Keypair {
-        generate_tls_keypair()
-    }
-}
-
-async fn create_swarm<C: Crypto + GenerateKeypair>(
+async fn create_swarm(
     keylog: bool,
 ) -> Result<Swarm<RequestResponse<PingCodec>>>
-where
-    <C::Session as Session>::ClientConfig: Send + Unpin,
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
 {
-    let keypair = C::generate_keypair();
-    let peer_id = keypair.to_peer_id();
-    let mut transport = QuicConfig::<C>::new(keypair);
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
+    let mut transport = QuicConfig::new(keypair);
     if keylog {
         transport.enable_keylogger();
     }
@@ -63,12 +40,8 @@ where
     Ok(Swarm::new(transport, behaviour, peer_id))
 }
 
-async fn smoke<C: Crypto + GenerateKeypair>() -> Result<()>
-where
-    <C::Session as Session>::ClientConfig: Send + Unpin,
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
-{
+#[async_std::test]
+async fn smoke() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init()
@@ -76,8 +49,8 @@ where
     log_panics::init();
     let mut rng = rand::thread_rng();
 
-    let mut a = create_swarm::<C>(true).await?;
-    let mut b = create_swarm::<C>(false).await?;
+    let mut a = create_swarm(true).await?;
+    let mut b = create_swarm(false).await?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
@@ -274,22 +247,21 @@ impl RequestResponseCodec for PingCodec {
     }
 }
 
-#[cfg(feature = "tls")]
 #[async_std::test]
-async fn dial_failure_tls() -> Result<()> {
+async fn dial_failure() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init()
         .ok();
     log_panics::init();
 
-    let mut a = create_swarm::<libp2p_quic::TlsCrypto>(true).await?;
-    let mut b = create_swarm::<libp2p_quic::TlsCrypto>(false).await?;
+    let mut a = create_swarm(true).await?;
+    let mut b = create_swarm(false).await?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
-    let keypair = libp2p_quic::TlsCrypto::generate_keypair();
-    let fake_peer_id = keypair.to_peer_id();
+    let keypair = generate_tls_keypair();
+    let fake_peer_id = keypair.public().to_peer_id();
 
     let mut addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,

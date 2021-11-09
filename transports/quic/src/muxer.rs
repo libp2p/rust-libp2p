@@ -18,14 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::crypto::Crypto;
 use crate::endpoint::ConnectionChannel;
 use async_io::Timer;
 use futures::prelude::*;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::{Multiaddr, PeerId};
 use parking_lot::Mutex;
-use quinn_proto::generic::Connection;
+use quinn_proto::Connection as QuinnConnection;
 use quinn_proto::{
     ConnectionError, Dir, Event, FinishError, ReadError, ReadableError, StreamEvent, StreamId,
     VarInt, WriteError,
@@ -39,24 +38,24 @@ use std::time::Instant;
 use thiserror::Error;
 
 /// State for a single opened QUIC connection.
-pub struct QuicMuxer<C: Crypto> {
-    inner: Mutex<QuicMuxerInner<C>>,
+pub struct QuicMuxer {
+    inner: Mutex<QuicMuxerInner>,
 }
 
-impl<C: Crypto> std::fmt::Debug for QuicMuxer<C> {
+impl std::fmt::Debug for QuicMuxer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "QuicMuxer")
     }
 }
 
 /// Mutex protected fields of [`QuicMuxer`].
-struct QuicMuxerInner<C: Crypto> {
+struct QuicMuxerInner {
     /// Accept incoming streams.
     accept_incoming: bool,
     /// Endpoint channel.
-    endpoint: ConnectionChannel<C>,
+    endpoint: ConnectionChannel,
     /// Inner connection object that yields events.
-    connection: Connection<C::Session>,
+    connection: QuinnConnection,
     /// Connection waker.
     waker: Option<Waker>,
     /// Connection timer.
@@ -78,8 +77,8 @@ struct SubstreamState {
     write_waker: Option<Waker>,
 }
 
-impl<C: Crypto> QuicMuxer<C> {
-    pub fn new(endpoint: ConnectionChannel<C>, connection: Connection<C::Session>) -> Self {
+impl QuicMuxer {
+    pub fn new(endpoint: ConnectionChannel, connection: QuinnConnection) -> Self {
         Self {
             inner: Mutex::new(QuicMuxerInner {
                 accept_incoming: false,
@@ -101,7 +100,10 @@ impl<C: Crypto> QuicMuxer<C> {
     pub fn peer_id(&self) -> Option<PeerId> {
         let inner = self.inner.lock();
         let session = inner.connection.crypto_session();
-        C::peer_id(session)
+        let certificate = session.get_peer_certificates()?.into_iter().next()?;
+        Some(crate::tls::extract_peerid_or_panic(
+            quinn_proto::Certificate::from(certificate).as_der(),
+        ))
     }
 
     pub fn local_addr(&self) -> Multiaddr {
@@ -126,7 +128,7 @@ impl<C: Crypto> QuicMuxer<C> {
     }
 }
 
-impl<C: Crypto> StreamMuxer for QuicMuxer<C> {
+impl StreamMuxer for QuicMuxer {
     type Substream = StreamId;
     type OutboundSubstream = ();
     type Error = QuicMuxerError;

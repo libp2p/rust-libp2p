@@ -18,16 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::crypto::{Crypto, CryptoConfig};
+use crate::crypto::{CryptoConfig, TlsCrypto};
 use crate::muxer::QuicMuxer;
 use crate::{QuicConfig, QuicError};
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
-use quinn_proto::crypto::Session;
-use quinn_proto::generic::{ClientConfig, ServerConfig};
+use quinn_proto::{ServerConfig as QuinnServerConfig};
+use quinn_proto::generic::{ClientConfig as QuinnClientConfig};
 use quinn_proto::{
     ConnectionEvent, ConnectionHandle, DatagramEvent, EcnCodepoint, EndpointEvent, Transmit,
 };
+use libp2p_core::identity::PublicKey;
 use std::collections::{HashMap, VecDeque};
 use std::io::IoSliceMut;
 use std::mem::MaybeUninit;
@@ -40,15 +41,15 @@ use udp_socket::{RecvMeta, SocketType, UdpCapabilities, UdpSocket, BATCH_SIZE};
 
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
-enum ToEndpoint<C: Crypto> {
+enum ToEndpoint {
     /// Instructs the endpoint to start connecting to the given address.
     Dial {
         /// UDP address to connect to.
         addr: SocketAddr,
         /// The remotes public key.
-        public_key: C::PublicKey,
+        public_key: PublicKey,
         /// Channel to return the result of the dialing to.
-        tx: oneshot::Sender<Result<QuicMuxer<C>, QuicError>>,
+        tx: oneshot::Sender<Result<QuicMuxer, QuicError>>,
     },
     /// Sent by a `quinn_proto` connection when the endpoint needs to process an event generated
     /// by a connection. The event itself is opaque to us.
@@ -61,19 +62,19 @@ enum ToEndpoint<C: Crypto> {
 }
 
 #[derive(Debug)]
-pub struct TransportChannel<C: Crypto> {
-    tx: mpsc::UnboundedSender<ToEndpoint<C>>,
-    rx: mpsc::Receiver<Result<QuicMuxer<C>, QuicError>>,
+pub struct TransportChannel {
+    tx: mpsc::UnboundedSender<ToEndpoint>,
+    rx: mpsc::Receiver<Result<QuicMuxer, QuicError>>,
     port: u16,
     ty: SocketType,
 }
 
-impl<C: Crypto> TransportChannel<C> {
+impl TransportChannel {
     pub fn dial(
         &mut self,
         addr: SocketAddr,
-        public_key: C::PublicKey,
-    ) -> oneshot::Receiver<Result<QuicMuxer<C>, QuicError>> {
+        public_key: PublicKey,
+    ) -> oneshot::Receiver<Result<QuicMuxer, QuicError>> {
         let (tx, rx) = oneshot::channel();
         let msg = ToEndpoint::Dial {
             addr,
@@ -87,7 +88,7 @@ impl<C: Crypto> TransportChannel<C> {
     pub fn poll_incoming(
         &mut self,
         cx: &mut Context,
-    ) -> Poll<Option<Result<QuicMuxer<C>, QuicError>>> {
+    ) -> Poll<Option<Result<QuicMuxer, QuicError>>> {
         Pin::new(&mut self.rx).poll_next(cx)
     }
 
@@ -101,15 +102,15 @@ impl<C: Crypto> TransportChannel<C> {
 }
 
 #[derive(Debug)]
-pub struct ConnectionChannel<C: Crypto> {
+pub struct ConnectionChannel {
     id: ConnectionHandle,
-    tx: mpsc::UnboundedSender<ToEndpoint<C>>,
+    tx: mpsc::UnboundedSender<ToEndpoint>,
     rx: mpsc::Receiver<ConnectionEvent>,
     port: u16,
     max_datagrams: usize,
 }
 
-impl<C: Crypto> ConnectionChannel<C> {
+impl ConnectionChannel {
     pub fn poll_channel_events(&mut self, cx: &mut Context) -> Poll<ConnectionEvent> {
         match Pin::new(&mut self.rx).poll_next(cx) {
             Poll::Ready(Some(event)) => Poll::Ready(event),
@@ -141,23 +142,23 @@ impl<C: Crypto> ConnectionChannel<C> {
 }
 
 #[derive(Debug)]
-struct EndpointChannel<C: Crypto> {
-    rx: mpsc::UnboundedReceiver<ToEndpoint<C>>,
-    tx: mpsc::Sender<Result<QuicMuxer<C>, QuicError>>,
+struct EndpointChannel {
+    rx: mpsc::UnboundedReceiver<ToEndpoint>,
+    tx: mpsc::Sender<Result<QuicMuxer, QuicError>>,
     port: u16,
     max_datagrams: usize,
-    connection_tx: mpsc::UnboundedSender<ToEndpoint<C>>,
+    connection_tx: mpsc::UnboundedSender<ToEndpoint>,
 }
 
-impl<C: Crypto> EndpointChannel<C> {
-    pub fn poll_next_event(&mut self, cx: &mut Context) -> Poll<Option<ToEndpoint<C>>> {
+impl EndpointChannel {
+    pub fn poll_next_event(&mut self, cx: &mut Context) -> Poll<Option<ToEndpoint>> {
         Pin::new(&mut self.rx).poll_next(cx)
     }
 
     pub fn create_connection(
         &self,
         id: ConnectionHandle,
-    ) -> (ConnectionChannel<C>, mpsc::Sender<ConnectionEvent>) {
+    ) -> (ConnectionChannel, mpsc::Sender<ConnectionEvent>) {
         let (tx, rx) = mpsc::channel(12);
         let channel = ConnectionChannel {
             id,
@@ -170,19 +171,19 @@ impl<C: Crypto> EndpointChannel<C> {
     }
 }
 
-type QuinnEndpointConfig<S> = quinn_proto::generic::EndpointConfig<S>;
-type QuinnEndpoint<S> = quinn_proto::generic::Endpoint<S>;
+type QuinnEndpointConfig = quinn_proto::EndpointConfig;
+type QuinnEndpoint = quinn_proto::Endpoint;
 
-pub struct EndpointConfig<C: Crypto> {
+pub struct EndpointConfig {
     socket: UdpSocket,
-    endpoint: QuinnEndpoint<C::Session>,
+    endpoint: QuinnEndpoint,
     port: u16,
-    crypto_config: Arc<CryptoConfig<C>>,
+    crypto_config: Arc<CryptoConfig>,
     capabilities: UdpCapabilities,
 }
 
-impl<C: Crypto> EndpointConfig<C> {
-    pub fn new(mut config: QuicConfig<C>, addr: SocketAddr) -> Result<Self, QuicError> {
+impl EndpointConfig {
+    pub fn new(mut config: QuicConfig, addr: SocketAddr) -> Result<Self, QuicError> {
         config.transport.max_concurrent_uni_streams(0)?;
         config.transport.datagram_receive_buffer_size(None);
         let transport = Arc::new(config.transport);
@@ -193,13 +194,13 @@ impl<C: Crypto> EndpointConfig<C> {
             transport: transport.clone(),
         });
 
-        let mut server_config = ServerConfig::<C::Session>::default();
+        let mut server_config = QuinnServerConfig::default();
         server_config.transport = transport;
-        server_config.crypto = C::new_server_config(&crypto_config);
+        server_config.crypto = TlsCrypto::new_server_config(&crypto_config);
 
         let mut endpoint_config = QuinnEndpointConfig::default();
         endpoint_config
-            .supported_versions(C::supported_quic_versions(), C::default_quic_version())?;
+            .supported_versions(TlsCrypto::supported_quic_versions(), TlsCrypto::default_quic_version())?;
 
         let socket = UdpSocket::bind(addr)?;
         let port = socket.local_addr()?.port();
@@ -217,11 +218,7 @@ impl<C: Crypto> EndpointConfig<C> {
         })
     }
 
-    pub fn spawn(self) -> TransportChannel<C>
-    where
-        <C::Session as Session>::ClientConfig: Send + Unpin,
-        <C::Session as Session>::HeaderKey: Unpin,
-        <C::Session as Session>::PacketKey: Unpin,
+    pub fn spawn(self) -> TransportChannel
     {
         let (tx1, rx1) = mpsc::unbounded();
         let (tx2, rx2) = mpsc::channel(1);
@@ -243,20 +240,20 @@ impl<C: Crypto> EndpointConfig<C> {
     }
 }
 
-struct Endpoint<C: Crypto> {
-    channel: EndpointChannel<C>,
-    endpoint: QuinnEndpoint<C::Session>,
+struct Endpoint {
+    channel: EndpointChannel,
+    endpoint: QuinnEndpoint,
     socket: UdpSocket,
-    crypto_config: Arc<CryptoConfig<C>>,
+    crypto_config: Arc<CryptoConfig>,
     connections: HashMap<ConnectionHandle, mpsc::Sender<ConnectionEvent>>,
     outgoing: VecDeque<udp_socket::Transmit>,
     recv_buf: Box<[u8]>,
-    incoming_slot: Option<QuicMuxer<C>>,
+    incoming_slot: Option<QuicMuxer>,
     event_slot: Option<(ConnectionHandle, ConnectionEvent)>,
 }
 
-impl<C: Crypto> Endpoint<C> {
-    pub fn new(channel: EndpointChannel<C>, config: EndpointConfig<C>) -> Self {
+impl Endpoint {
+    pub fn new(channel: EndpointChannel, config: EndpointConfig) -> Self {
         let max_udp_payload_size = config
             .endpoint
             .config()
@@ -291,7 +288,7 @@ impl<C: Crypto> Endpoint<C> {
         self.outgoing.push_back(transmit);
     }
 
-    fn send_incoming(&mut self, muxer: QuicMuxer<C>, cx: &mut Context) -> bool {
+    fn send_incoming(&mut self, muxer: QuicMuxer, cx: &mut Context) -> bool {
         assert!(self.incoming_slot.is_none());
         match self.channel.tx.poll_ready(cx) {
             Poll::Pending => {
@@ -328,11 +325,7 @@ impl<C: Crypto> Endpoint<C> {
     }
 }
 
-impl<C: Crypto> Future for Endpoint<C>
-where
-    <C::Session as Session>::ClientConfig: Unpin,
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
+impl Future for Endpoint
 {
     type Output = ();
 
@@ -363,8 +356,8 @@ where
                         public_key,
                         tx,
                     }) => {
-                        let crypto = C::new_client_config(&me.crypto_config, public_key);
-                        let client_config = ClientConfig {
+                        let crypto = TlsCrypto::new_client_config(&me.crypto_config, public_key);
+                        let client_config = QuinnClientConfig {
                             transport: me.crypto_config.transport.clone(),
                             crypto,
                         };

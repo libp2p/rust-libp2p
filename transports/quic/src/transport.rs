@@ -18,19 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::crypto::Crypto;
 use crate::endpoint::{EndpointConfig, TransportChannel};
 use crate::muxer::QuicMuxer;
 use crate::{QuicConfig, QuicError};
 use futures::channel::oneshot;
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
+use libp2p_core::identity::PublicKey;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::transport::{Boxed, ListenerEvent, Transport, TransportError};
 use libp2p_core::PeerId;
 use parking_lot::Mutex;
-use quinn_proto::crypto::Session;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -38,22 +37,18 @@ use std::task::{Context, Poll};
 use udp_socket::SocketType;
 
 #[derive(Clone)]
-pub struct QuicTransport<C: Crypto> {
-    inner: Arc<Mutex<QuicTransportInner<C>>>,
+pub struct QuicTransport {
+    inner: Arc<Mutex<QuicTransportInner>>,
 }
 
-impl<C: Crypto> QuicTransport<C>
-where
-    <C::Session as Session>::ClientConfig: Send + Unpin,
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
+impl QuicTransport
 {
     /// Creates a new quic transport.
     pub async fn new(
-        config: QuicConfig<C>,
+        config: QuicConfig,
         addr: Multiaddr,
     ) -> Result<Self, TransportError<QuicError>> {
-        let socket_addr = multiaddr_to_socketaddr::<C>(&addr)
+        let socket_addr = multiaddr_to_socketaddr(&addr)
             .map_err(|_| TransportError::MultiaddrNotSupported(addr.clone()))?
             .0;
         let addresses = if socket_addr.ip().is_unspecified() {
@@ -82,14 +77,14 @@ where
     }
 }
 
-impl<C: Crypto> std::fmt::Debug for QuicTransport<C> {
+impl std::fmt::Debug for QuicTransport {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("QuicTransport").finish()
     }
 }
 
-struct QuicTransportInner<C: Crypto> {
-    channel: TransportChannel<C>,
+struct QuicTransportInner {
+    channel: TransportChannel,
     addresses: Addresses,
 }
 
@@ -98,26 +93,23 @@ enum Addresses {
     Ip(Option<IpAddr>),
 }
 
-impl<C: Crypto> Transport for QuicTransport<C>
-where
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
+impl Transport for QuicTransport
 {
-    type Output = (PeerId, QuicMuxer<C>);
+    type Output = (PeerId, QuicMuxer);
     type Error = QuicError;
     type Listener = Self;
-    type ListenerUpgrade = QuicUpgrade<C>;
-    type Dial = QuicDial<C>;
+    type ListenerUpgrade = QuicUpgrade;
+    type Dial = QuicDial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        multiaddr_to_socketaddr::<C>(&addr)
+        multiaddr_to_socketaddr(&addr)
             .map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
         Ok(self)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, public_key) =
-            if let Ok((socket_addr, Some(public_key))) = multiaddr_to_socketaddr::<C>(&addr) {
+            if let Ok((socket_addr, Some(public_key))) = multiaddr_to_socketaddr(&addr) {
                 (socket_addr, public_key)
             } else {
                 tracing::debug!("invalid multiaddr");
@@ -137,8 +129,8 @@ where
     }
 }
 
-impl<C: Crypto> Stream for QuicTransport<C> {
-    type Item = Result<ListenerEvent<QuicUpgrade<C>, QuicError>, QuicError>;
+impl Stream for QuicTransport {
+    type Item = Result<ListenerEvent<QuicUpgrade, QuicError>, QuicError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let mut inner = self.inner.lock();
@@ -190,17 +182,14 @@ impl<C: Crypto> Stream for QuicTransport<C> {
 }
 
 #[allow(clippy::large_enum_variant)]
-pub enum QuicDial<C: Crypto> {
-    Dialing(oneshot::Receiver<Result<QuicMuxer<C>, QuicError>>),
-    Upgrade(QuicUpgrade<C>),
+pub enum QuicDial {
+    Dialing(oneshot::Receiver<Result<QuicMuxer, QuicError>>),
+    Upgrade(QuicUpgrade),
 }
 
-impl<C: Crypto> Future for QuicDial<C>
-where
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
+impl Future for QuicDial
 {
-    type Output = Result<(PeerId, QuicMuxer<C>), QuicError>;
+    type Output = Result<(PeerId, QuicMuxer), QuicError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
@@ -219,22 +208,19 @@ where
     }
 }
 
-pub struct QuicUpgrade<C: Crypto> {
-    muxer: Option<QuicMuxer<C>>,
+pub struct QuicUpgrade {
+    muxer: Option<QuicMuxer>,
 }
 
-impl<C: Crypto> QuicUpgrade<C> {
-    fn new(muxer: QuicMuxer<C>) -> Self {
+impl QuicUpgrade {
+    fn new(muxer: QuicMuxer) -> Self {
         Self { muxer: Some(muxer) }
     }
 }
 
-impl<C: Crypto> Future for QuicUpgrade<C>
-where
-    <C::Session as Session>::HeaderKey: Unpin,
-    <C::Session as Session>::PacketKey: Unpin,
+impl Future for QuicUpgrade
 {
-    type Output = Result<(PeerId, QuicMuxer<C>), QuicError>;
+    type Output = Result<(PeerId, QuicMuxer), QuicError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let inner = Pin::into_inner(self);
@@ -261,9 +247,9 @@ where
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns an error if the format
 /// of the multiaddr is wrong.
-fn multiaddr_to_socketaddr<C: Crypto>(
+fn multiaddr_to_socketaddr(
     addr: &Multiaddr,
-) -> Result<(SocketAddr, Option<C::PublicKey>), ()> {
+) -> Result<(SocketAddr, Option<PublicKey>), ()> {
     let mut iter = addr.iter().peekable();
     let proto1 = iter.next().ok_or(())?;
     let proto2 = iter.next().ok_or(())?;
@@ -275,7 +261,6 @@ fn multiaddr_to_socketaddr<C: Crypto>(
         }
         let public_key =
             libp2p_core::PublicKey::from_protobuf_encoding(peer_id.digest()).map_err(|_| ())?;
-        let public_key = C::extract_public_key(public_key).ok_or(())?;
         iter.next();
         Some(public_key)
     } else {
@@ -309,16 +294,17 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 mod tests {
     use super::*;
 
-    fn multiaddr_to_udp_conversion<C: Crypto>() {
+    #[test]
+    fn multiaddr_to_udp_conversion() {
         use std::net::{Ipv4Addr, Ipv6Addr};
 
-        assert!(multiaddr_to_socketaddr::<C>(
+        assert!(multiaddr_to_socketaddr(
             &"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()
         )
         .is_err());
 
         assert_eq!(
-            multiaddr_to_socketaddr::<C>(
+            multiaddr_to_socketaddr(
                 &"/ip4/127.0.0.1/udp/12345/quic"
                     .parse::<Multiaddr>()
                     .unwrap()
@@ -329,7 +315,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr::<C>(
+            multiaddr_to_socketaddr(
                 &"/ip4/255.255.255.255/udp/8080/quic"
                     .parse::<Multiaddr>()
                     .unwrap()
@@ -340,14 +326,14 @@ mod tests {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr::<C>(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
+            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
             Ok((
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
                 None
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr::<C>(
+            multiaddr_to_socketaddr(
                 &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
                     .parse::<Multiaddr>()
                     .unwrap()
@@ -364,31 +350,19 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tls")]
     #[test]
-    fn multiaddr_to_udp_tls() {
-        multiaddr_to_udp_conversion::<crate::TlsCrypto>();
-    }
-
-    fn multiaddr_to_pk_conversion<C: Crypto>(keypair: C::Keypair) {
-        use crate::crypto::ToLibp2p;
+    fn multiaddr_to_pk_conversion() {
         use std::net::Ipv4Addr;
 
-        let peer_id = keypair.to_public().to_peer_id();
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let peer_id = keypair.public().to_peer_id();
         let addr = String::from("/ip4/127.0.0.1/udp/12345/quic/p2p/") + &peer_id.to_base58();
         assert_eq!(
-            multiaddr_to_socketaddr::<C>(&addr.parse::<Multiaddr>().unwrap()),
+            multiaddr_to_socketaddr(&addr.parse::<Multiaddr>().unwrap()),
             Ok((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                C::extract_public_key(keypair.to_public())
+                Some(keypair.public())
             ))
         );
-    }
-
-    #[cfg(feature = "tls")]
-    #[test]
-    fn multiaddr_to_pk_tls() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        multiaddr_to_pk_conversion::<crate::TlsCrypto>(keypair);
     }
 }

@@ -18,65 +18,25 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::PeerId;
+use libp2p_core::identity::{PublicKey, Keypair};
 use quinn_proto::crypto::Session;
 use quinn_proto::TransportConfig;
 use std::sync::Arc;
 
-pub struct CryptoConfig<C: Crypto> {
-    pub keypair: C::Keypair,
-    pub keylogger: Option<C::Keylogger>,
+pub struct CryptoConfig {
+    pub keypair: Keypair,
+    pub keylogger: Option<Arc<dyn rustls::KeyLog>>,
     pub transport: Arc<TransportConfig>,
 }
 
-pub trait ToLibp2p {
-    fn to_public(&self) -> libp2p_core::identity::PublicKey;
-    fn to_peer_id(&self) -> PeerId {
-        self.to_public().to_peer_id()
-    }
-}
-
-#[cfg(feature = "tls")]
-impl ToLibp2p for libp2p_core::identity::Keypair {
-    fn to_public(&self) -> libp2p_core::identity::PublicKey {
-        self.public()
-    }
-}
-
-pub trait Crypto: std::fmt::Debug + Clone + 'static {
-    type Session: Session + Unpin;
-    type Keylogger: Send + Sync;
-    type Keypair: Send + Sync + ToLibp2p;
-    type PublicKey: Send + std::fmt::Debug + PartialEq<Self::PublicKey>;
-
-    fn new_server_config(
-        config: &CryptoConfig<Self>,
-    ) -> <Self::Session as Session>::ServerConfig;
-    fn new_client_config(
-        config: &CryptoConfig<Self>,
-        remote_public: Self::PublicKey,
-    ) -> <Self::Session as Session>::ClientConfig;
-    fn supported_quic_versions() -> Vec<u32>;
-    fn default_quic_version() -> u32;
-    fn peer_id(session: &Self::Session) -> Option<PeerId>;
-    fn extract_public_key(generic_key: libp2p_core::PublicKey) -> Option<Self::PublicKey>;
-    fn keylogger() -> Self::Keylogger;
-}
-
-#[cfg(feature = "tls")]
 #[derive(Clone, Copy, Debug)]
-pub struct TlsCrypto;
+pub(crate) struct TlsCrypto;
 
-#[cfg(feature = "tls")]
-impl Crypto for TlsCrypto {
-    type Session = quinn_proto::crypto::rustls::TlsSession;
-    type Keylogger = Arc<dyn rustls::KeyLog>;
-    type Keypair = libp2p_core::identity::Keypair;
-    type PublicKey = libp2p_core::identity::PublicKey;
+impl TlsCrypto {
 
-    fn new_server_config(
-        config: &CryptoConfig<Self>,
-    ) -> <Self::Session as Session>::ServerConfig {
+    pub fn new_server_config(
+        config: &CryptoConfig,
+    ) -> <quinn_proto::crypto::rustls::TlsSession as Session>::ServerConfig {
         let mut server = crate::tls::make_server_config(&config.keypair).expect("invalid config");
         if let Some(key_log) = config.keylogger.clone() {
             server.key_log = key_log;
@@ -84,10 +44,10 @@ impl Crypto for TlsCrypto {
         Arc::new(server)
     }
 
-    fn new_client_config(
-        config: &CryptoConfig<Self>,
-        remote_public: Self::PublicKey,
-    ) -> <Self::Session as Session>::ClientConfig {
+    pub fn new_client_config(
+        config: &CryptoConfig,
+        remote_public: PublicKey,
+    ) -> <quinn_proto::crypto::rustls::TlsSession as Session>::ClientConfig {
         let mut client =
             crate::tls::make_client_config(&config.keypair, remote_public.to_peer_id())
                 .expect("invalid config");
@@ -97,26 +57,15 @@ impl Crypto for TlsCrypto {
         Arc::new(client)
     }
 
-    fn supported_quic_versions() -> Vec<u32> {
+    pub fn supported_quic_versions() -> Vec<u32> {
         quinn_proto::DEFAULT_SUPPORTED_VERSIONS.to_vec()
     }
 
-    fn default_quic_version() -> u32 {
+    pub fn default_quic_version() -> u32 {
         quinn_proto::DEFAULT_SUPPORTED_VERSIONS[0]
     }
 
-    fn peer_id(session: &Self::Session) -> Option<PeerId> {
-        let certificate = session.get_peer_certificates()?.into_iter().next()?;
-        Some(crate::tls::extract_peerid_or_panic(
-            quinn_proto::Certificate::from(certificate).as_der(),
-        ))
-    }
-
-    fn extract_public_key(generic_key: libp2p_core::PublicKey) -> Option<Self::PublicKey> {
-        Some(generic_key)
-    }
-
-    fn keylogger() -> Self::Keylogger {
+    pub fn keylogger() -> Arc<dyn rustls::KeyLog> {
         Arc::new(rustls::KeyLogFile::new())
     }
 }
