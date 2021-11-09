@@ -15,19 +15,9 @@ use quinn_proto::crypto::Session;
 use rand::RngCore;
 use std::{io, iter};
 
-#[cfg(feature = "noise")]
-fn generate_noise_keypair() -> ed25519_dalek::Keypair {
-    ed25519_dalek::Keypair::generate(&mut rand_core::OsRng {})
-}
 #[cfg(feature = "tls")]
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
-}
-
-#[cfg(feature = "noise")]
-#[async_std::test]
-async fn smoke_noise() -> Result<()> {
-    smoke::<libp2p_quic::NoiseCrypto>().await
 }
 
 #[cfg(feature = "tls")]
@@ -38,13 +28,6 @@ async fn smoke_tls() -> Result<()> {
 
 trait GenerateKeypair: Crypto {
     fn generate_keypair() -> Self::Keypair;
-}
-
-#[cfg(feature = "noise")]
-impl GenerateKeypair for libp2p_quic::NoiseCrypto {
-    fn generate_keypair() -> Self::Keypair {
-        generate_noise_keypair()
-    }
 }
 
 #[cfg(feature = "tls")]
@@ -289,53 +272,6 @@ impl RequestResponseCodec for PingCodec {
         io.close().await?;
         Ok(())
     }
-}
-
-#[cfg(feature = "noise")]
-#[async_std::test]
-async fn dial_failure_noise() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init()
-        .ok();
-    log_panics::init();
-
-    let mut a = create_swarm::<libp2p_quic::NoiseCrypto>(true).await?;
-    let mut b = create_swarm::<libp2p_quic::NoiseCrypto>(false).await?;
-
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
-
-    let keypair = libp2p_quic::NoiseCrypto::generate_keypair();
-    let fake_peer_id = keypair.to_peer_id();
-
-    let mut addr = match a.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
-    addr.push(Protocol::P2p(fake_peer_id.into()));
-
-    b.behaviour_mut().add_address(&fake_peer_id, addr);
-    b.behaviour_mut()
-        .send_request(&fake_peer_id, Ping(b"hello world".to_vec()));
-
-    match b.next().await {
-        Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::ConnectionEstablished { .. }) => {}
-        e => panic!("{:?}", e),
-    };
-
-    match b.next().await {
-        Some(SwarmEvent::ConnectionClosed { .. }) => {}
-        e => panic!("{:?}", e),
-    };
-
-    assert!(a.next().now_or_never().is_none());
-
-    Ok(())
 }
 
 #[cfg(feature = "tls")]

@@ -364,11 +364,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "noise")]
-    #[test]
-    fn multiaddr_to_udp_noise() {
-        multiaddr_to_udp_conversion::<crate::NoiseCrypto>();
-    }
     #[cfg(feature = "tls")]
     #[test]
     fn multiaddr_to_udp_tls() {
@@ -395,11 +390,5 @@ mod tests {
     fn multiaddr_to_pk_tls() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         multiaddr_to_pk_conversion::<crate::TlsCrypto>(keypair);
-    }
-    #[cfg(feature = "noise")]
-    #[test]
-    fn multiaddr_to_pk_noise() {
-        let keypair = ed25519_dalek::Keypair::generate(&mut rand_core::OsRng {});
-        multiaddr_to_pk_conversion::<crate::NoiseCrypto>(keypair);
     }
 }

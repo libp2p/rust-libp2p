@@ -26,15 +26,11 @@ mod tls;
 mod transport;
 
 pub use crate::crypto::Crypto;
-#[cfg(feature = "noise")]
-pub use crate::crypto::NoiseCrypto;
 #[cfg(feature = "tls")]
 pub use crate::crypto::TlsCrypto;
 pub use crate::crypto::ToLibp2p;
 pub use crate::muxer::{QuicMuxer, QuicMuxerError};
 pub use crate::transport::{QuicDial, QuicTransport};
-#[cfg(feature = "noise")]
-pub use quinn_noise::{KeyLog, KeyLogFile};
 pub use quinn_proto::{ConfigError, ConnectError, ConnectionError, TransportConfig};
 
 use libp2p_core::transport::TransportError;
@@ -45,7 +41,6 @@ use thiserror::Error;
 /// Quic configuration.
 pub struct QuicConfig<C: Crypto> {
     pub keypair: C::Keypair,
-    pub psk: Option<[u8; 32]>,
     pub transport: TransportConfig,
     pub keylogger: Option<C::Keylogger>,
 }
@@ -54,7 +49,6 @@ impl<C: Crypto> std::fmt::Debug for QuicConfig<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("QuicConfig")
             .field("keypair", &self.keypair.to_public())
-            .field("psk", &self.psk)
             .field("transport", &self.transport)
             .finish()
     }
@@ -70,7 +64,6 @@ where
     pub fn new(keypair: C::Keypair) -> Self {
         Self {
             keypair,
-            psk: None,
             transport: TransportConfig::default(),
             keylogger: None,
         }

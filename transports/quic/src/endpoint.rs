@@ -189,7 +189,6 @@ impl<C: Crypto> EndpointConfig<C> {
 
         let crypto_config = Arc::new(CryptoConfig {
             keypair: config.keypair,
-            psk: config.psk,
             keylogger: config.keylogger,
             transport: transport.clone(),
         });

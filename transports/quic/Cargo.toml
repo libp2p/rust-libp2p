@@ -3,36 +3,34 @@ name = "libp2p-quic"
 version = "0.6.0"
 authors = ["David Craven <david@craven.ch>", "Parity Technologies <admin@parity.io>"]
 edition = "2018"
-description = "TLS and Noise based QUIC transport implementation for libp2p"
+description = "TLS based QUIC transport implementation for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [features]
-noise = ["quinn-noise", "ed25519-dalek"]
-tls = ["barebones-x509", "quinn-proto/tls-rustls", "rcgen", "ring", "rustls", "untrusted", "webpki", "yasna"]
+tls = []
+default = ["tls"]
 
 [dependencies]
 async-global-executor = "2.0.2"
 async-io = "1.6.0"
-barebones-x509 = { version = "0.5.0", optional = true, features = ["webpki", "rustls", "std"] }
+barebones-x509 = { version = "0.5.0", features = ["webpki", "rustls", "std"] }
 bytes = "1.0.1"
-ed25519-dalek = { version = "1.0.1", optional = true }
 futures = "0.3.15"
 if-watch = "0.2.2"
 libp2p-core = { version = "0.30.0-rc.1", path = "../../core" }
 multihash = { version = "0.14.0", default-features = false }
 parking_lot = "0.11.1"
-quinn-noise = { version = "0.3.0", optional = true }
-quinn-proto = { version = "0.7.3", default-features = false }
-rcgen = { version = "0.8.11", optional = true }
-ring = { version = "0.16.20", optional = true }
-rustls = { version = "0.19.1", optional = true, features = ["dangerous_configuration"] }
+quinn-proto = { version = "0.7.3", default-features = false, features = ["tls-rustls"] }
+rcgen = { version = "0.8.11" }
+ring = { version = "0.16.20" }
+rustls = { version = "0.19.1", features = ["dangerous_configuration"] }
 thiserror = "1.0.26"
 tracing = "0.1.26"
 udp-socket = "0.1.5"
-untrusted = { version = "0.7.1", optional = true }
-webpki = { version = "0.21.4", optional = true, features = ["std"] }
-yasna = { version = "0.4.0", optional = true }
+untrusted = { version = "0.7.1" }
+webpki = { version = "0.21.4", features = ["std"] }
+yasna = { version = "0.4.0" }
 
 [dev-dependencies]
 anyhow = "1.0.41"
