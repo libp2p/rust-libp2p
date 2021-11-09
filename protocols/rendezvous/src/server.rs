@@ -381,14 +381,8 @@ impl Registrations {
         self.registrations
             .insert(registration_id, registration.clone());
 
-        let next_expiry = wasm_timer::Delay::new(Duration::from_secs(ttl as u64))
-            .map(move |result| {
-                if result.is_err() {
-                    log::warn!("Timer for registration {} has unexpectedly errored, treating it as expired", registration_id.0);
-                }
-
-                registration_id
-            })
+        let next_expiry = futures_timer::Delay::new(Duration::from_secs(ttl as u64))
+            .map(move |_| registration_id)
             .boxed();
 
         self.next_expiry.push(next_expiry);
@@ -496,8 +490,8 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
+    use instant::SystemTime;
     use std::option::Option::None;
-    use std::time::SystemTime;
 
     use libp2p_core::{identity, PeerRecord};
 
