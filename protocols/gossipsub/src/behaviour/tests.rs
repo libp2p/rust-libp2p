@@ -4749,7 +4749,7 @@ mod tests {
         // now we do a heartbeat to apply penalization
         gs.heartbeat();
 
-        // now we get all the second messages
+        // now we get the second messages from the last 80 peers.
         for (index, peer) in other_peers.iter().enumerate() {
             if index > 19 {
                 gs.handle_received_message(second_messages[index].clone(), &peer);
