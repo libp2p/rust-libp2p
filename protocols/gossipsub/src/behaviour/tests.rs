@@ -4700,7 +4700,7 @@ mod tests {
             .map(|_| add_peer(&mut gs, &topics, false, false))
             .collect();
 
-        // each peer sends us two ihave containing each two message ids
+        // each peer sends us an ihave containing each two message ids
         let mut first_messages = Vec::new();
         let mut second_messages = Vec::new();
         let mut seq = 0;
