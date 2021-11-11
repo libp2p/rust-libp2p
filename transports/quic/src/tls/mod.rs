@@ -23,7 +23,6 @@
 mod certificate;
 mod verifier;
 
-use libp2p_core::PeerId;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -50,13 +49,12 @@ pub enum ConfigError {
 
 pub fn make_client_config(
     keypair: &libp2p_core::identity::Keypair,
-    remote_peer_id: PeerId,
 ) -> Result<rustls::ClientConfig, ConfigError> {
     let cert = certificate::make_cert(keypair)?;
     let private_key = cert.serialize_private_key_der();
     let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);
-    let verifier = verifier::Libp2pServerCertificateVerifier(remote_peer_id);
+    let verifier = verifier::Libp2pCertificateVerifier;
 
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
@@ -76,7 +74,7 @@ pub fn make_server_config(
     let private_key = cert.serialize_private_key_der();
     let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);
-    let verifier = verifier::Libp2pClientCertificateVerifier;
+    let verifier = verifier::Libp2pCertificateVerifier;
 
     let mut crypto = rustls::ServerConfig::new(Arc::new(verifier));
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];

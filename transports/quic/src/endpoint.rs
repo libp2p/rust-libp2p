@@ -23,7 +23,6 @@ use crate::muxer::QuicMuxer;
 use crate::{QuicConfig, QuicError};
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
-use libp2p_core::identity::PublicKey;
 use quinn_proto::generic::ClientConfig as QuinnClientConfig;
 use quinn_proto::ServerConfig as QuinnServerConfig;
 use quinn_proto::{
@@ -46,8 +45,6 @@ enum ToEndpoint {
     Dial {
         /// UDP address to connect to.
         addr: SocketAddr,
-        /// The remotes public key.
-        public_key: PublicKey,
         /// Channel to return the result of the dialing to.
         tx: oneshot::Sender<Result<QuicMuxer, QuicError>>,
     },
@@ -70,17 +67,9 @@ pub struct TransportChannel {
 }
 
 impl TransportChannel {
-    pub fn dial(
-        &mut self,
-        addr: SocketAddr,
-        public_key: PublicKey,
-    ) -> oneshot::Receiver<Result<QuicMuxer, QuicError>> {
+    pub fn dial(&mut self, addr: SocketAddr) -> oneshot::Receiver<Result<QuicMuxer, QuicError>> {
         let (tx, rx) = oneshot::channel();
-        let msg = ToEndpoint::Dial {
-            addr,
-            public_key,
-            tx,
-        };
+        let msg = ToEndpoint::Dial { addr, tx };
         self.tx.unbounded_send(msg).expect("endpoint has crashed");
         rx
     }
@@ -351,12 +340,8 @@ impl Future for Endpoint {
         if me.event_slot.is_none() {
             while let Poll::Ready(event) = me.channel.poll_next_event(cx) {
                 match event {
-                    Some(ToEndpoint::Dial {
-                        addr,
-                        public_key,
-                        tx,
-                    }) => {
-                        let crypto = TlsCrypto::new_client_config(&me.crypto_config, public_key);
+                    Some(ToEndpoint::Dial { addr, tx }) => {
+                        let crypto = TlsCrypto::new_client_config(&me.crypto_config);
                         let client_config = QuinnClientConfig {
                             transport: me.crypto_config.transport.clone(),
                             crypto,

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::identity::{Keypair, PublicKey};
+use libp2p_core::identity::Keypair;
 use quinn_proto::crypto::Session;
 use quinn_proto::TransportConfig;
 use std::sync::Arc;
@@ -45,11 +45,8 @@ impl TlsCrypto {
 
     pub fn new_client_config(
         config: &CryptoConfig,
-        remote_public: PublicKey,
     ) -> <quinn_proto::crypto::rustls::TlsSession as Session>::ClientConfig {
-        let mut client =
-            crate::tls::make_client_config(&config.keypair, remote_public.to_peer_id())
-                .expect("invalid config");
+        let mut client = crate::tls::make_client_config(&config.keypair).expect("invalid config");
         if let Some(key_log) = config.keylogger.clone() {
             client.key_log = key_log;
         }

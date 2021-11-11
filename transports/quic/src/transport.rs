@@ -24,7 +24,6 @@ use crate::{QuicConfig, QuicError};
 use futures::channel::oneshot;
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
-use libp2p_core::identity::PublicKey;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::transport::{Boxed, ListenerEvent, Transport, TransportError};
@@ -48,8 +47,7 @@ impl QuicTransport {
         addr: Multiaddr,
     ) -> Result<Self, TransportError<QuicError>> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
-            .map_err(|_| TransportError::MultiaddrNotSupported(addr.clone()))?
-            .0;
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         let addresses = if socket_addr.ip().is_unspecified() {
             let watcher = IfWatcher::new()
                 .await
@@ -100,24 +98,22 @@ impl Transport for QuicTransport {
     type Dial = QuicDial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        multiaddr_to_socketaddr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
+        multiaddr_to_socketaddr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
         Ok(self)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, public_key) =
-            if let Ok((socket_addr, Some(public_key))) = multiaddr_to_socketaddr(&addr) {
-                (socket_addr, public_key)
-            } else {
-                tracing::debug!("invalid multiaddr");
-                return Err(TransportError::MultiaddrNotSupported(addr.clone()));
-            };
+        let socket_addr = multiaddr_to_socketaddr(&addr).ok_or_else(|| {
+            tracing::debug!("invalid multiaddr");
+            TransportError::MultiaddrNotSupported(addr.clone())
+        })?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             tracing::debug!("invalid multiaddr");
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
         tracing::debug!("dialing {}", socket_addr);
-        let rx = self.inner.lock().channel.dial(socket_addr, public_key);
+        let rx = self.inner.lock().channel.dial(socket_addr);
         Ok(QuicDial::Dialing(rx))
     }
 
@@ -240,38 +236,29 @@ impl Future for QuicUpgrade {
     }
 }
 
-/// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns an error if the format
+/// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
 /// of the multiaddr is wrong.
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<(SocketAddr, Option<PublicKey>), ()> {
-    let mut iter = addr.iter().peekable();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
-    let proto3 = iter.next().ok_or(())?;
+fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
+    let mut iter = addr.iter();
+    let proto1 = iter.next()?;
+    let proto2 = iter.next()?;
+    let proto3 = iter.next()?;
 
-    let peer_id = if let Some(Protocol::P2p(peer_id)) = iter.peek() {
-        if peer_id.code() != multihash::Code::Identity.into() {
-            return Err(());
+    while let Some(proto) = iter.next() {
+        match proto {
+            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            _ => return None,
         }
-        let public_key =
-            libp2p_core::PublicKey::from_protobuf_encoding(peer_id.digest()).map_err(|_| ())?;
-        iter.next();
-        Some(public_key)
-    } else {
-        None
-    };
-
-    if iter.next().is_some() {
-        return Err(());
     }
 
     match (proto1, proto2, proto3) {
         (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok((SocketAddr::new(ip.into(), port), peer_id))
+            Some(SocketAddr::new(ip.into(), port))
         }
         (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok((SocketAddr::new(ip.into(), port), peer_id))
+            Some(SocketAddr::new(ip.into(), port))
         }
-        _ => Err(()),
+        _ => None,
     }
 }
 
@@ -288,12 +275,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn multiaddr_to_udp_conversion() {
+    fn multiaddr_to_socketaddr_conversion() {
         use std::net::{Ipv4Addr, Ipv6Addr};
 
         assert!(
             multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
-                .is_err()
+                .is_none()
         );
 
         assert_eq!(
@@ -302,27 +289,35 @@ mod tests {
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
-            Ok((
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                None
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                12345,
             ))
         );
+
+        assert!(multiaddr_to_socketaddr(
+            &"/ip4/127.0.0.1/udp/12345/quic/tcp/12345"
+                .parse::<Multiaddr>()
+                .unwrap()
+        )
+        .is_none());
+
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip4/255.255.255.255/udp/8080/quic"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
-            Ok((
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080,),
-                None
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
+                8080,
             ))
         );
         assert_eq!(
             multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
-            Ok((
-                SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
-                None
+            Some(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+                12345,
             ))
         );
         assert_eq!(
@@ -331,30 +326,11 @@ mod tests {
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
-            Ok((
-                SocketAddr::new(
-                    IpAddr::V6(Ipv6Addr::new(
-                        65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                    )),
-                    8080,
-                ),
-                None
-            ))
-        );
-    }
-
-    #[test]
-    fn multiaddr_to_pk_conversion() {
-        use std::net::Ipv4Addr;
-
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        let peer_id = keypair.public().to_peer_id();
-        let addr = String::from("/ip4/127.0.0.1/udp/12345/quic/p2p/") + &peer_id.to_base58();
-        assert_eq!(
-            multiaddr_to_socketaddr(&addr.parse::<Multiaddr>().unwrap()),
-            Ok((
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                Some(keypair.public())
+            Some(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(
+                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
+                )),
+                8080,
             ))
         );
     }

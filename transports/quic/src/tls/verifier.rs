@@ -31,7 +31,7 @@ use webpki::Error;
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
 /// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub(crate) struct Libp2pServerCertificateVerifier(pub(crate) PeerId);
+pub(crate) struct Libp2pCertificateVerifier;
 
 /// libp2p requires the following of X.509 server certificate chains:
 ///
@@ -39,7 +39,7 @@ pub(crate) struct Libp2pServerCertificateVerifier(pub(crate) PeerId);
 /// - The certificate must be self-signed.
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
-impl rustls::ServerCertVerifier for Libp2pServerCertificateVerifier {
+impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     fn verify_server_cert(
         &self,
         _roots: &rustls::RootCertStore,
@@ -47,13 +47,7 @@ impl rustls::ServerCertVerifier for Libp2pServerCertificateVerifier {
         _dns_name: webpki::DNSNameRef<'_>,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        let peer_id = verify_presented_certs(presented_certs)?;
-        if peer_id != self.0 {
-            return Err(TLSError::PeerIncompatibleError(
-                "Unexpected peer id".to_string(),
-            ));
-        }
-        Ok(ServerCertVerified::assertion())
+        verify_presented_certs(presented_certs).map(|_| ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -77,11 +71,6 @@ impl rustls::ServerCertVerifier for Libp2pServerCertificateVerifier {
     }
 }
 
-/// Implementation of the `rustls` certificate verification traits for libp2p.
-///
-/// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub(crate) struct Libp2pClientCertificateVerifier;
-
 /// libp2p requires the following of X.509 client certificate chains:
 ///
 /// - Exactly one certificate must be presented. In particular, client
@@ -89,7 +78,7 @@ pub(crate) struct Libp2pClientCertificateVerifier;
 /// - The certificate must be self-signed.
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
-impl rustls::ClientCertVerifier for Libp2pClientCertificateVerifier {
+impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -186,7 +175,7 @@ fn parse_certificate(
     Ok((parsed, libp2p_extension))
 }
 
-fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<PeerId, TLSError> {
+fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSError> {
     if presented_certs.len() != 1 {
         return Err(TLSError::NoCertificatesPresented);
     }
@@ -198,7 +187,7 @@ fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<PeerId, TLS
         .map_err(TLSError::WebPKIError)?;
     verify_libp2p_signature(&extension, certificate.subject_public_key_info().spki())
         .map_err(TLSError::WebPKIError)?;
-    Ok(PeerId::from_public_key(&extension.peer_key))
+    Ok(())
 }
 
 struct Libp2pExtension<'a> {

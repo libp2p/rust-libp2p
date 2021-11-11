@@ -4,7 +4,6 @@ use futures::future::FutureExt;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
-use libp2p::multiaddr::Protocol;
 use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
@@ -51,11 +50,10 @@ async fn smoke() -> Result<()> {
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
-    let mut addr = match a.next().await {
+    let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
-    addr.push(Protocol::P2p((*a.local_peer_id()).into()));
 
     let mut data = vec![0; 4096 * 10];
     rng.fill_bytes(&mut data);
@@ -252,31 +250,24 @@ async fn dial_failure() -> Result<()> {
         .ok();
     log_panics::init();
 
-    let mut a = create_swarm(true).await?;
-    let mut b = create_swarm(false).await?;
+    let mut a = create_swarm(false).await?;
+    let mut b = create_swarm(true).await?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
 
-    let keypair = generate_tls_keypair();
-    let fake_peer_id = keypair.public().to_peer_id();
-
-    let mut addr = match a.next().await {
+    let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
-    addr.push(Protocol::P2p(fake_peer_id.into()));
+    let a_peer_id = &Swarm::local_peer_id(&a).clone();
+    drop(a); // stop a swarm so b can never reach it
 
-    b.behaviour_mut().add_address(&fake_peer_id, addr);
+    b.behaviour_mut().add_address(a_peer_id, addr);
     b.behaviour_mut()
-        .send_request(&fake_peer_id, Ping(b"hello world".to_vec()));
+        .send_request(a_peer_id, Ping(b"hello world".to_vec()));
 
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match a.next().await {
-        Some(SwarmEvent::IncomingConnection { .. }) => {}
         e => panic!("{:?}", e),
     }
 
@@ -289,9 +280,6 @@ async fn dial_failure() -> Result<()> {
         Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {}
         e => panic!("{:?}", e),
     };
-
-    assert!(a.next().await.is_some()); // ConnectionClosed
-    assert!(a.next().now_or_never().is_none());
 
     Ok(())
 }
