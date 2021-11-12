@@ -23,6 +23,7 @@ use crate::protocol::{IdentifyInfo, ReplySubstream};
 use futures::prelude::*;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
+    multiaddr::Protocol,
     upgrade::UpgradeError,
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
@@ -306,8 +307,14 @@ impl NetworkBehaviour for Identify {
         match event {
             IdentifyHandlerEvent::Identified(info) => {
                 // Replace existing addresses to prevent other peer from filling up our memory.
+                let valid_listen_addrs = info
+                    .listen_addrs
+                    .clone()
+                    .into_iter()
+                    .filter(|addr| multiaddr_matches_peer_id(addr, &peer_id));
+
                 self.discovered_peers
-                    .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
+                    .put(peer_id, HashSet::from_iter(valid_listen_addrs));
 
                 let observed = info.observed_addr.clone();
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -497,6 +504,16 @@ fn listen_addrs(params: &impl PollParameters) -> Vec<Multiaddr> {
     let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
     listen_addrs.extend(params.listened_addresses());
     listen_addrs
+}
+
+/// If there is a given peer_id in the multiaddr, make sure it is the same as
+/// the given peer_id. If there is no peer_id for the peer in the mutiaddr, this returns true.
+fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
+    let last_component = addr.iter().last();
+    if let Some(Protocol::P2p(multi_addr_peer_id)) = last_component {
+        return multi_addr_peer_id == *peer_id.as_ref();
+    }
+    return true;
 }
 
 #[cfg(test)]
@@ -770,5 +787,30 @@ mod tests {
         });
 
         assert_eq!(connected_peer, swarm1_peer_id);
+    }
+
+    #[test]
+    fn check_multiaddr_matches_peer_id() {
+        let peer_id = PeerId::random();
+        let other_peer_id = PeerId::random();
+        let mut addr: Multiaddr = ("/ip4/147.75.69.143/tcp/4001".to_string())
+            .parse()
+            .expect("failed to parse multiaddr");
+
+        let addr_without_peer_id: Multiaddr = addr.clone();
+        let mut addr_with_other_peer_id = addr.clone();
+
+        addr.push(Protocol::P2p(peer_id.clone().into()));
+        addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
+
+        assert_eq!(true, multiaddr_matches_peer_id(&addr, &peer_id));
+        assert_eq!(
+            false,
+            multiaddr_matches_peer_id(&addr_with_other_peer_id, &peer_id)
+        );
+        assert_eq!(
+            true,
+            multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id)
+        );
     }
 }
