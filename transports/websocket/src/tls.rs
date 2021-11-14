@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
-use std::{fmt, io, sync::Arc};
 use std::convert::TryFrom;
+use std::{fmt, io, sync::Arc};
 
 /// TLS configuration.
 #[derive(Clone)]
@@ -92,15 +92,13 @@ impl Config {
 /// Setup the rustls client configuration.
 fn client_root_store() -> rustls::RootCertStore {
     let mut client_root_store = rustls::RootCertStore::empty();
-    client_root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
-        |ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        },
-    ));
+    client_root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
     client_root_store
 }
 
@@ -128,7 +126,8 @@ impl Builder {
 
     /// Add an additional trust anchor.
     pub fn add_trust(&mut self, cert: &Certificate) -> Result<&mut Self, Error> {
-        self.client_root_store.add(&cert.0)
+        self.client_root_store
+            .add(&cert.0)
             .map_err(|e| Error::Tls(Box::new(e)))?;
         Ok(self)
     }
