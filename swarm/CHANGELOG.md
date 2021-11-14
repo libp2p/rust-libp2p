@@ -10,13 +10,14 @@
    Changes required to maintain status quo:
 
    - Previously `swarm.dial(peer_id)`
-     Now `swarm.dial(DialOpts::peer_id(swarm1_peer_id).build())`
+     now `swarm.dial(DialOpts::peer_id(swarm1_peer_id).build())`
 
    - Previously `swarm.dial_addr(addr)`
-     Now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
+     now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
+     or `swarm.dial(addr)` given that `DialOpts` implements `From<Multiaddr>`.
 
    - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
-     Now
+     now
      ```rust
      NetworkBehaviourAction::Dial {
        opts: DialOpts::peer_id(peer_id)
@@ -27,7 +28,7 @@
      ```
 
    - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
-     Now
+     now
      ```rust
      NetworkBehaviourAction::Dial {
        opts: DialOpts::unknown_peer_id()

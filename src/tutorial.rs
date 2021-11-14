@@ -251,7 +251,7 @@
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote = addr.parse()?;
-//!         swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
+//!         swarm.dial(remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!
@@ -298,7 +298,7 @@
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote = addr.parse()?;
-//!         swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
+//!         swarm.dial(remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!

@@ -165,12 +165,7 @@ where
     {
         let addr_to_dial = other.external_addresses().next().unwrap().addr.clone();
 
-        self.dial(
-            DialOpts::unknown_peer_id()
-                .address(addr_to_dial.clone())
-                .build(),
-        )
-        .unwrap();
+        self.dial(addr_to_dial.clone()).unwrap();
 
         let mut dialer_done = false;
         let mut listener_done = false;

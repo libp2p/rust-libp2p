@@ -146,13 +146,7 @@ fn src_connect_to_dst_listening_via_relay() {
             }
         };
 
-        src_swarm
-            .dial(
-                DialOpts::unknown_peer_id()
-                    .address(dst_addr_via_relay)
-                    .build(),
-            )
-            .unwrap();
+        src_swarm.dial(dst_addr_via_relay).unwrap();
         let src = async move {
             // Source Node dialing Relay to connect to Destination Node.
             match src_swarm.select_next_some().await {
@@ -227,13 +221,7 @@ fn src_connect_to_dst_not_listening_via_active_relay() {
     dst_swarm.listen_on(Protocol::P2pCircuit.into()).unwrap();
     spawn_swarm_on_pool(&pool, dst_swarm);
 
-    src_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay)
-                .build(),
-        )
-        .unwrap();
+    src_swarm.dial(dst_addr_via_relay).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.select_next_some().await {
@@ -319,9 +307,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
     spawn_swarm_on_pool(&pool, dst_swarm);
 
     pool.run_until(async move {
-        src_swarm
-            .dial(DialOpts::unknown_peer_id().address(relay_addr).build())
-            .unwrap();
+        src_swarm.dial(relay_addr).unwrap();
 
         // Source Node establishing connection to Relay.
         loop {
@@ -335,13 +321,7 @@ fn src_connect_to_dst_via_established_connection_to_relay() {
             }
         }
 
-        src_swarm
-            .dial(
-                DialOpts::unknown_peer_id()
-                    .address(dst_addr_via_relay)
-                    .build(),
-            )
-            .unwrap();
+        src_swarm.dial(dst_addr_via_relay).unwrap();
 
         // Source Node establishing connection to destination node via Relay.
         loop {
@@ -395,13 +375,7 @@ fn src_try_connect_to_offline_dst() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
-    src_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay.clone())
-                .build(),
-        )
-        .unwrap();
+    src_swarm.dial(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.select_next_some().await {
@@ -459,13 +433,7 @@ fn src_try_connect_to_unsupported_dst() {
     dst_swarm.listen_on(dst_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, dst_swarm);
 
-    src_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay.clone())
-                .build(),
-        )
-        .unwrap();
+    src_swarm.dial(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.select_next_some().await {
@@ -516,13 +484,7 @@ fn src_try_connect_to_offline_dst_via_offline_relay() {
         .with(dst_addr.into_iter().next().unwrap())
         .with(Protocol::P2p(dst_peer_id.clone().into()));
 
-    src_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay.clone())
-                .build(),
-        )
-        .unwrap();
+    src_swarm.dial(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.select_next_some().await {
@@ -799,9 +761,7 @@ fn inactive_connection_timeout() {
     spawn_swarm_on_pool(&pool, dst_swarm);
 
     pool.run_until(async move {
-        src_swarm
-            .dial(DialOpts::unknown_peer_id().address(relay_addr).build())
-            .unwrap();
+        src_swarm.dial(relay_addr).unwrap();
         // Source Node dialing Relay.
         loop {
             match src_swarm.select_next_some().await {
@@ -813,13 +773,7 @@ fn inactive_connection_timeout() {
             }
         }
 
-        src_swarm
-            .dial(
-                DialOpts::unknown_peer_id()
-                    .address(dst_addr_via_relay)
-                    .build(),
-            )
-            .unwrap();
+        src_swarm.dial(dst_addr_via_relay).unwrap();
 
         // Source Node establishing connection to destination node via Relay.
         match src_swarm.select_next_some().await {
@@ -887,20 +841,8 @@ fn concurrent_connection_same_relay_same_dst() {
     spawn_swarm_on_pool(&pool, dst_swarm);
 
     pool.run_until(async move {
-        src_swarm
-            .dial(
-                DialOpts::unknown_peer_id()
-                    .address(dst_addr_via_relay.clone())
-                    .build(),
-            )
-            .unwrap();
-        src_swarm
-            .dial(
-                DialOpts::unknown_peer_id()
-                    .address(dst_addr_via_relay)
-                    .build(),
-            )
-            .unwrap();
+        src_swarm.dial(dst_addr_via_relay.clone()).unwrap();
+        src_swarm.dial(dst_addr_via_relay).unwrap();
 
         // Source Node establishing two connections to destination node via Relay.
         let mut num_established = 0;
@@ -1045,20 +987,8 @@ fn yield_incoming_connection_through_correct_listener() {
         }
     });
 
-    src_1_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay_1.clone())
-                .build(),
-        )
-        .unwrap();
-    src_2_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay_2.clone())
-                .build(),
-        )
-        .unwrap();
+    src_1_swarm.dial(dst_addr_via_relay_1.clone()).unwrap();
+    src_2_swarm.dial(dst_addr_via_relay_2.clone()).unwrap();
     spawn_swarm_on_pool(&pool, src_1_swarm);
     spawn_swarm_on_pool(&pool, src_2_swarm);
 
@@ -1117,13 +1047,7 @@ fn yield_incoming_connection_through_correct_listener() {
 
     // Expect destination node to reject incoming connection from unknown relay given that
     // destination node is not listening for such connections.
-    src_3_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay_3.clone())
-                .build(),
-        )
-        .unwrap();
+    src_3_swarm.dial(dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(async {
         loop {
             futures::select! {
@@ -1193,13 +1117,7 @@ fn yield_incoming_connection_through_correct_listener() {
 
     // Expect destination node to accept incoming connection from "unknown" relay, i.e. the
     // connection from source node 3 via relay 3.
-    src_3_swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(dst_addr_via_relay_3.clone())
-                .build(),
-        )
-        .unwrap();
+    src_3_swarm.dial(dst_addr_via_relay_3.clone()).unwrap();
     pool.run_until(async move {
         loop {
             match src_3_swarm.select_next_some().await {

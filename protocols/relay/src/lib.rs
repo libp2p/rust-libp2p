@@ -62,7 +62,7 @@
 //! swarm.listen_on(relay_addr).unwrap();
 //!
 //! // Dial node (5678) via relay node (1234).
-//! swarm.dial(DialOpts::unknown_peer_id().address(dst_addr).build()).unwrap();
+//! swarm.dial(dst_addr).unwrap();
 //! ```
 //!
 //! ## Terminology

@@ -523,11 +523,10 @@ mod network {
                             .behaviour_mut()
                             .kademlia
                             .add_address(&peer_id, peer_addr.clone());
-                        match self.swarm.dial(
-                            DialOpts::unknown_peer_id()
-                                .address(peer_addr.with(Protocol::P2p(peer_id.into())))
-                                .build(),
-                        ) {
+                        match self
+                            .swarm
+                            .dial(peer_addr.with(Protocol::P2p(peer_id.into())))
+                        {
                             Ok(()) => {
                                 self.pending_dial.insert(peer_id, sender);
                             }

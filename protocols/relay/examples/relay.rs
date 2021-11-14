@@ -130,11 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Mode::ClientDial => {
             let client_listen_address = get_client_listen_address(&opt);
-            swarm.dial(
-                DialOpts::unknown_peer_id()
-                    .address(client_listen_address.parse()?)
-                    .build(),
-            )?;
+            swarm.dial(client_listen_address.parse()?)?;
             println!("starting as client dialer on {}", client_listen_address);
         }
     }

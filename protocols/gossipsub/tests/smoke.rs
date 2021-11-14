@@ -98,13 +98,7 @@ impl Graph {
                 p2p_suffix_connected.unwrap()
             );
 
-            next.1
-                .dial(
-                    DialOpts::unknown_peer_id()
-                        .address(connected_addr_no_p2p)
-                        .build(),
-                )
-                .unwrap();
+            next.1.dial(connected_addr_no_p2p).unwrap();
 
             connected_nodes.push(next);
         }

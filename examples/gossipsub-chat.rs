@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(to_dial) = std::env::args().nth(1) {
         let dialing = to_dial.clone();
         match to_dial.parse() {
-            Ok(to_dial) => match swarm.dial(DialOpts::unknown_peer_id().address(to_dial).build()) {
+            Ok(to_dial) => match swarm.dial(to_dial) {
                 Ok(_) => println!("Dialed {:?}", dialing),
                 Err(e) => println!("Dial {:?} failed: {:?}", dialing, e),
             },

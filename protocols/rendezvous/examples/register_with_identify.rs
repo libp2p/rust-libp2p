@@ -60,13 +60,7 @@ async fn main() {
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
-    swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(rendezvous_point_address)
-                .build(),
-        )
-        .unwrap();
+    swarm.dial(rendezvous_point_address).unwrap();
 
     while let Some(event) = swarm.next().await {
         match event {

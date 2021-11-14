@@ -563,9 +563,7 @@ mod tests {
                 }
             }
         });
-        swarm2
-            .dial(DialOpts::unknown_peer_id().address(listen_addr).build())
-            .unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
@@ -645,9 +643,7 @@ mod tests {
             }
         });
 
-        swarm2
-            .dial(DialOpts::unknown_peer_id().address(listen_addr).build())
-            .unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         async_std::task::block_on(async move {
             loop {
@@ -734,9 +730,7 @@ mod tests {
             }
         });
 
-        swarm2
-            .dial(DialOpts::unknown_peer_id().address(listen_addr).build())
-            .unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         // Wait until we identified.
         async_std::task::block_on(async {

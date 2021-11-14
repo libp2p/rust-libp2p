@@ -77,6 +77,12 @@ impl DialOpts {
     }
 }
 
+impl From<Multiaddr> for DialOpts {
+    fn from(address: Multiaddr) -> Self {
+        DialOpts::unknown_peer_id().address(address).build()
+    }
+}
+
 /// Internal options type.
 ///
 /// Not to be constructed manually. Use either of the below instead:

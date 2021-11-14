@@ -347,15 +347,11 @@ where
     /// );
     ///
     /// // Dial an unknown peer.
-    /// swarm.dial(
-    ///   DialOpts::unknown_peer_id()
-    ///      .address("/ip6/::1/tcp/12345".parse().unwrap())
-    ///      .build()
-    /// );
+    /// swarm.dial("/ip6/::1/tcp/12345".parse().unwrap());
     /// ```
-    pub fn dial(&mut self, opts: DialOpts) -> Result<(), DialError> {
+    pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
         let handler = self.behaviour.new_handler();
-        self.dial_with_handler(opts, handler)
+        self.dial_with_handler(opts.into(), handler)
     }
 
     fn dial_with_handler(
@@ -1523,9 +1519,7 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1
-                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
-                .unwrap();
+            swarm1.dial(addr2.clone()).unwrap();
         }
         let mut state = State::Connecting;
 
@@ -1557,11 +1551,7 @@ mod tests {
                             swarm2.behaviour.reset();
                             unbanned = true;
                             for _ in 0..num_connections {
-                                swarm2
-                                    .dial(
-                                        DialOpts::unknown_peer_id().address(addr1.clone()).build(),
-                                    )
-                                    .unwrap();
+                                swarm2.dial(addr1.clone()).unwrap();
                             }
                             state = State::Connecting;
                         }
@@ -1604,9 +1594,7 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1
-                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
-                .unwrap();
+            swarm1.dial(addr2.clone()).unwrap();
         }
         let mut state = State::Connecting;
 
@@ -1636,9 +1624,7 @@ mod tests {
                         swarm1.behaviour.reset();
                         swarm2.behaviour.reset();
                         for _ in 0..num_connections {
-                            swarm2
-                                .dial(DialOpts::unknown_peer_id().address(addr1.clone()).build())
-                                .unwrap();
+                            swarm2.dial(addr1.clone()).unwrap();
                         }
                         state = State::Connecting;
                     }
@@ -1681,9 +1667,7 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1
-                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
-                .unwrap();
+            swarm1.dial(addr2.clone()).unwrap();
         }
         let mut state = State::Connecting;
 
@@ -1716,9 +1700,7 @@ mod tests {
                         swarm1.behaviour.reset();
                         swarm2.behaviour.reset();
                         for _ in 0..num_connections {
-                            swarm2
-                                .dial(DialOpts::unknown_peer_id().address(addr1.clone()).build())
-                                .unwrap();
+                            swarm2.dial(addr1.clone()).unwrap();
                         }
                         state = State::Connecting;
                     }
@@ -1760,9 +1742,7 @@ mod tests {
         let num_connections = 10;
 
         for _ in 0..num_connections {
-            swarm1
-                .dial(DialOpts::unknown_peer_id().address(addr2.clone()).build())
-                .unwrap();
+            swarm1.dial(addr2.clone()).unwrap();
         }
         let mut state = State::Connecting;
         let mut disconnected_conn_id = None;

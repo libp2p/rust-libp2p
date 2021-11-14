@@ -55,13 +55,7 @@ async fn main() {
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
-    let _ = swarm
-        .dial(
-            DialOpts::unknown_peer_id()
-                .address(rendezvous_point_address.clone())
-                .build(),
-        )
-        .unwrap();
+    let _ = swarm.dial(rendezvous_point_address.clone()).unwrap();
 
     let mut discover_tick = tokio::time::interval(Duration::from_secs(30));
     let mut cookie = None;
@@ -102,7 +96,7 @@ async fn main() {
                                         address.clone()
                                     };
 
-                                swarm.dial(DialOpts::unknown_peer_id().address(address_with_p2p).build()).unwrap()
+                                swarm.dial(address_with_p2p).unwrap()
                             }
                         }
                     }

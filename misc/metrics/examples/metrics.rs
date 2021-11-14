@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     if let Some(addr) = std::env::args().nth(1) {
         let remote = addr.parse()?;
-        swarm.dial(DialOpts::unknown_peer_id().address(remote).build())?;
+        swarm.dial(remote)?;
         tide::log::info!("Dialed {}", addr)
     }
 
