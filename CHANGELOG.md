@@ -42,13 +42,14 @@
 
 # `libp2p` facade crate
 
-
-## Version 0.40.0-rc.2 [2021-10-15]
+## Version 0.41.0 [unreleased]
 
 - Update individual crates.
     - `libp2p-kad`
+    - `libp2p-websocket`
+- Forward `wasm-bindgen` feature to `futures-timer`, `instant`, `parking_lot`, `getrandom/js` and `rand/wasm-bindgen`.
 
-## Version 0.40.0-rc.1 [2021-10-15]
+## Version 0.40.0 [2021-11-01]
 
 - Update individual crates.
     - `libp2p-core`

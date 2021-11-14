@@ -80,7 +80,18 @@ const dial = (addr) => {
 			read: (function*() { while(ws.readyState == 1) { yield reader.next(); } })(),
 			write: (data) => {
 				if (ws.readyState == 1) {
-					ws.send(data);
+					// The passed in `data` is an `ArrayBufferView` [0]. If the
+					// underlying typed array is a `SharedArrayBuffer` (when
+					// using WASM threads, so multiple web workers sharing
+					// memory) the WebSocket's `send` method errors [1][2][3].
+					// This limitation will probably be lifted in the future,
+					// but for now we have to make a copy here ..
+					//
+					// [0]: https://developer.mozilla.org/en-US/docs/Web/API/ArrayBufferView
+					// [1]: https://chromium.googlesource.com/chromium/src/+/1438f63f369fed3766fa5031e7a252c986c69be6%5E%21/
+					// [2]: https://bugreports.qt.io/browse/QTBUG-78078
+					// [3]: https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/renderer/bindings/IDLExtendedAttributes.md#AllowShared_p
+					ws.send(data.slice(0));
 					return promise_when_send_finished(ws);
 				} else {
 					return Promise.reject("WebSocket is closed");
