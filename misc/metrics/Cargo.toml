@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-metrics"
-edition = "2018"
+edition = "2021"
 description = "Metrics for libp2p"
 version = "0.1.0"
 authors = ["Max Inden <mail@max-inden.de>"]

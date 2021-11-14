@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-rendezvous"
-edition = "2018"
+edition = "2021"
 description = "Rendezvous protocol for libp2p"
 version = "0.1.0"
 authors = ["The COMIT guys <hello@comit.network>"]

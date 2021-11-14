@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-core"
-edition = "2018"
+edition = "2021"
 description = "Core traits and structs of libp2p"
 version = "0.30.0"
 authors = ["Parity Technologies <admin@parity.io>"]

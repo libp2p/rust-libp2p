@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-kad"
-edition = "2018"
+edition = "2021"
 description = "Kademlia protocol for libp2p"
 version = "0.32.0"
 authors = ["Parity Technologies <admin@parity.io>"]

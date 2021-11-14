@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-pnet"
-edition = "2018"
+edition = "2021"
 description = "Private swarm support for libp2p"
 version = "0.22.0"
 authors = ["Parity Technologies <admin@parity.io>"]
