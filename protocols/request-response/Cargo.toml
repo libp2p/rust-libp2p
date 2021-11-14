@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-request-response"
-edition = "2018"
+edition = "2021"
 description = "Generic Request/Response Protocols"
 version = "0.13.1"
 authors = ["Parity Technologies <admin@parity.io>"]

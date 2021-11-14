@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-relay"
-edition = "2018"
+edition = "2021"
 description = "Communications relaying for libp2p"
 version = "0.4.1"
 authors = ["Parity Technologies <admin@parity.io>"]

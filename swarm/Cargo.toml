@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-swarm"
-edition = "2018"
+edition = "2021"
 description = "The libp2p swarm"
 version = "0.31.1"
 authors = ["Parity Technologies <admin@parity.io>"]

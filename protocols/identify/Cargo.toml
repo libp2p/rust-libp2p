@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-identify"
-edition = "2018"
+edition = "2021"
 description = "Nodes identifcation protocol for libp2p"
 version = "0.31.1"
 authors = ["Parity Technologies <admin@parity.io>"]
