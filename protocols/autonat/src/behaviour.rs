@@ -33,7 +33,7 @@ use libp2p_swarm::{
     NetworkBehaviourAction, PollParameters,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     iter,
     task::{Context, Poll},
     time::{Duration, Instant},
@@ -577,27 +577,66 @@ fn filter_valid_addrs(
     demanded: Vec<Multiaddr>,
     observed_remote_at: &Multiaddr,
 ) -> Vec<Multiaddr> {
-    let observed_ip = match observed_remote_at.into_iter().next() {
-        Some(Protocol::Ip4(ip)) => Protocol::Ip4(ip),
-        Some(Protocol::Ip6(ip)) => Protocol::Ip6(ip),
-        _ => return Vec::new(),
+    let observed_ip = observed_remote_at.into_iter().find(|p| match p {
+        Protocol::Ip4(ip) => {
+            // NOTE: The below logic is copied from `std::net::Ipv4Addr::is_global`, which at the current
+            // point is behind the unstable `ip` feature.
+            // See https://github.com/rust-lang/rust/issues/27709 for more info.
+            // The check for the unstable `Ipv4Addr::is_benchmarking` and `Ipv4Addr::is_reserved `
+            // were skipped, because they should never occur in an observed address.
+
+            // check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the only two
+            // globally routable addresses in the 192.0.0.0/24 range.
+            if u32::from_be_bytes(ip.octets()) == 0xc0000009
+                || u32::from_be_bytes(ip.octets()) == 0xc000000a
+            {
+                return true;
+            }
+
+            let is_shared = ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000);
+
+            !ip.is_private()
+                && !ip.is_loopback()
+                && !ip.is_link_local()
+                && !ip.is_broadcast()
+                && !ip.is_documentation()
+                && !is_shared
+        }
+        Protocol::Ip6(_) => {
+            // TODO: filter addresses for global ones
+            true
+        }
+        _ => false,
+    });
+    let observed_ip = match observed_ip {
+        Some(ip) => ip,
+        None => return Vec::new(),
     };
+    let mut distinct = HashSet::new();
     demanded
         .into_iter()
         .filter_map(|addr| {
-            addr.replace(0, |proto| match proto {
+            // Replace the demanded ip with the observed one.
+            let i = addr
+                .iter()
+                .position(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))?;
+            addr.replace(i, |proto| match proto {
                 Protocol::Ip4(_) => Some(observed_ip.clone()),
                 Protocol::Ip6(_) => Some(observed_ip.clone()),
                 _ => None,
             })?;
-            // TODO: Add more filters
-            addr.iter()
-                .all(|proto| match proto {
-                    Protocol::P2pCircuit => false,
-                    Protocol::P2p(hash) => hash == peer.into(),
-                    _ => true,
-                })
-                .then(|| addr)
+            // Filter relay addresses and addresses with invalid peer id.
+            let is_valid = addr.iter().all(|proto| match proto {
+                Protocol::P2pCircuit => false,
+                Protocol::P2p(hash) => hash == peer.into(),
+                _ => true,
+            });
+
+            if !is_valid {
+                return None;
+            }
+            // Only collect distinct addresses.
+            distinct.insert(addr.clone()).then(|| addr)
         })
         .collect()
 }
