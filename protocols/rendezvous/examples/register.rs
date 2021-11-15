@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::swarm::{dial_opts::DialOpts, Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
 use libp2p_swarm::AddressScore;

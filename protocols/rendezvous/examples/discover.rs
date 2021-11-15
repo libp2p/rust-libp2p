@@ -23,7 +23,7 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::swarm::{dial_opts::DialOpts, SwarmEvent};
+use libp2p::swarm::{SwarmEvent};
 use libp2p::Swarm;
 use libp2p::{development_transport, rendezvous, Multiaddr};
 use std::time::Duration;
