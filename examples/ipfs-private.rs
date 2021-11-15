@@ -43,7 +43,7 @@ use libp2p::{
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{dial_opts::DialOpts, NetworkBehaviourEventProcess, SwarmEvent},
+    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
     tcp::TcpConfig,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,

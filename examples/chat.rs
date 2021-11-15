@@ -55,7 +55,7 @@ use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::{dial_opts::DialOpts, SwarmEvent},
+    swarm::{SwarmEvent},
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
 use std::{

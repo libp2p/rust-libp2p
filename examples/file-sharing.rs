@@ -217,7 +217,7 @@ mod network {
         ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
         RequestResponseMessage, ResponseChannel,
     };
-    use libp2p::swarm::{dial_opts::DialOpts, ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
+    use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
     use libp2p::{NetworkBehaviour, Swarm};
     use std::collections::{HashMap, HashSet};
     use std::iter;
