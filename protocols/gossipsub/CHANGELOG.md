@@ -1,6 +1,6 @@
 # 0.33.1 [unreleased]
 
-- Add topic and mesh metrics (see [PR 2316])
+- Add topic and mesh metrics (see [PR 2316]).
 
 - Fix bug in internal peer's topics tracking (see [PR 2325]).
 
