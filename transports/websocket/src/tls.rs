@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures_rustls::{rustls, webpki, TlsAcceptor, TlsConnector};
+use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
+use std::convert::TryFrom;
 use std::{fmt, io, sync::Arc};
 
 /// TLS configuration.
@@ -69,8 +70,12 @@ impl Config {
 
     /// Create a client-only configuration.
     pub fn client() -> Self {
+        let client = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(client_root_store())
+            .with_no_client_auth();
         Config {
-            client: Arc::new(client_config()).into(),
+            client: Arc::new(client).into(),
             server: None,
         }
     }
@@ -78,24 +83,28 @@ impl Config {
     /// Create a new TLS configuration builder.
     pub fn builder() -> Builder {
         Builder {
-            client: client_config(),
+            client_root_store: client_root_store(),
             server: None,
         }
     }
 }
 
 /// Setup the rustls client configuration.
-fn client_config() -> rustls::ClientConfig {
-    let mut client = rustls::ClientConfig::new();
-    client
-        .root_store
-        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-    client
+fn client_root_store() -> rustls::RootCertStore {
+    let mut client_root_store = rustls::RootCertStore::empty();
+    client_root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+    client_root_store
 }
 
 /// TLS configuration builder.
 pub struct Builder {
-    client: rustls::ClientConfig,
+    client_root_store: rustls::RootCertStore,
     server: Option<rustls::ServerConfig>,
 }
 
@@ -105,10 +114,11 @@ impl Builder {
     where
         I: IntoIterator<Item = Certificate>,
     {
-        let mut server = rustls::ServerConfig::new(rustls::NoClientAuth::new());
         let certs = certs.into_iter().map(|c| c.0).collect();
-        server
-            .set_single_cert(certs, key.0)
+        let server = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certs, key.0)
             .map_err(|e| Error::Tls(Box::new(e)))?;
         self.server = Some(server);
         Ok(self)
@@ -116,8 +126,7 @@ impl Builder {
 
     /// Add an additional trust anchor.
     pub fn add_trust(&mut self, cert: &Certificate) -> Result<&mut Self, Error> {
-        self.client
-            .root_store
+        self.client_root_store
             .add(&cert.0)
             .map_err(|e| Error::Tls(Box::new(e)))?;
         Ok(self)
@@ -125,15 +134,20 @@ impl Builder {
 
     /// Finish configuration.
     pub fn finish(self) -> Config {
+        let client = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(self.client_root_store)
+            .with_no_client_auth();
+
         Config {
-            client: Arc::new(self.client).into(),
+            client: Arc::new(client).into(),
             server: self.server.map(|s| Arc::new(s).into()),
         }
     }
 }
 
-pub(crate) fn dns_name_ref(name: &str) -> Result<webpki::DNSNameRef<'_>, Error> {
-    webpki::DNSNameRef::try_from_ascii_str(name).map_err(|_| Error::InvalidDnsName(name.into()))
+pub(crate) fn dns_name_ref(name: &str) -> Result<rustls::ServerName, Error> {
+    rustls::ServerName::try_from(name).map_err(|_| Error::InvalidDnsName(name.into()))
 }
 
 // Error //////////////////////////////////////////////////////////////////////////////////////////

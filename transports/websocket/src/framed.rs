@@ -21,7 +21,7 @@
 use crate::{error::Error, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use futures_rustls::{client, server, webpki};
+use futures_rustls::{client, rustls, server};
 use libp2p_core::{
     either::EitherOutput,
     multiaddr::{Multiaddr, Protocol},
@@ -311,7 +311,7 @@ where
             let stream = self
                 .tls_config
                 .client
-                .connect(dns_name.as_ref(), stream)
+                .connect(dns_name.clone(), stream)
                 .map_err(|e| {
                     debug!("TLS handshake with {:?} failed: {}", dns_name, e);
                     Error::Tls(tls::Error::from(e))
@@ -364,7 +364,7 @@ where
 struct WsAddress {
     host_port: String,
     path: String,
-    dns_name: Option<webpki::DNSName>,
+    dns_name: Option<rustls::ServerName>,
     use_tls: bool,
     tcp_addr: Multiaddr,
 }
@@ -393,10 +393,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
-                break (
-                    format!("{}:{}", &h, port),
-                    Some(tls::dns_name_ref(&h)?.to_owned()),
-                )
+                break (format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?))
             }
             (Some(_), Some(p)) => {
                 ip = Some(p);
