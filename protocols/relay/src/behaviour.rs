@@ -29,8 +29,9 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId, ListenerId};
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::PeerId;
 use libp2p_swarm::{
-    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::{self, DialOpts},
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -310,7 +311,7 @@ impl NetworkBehaviour for Relay {
         error: &DialError,
     ) {
         if let DialError::DialPeerConditionFalse(
-            DialPeerCondition::Disconnected | DialPeerCondition::NotDialing,
+            dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
         ) = error
         {
             // Return early. The dial, that this dial was canceled for, might still succeed.
@@ -483,9 +484,10 @@ impl NetworkBehaviour for Relay {
                         );
                         let handler = self.new_handler();
                         self.outbox_to_swarm
-                            .push_back(NetworkBehaviourAction::DialPeer {
-                                peer_id: dest_id,
-                                condition: DialPeerCondition::NotDialing,
+                            .push_back(NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(dest_id)
+                                    .condition(dial_opts::PeerCondition::NotDialing)
+                                    .build(),
                                 handler,
                             });
                     } else {
@@ -676,9 +678,10 @@ impl NetworkBehaviour for Relay {
                                 dst_peer_id,
                                 send_back,
                             });
-                        return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                            peer_id: relay_peer_id,
-                            condition: DialPeerCondition::Disconnected,
+                        return Poll::Ready(NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(relay_peer_id)
+                                .condition(dial_opts::PeerCondition::Disconnected)
+                                .build(),
                             handler: self.new_handler(),
                         });
                     }
@@ -743,9 +746,10 @@ impl NetworkBehaviour for Relay {
                                         to_listener,
                                     },
                                 );
-                                return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                                    peer_id: relay_peer_id,
-                                    condition: DialPeerCondition::Disconnected,
+                                return Poll::Ready(NetworkBehaviourAction::Dial {
+                                    opts: DialOpts::peer_id(relay_peer_id)
+                                        .condition(dial_opts::PeerCondition::Disconnected)
+                                        .build(),
                                     handler: self.new_handler(),
                                 });
                             }

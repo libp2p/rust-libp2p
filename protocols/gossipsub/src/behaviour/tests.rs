@@ -1342,11 +1342,9 @@ mod tests {
             .events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::DialPeer {
-                    peer_id,
-                    condition: DialPeerCondition::Disconnected,
-                    handler: _,
-                } => peer_id == &peer,
+                NetworkBehaviourAction::Dial { opts, handler: _ } => {
+                    opts.get_peer_id() == Some(peer)
+                }
                 _ => false,
             })
             .collect();
@@ -1388,11 +1386,8 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Disconnected,
-                        handler: _,
-                    } => peer_id == peer,
+                    NetworkBehaviourAction::Dial { opts, handler: _ } =>
+                        opts.get_peer_id() == Some(*peer),
                     _ => false,
                 })
                 .count(),
@@ -1407,11 +1402,8 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Disconnected,
-                        handler: _,
-                    } => peer_id == peer,
+                    NetworkBehaviourAction::Dial { opts, handler: _ } =>
+                        opts.get_peer_id() == Some(*peer),
                     _ => false,
                 })
                 .count()
@@ -1821,11 +1813,7 @@ mod tests {
             .events
             .iter()
             .filter_map(|e| match e {
-                NetworkBehaviourAction::DialPeer {
-                    peer_id,
-                    condition: DialPeerCondition::Disconnected,
-                    handler: _,
-                } => Some(peer_id.clone()),
+                NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id(),
                 _ => None,
             })
             .collect();
@@ -2444,7 +2432,7 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer { .. } => true,
+                    NetworkBehaviourAction::Dial { .. } => true,
                     _ => false,
                 })
                 .count(),
@@ -3047,7 +3035,7 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer { .. } => true,
+                    NetworkBehaviourAction::Dial { .. } => true,
                     _ => false,
                 })
                 .count(),
@@ -3072,7 +3060,7 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer { .. } => true,
+                    NetworkBehaviourAction::Dial { .. } => true,
                     _ => false,
                 })
                 .count()
