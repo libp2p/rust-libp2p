@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures-rustls = "0.21"
+futures-rustls = "0.22"
 either = "1.5.3"
 futures = "0.3.1"
 libp2p-core = { version = "0.30.0", path = "../../core", default-features = false  }
@@ -19,7 +19,7 @@ quicksink = "0.1"
 rw-stream-sink = "0.2.0"
 soketto = { version = "0.7.0", features = ["deflate"] }
 url = "2.1"
-webpki-roots = "0.21"
+webpki-roots = "0.22"
 
 [dev-dependencies]
 libp2p-tcp = { path = "../tcp" }
