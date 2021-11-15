@@ -620,11 +620,7 @@ fn filter_valid_addrs(
             let i = addr
                 .iter()
                 .position(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))?;
-            addr.replace(i, |proto| match proto {
-                Protocol::Ip4(_) => Some(observed_ip.clone()),
-                Protocol::Ip6(_) => Some(observed_ip.clone()),
-                _ => None,
-            })?;
+            addr.replace(i, |_| Some(observed_ip.clone()))?;
             // Filter relay addresses and addresses with invalid peer id.
             let is_valid = addr.iter().all(|proto| match proto {
                 Protocol::P2pCircuit => false,
