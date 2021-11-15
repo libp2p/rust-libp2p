@@ -53,11 +53,7 @@ use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
-use libp2p::{
-    gossipsub, identity,
-    swarm::{SwarmEvent},
-    Multiaddr, PeerId,
-};
+use libp2p::{gossipsub, identity, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;

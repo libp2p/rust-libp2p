@@ -62,7 +62,7 @@ use futures::stream::StreamExt;
 use libp2p::dns::DnsConfig;
 use libp2p::plaintext;
 use libp2p::relay::{Relay, RelayConfig};
-use libp2p::swarm::{SwarmEvent};
+use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{core::upgrade, identity::ed25519, ping, Multiaddr};
