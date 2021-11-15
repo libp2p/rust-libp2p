@@ -305,16 +305,14 @@ impl NetworkBehaviour for Identify {
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            IdentifyHandlerEvent::Identified(info) => {
-                // Replace existing addresses to prevent other peer from filling up our memory.
-                let valid_listen_addrs = info
-                    .listen_addrs
-                    .clone()
-                    .into_iter()
-                    .filter(|addr| multiaddr_matches_peer_id(addr, &peer_id));
+            IdentifyHandlerEvent::Identified(mut info) => {
+                // Remove invalid multiaddrs.
+                info.listen_addrs
+                    .retain(|addr| multiaddr_matches_peer_id(addr, &peer_id));
 
+                // Replace existing addresses to prevent other peer from filling up our memory.
                 self.discovered_peers
-                    .put(peer_id, HashSet::from_iter(valid_listen_addrs));
+                    .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
 
                 let observed = info.observed_addr.clone();
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -793,7 +791,7 @@ mod tests {
     fn check_multiaddr_matches_peer_id() {
         let peer_id = PeerId::random();
         let other_peer_id = PeerId::random();
-        let mut addr: Multiaddr = ("/ip4/147.75.69.143/tcp/4001".to_string())
+        let mut addr: Multiaddr = "/ip4/147.75.69.143/tcp/4001"
             .parse()
             .expect("failed to parse multiaddr");
 
@@ -803,14 +801,11 @@ mod tests {
         addr.push(Protocol::P2p(peer_id.clone().into()));
         addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
 
-        assert_eq!(true, multiaddr_matches_peer_id(&addr, &peer_id));
-        assert_eq!(
-            false,
-            multiaddr_matches_peer_id(&addr_with_other_peer_id, &peer_id)
-        );
-        assert_eq!(
-            true,
-            multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id)
-        );
+        assert!(multiaddr_matches_peer_id(&addr, &peer_id));
+        assert!(!multiaddr_matches_peer_id(
+            &addr_with_other_peer_id,
+            &peer_id
+        ));
+        assert!(multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id));
     }
 }
