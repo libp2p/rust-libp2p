@@ -1,4 +1,4 @@
-# 0.30.1 [unreleased]
+# 0.30.1 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
 

@@ -1,4 +1,4 @@
-# 0.34.0 [unreleased]
+# 0.34.0 [2021-11-16]
 
 - Fix bug in internal peer's topics tracking (see [PR 2325]).
 
