@@ -222,7 +222,7 @@
 //!
 //! ```rust
 //! use futures::executor::block_on;
-//! use libp2p::{identity, PeerId};
+//! use libp2p::{identity, Multiaddr, PeerId};
 //! use libp2p::ping::{Ping, PingConfig};
 //! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
 //! use std::error::Error;
@@ -250,7 +250,7 @@
 //!     // Dial the peer identified by the multi-address given as the second
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
-//!         let remote = addr.parse()?;
+//!         let remote: Multiaddr = addr.parse()?;
 //!         swarm.dial(remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
@@ -270,7 +270,7 @@
 //! use futures::prelude::*;
 //! use libp2p::ping::{Ping, PingConfig};
 //! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
-//! use libp2p::{identity, PeerId};
+//! use libp2p::{identity, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::task::Poll;
 //!
@@ -297,7 +297,7 @@
 //!     // Dial the peer identified by the multi-address given as the second
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
-//!         let remote = addr.parse()?;
+//!         let remote: Multiaddr = addr.parse()?;
 //!         swarm.dial(remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
