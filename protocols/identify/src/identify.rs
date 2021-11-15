@@ -757,9 +757,7 @@ mod tests {
         });
 
         // We should still be able to dial now!
-        swarm2
-            .dial(DialOpts::peer_id(swarm1_peer_id).build())
-            .unwrap();
+        swarm2.dial(swarm1_peer_id).unwrap();
 
         let connected_peer = async_std::task::block_on(async {
             loop {

@@ -341,10 +341,7 @@ where
     /// );
     ///
     /// // Dial a known peer.
-    /// swarm.dial(
-    ///   DialOpts::peer_id(PeerId::random())
-    ///      .build()
-    /// );
+    /// swarm.dial(PeerId::random());
     ///
     /// // Dial an unknown peer.
     /// swarm.dial("/ip6/::1/tcp/12345".parse().unwrap());

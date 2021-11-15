@@ -10,7 +10,8 @@
    Changes required to maintain status quo:
 
    - Previously `swarm.dial(peer_id)`
-     now `swarm.dial(DialOpts::peer_id(swarm1_peer_id).build())`
+     now `swarm.dial(DialOpts::peer_id(peer_id).build())`
+     or `swarm.dial(peer_id)` given that `DialOpts` implements `From<PeerId>`.
 
    - Previously `swarm.dial_addr(addr)`
      now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
