@@ -1,3 +1,7 @@
+# 0.33.0 [unreleased]
+
+- Update dependencies.
+
 # 0.32.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.

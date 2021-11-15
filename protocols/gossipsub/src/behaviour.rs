@@ -42,8 +42,8 @@ use libp2p_core::{
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::{self, DialOpts},
+    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 
 use crate::config::{GossipsubConfig, ValidationMode};
@@ -1103,9 +1103,10 @@ where
             // Connect to peer
             debug!("Connecting to explicit peer {:?}", peer_id);
             let handler = self.new_handler();
-            self.events.push_back(NetworkBehaviourAction::DialPeer {
-                peer_id: *peer_id,
-                condition: DialPeerCondition::Disconnected,
+            self.events.push_back(NetworkBehaviourAction::Dial {
+                opts: DialOpts::peer_id(*peer_id)
+                    .condition(dial_opts::PeerCondition::Disconnected)
+                    .build(),
                 handler,
             });
         }
@@ -1587,9 +1588,10 @@ where
 
                 // dial peer
                 let handler = self.new_handler();
-                self.events.push_back(NetworkBehaviourAction::DialPeer {
-                    peer_id,
-                    condition: DialPeerCondition::Disconnected,
+                self.events.push_back(NetworkBehaviourAction::Dial {
+                    opts: DialOpts::peer_id(peer_id)
+                        .condition(dial_opts::PeerCondition::Disconnected)
+                        .build(),
                     handler,
                 });
             }

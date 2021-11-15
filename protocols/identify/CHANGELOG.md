@@ -1,6 +1,8 @@
-# 0.31.1 [unreleased]
+# 0.32.0 [unreleased]
 
 - Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Update dependencies.
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
 

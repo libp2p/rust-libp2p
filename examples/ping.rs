@@ -43,7 +43,7 @@
 use futures::executor::block_on;
 use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::{identity, ping, PeerId};
+use libp2p::{identity, ping, Multiaddr, PeerId};
 use std::error::Error;
 use std::task::Poll;
 
@@ -70,8 +70,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
     if let Some(addr) = std::env::args().nth(1) {
-        let remote = addr.parse()?;
-        swarm.dial_addr(remote)?;
+        let remote: Multiaddr = addr.parse()?;
+        swarm.dial(remote)?;
         println!("Dialed {}", addr)
     }
 

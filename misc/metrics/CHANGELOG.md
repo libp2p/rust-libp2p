@@ -1,6 +1,8 @@
-# 0.1.1 [unreleased]
+# 0.2.0 [unreleased]
 
 - Include gossipsub metrics (see [PR 2316]).
+
+- Update dependencies.
 
 [PR 2316]: https://github.com/libp2p/rust-libp2p/pull/2316
 
