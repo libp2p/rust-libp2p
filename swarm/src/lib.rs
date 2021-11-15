@@ -330,7 +330,7 @@ where
     /// ```
     /// # use libp2p_swarm::Swarm;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p_core::{PeerId, Transport};
+    /// # use libp2p_core::{Multiaddr, PeerId, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::DummyBehaviour;
     /// #
@@ -344,7 +344,7 @@ where
     /// swarm.dial(PeerId::random());
     ///
     /// // Dial an unknown peer.
-    /// swarm.dial("/ip6/::1/tcp/12345".parse().unwrap());
+    /// swarm.dial("/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap());
     /// ```
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
         let handler = self.behaviour.new_handler();
