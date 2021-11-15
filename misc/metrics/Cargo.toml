@@ -2,7 +2,7 @@
 name = "libp2p-metrics"
 edition = "2018"
 description = "Metrics for libp2p"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
