@@ -186,6 +186,15 @@ where
         self.inner.listen_on(addr)
     }
 
+    /// Dials immediately if there is no open circuit related to the
+    /// `CircuitAddr` corresponding to `addr`. Otherwise it waits before
+    /// dialing, see [`CircuitBreaking`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `addr` becomes unsupported while waiting for its circuit to
+    /// close. For an open circuit to exist, `addr` must have been supported
+    /// when it was dialed initially.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Purge expired addresses.
         self.state.close_expired_circuits();
@@ -264,31 +273,28 @@ where
 
         loop {
             match this.inner.as_mut().project() {
-                CircuitBreakingDialInnerProj::Waiting(delay, transport) => {
-                    match delay.poll(cx) {
-                        Poll::Pending => return Poll::Pending,
-                        Poll::Ready(()) => {
-                            debug!(
-                                "Dialing address after circuit breaking wait expired: {:?}",
-                                this.addr
-                            );
-                            let transport = transport
-                                .take()
-                                .expect("future called after being finished");
-                            match transport.dial(this.addr.clone()) {
-                                Ok(f) => this.inner.set(CircuitBreakingDialInner::Dialing(f)),
-                                Err(TransportError::MultiaddrNotSupported(_addr)) => {
-                                    // TODO do something other than panic?
-                                    panic!("Open circuit for unsupported Multiaddr")
-                                }
-                                Err(TransportError::Other(err)) => {
-                                    this.state.open_or_extend_circuit(this.addr.clone());
-                                    return Poll::Ready(Err(err));
-                                }
+                CircuitBreakingDialInnerProj::Waiting(delay, transport) => match delay.poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(()) => {
+                        debug!(
+                            "Dialing address after circuit breaking wait expired: {:?}",
+                            this.addr
+                        );
+                        let transport = transport
+                            .take()
+                            .expect("future called after being finished");
+                        match transport.dial(this.addr.clone()) {
+                            Ok(f) => this.inner.set(CircuitBreakingDialInner::Dialing(f)),
+                            Err(TransportError::MultiaddrNotSupported(_addr)) => {
+                                panic!("Open circuit for unsupported Multiaddr")
+                            }
+                            Err(TransportError::Other(err)) => {
+                                this.state.open_or_extend_circuit(this.addr.clone());
+                                return Poll::Ready(Err(err));
                             }
                         }
                     }
-                }
+                },
 
                 CircuitBreakingDialInnerProj::Dialing(dial) => {
                     match dial.poll(cx) {
