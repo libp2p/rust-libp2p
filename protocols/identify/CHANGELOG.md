@@ -1,10 +1,12 @@
 # 0.32.0 [unreleased]
 
 - Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+- Filter invalid peers from cache used in `addresses_of_peer` – [PR 2338].
 
 - Update dependencies.
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2338]: https://github.com/libp2p/rust-libp2p/pull/2338
 
 # 0.31.0 [2021-11-01]
 
