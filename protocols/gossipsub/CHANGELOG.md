@@ -1,7 +1,7 @@
 # 0.33.1 [unreleased]
 
 - Improve bandwidth performance by tracking IWANTs and reducing duplicate sends
-(see PR 2327)
+  (see PR 2327).
 
 - Fix bug in internal peer's topics tracking (see [PR 2325]).
 
