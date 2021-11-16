@@ -26,8 +26,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
 use libp2p_rendezvous as rendezvous;
-use libp2p_swarm::DialError;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm, SwarmEvent};
 use std::convert::TryInto;
 use std::time::Duration;
 
@@ -187,7 +186,7 @@ async fn discover_allows_for_dial_by_peer_id() {
     let alices_peer_id = *alice.local_peer_id();
     let bobs_peer_id = *bob.local_peer_id();
 
-    bob.dial(&alices_peer_id).unwrap();
+    bob.dial(alices_peer_id).unwrap();
 
     let alice_connected_to = tokio::spawn(async move {
         loop {
@@ -296,7 +295,7 @@ async fn registration_on_clients_expire() {
     tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
 
     let event = bob.select_next_some().await;
-    let error = bob.dial(alice.local_peer_id()).unwrap_err();
+    let error = bob.dial(*alice.local_peer_id()).unwrap_err();
 
     assert!(matches!(
         event,

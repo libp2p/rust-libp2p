@@ -8,6 +8,8 @@
 
 - Populate the `key` field when converting `KadRequestMsg::PutValue` to `proto::Message` (see [PR 2309]).
 
+- Update dependencies.
+
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
 [PR 2297]: https://github.com/libp2p/rust-libp2p/pull/2297
 [PR 2309]: https://github.com/libp2p/rust-libp2p/pull/2309
