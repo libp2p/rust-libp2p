@@ -1,3 +1,9 @@
+# 0.34.1 [unreleased]
+
+- Add metrics for network and configuration performance analysis (see [PR 2346]).
+
+[PR 2346]: https://github.com/libp2p/rust-libp2p/pull/2346
+
 # 0.34.0 [2021-11-16]
 
 - Add topic and mesh metrics (see [PR 2316]).
