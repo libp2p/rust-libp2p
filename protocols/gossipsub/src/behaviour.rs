@@ -1174,8 +1174,8 @@ where
 
         debug!("Handling IHAVE for peer: {:?}", peer_id);
 
-        // use a hashset to avoid duplicates efficiently
-        let mut iwant_ids = HashSet::new();
+        // use a hashmap to avoid duplicates efficiently
+        let mut iwant_ids = HashMap::new();
 
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
@@ -1190,7 +1190,7 @@ where
             for id in ids {
                 if !self.duplicate_cache.contains(&id) {
                     // have not seen this message, request it
-                    iwant_ids.insert(id);
+                    iwant_ids.insert(id, topic.clone());
                 }
             }
         }
@@ -1210,7 +1210,7 @@ where
                 peer_id
             );
 
-            //ask in random order
+            // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.iter().collect();
             let mut rng = thread_rng();
             iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
@@ -1218,7 +1218,14 @@ where
             iwant_ids_vec.truncate(iask as usize);
             *iasked += iask;
 
-            let message_ids = iwant_ids_vec.into_iter().cloned().collect::<Vec<_>>();
+            let mut message_ids = Vec::with_capacity(iwant_ids_vec.len());
+            for (id, topic) in iwant_ids_vec {
+                message_ids.push(id.clone());
+                if let Some(m) = self.metrics.as_mut() {
+                    m.iwant(topic)
+                }
+            }
+
             if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
                 gossip_promises.add_promise(
                     *peer_id,

@@ -138,6 +138,15 @@ pub struct Metrics {
     topic_msg_sent_counts: Family<TopicHash, Counter>,
     /// Bytes from gossip messages sent to each topic .
     topic_msg_sent_bytes: Family<TopicHash, Counter>,
+
+    /* Performance metrics */
+    /// When the user validates a message, it tries to re propagate it to its mesh peers. If the
+    /// message expires from the memcache before it can be validated, we count this a cache miss
+    /// and it is an indicator that the memcache size should be increased.
+    memcache_misses: Counter,
+    /// The number of times we have decided that an IWANT control message is required for this
+    /// topic. A very high metric might indicate an underperforming network.
+    topic_iwant_msgs: Family<TopicHash, Counter>,
 }
 
 impl Metrics {
@@ -186,6 +195,19 @@ impl Metrics {
             "topic_msg_sent_bytes",
             "Bytes from gossip messages sent to each topic."
         );
+        let topic_iwant_msgs = register_family!(
+            "topic_iwant_msgs",
+            "Number of times we have decided an IWANT is required for this topic."
+        );
+        let memcache_misses = {
+            let metric = Counter::default();
+            registry.register(
+                "memcache_misses",
+                "Number of times a message is not found in the duplicate cache when validating.",
+                Box::new(metric.clone()),
+            );
+            metric
+        };
 
         Self {
             max_topics,
@@ -198,6 +220,8 @@ impl Metrics {
             mesh_peer_churn_events,
             topic_msg_sent_counts,
             topic_msg_sent_bytes,
+            memcache_misses,
+            topic_iwant_msgs,
         }
     }
 
@@ -299,6 +323,18 @@ impl Metrics {
             self.topic_msg_sent_bytes
                 .get_or_create(topic)
                 .inc_by(bytes as u64);
+        }
+    }
+
+    /// Register a memcache miss.
+    pub fn memcache_miss(&mut self) {
+        self.memcache_misses.inc();
+    }
+
+    /// Register sending an IWANT msg for this topic.
+    pub fn iwant(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_iwant_msgs.get_or_create(topic).inc();
         }
     }
 }
