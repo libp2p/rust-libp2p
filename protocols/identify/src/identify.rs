@@ -27,8 +27,9 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
-    AddressScore, DialError, DialPeerCondition, IntoProtocolsHandler, NegotiatedSubstream,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
+    dial_opts::{self, DialOpts},
+    AddressScore, DialError, IntoProtocolsHandler, NegotiatedSubstream, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
 };
 use lru::LruCache;
@@ -198,9 +199,10 @@ impl Identify {
             if self.pending_push.insert(p) {
                 if !self.connected.contains_key(&p) {
                     let handler = self.new_handler();
-                    self.events.push_back(NetworkBehaviourAction::DialPeer {
-                        peer_id: p,
-                        condition: DialPeerCondition::Disconnected,
+                    self.events.push_back(NetworkBehaviourAction::Dial {
+                        opts: DialOpts::peer_id(p)
+                            .condition(dial_opts::PeerCondition::Disconnected)
+                            .build(),
                         handler,
                     });
                 }
@@ -561,7 +563,7 @@ mod tests {
                 }
             }
         });
-        swarm2.dial_addr(listen_addr).unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
@@ -641,7 +643,7 @@ mod tests {
             }
         });
 
-        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         async_std::task::block_on(async move {
             loop {
@@ -728,9 +730,9 @@ mod tests {
             }
         });
 
-        swarm2.dial_addr(listen_addr).unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
-        // wait until we identified
+        // Wait until we identified.
         async_std::task::block_on(async {
             loop {
                 if let SwarmEvent::Behaviour(IdentifyEvent::Received { .. }) =
@@ -743,8 +745,19 @@ mod tests {
 
         swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
 
-        // we should still be able to dial now!
-        swarm2.dial(&swarm1_peer_id).unwrap();
+        // Wait for connection to close.
+        async_std::task::block_on(async {
+            loop {
+                if let SwarmEvent::ConnectionClosed { peer_id, .. } =
+                    swarm2.select_next_some().await
+                {
+                    break peer_id;
+                }
+            }
+        });
+
+        // We should still be able to dial now!
+        swarm2.dial(swarm1_peer_id).unwrap();
 
         let connected_peer = async_std::task::block_on(async {
             loop {
