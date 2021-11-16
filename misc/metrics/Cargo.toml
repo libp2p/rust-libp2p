@@ -10,12 +10,14 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
+gossipsub = ["libp2p-gossipsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
 ping = ["libp2p-ping"]
 
 [dependencies]
 libp2p-core = { version = "0.30.0", path = "../../core" }
+libp2p-gossipsub =  { version = "0.34.0", path = "../../protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.32.0", path = "../../protocols/identify", optional = true }
 libp2p-kad = { version = "0.33.0", path = "../../protocols/kad", optional = true }
 libp2p-ping = { version = "0.32.0", path = "../../protocols/ping", optional = true }

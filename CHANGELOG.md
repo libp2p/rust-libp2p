@@ -45,6 +45,7 @@
 ## Version 0.41.0 [2021-11-16]
 
 - Update individual crates.
+    - `libp2p-identify`
     - `libp2p-kad`
     - `libp2p-websocket`
 - Forward `wasm-bindgen` feature to `futures-timer`, `instant`, `parking_lot`, `getrandom/js` and `rand/wasm-bindgen`.

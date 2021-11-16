@@ -72,6 +72,7 @@ mod tests {
             let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
                 MessageAuthenticity::Signed(keypair),
                 self.gs_config,
+                None,
                 self.subscription_filter,
                 self.data_transform,
             )
