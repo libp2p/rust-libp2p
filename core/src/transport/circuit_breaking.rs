@@ -143,11 +143,10 @@ struct CircuitAddr(Multiaddr);
 impl From<Multiaddr> for CircuitAddr {
     fn from(mut addr: Multiaddr) -> Self {
         // Check if `addr` contains `Protocol::P2p(_)`.
-        let contained_p2p = addr.iter().find(|protocol| match protocol {
-            Protocol::P2p(_) => true,
-            _ => false,
-        });
-        if contained_p2p == None {
+        let contains_p2p = addr
+            .iter()
+            .any(|protocol| matches!(protocol, Protocol::P2p(_)));
+        if !contains_p2p {
             return Self(addr);
         }
 
