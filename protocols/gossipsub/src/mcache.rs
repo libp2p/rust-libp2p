@@ -92,7 +92,7 @@ impl MessageCache {
         }
     }
 
-    /// Keeps track of peers we know have received the message to prevent forwarding peers
+    /// Keeps track of peers we know have received the message to prevent forwarding to said peers.
     pub fn observe_duplicate(&mut self, message_id: &MessageId, source: &PeerId) {
         if let Some((message, originating_peers)) = self.msgs.get_mut(message_id) {
             // if the message is already validated, we don't need to store extra peers sending us
