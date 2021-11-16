@@ -37,7 +37,7 @@ use std::{
 };
 
 /// Timeout set when opening CircuitBreaker.
-const INITIAL_TIMEOUT: Duration = Duration::from_secs(2);
+const INITIAL_TIMEOUT: Duration = Duration::from_millis(200);
 /// Maximum allowed timeout.
 const MAX_TIMEOUT: Duration = Duration::from_secs(300);
 
