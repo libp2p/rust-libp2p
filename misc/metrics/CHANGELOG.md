@@ -1,4 +1,4 @@
-# 0.2.0 [unreleased]
+# 0.2.0 [2021-11-16]
 
 - Include gossipsub metrics (see [PR 2316]).
 

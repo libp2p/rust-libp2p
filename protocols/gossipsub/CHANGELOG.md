@@ -1,4 +1,4 @@
-# 0.34.0 [unreleased]
+# 0.34.0 [2021-11-16]
 
 - Add topic and mesh metrics (see [PR 2316]).
 
