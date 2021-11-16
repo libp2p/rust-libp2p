@@ -1,3 +1,9 @@
+# 0.26.0 [2021-11-16]
+
+- Adjust to advanced dialing requests API changes (see [PR 2317]).
+
+[PR 2317]: https://github.com/libp2p/rust-libp2p/pull/2317
+
 # 0.25.0 [2021-11-01]
 
 - Update to latest `libp2p-swarm` changes (see [PR 2191]).
