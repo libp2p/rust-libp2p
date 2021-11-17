@@ -202,17 +202,17 @@ where
             None => {
                 debug!("No open circuit for address {}, dialing immediately", addr);
                 let future = match self.inner.dial(addr.clone()) {
-                    Ok(f) => Ok(f),
+                    Ok(f) => f,
                     Err(TransportError::MultiaddrNotSupported(err)) => {
                         // Avoid open circuits for unsupported addresses.
                         return Err(TransportError::MultiaddrNotSupported(err));
                     }
                     Err(err) => {
                         self.state.open_or_extend_circuit(addr.clone());
-                        Err(err)
+                        return Err(err);
                     }
                 };
-                CircuitBreakingDialInner::Dialing(future?)
+                CircuitBreakingDialInner::Dialing(future)
             }
 
             Some(wait_duration) => {
