@@ -216,7 +216,11 @@ where
             }
 
             Some(wait_duration) => {
-                debug!("Circuit for address {} is open, dialing will be delayed by {}s", addr, wait_duration.as_secs());
+                debug!(
+                    "Circuit for address {} is open, dialing will be delayed by {}s",
+                    addr,
+                    wait_duration.as_secs()
+                );
                 let timer = Delay::new(wait_duration);
                 CircuitBreakingDialInner::Waiting(timer, Some(self.inner))
             }
