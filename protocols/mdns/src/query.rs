@@ -159,13 +159,7 @@ impl MdnsResponse {
                     _ => return None,
                 };
 
-                match MdnsPeer::new(&packet, record_value, record.ttl) {
-                    Ok(peer) => Some(peer),
-                    Err(err) => {
-                        log::debug!("Creating mdns peer failed: {:?}", err);
-                        None
-                    }
-                }
+                MdnsPeer::new(&packet, record_value, record.ttl)
             })
             .collect();
 
@@ -209,7 +203,7 @@ impl MdnsPeer {
         packet: &Packet<'_>,
         record_value: String,
         ttl: u32,
-    ) -> Result<MdnsPeer, String> {
+    ) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
             .additional
@@ -265,12 +259,12 @@ impl MdnsPeer {
 
         match my_peer_id {
             Some(peer_id) =>
-                Ok(MdnsPeer {
+                Some(MdnsPeer {
                     addrs,
                     peer_id,
                     ttl,
                 }),
-            None => Err("Missing Peer ID".to_string())
+            None => None,
         }
     }
 
@@ -309,7 +303,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_create_mdns_peer() -> Result<(), String> {
+    fn test_create_mdns_peer() {
         let ttl = 300;
         let peer_id = PeerId::random();
 
@@ -341,11 +335,9 @@ mod tests {
                     return Some(record_value);
                 }).next().unwrap();
 
-            let peer = MdnsPeer::new(&packet, record_value, ttl)?;
+            let peer = MdnsPeer::new(&packet, record_value, ttl).unwrap();
             assert_eq!(peer.peer_id, peer_id);
         }
-
-        Ok(())
     }
 }
 
