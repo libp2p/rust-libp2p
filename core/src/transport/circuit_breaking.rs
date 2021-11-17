@@ -200,7 +200,7 @@ where
 
         let inner = match self.state.get_wait_duration(&addr) {
             None => {
-                debug!("Dialing address immediately (no open circuit): {:?}", addr);
+                debug!("No open circuit for address {}, dialing immediately", addr);
                 let future = match self.inner.dial(addr.clone()) {
                     Ok(f) => Ok(f),
                     Err(TransportError::MultiaddrNotSupported(err)) => {
@@ -216,7 +216,7 @@ where
             }
 
             Some(wait_duration) => {
-                debug!("Wait before dialing address (open circuit): {:?}", addr);
+                debug!("Circuit for address {} is open, dialing will be delayed by {}s", addr, wait_duration.as_secs());
                 let timer = Delay::new(wait_duration);
                 CircuitBreakingDialInner::Waiting(timer, Some(self.inner))
             }
@@ -276,7 +276,7 @@ where
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(()) => {
                         debug!(
-                            "Dialing address after circuit breaking wait expired: {:?}",
+                            "Dialing address after circuit breaking wait expired: {}",
                             this.addr
                         );
                         let transport = transport
@@ -300,7 +300,7 @@ where
                         Poll::Pending => return Poll::Pending,
                         Poll::Ready(Ok(output)) => {
                             // On success, remove the address.
-                            debug!("Successfully dialed addr: {:?}", this.addr);
+                            debug!("Successfully dialed addr: {}", this.addr);
                             this.state.close_circuit(&this.addr);
                             return Poll::Ready(Ok(output));
                         }
