@@ -159,23 +159,13 @@ impl MdnsResponse {
                     _ => return None,
                 };
 
-                let mut peer_name = match record_value.rsplitn(4, |c| c == '.').last() {
-                    Some(n) => n.to_owned(),
-                    None => return None,
-                };
-
-                // if we have a segmented name, remove the '.'
-                peer_name.retain(|c| c != '.');
-
-                let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
-                    Ok(bytes) => match PeerId::from_bytes(&bytes) {
-                        Ok(id) => id,
-                        Err(_) => return None,
-                    },
-                    Err(_) => return None,
-                };
-
-                Some(MdnsPeer::new(&packet, record_value, peer_id, record.ttl))
+                match MdnsPeer::new(&packet, record_value, record.ttl) {
+                    Ok(peer) => Some(peer),
+                    Err(err) => {
+                        log::debug!("Creating mdns peer failed: {:?}", err);
+                        None
+                    }
+                }
             })
             .collect();
 
@@ -218,9 +208,9 @@ impl MdnsPeer {
     pub fn new(
         packet: &Packet<'_>,
         record_value: String,
-        my_peer_id: PeerId,
         ttl: u32,
-    ) -> MdnsPeer {
+    ) -> Result<MdnsPeer, String> {
+        let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
             .additional
             .iter()
@@ -256,8 +246,12 @@ impl MdnsPeer {
                 match addr.pop() {
                     Some(Protocol::P2p(peer_id)) => {
                         if let Ok(peer_id) = PeerId::try_from(peer_id) {
-                            if peer_id != my_peer_id {
-                                return None;
+                            if let Some(pid) = &my_peer_id {
+                                if peer_id != *pid {
+                                    return None;
+                                }
+                            } else {
+                                my_peer_id.replace(peer_id);
                             }
                         } else {
                             return None;
@@ -269,10 +263,14 @@ impl MdnsPeer {
             })
             .collect();
 
-        MdnsPeer {
-            addrs,
-            peer_id: my_peer_id,
-            ttl,
+        match my_peer_id {
+            Some(peer_id) =>
+                Ok(MdnsPeer {
+                    addrs,
+                    peer_id,
+                    ttl,
+                }),
+            None => Err("Missing Peer ID".to_string())
         }
     }
 
@@ -303,3 +301,52 @@ impl fmt::Debug for MdnsPeer {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::dns::build_query_response;
+    use super::*;
+
+    #[test]
+    fn test_create_mdns_peer() -> Result<(), String> {
+        let ttl = 300;
+        let peer_id = PeerId::random();
+
+        let mut addr1: Multiaddr = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
+        let mut addr2: Multiaddr = "/ip6/::1/udp/10000".parse().unwrap();
+        addr1.push(Protocol::P2p(peer_id.clone().into()));
+        addr2.push(Protocol::P2p(peer_id.clone().into()));
+
+        let packets = build_query_response(
+            0xf8f8,
+            peer_id,
+            vec![addr1, addr2].into_iter(),
+            Duration::from_secs(60),
+        );
+
+        for bytes in packets {
+            let packet = Packet::parse(&bytes).unwrap();
+            let record_value = packet
+                .answers
+                .iter()
+                .filter_map(|record| {
+                    if record.name.to_string().as_bytes() != SERVICE_NAME {
+                        return None;
+                    }
+                    let record_value = match record.data {
+                        RData::PTR(record) => record.0.to_string(),
+                        _ => return None,
+                    };
+                    return Some(record_value);
+                }).next().unwrap();
+
+            let peer = MdnsPeer::new(&packet, record_value, ttl)?;
+            assert_eq!(peer.peer_id, peer_id);
+        }
+
+        Ok(())
+    }
+}
+
+
