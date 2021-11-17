@@ -132,6 +132,7 @@ mod gossip_promises;
 mod handler;
 mod interval;
 mod mcache;
+pub mod metrics;
 mod peer_score;
 pub mod subscription_filter;
 pub mod time_cache;

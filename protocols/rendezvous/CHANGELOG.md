@@ -1,4 +1,4 @@
-# 0.2.0 [unreleased]
+# 0.2.0 [2021-11-16]
 
 - Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
 

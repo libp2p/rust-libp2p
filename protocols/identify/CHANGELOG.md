@@ -1,4 +1,4 @@
-# 0.32.0 [unreleased]
+# 0.32.0 [2021-11-16]
 
 - Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).
 - Filter invalid peers from cache used in `addresses_of_peer` – [PR 2338].

@@ -42,11 +42,21 @@
 
 # `libp2p` facade crate
 
-## Version 0.41.0 [unreleased]
+## Version 0.41.0 [2021-11-16]
 
 - Update individual crates.
+    - `libp2p-floodsub`
+    - `libp2p-gossipsub`
     - `libp2p-identify`
     - `libp2p-kad`
+    - `libp2p-mdns`
+    - `libp2p-metrics`
+    - `libp2p-ping`
+    - `libp2p-relay`
+    - `libp2p-rendezvous`
+    - `libp2p-request-response`
+    - `libp2p-swarm-derive`
+    - `libp2p-swarm`
     - `libp2p-websocket`
 - Forward `wasm-bindgen` feature to `futures-timer`, `instant`, `parking_lot`, `getrandom/js` and `rand/wasm-bindgen`.
 
