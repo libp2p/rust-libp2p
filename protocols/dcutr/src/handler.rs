@@ -24,6 +24,7 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{upgrade, ConnectedPoint, PeerId};
 use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
@@ -34,6 +35,7 @@ use libp2p_swarm::{
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
+use void::Void;
 
 pub enum In {
     Connect {
@@ -66,7 +68,7 @@ impl fmt::Debug for In {
     }
 }
 
-pub enum Event {
+pub enum RelayedConnectionEvent {
     InboundConnectReq {
         inbound_connect: protocol::InboundConnect,
         remote_addr: Multiaddr,
@@ -79,25 +81,25 @@ pub enum Event {
     },
 }
 
-impl fmt::Debug for Event {
+impl fmt::Debug for RelayedConnectionEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Event::InboundConnectReq {
+            RelayedConnectionEvent::InboundConnectReq {
                 inbound_connect: _,
                 remote_addr,
             } => f
-                .debug_struct("Event::InboundConnectReq")
+                .debug_struct("RelayedConnectionEvent::InboundConnectReq")
                 .field("remote_addrs", remote_addr)
                 .finish(),
-            Event::InboundConnectNeg(addrs) => f
-                .debug_tuple("Event::InboundConnectNeg")
+            RelayedConnectionEvent::InboundConnectNeg(addrs) => f
+                .debug_tuple("RelayedConnectionEvent::InboundConnectNeg")
                 .field(addrs)
                 .finish(),
-            Event::OutboundConnectNeg {
+            RelayedConnectionEvent::OutboundConnectNeg {
                 remote_addrs,
                 attempt,
             } => f
-                .debug_struct("Event::OutboundConnectNeg")
+                .debug_struct("RelayedConnectionEvent::OutboundConnectNeg")
                 .field("remote_addrs", remote_addrs)
                 .field("attempt", attempt)
                 .finish(),
@@ -106,6 +108,7 @@ impl fmt::Debug for Event {
 }
 
 pub enum Prototype {
+    // TODO: Variant needed?
     RelayedConnection,
     DirectConnection { role: Role },
     UnknownConnection,
@@ -120,7 +123,8 @@ pub enum Role {
 }
 
 impl IntoProtocolsHandler for Prototype {
-    type Handler = Either<Handler, DummyProtocolsHandler>;
+    type Handler =
+        Either<RelayedConnectionHandler, Either<DirectConnectionHandler, DummyProtocolsHandler>>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         let is_relayed_addr = match endpoint {
@@ -135,14 +139,17 @@ impl IntoProtocolsHandler for Prototype {
                 // TODO: When handler is created via new_handler, the connection is inbound. It should only
                 // ever be us initiating a dcutr request on this handler then, as one never initiates a
                 // request on an outbound handler. Should this be enforced?
-                Either::Left(Handler {
+                Either::Left(RelayedConnectionHandler {
                     remote_addr: endpoint.get_remote_address().clone(),
                     queued_events: Default::default(),
                     inbound_connects: Default::default(),
                 })
             }
-            (Self::DirectConnection { .. } | Self::UnknownConnection, false) => {
-                Either::Right(DummyProtocolsHandler::default())
+            (Self::DirectConnection { .. }, false) => {
+                Either::Right(Either::Left(DirectConnectionHandler { reported: false }))
+            }
+            (Self::UnknownConnection, false) => {
+                Either::Right(Either::Right(DummyProtocolsHandler::default()))
             }
             (Self::RelayedConnection, false) => {
                 todo!("Expected relayed connection.")
@@ -158,7 +165,7 @@ impl IntoProtocolsHandler for Prototype {
     }
 }
 
-pub struct Handler {
+pub struct RelayedConnectionHandler {
     remote_addr: Multiaddr,
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -174,9 +181,9 @@ pub struct Handler {
         FuturesUnordered<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::InboundUpgradeError>>>,
 }
 
-impl ProtocolsHandler for Handler {
+impl ProtocolsHandler for RelayedConnectionHandler {
     type InEvent = In;
-    type OutEvent = Event;
+    type OutEvent = RelayedConnectionEvent;
     type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
     type InboundProtocol = protocol::InboundUpgrade;
     type OutboundProtocol = protocol::OutboundUpgrade;
@@ -193,11 +200,12 @@ impl ProtocolsHandler for Handler {
         inbound_connect: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::InboundConnectReq {
+        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+            RelayedConnectionEvent::InboundConnectReq {
                 inbound_connect,
                 remote_addr: self.remote_addr.clone(),
-            }));
+            },
+        ));
     }
 
     fn inject_fully_negotiated_outbound(
@@ -207,11 +215,12 @@ impl ProtocolsHandler for Handler {
         >>::Output,
         attempt: Self::OutboundOpenInfo,
     ) {
-        self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::OutboundConnectNeg {
+        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+            RelayedConnectionEvent::OutboundConnectNeg {
                 remote_addrs: obs_addrs,
                 attempt,
-            }));
+            },
+        ));
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
@@ -277,11 +286,95 @@ impl ProtocolsHandler for Handler {
         }
 
         while let Poll::Ready(Some(remote_addrs)) = self.inbound_connects.poll_next_unpin(cx) {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::InboundConnectNeg(
-                remote_addrs.unwrap(),
-            )));
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                RelayedConnectionEvent::InboundConnectNeg(remote_addrs.unwrap()),
+            ));
         }
 
+        Poll::Pending
+    }
+}
+
+#[derive(Debug)]
+pub enum DirectConnectionEvent {
+    DirectConnectionUpgradeSucceeded,
+}
+
+pub struct DirectConnectionHandler {
+    reported: bool,
+}
+
+impl ProtocolsHandler for DirectConnectionHandler {
+    type InEvent = void::Void;
+    type OutEvent = DirectConnectionEvent;
+    type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = DeniedUpgrade;
+    type OutboundOpenInfo = Void;
+    type InboundOpenInfo = ();
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(DeniedUpgrade, ())
+    }
+
+    // TODO: Can some of these methods be removed?
+    fn inject_fully_negotiated_inbound(
+        &mut self,
+        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        _: Self::InboundOpenInfo,
+    ) {
+    }
+
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
+        _: Self::OutboundOpenInfo,
+    ) {
+    }
+
+    fn inject_event(&mut self, _: Self::InEvent) {}
+
+    fn inject_address_change(&mut self, _: &Multiaddr) {}
+
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
+        >,
+    ) {
+    }
+
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: Self::InboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
+        >,
+    ) {
+    }
+
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::No
+    }
+
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+    ) -> Poll<
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
+    > {
+        if !self.reported {
+            self.reported = true;
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                DirectConnectionEvent::DirectConnectionUpgradeSucceeded,
+            ));
+        }
         Poll::Pending
     }
 }

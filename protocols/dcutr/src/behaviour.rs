@@ -45,7 +45,9 @@ pub enum Event {
         remote_relayed_addr: Multiaddr,
     },
     // TODO: Emit
-    DirectConnectionUpgradeSucceeded,
+    DirectConnectionUpgradeSucceeded {
+        remote_peer_id: PeerId,
+    },
     DirectConnectionUpgradeFailed {
         remote_peer_id: PeerId,
     },
@@ -188,11 +190,23 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(event) => event,
-            Either::Right(event) => void::unreachable(event),
+            // TODO: Clean up.
+            Either::Right(Either::Left(
+                handler::DirectConnectionEvent::DirectConnectionUpgradeSucceeded,
+            )) => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::DirectConnectionUpgradeSucceeded {
+                            remote_peer_id: event_source,
+                        },
+                    ));
+                return;
+            }
+            Either::Right(Either::Right(event)) => void::unreachable(event),
         };
 
         match handler_event {
-            handler::Event::InboundConnectReq {
+            handler::RelayedConnectionEvent::InboundConnectReq {
                 inbound_connect,
                 remote_addr,
             } => {
@@ -213,7 +227,7 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
-            handler::Event::InboundConnectNeg(remote_addrs) => {
+            handler::RelayedConnectionEvent::InboundConnectNeg(remote_addrs) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
                     // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
@@ -225,7 +239,7 @@ impl NetworkBehaviour for Behaviour {
                     },
                 });
             }
-            handler::Event::OutboundConnectNeg {
+            handler::RelayedConnectionEvent::OutboundConnectNeg {
                 remote_addrs,
                 attempt,
             } => {
