@@ -19,28 +19,70 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::executor::block_on;
+use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::upgrade;
 use libp2p::dcutr;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::dns::DnsConfig;
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p::noise;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
-
-use libp2p::dns::DnsConfig;
 use libp2p::relay::v2::client::{self, Client};
-use libp2p::swarm::{AddressScore, Swarm, SwarmEvent};
+use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId};
+use std::convert::TryInto;
 use std::error::Error;
 use std::net::Ipv4Addr;
+use std::str::FromStr;
 use std::task::{Context, Poll};
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "libp2p DCUtR client")]
+struct Opts {
+    /// The mode (relay, client-listen, client-dial)
+    #[structopt(long)]
+    mode: Mode,
+
+    /// Fixed value to generate deterministic peer id
+    #[structopt(long)]
+    secret_key_seed: u8,
+
+    /// The listening address
+    #[structopt(long)]
+    relay_address: Multiaddr,
+
+    /// Peer ID of the remote peer to hole punch to.
+    #[structopt(long)]
+    remote_peer_id: Option<PeerId>,
+}
+
+#[derive(Debug, StructOpt)]
+enum Mode {
+    Dial,
+    Listen,
+}
+
+impl FromStr for Mode {
+    type Err = String;
+    fn from_str(mode: &str) -> Result<Self, Self::Err> {
+        match mode {
+            "dial" => Ok(Mode::Dial),
+            "listen" => Ok(Mode::Listen),
+            _ => Err("Expected either 'dial' or 'listen'".to_string()),
+        }
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let local_key = generate_ed25519(std::env::args().nth(1).unwrap().parse().unwrap());
+    let opts = Opts::from_args();
+
+    let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
@@ -113,40 +155,93 @@ fn main() -> Result<(), Box<dyn Error>> {
         dcutr: dcutr::behaviour::Behaviour::new(),
     };
 
-    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+    let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
+        .dial_concurrency_factor(10_u8.try_into().unwrap())
+        .build();
 
-    if let (Some(external_ip), Some(port)) = (std::env::args().nth(2), std::env::args().nth(3)) {
-        let listen_addr = Multiaddr::empty()
-            .with("0.0.0.0".parse::<Ipv4Addr>().unwrap().into())
-            .with(Protocol::Tcp(port.parse().unwrap()));
-        swarm.listen_on(listen_addr)?;
+    swarm
+        .listen_on(
+            Multiaddr::empty()
+                .with("0.0.0.0".parse::<Ipv4Addr>().unwrap().into())
+                .with(Protocol::Tcp(0)),
+        )
+        .unwrap();
 
-        let external_addr = Multiaddr::empty()
-            .with(external_ip.parse::<Ipv4Addr>().unwrap().into())
-            .with(Protocol::Tcp(port.parse().unwrap()));
-        swarm.add_external_address(external_addr, AddressScore::Infinite);
-    } else {
-        panic!();
-    }
-
-    if let (Some(mode), Some(addr)) = (std::env::args().nth(4), std::env::args().nth(5)) {
-        match mode.as_str() {
-            "dial" => {
-                let addr: Multiaddr = addr.parse().unwrap();
-                swarm.dial(addr).unwrap();
+    // Wait to listen on localhost.
+    block_on(async {
+        let mut delay = futures_timer::Delay::new(std::time::Duration::from_secs(2)).fuse();
+        loop {
+            futures::select! {
+                event = swarm.next() => {
+                    match event.unwrap() {
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            println!("Listening on {:?}", address);
+                        }
+                        event => panic!("{:?}", event),
+                    }
+                }
+                _ = delay => {
+                    break;
+                }
             }
-            "listen" => {
-                swarm.listen_on(addr.parse().unwrap()).unwrap();
-            }
-            s => panic!("Unexpected string {:?}", s),
         }
-    } else {
-        panic!();
+    });
+
+    println!("Ready listening");
+
+    match opts.mode {
+        Mode::Dial => {
+            swarm.dial(opts.relay_address.clone()).unwrap();
+        }
+        Mode::Listen => {
+            swarm
+                .listen_on(opts.relay_address.clone().with(Protocol::P2pCircuit))
+                .unwrap();
+        }
     }
 
-    let mut listening = false;
+    // Wait till connected to relay to learn external address.
+    block_on(async {
+        loop {
+            match swarm.next().await.unwrap() {
+                SwarmEvent::NewListenAddr { .. } => {}
+                SwarmEvent::Dialing { .. } => {}
+                SwarmEvent::ConnectionEstablished { .. } => {}
+                SwarmEvent::Behaviour(Event::Ping(_)) => {}
+                SwarmEvent::Behaviour(Event::Relay(_)) => {}
+                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Sent { .. })) => {}
+                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
+                    info: IdentifyInfo { observed_addr, .. },
+                    ..
+                })) => {
+                    println!("Observed address: {:?}", observed_addr);
+                    break;
+                }
+                event => panic!("{:?}", event),
+            }
+        }
+    });
+
+    println!("Got identify event");
+
+    if matches!(opts.mode, Mode::Dial) {
+        println!("dialing remote peer");
+        swarm
+            .dial(
+                opts.relay_address
+                    .clone()
+                    .with(Protocol::P2pCircuit)
+                    .with(Protocol::P2p(opts.remote_peer_id.unwrap().into())),
+            )
+            .unwrap();
+    }
+
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
+            println!(
+                "External addresses: {:?}",
+                swarm.external_addresses().collect::<Vec<_>>()
+            );
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
                     println!("Listening on {:?}", address);
@@ -154,18 +249,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {
                     println!("{:?}", event)
                 }
+                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Dcutr(event)))) => {
+                    println!("{:?}", event)
+                }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Identify(event)))) => {
                     println!("{:?}", event)
                 }
-                Poll::Ready(Some(_)) => {}
+                Poll::Ready(Some(SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                })) => {
+                    println!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                }
+                Poll::Ready(Some(e)) => {
+                    println!("{:?}", e)
+                }
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {:?}", addr);
-                            listening = true;
-                        }
-                    }
                     break;
                 }
             }

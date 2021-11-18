@@ -33,3 +33,4 @@ libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-relay = { version = "0.5", path = "../relay" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 rand = "0.7"
+structopt = "0.3.21"
