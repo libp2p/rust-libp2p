@@ -110,7 +110,7 @@ fn connect() {
 
     let mut src = build_client();
 
-    src.dial_addr(dst_addr).unwrap();
+    src.dial(dst_addr).unwrap();
 
     pool.run_until(async {
         loop {
@@ -173,7 +173,7 @@ fn reuse_connection() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
 
-    client.dial_addr(relay_addr).unwrap();
+    client.dial(relay_addr).unwrap();
     assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
 
     client.listen_on(client_addr.clone()).unwrap();
@@ -337,11 +337,13 @@ async fn wait_for_dial(client: &mut Swarm<Client>, relay_peer_id: PeerId) -> boo
     loop {
         match client.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-            SwarmEvent::UnreachableAddr { peer_id, .. } if peer_id == relay_peer_id => {
-                return false
-            }
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
                 return true
+            }
+            SwarmEvent::OutgoingConnectionError { peer_id, .. }
+                if peer_id == Some(relay_peer_id) =>
+            {
+                return false
             }
             e => panic!("{:?}", e),
         }

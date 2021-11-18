@@ -27,8 +27,8 @@ use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::noise;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 
-use libp2p::relay::v2::client::{self, Client};
 use libp2p::dns::DnsConfig;
+use libp2p::relay::v2::client::{self, Client};
 use libp2p::swarm::{AddressScore, Swarm, SwarmEvent};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
@@ -44,8 +44,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-
-    let (transport, client) = Client::new_transport_and_behaviour(local_peer_id, block_on(DnsConfig::system( TcpConfig::new().port_reuse(true))).unwrap());
+    let (transport, client) = Client::new_transport_and_behaviour(
+        local_peer_id,
+        block_on(DnsConfig::system(TcpConfig::new().port_reuse(true))).unwrap(),
+    );
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&local_key)
@@ -53,7 +55,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = transport
         .upgrade()
-        .authenticate_with_version(noise::NoiseConfig::xx(noise_keys).into_authenticated(), upgrade::AuthenticationVersion::V1SimultaneousOpen)
+        .authenticate_with_version(
+            noise::NoiseConfig::xx(noise_keys).into_authenticated(),
+            upgrade::AuthenticationVersion::V1SimultaneousOpen,
+        )
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
@@ -127,7 +132,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let (Some(mode), Some(addr)) = (std::env::args().nth(4), std::env::args().nth(5)) {
         match mode.as_str() {
             "dial" => {
-                swarm.dial_addr(addr.parse().unwrap()).unwrap();
+                let addr: Multiaddr = addr.parse().unwrap();
+                swarm.dial(addr).unwrap();
             }
             "listen" => {
                 swarm.listen_on(addr.parse().unwrap()).unwrap();
@@ -142,7 +148,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::NewListenAddr{address, ..})) => {
+                Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
                     println!("Listening on {:?}", address);
                 }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {

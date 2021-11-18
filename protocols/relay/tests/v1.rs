@@ -36,7 +36,7 @@ use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::v1::{new_transport_and_behaviour, Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::KeepAlive;
 use libp2p_swarm::{
-    dial_opts::DialOpts, DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
+    DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
     NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
 };
 use std::task::{Context, Poll};

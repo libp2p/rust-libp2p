@@ -65,7 +65,7 @@ use libp2p::relay::v1::{Relay, RelayConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{identity, NetworkBehaviour, PeerId, Swarm};
+use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId, Swarm};
 use libp2p::{identity::ed25519, ping};
 use std::error::Error;
 use std::task::{Context, Poll};

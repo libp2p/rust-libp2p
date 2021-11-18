@@ -77,7 +77,7 @@ fn connect() {
     pool.run_until(wait_for_new_listen_addr(&mut src, &src_addr));
     src.add_external_address(src_addr.clone(), AddressScore::Infinite);
 
-    src.dial_addr(dst_relayed_addr.clone()).unwrap();
+    src.dial(dst_relayed_addr.clone()).unwrap();
 
     pool.run_until(wait_for_connection_established(&mut src, &dst_relayed_addr));
     assert_eq!(

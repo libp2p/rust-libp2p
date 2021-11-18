@@ -25,6 +25,7 @@ use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters, ProtocolsHandler,
@@ -87,11 +88,22 @@ impl NetworkBehaviour for Behaviour {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         connected_point: &ConnectedPoint,
+        _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
         match connected_point {
             ConnectedPoint::Listener { local_addr, .. }
                 if local_addr.iter().any(|p| p == Protocol::P2pCircuit) =>
             {
+                // TODO: Try dialing the remote peer directly. Specification:
+                //
+                // > The protocol starts with the completion of a relay connection from A to B. Upon
+                // observing the new connection, the inbound peer (here B) checks the addresses
+                // advertised by A via identify. If that set includes public addresses, then A may
+                // be reachable by a direct connection, in which case B attempts a unilateral
+                // connection upgrade by initiating a direct connection to A.
+                //
+                // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+                //
                 // TODO: Only do this in case there is not already a direct connection.
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -116,9 +128,9 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         handler: Self::ProtocolsHandler,
-        _error: DialError,
+        _error: &DialError,
     ) {
         match handler {
             handler::Prototype::DirectConnection {
@@ -128,11 +140,13 @@ impl NetworkBehaviour for Behaviour {
                         relay_connection_id,
                     },
             } => {
+                let peer_id =
+                    peer_id.expect("Prototype::DirectConnection to always connect to known peer.");
                 if attempt < 3 {
                     // TODO: Emit event that attempt failed and another attempt is started.
                     self.queued_actions
                         .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: *peer_id,
+                            peer_id: peer_id,
                             handler: NotifyHandler::One(relay_connection_id),
                             event: Either::Left(handler::In::Connect {
                                 obs_addrs: vec![],
@@ -143,7 +157,7 @@ impl NetworkBehaviour for Behaviour {
                     self.queued_actions
                         .push_back(NetworkBehaviourAction::GenerateEvent(
                             Event::DirectConnectionUpgradeFailed {
-                                remote_peer_id: *peer_id,
+                                remote_peer_id: peer_id,
                             },
                         ));
                 }
@@ -200,32 +214,34 @@ impl NetworkBehaviour for Behaviour {
                     ));
             }
             handler::Event::InboundConnectNeg(remote_addrs) => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::DialAddress {
-                        // TODO: Handle empty addresses.
-                        // TODO: What about the other addresses?
-                        address: remote_addrs.into_iter().next().unwrap(),
-                        handler: handler::Prototype::DirectConnection {
-                            role: handler::Role::Listener,
-                        },
-                    });
+                self.queued_actions.push_back(NetworkBehaviourAction::Dial {
+                    // TODO: Handle empty addresses.
+                    opts: DialOpts::peer_id(event_source)
+                        .addresses(remote_addrs)
+                        .condition(dial_opts::PeerCondition::Always)
+                        .build(),
+                    handler: handler::Prototype::DirectConnection {
+                        role: handler::Role::Listener,
+                    },
+                });
             }
             handler::Event::OutboundConnectNeg {
                 remote_addrs,
                 attempt,
             } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::DialAddress {
-                        // TODO: Handle empty addresses.
-                        // TODO: What about the other addresses?
-                        address: remote_addrs.into_iter().next().unwrap(),
-                        handler: handler::Prototype::DirectConnection {
-                            role: handler::Role::Initiator {
-                                attempt: attempt,
-                                relay_connection_id: connection,
-                            },
+                self.queued_actions.push_back(NetworkBehaviourAction::Dial {
+                    // TODO: Handle empty addresses.
+                    opts: DialOpts::peer_id(event_source)
+                        .condition(dial_opts::PeerCondition::Always)
+                        .addresses(remote_addrs)
+                        .build(),
+                    handler: handler::Prototype::DirectConnection {
+                        role: handler::Role::Initiator {
+                            attempt: attempt,
+                            relay_connection_id: connection,
                         },
-                    });
+                    },
+                });
             }
         }
     }

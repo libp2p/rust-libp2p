@@ -26,8 +26,8 @@
 //! ```rust
 //! # use libp2p_core::transport::memory::MemoryTransport;
 //! # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
-//! # use libp2p_swarm::Swarm;
-//! # use libp2p_core::{identity, Multiaddr, multiaddr::Protocol, PeerId, upgrade, Transport};
+//! # use libp2p_swarm::{Swarm, dial_opts::DialOpts};
+//! # use libp2p_core::{identity, Multiaddr, multiaddr::Protocol, PeerId, Transport};
 //! # use libp2p_yamux::YamuxConfig;
 //! # use libp2p_plaintext::PlainText2Config;
 //! # use std::convert::TryInto;
@@ -35,7 +35,7 @@
 //! #
 //! # let local_key = identity::Keypair::generate_ed25519();
 //! # let local_public_key = local_key.public();
-//! # let local_peer_id = local_public_key.clone().to_peer_id();
+//! # let local_peer_id = local_public_key.to_peer_id();
 //! # let plaintext = PlainText2Config {
 //! #     local_public_key: local_public_key.clone(),
 //! # };
@@ -46,7 +46,7 @@
 //! );
 //!
 //! let transport = relay_transport
-//!     .upgrade(upgrade::Version::V1)
+//!     .upgrade()
 //!     .authenticate(plaintext)
 //!     .multiplex(YamuxConfig::default())
 //!     .boxed();
@@ -62,7 +62,7 @@
 //! swarm.listen_on(relay_addr).unwrap();
 //!
 //! // Dial node (5678) via relay node (1234).
-//! swarm.dial_addr(dst_addr).unwrap();
+//! swarm.dial(dst_addr).unwrap();
 //! ```
 //!
 //! ## Terminology

@@ -33,9 +33,10 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId, Transport};
+use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    DialError, DialPeerCondition, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    DialError, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
 use std::io::{Error, IoSlice};
@@ -106,11 +107,8 @@ impl NetworkBehaviour for Client {
         handler::Prototype::new(self.local_peer_id)
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.rqsts_pending_connection
-            .get(peer_id)
-            .map(|rqsts| rqsts.iter().map(|r| r.relay_addr().clone()).collect())
-            .unwrap_or_default()
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        vec![]
     }
 
     fn inject_connected(&mut self, _peer_id: &PeerId) {}
@@ -120,6 +118,7 @@ impl NetworkBehaviour for Client {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         _: &ConnectedPoint,
+        _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
         self.connected_peers
             .entry(*peer_id)
@@ -163,11 +162,13 @@ impl NetworkBehaviour for Client {
 
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         _handler: handler::Prototype,
-        _error: DialError,
+        _error: &DialError,
     ) {
-        self.rqsts_pending_connection.remove(peer_id);
+        if let Some(peer_id) = peer_id {
+            self.rqsts_pending_connection.remove(&peer_id);
+        }
     }
 
     fn inject_disconnected(&mut self, _peer: &PeerId) {}
@@ -267,14 +268,13 @@ impl NetworkBehaviour for Client {
                             self.rqsts_pending_connection
                                 .entry(relay_peer_id)
                                 .or_default()
-                                .push(RqstPendingConnection::Reservation {
-                                    relay_addr,
-                                    to_listener,
-                                });
+                                .push(RqstPendingConnection::Reservation { to_listener });
                             let handler = self.new_handler();
-                            return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                                peer_id: relay_peer_id,
-                                condition: DialPeerCondition::Disconnected,
+                            return Poll::Ready(NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(relay_peer_id)
+                                    .addresses(vec![relay_addr])
+                                    .extend_addresses_through_behaviour()
+                                    .build(),
                                 handler,
                             });
                         }
@@ -308,14 +308,15 @@ impl NetworkBehaviour for Client {
                                 .entry(relay_peer_id)
                                 .or_default()
                                 .push(RqstPendingConnection::Circuit {
-                                    relay_addr,
                                     dst_peer_id,
                                     send_back,
                                 });
                             let handler = self.new_handler();
-                            return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                                peer_id: relay_peer_id,
-                                condition: DialPeerCondition::Disconnected,
+                            return Poll::Ready(NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(relay_peer_id)
+                                    .addresses(vec![relay_addr])
+                                    .extend_addresses_through_behaviour()
+                                    .build(),
                                 handler,
                             });
                         }
@@ -552,21 +553,10 @@ impl AsyncRead for RelayedConnection {
 
 enum RqstPendingConnection {
     Reservation {
-        relay_addr: Multiaddr,
         to_listener: Sender<transport::ToListenerMsg>,
     },
     Circuit {
         dst_peer_id: PeerId,
-        relay_addr: Multiaddr,
         send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
     },
-}
-
-impl RqstPendingConnection {
-    fn relay_addr(&self) -> &Multiaddr {
-        match self {
-            RqstPendingConnection::Reservation { relay_addr, .. } => relay_addr,
-            RqstPendingConnection::Circuit { relay_addr, .. } => relay_addr,
-        }
-    }
 }
