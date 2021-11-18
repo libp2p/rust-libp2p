@@ -21,13 +21,12 @@
 #[macro_use]
 pub mod harness;
 
-use crate::harness::{await_events_or_timeout, new_swarm, SwarmExt};
+use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm, SwarmExt};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
 use libp2p_rendezvous as rendezvous;
-use libp2p_swarm::DialError;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm, SwarmEvent};
 use std::convert::TryInto;
 use std::time::Duration;
 
@@ -170,19 +169,24 @@ async fn discover_allows_for_dial_by_peer_id() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None);
-    bob.behaviour_mut()
-        .discover(Some(namespace.clone()), None, None, roberts_peer_id);
-
     assert_behaviour_events! {
         alice: rendezvous::client::Event::Registered { .. },
-        bob: rendezvous::client::Event::Discovered { .. },
         || { }
+    };
+
+    bob.behaviour_mut()
+        .discover(Some(namespace.clone()), None, None, roberts_peer_id);
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { registrations,.. },
+        || {
+            assert!(!registrations.is_empty());
+        }
     };
 
     let alices_peer_id = *alice.local_peer_id();
     let bobs_peer_id = *bob.local_peer_id();
 
-    bob.dial(&alices_peer_id).unwrap();
+    bob.dial(alices_peer_id).unwrap();
 
     let alice_connected_to = tokio::spawn(async move {
         loop {
@@ -275,19 +279,23 @@ async fn registration_on_clients_expire() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, Some(registration_ttl));
-    bob.behaviour_mut()
-        .discover(Some(namespace), None, None, roberts_peer_id);
-
     assert_behaviour_events! {
         alice: rendezvous::client::Event::Registered { .. },
-        bob: rendezvous::client::Event::Discovered { .. },
         || { }
+    };
+    bob.behaviour_mut()
+        .discover(Some(namespace), None, None, roberts_peer_id);
+    assert_behaviour_events! {
+        bob: rendezvous::client::Event::Discovered { registrations,.. },
+        || {
+            assert!(!registrations.is_empty());
+        }
     };
 
     tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
 
     let event = bob.select_next_some().await;
-    let error = bob.dial(alice.local_peer_id()).unwrap_err();
+    let error = bob.dial(*alice.local_peer_id()).unwrap_err();
 
     assert!(matches!(
         event,

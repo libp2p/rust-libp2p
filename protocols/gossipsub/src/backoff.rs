@@ -20,13 +20,13 @@
 
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use crate::topic::TopicHash;
+use instant::Instant;
 use libp2p_core::PeerId;
 use std::collections::{
     hash_map::{Entry, HashMap},
     HashSet,
 };
 use std::time::Duration;
-use wasm_timer::Instant;
 
 #[derive(Copy, Clone)]
 struct HeartbeatIndex(usize);

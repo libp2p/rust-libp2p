@@ -21,12 +21,12 @@
 use crate::error::ValidationError;
 use crate::peer_score::RejectReason;
 use crate::MessageId;
+use instant::Instant;
 use libp2p_core::PeerId;
 use log::debug;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
-use wasm_timer::Instant;
 
 /// Tracks recently sent `IWANT` messages and checks if peers respond to them
 /// for each `IWANT` message we track one random requested message id.

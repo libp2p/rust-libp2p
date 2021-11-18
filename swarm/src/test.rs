@@ -108,8 +108,7 @@ where
         ConnectionId,
         <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     )>,
-    pub inject_addr_reach_failure: Vec<(Option<PeerId>, Multiaddr)>,
-    pub inject_dial_failure: Vec<PeerId>,
+    pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
     pub inject_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub inject_new_external_addr: Vec<Multiaddr>,
@@ -133,7 +132,6 @@ where
             inject_connection_established: Vec::new(),
             inject_connection_closed: Vec::new(),
             inject_event: Vec::new(),
-            inject_addr_reach_failure: Vec::new(),
             inject_dial_failure: Vec::new(),
             inject_new_listener: Vec::new(),
             inject_new_listen_addr: Vec::new(),
@@ -153,7 +151,6 @@ where
         self.inject_connection_established = Vec::new();
         self.inject_connection_closed = Vec::new();
         self.inject_event = Vec::new();
-        self.inject_addr_reach_failure = Vec::new();
         self.inject_dial_failure = Vec::new();
         self.inject_new_listen_addr = Vec::new();
         self.inject_new_external_addr = Vec::new();
@@ -191,10 +188,16 @@ where
         self.inner.inject_connected(peer);
     }
 
-    fn inject_connection_established(&mut self, p: &PeerId, c: &ConnectionId, e: &ConnectedPoint) {
+    fn inject_connection_established(
+        &mut self,
+        p: &PeerId,
+        c: &ConnectionId,
+        e: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
+    ) {
         self.inject_connection_established
             .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_established(p, c, e);
+        self.inner.inject_connection_established(p, c, e, errors);
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
@@ -224,23 +227,13 @@ where
         self.inner.inject_event(p, c, e);
     }
 
-    fn inject_addr_reach_failure(
-        &mut self,
-        p: Option<&PeerId>,
-        a: &Multiaddr,
-        e: &dyn std::error::Error,
-    ) {
-        self.inject_addr_reach_failure.push((p.cloned(), a.clone()));
-        self.inner.inject_addr_reach_failure(p, a, e);
-    }
-
     fn inject_dial_failure(
         &mut self,
-        p: &PeerId,
+        p: Option<PeerId>,
         handler: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
-        self.inject_dial_failure.push(p.clone());
+        self.inject_dial_failure.push(p);
         self.inner.inject_dial_failure(p, handler, error);
     }
 

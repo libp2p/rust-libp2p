@@ -20,13 +20,13 @@
 
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
+use instant::Instant;
 use libp2p_core::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
     ops::{Index, IndexMut, Range},
 };
-use wasm_timer::Instant;
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.

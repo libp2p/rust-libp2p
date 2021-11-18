@@ -30,7 +30,7 @@ use libp2p_core::{
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
+use libp2p_swarm::{dial_opts::DialOpts, DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
 use libp2p_yamux as yamux;
 use quickcheck::*;
@@ -82,7 +82,7 @@ fn ping_pong() {
 
         let pid2 = peer2_id.clone();
         let peer2 = async move {
-            swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+            swarm2.dial(rx.next().await.unwrap()).unwrap();
 
             loop {
                 match swarm2.select_next_some().await {
@@ -156,7 +156,7 @@ fn max_failures() {
         };
 
         let peer2 = async move {
-            swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+            swarm2.dial(rx.next().await.unwrap()).unwrap();
 
             let mut count2: u8 = 0;
 
@@ -216,7 +216,7 @@ fn unsupported_doesnt_fail() {
     });
 
     let result = async_std::task::block_on(async move {
-        swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+        swarm2.dial(rx.next().await.unwrap()).unwrap();
 
         loop {
             match swarm2.select_next_some().await {

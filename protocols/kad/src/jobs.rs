@@ -63,13 +63,14 @@
 
 use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
+use futures_timer::Delay;
+use instant::Instant;
 use libp2p_core::PeerId;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::vec;
-use wasm_timer::{Delay, Instant};
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
@@ -101,7 +102,7 @@ impl<T> PeriodicJob<T> {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             let new_deadline = Instant::now() - Duration::from_secs(1);
             *deadline = new_deadline;
-            delay.reset_at(new_deadline);
+            delay.reset(Duration::from_secs(1));
         }
     }
 
@@ -148,7 +149,7 @@ impl PutRecordJob {
     ) -> Self {
         let now = Instant::now();
         let deadline = now + replicate_interval;
-        let delay = Delay::new_at(deadline);
+        let delay = Delay::new(replicate_interval);
         let next_publish = publish_interval.map(|i| now + i);
         Self {
             local_id,
@@ -236,7 +237,7 @@ impl PutRecordJob {
 
             // Wait for the next run.
             let deadline = now + self.inner.interval;
-            let delay = Delay::new_at(deadline);
+            let delay = Delay::new(self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay, deadline);
             assert!(!self.inner.is_ready(cx, now));
         }
@@ -262,7 +263,7 @@ impl AddProviderJob {
                 interval,
                 state: {
                     let deadline = now + interval;
-                    PeriodicJobState::Waiting(Delay::new_at(deadline), deadline)
+                    PeriodicJobState::Waiting(Delay::new(interval), deadline)
                 },
             },
         }
@@ -314,7 +315,7 @@ impl AddProviderJob {
             }
 
             let deadline = now + self.inner.interval;
-            let delay = Delay::new_at(deadline);
+            let delay = Delay::new(self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay, deadline);
             assert!(!self.inner.is_ready(cx, now));
         }

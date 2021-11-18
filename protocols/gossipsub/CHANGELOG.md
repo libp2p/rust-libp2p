@@ -1,4 +1,21 @@
-# 0.33.0 [unreleased]
+# 0.34.0 [2021-11-16]
+
+- Add topic and mesh metrics (see [PR 2316]).
+
+- Fix bug in internal peer's topics tracking (see [PR 2325]).
+
+- Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Update dependencies.
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2325]: https://github.com/libp2p/rust-libp2p/pull/2325
+[PR 2316]: https://github.com/libp2p/rust-libp2p/pull/2316
+
+# 0.33.0 [2021-11-01]
+
+- Add an event to register peers that do not support the gossipsub protocol
+  [PR 2241](https://github.com/libp2p/rust-libp2p/pull/2241)
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
@@ -10,6 +27,9 @@
 
 - Allow `message_id_fn`s to accept closures that capture variables.
   [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
+
+- Implement std::error::Error for error types.
+  [PR 2254](https://github.com/libp2p/rust-libp2p/pull/2254)
 
 # 0.32.0 [2021-07-12]
 

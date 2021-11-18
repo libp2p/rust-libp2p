@@ -65,7 +65,7 @@ use libp2p::relay::{Relay, RelayConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{core::upgrade, identity::ed25519, ping};
+use libp2p::{core::upgrade, identity::ed25519, ping, Multiaddr};
 use libp2p::{identity, NetworkBehaviour, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};
@@ -129,8 +129,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("starting client listener via relay on {}", &relay_address);
         }
         Mode::ClientDial => {
-            let client_listen_address = get_client_listen_address(&opt);
-            swarm.dial_addr(client_listen_address.parse()?)?;
+            let client_listen_address: Multiaddr = get_client_listen_address(&opt).parse()?;
+            swarm.dial(client_listen_address.clone())?;
             println!("starting as client dialer on {}", client_listen_address);
         }
     }

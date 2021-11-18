@@ -26,7 +26,7 @@
 //! ```rust
 //! # use libp2p_core::transport::memory::MemoryTransport;
 //! # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
-//! # use libp2p_swarm::Swarm;
+//! # use libp2p_swarm::{Swarm, dial_opts::DialOpts};
 //! # use libp2p_core::{identity, Multiaddr, multiaddr::Protocol, PeerId, upgrade, Transport};
 //! # use libp2p_yamux::YamuxConfig;
 //! # use libp2p_plaintext::PlainText2Config;
@@ -62,7 +62,7 @@
 //! swarm.listen_on(relay_addr).unwrap();
 //!
 //! // Dial node (5678) via relay node (1234).
-//! swarm.dial_addr(dst_addr).unwrap();
+//! swarm.dial(dst_addr).unwrap();
 //! ```
 //!
 //! ## Terminology
