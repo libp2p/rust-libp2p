@@ -24,7 +24,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.4.0
 
     - uses: Swatinem/rust-cache@v1.3.0
       with:
@@ -41,6 +41,9 @@ jobs:
           wasm32-unknown-emscripten,
           wasm32-wasi
         ]
+        include:
+          - toolchain: wasm32-unknown-unknown
+            args: "--features wasm-bindgen"
     container:
       image: rust
       env:
@@ -52,7 +55,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.4.0
 
     - name: Install Rust ${{ matrix.toolchain }}
       uses: actions-rs/toolchain@v1.0.7
@@ -76,7 +79,7 @@ jobs:
     - name: Build on ${{ matrix.toolchain }}
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=${{ matrix.toolchain }}
+      run: cargo build --target=${{ matrix.toolchain }} ${{ matrix.args }}
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
@@ -90,7 +93,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.4.0
 
     - uses: Swatinem/rust-cache@v1.3.0
 
@@ -106,7 +109,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.4.0
 
     - uses: actions-rs/toolchain@v1.0.7
       with:
@@ -134,7 +137,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.4.0
 
     - uses: Swatinem/rust-cache@v1.3.0
 
@@ -150,7 +153,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.3.4
+    - uses: actions/checkout@v2.4.0
 
     - uses: actions-rs/toolchain@v1.0.7
       with:

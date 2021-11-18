@@ -25,6 +25,8 @@
 //!
 //! See `examples` directory for more.
 
+#[cfg(feature = "gossipsub")]
+mod gossipsub;
 #[cfg(feature = "identify")]
 mod identify;
 #[cfg(feature = "kad")]
@@ -39,6 +41,8 @@ use open_metrics_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {
+    #[cfg(feature = "gossipsub")]
+    gossipsub: gossipsub::Metrics,
     #[cfg(feature = "identify")]
     identify: identify::Metrics,
     #[cfg(feature = "kad")]
@@ -62,6 +66,8 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("libp2p");
         Self {
+            #[cfg(feature = "gossipsub")]
+            gossipsub: gossipsub::Metrics::new(sub_registry),
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),
             #[cfg(feature = "kad")]

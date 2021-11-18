@@ -29,7 +29,9 @@ use libp2p::core::upgrade::SelectUpgrade;
 use libp2p::core::{identity, Multiaddr, PeerId, Transport};
 use libp2p::mplex::MplexConfig;
 use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{
+    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
+};
 use libp2p::yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -76,13 +78,29 @@ fn get_rand_memory_address() -> Multiaddr {
     addr
 }
 
-pub async fn await_events_or_timeout<A, B, E1, E2>(
-    swarm_1: &mut (impl Stream<Item = SwarmEvent<A, E1>> + FusedStream + Unpin),
-    swarm_2: &mut (impl Stream<Item = SwarmEvent<B, E2>> + FusedStream + Unpin),
-) -> (SwarmEvent<A, E1>, SwarmEvent<B, E2>)
+pub async fn await_event_or_timeout<Event, Error>(
+    swarm: &mut (impl Stream<Item = SwarmEvent<Event, Error>> + FusedStream + Unpin),
+) -> SwarmEvent<Event, Error>
 where
-    SwarmEvent<A, E1>: Debug,
-    SwarmEvent<B, E2>: Debug,
+    SwarmEvent<Event, Error>: Debug,
+{
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        swarm
+            .inspect(|event| log::debug!("Swarm emitted {:?}", event))
+            .select_next_some(),
+    )
+    .await
+    .expect("network behaviour to emit an event within 30 seconds")
+}
+
+pub async fn await_events_or_timeout<Event1, Event2, Error1, Error2>(
+    swarm_1: &mut (impl Stream<Item = SwarmEvent<Event1, Error1>> + FusedStream + Unpin),
+    swarm_2: &mut (impl Stream<Item = SwarmEvent<Event2, Error2>> + FusedStream + Unpin),
+) -> (SwarmEvent<Event1, Error1>, SwarmEvent<Event2, Error2>)
+where
+    SwarmEvent<Event1, Error1>: Debug,
+    SwarmEvent<Event2, Error2>: Debug,
 {
     tokio::time::timeout(
         Duration::from_secs(30),
@@ -96,11 +114,17 @@ where
         ),
     )
     .await
-    .expect("network behaviours to emit an event within 10 seconds")
+    .expect("network behaviours to emit an event within 30 seconds")
 }
 
 #[macro_export]
 macro_rules! assert_behaviour_events {
+    ($swarm: ident: $pat: pat, || $body: block) => {
+        match await_event_or_timeout(&mut $swarm).await {
+            libp2p::swarm::SwarmEvent::Behaviour($pat) => $body,
+            _ => panic!("Unexpected combination of events emitted, check logs for details"),
+        }
+    };
     ($swarm1: ident: $pat1: pat, $swarm2: ident: $pat2: pat, || $body: block) => {
         match await_events_or_timeout(&mut $swarm1, &mut $swarm2).await {
             (
@@ -141,7 +165,7 @@ where
     {
         let addr_to_dial = other.external_addresses().next().unwrap().addr.clone();
 
-        self.dial_addr(addr_to_dial.clone()).unwrap();
+        self.dial(addr_to_dial.clone()).unwrap();
 
         let mut dialer_done = false;
         let mut listener_done = false;
@@ -154,9 +178,6 @@ where
                     match dialer_event {
                         SwarmEvent::ConnectionEstablished { .. } => {
                             dialer_done = true;
-                        }
-                        SwarmEvent::UnknownPeerUnreachableAddr { address, error } if address == addr_to_dial => {
-                            panic!("Failed to dial address {}: {}", addr_to_dial, error)
                         }
                         other => {
                             log::debug!("Ignoring {:?}", other);

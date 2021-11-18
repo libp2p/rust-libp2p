@@ -22,8 +22,7 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
-use libp2p::swarm::Swarm;
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
 use libp2p_swarm::AddressScore;
@@ -58,7 +57,7 @@ async fn main() {
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
-    swarm.dial_addr(rendezvous_point_address).unwrap();
+    swarm.dial(rendezvous_point_address).unwrap();
 
     while let Some(event) = swarm.next().await {
         match event {

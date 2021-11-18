@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
-        swarm.dial_addr(addr)?;
+        swarm.dial(addr)?;
         println!("Dialed {:?}", to_dial)
     }
 

@@ -313,6 +313,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
+    let _ = env_logger::try_init();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
@@ -601,19 +602,28 @@ fn put_record() {
                             }
                         }
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::InboundPutRecordRequest { record, .. },
+                            KademliaEvent::InboundRequest {
+                                request: InboundRequest::PutRecord { record, .. },
+                            },
                         ))) => {
-                            assert_ne!(
-                                swarm.behaviour().record_filtering,
-                                KademliaStoreInserts::Unfiltered
-                            );
                             if !drop_records {
-                                // Accept the record
-                                swarm
-                                    .behaviour_mut()
-                                    .store_mut()
-                                    .put(record)
-                                    .expect("record is stored");
+                                if let Some(record) = record {
+                                    assert_eq!(
+                                        swarm.behaviour().record_filtering,
+                                        KademliaStoreInserts::FilterBoth
+                                    );
+                                    // Accept the record
+                                    swarm
+                                        .behaviour_mut()
+                                        .store_mut()
+                                        .put(record)
+                                        .expect("record is stored");
+                                } else {
+                                    assert_eq!(
+                                        swarm.behaviour().record_filtering,
+                                        KademliaStoreInserts::Unfiltered
+                                    );
+                                }
                             }
                         }
                         // Ignore any other event.
@@ -1280,7 +1290,7 @@ fn network_behaviour_inject_address_change() {
     };
 
     // Mimick a connection being established.
-    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint);
+    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None);
     kademlia.inject_connected(&remote_peer_id);
 
     // At this point the remote is not yet known to support the

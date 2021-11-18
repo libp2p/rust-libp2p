@@ -55,6 +55,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let into_proto_select_ident = quote! {::libp2p::swarm::IntoProtocolsHandlerSelect};
     let peer_id = quote! {::libp2p::core::PeerId};
     let connection_id = quote! {::libp2p::core::connection::ConnectionId};
+    let dial_errors = quote! {Option<&Vec<::libp2p::core::Multiaddr>>};
     let connected_point = quote! {::libp2p::core::ConnectedPoint};
     let listener_id = quote! {::libp2p::core::connection::ListenerId};
     let dial_error = quote! {::libp2p::swarm::DialError};
@@ -203,8 +204,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 return None;
             }
             Some(match field.ident {
-                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint); },
-                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint); },
+                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint, errors); },
+                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint, errors); },
             })
         })
     };
@@ -253,21 +254,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
     };
 
-    // Build the list of statements to put in the body of `inject_addr_reach_failure()`.
-    let inject_addr_reach_failure_stmts =
-        {
-            data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(field) {
-                return None;
-            }
-
-            Some(match field.ident {
-                Some(ref i) => quote!{ self.#i.inject_addr_reach_failure(peer_id, addr, error); },
-                None => quote!{ self.#field_n.inject_addr_reach_failure(peer_id, addr, error); },
-            })
-        })
-        };
-
     // Build the list of statements to put in the body of `inject_dial_failure()`.
     let inject_dial_failure_stmts = {
         data_struct
@@ -290,10 +276,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 let inject = match field.ident {
                     Some(ref i) => {
-                        quote! { self.#i.inject_dial_failure(peer_id, handler, error.clone()) }
+                        quote! { self.#i.inject_dial_failure(peer_id, handler, error) }
                     }
                     None => {
-                        quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error.clone()) }
+                        quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error) }
                     }
                 };
 
@@ -568,10 +554,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
-        // `DialPeer` and `DialAddress` each provide a handler of the specific
-        // behaviour triggering the event. Though in order for the final handler
-        // to be able to handle protocols of all behaviours, the provided
-        // handler needs to be combined with handlers of all other behaviours.
+        // `Dial` provides a handler of the specific behaviour triggering the
+        // event. Though in order for the final handler to be able to handle
+        // protocols of all behaviours, the provided handler needs to be
+        // combined with handlers of all other behaviours.
         let provided_handler_and_new_handlers = {
             let mut out_handler = None;
 
@@ -622,11 +608,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
                     #generate_event_match_arm
-                    std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: provided_handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address, handler: #provided_handler_and_new_handlers });
-                    }
-                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: provided_handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition, handler: #provided_handler_and_new_handlers });
+                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: provided_handler }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: #provided_handler_and_new_handlers });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
@@ -674,7 +657,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_disconnected_stmts);*
             }
 
-            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
+            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, errors: #dial_errors) {
                 #(#inject_connection_established_stmts);*
             }
 
@@ -686,11 +669,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_connection_closed_stmts);*
             }
 
-            fn inject_addr_reach_failure(&mut self, peer_id: Option<&#peer_id>, addr: &#multiaddr, error: &dyn std::error::Error) {
-                #(#inject_addr_reach_failure_stmts);*
-            }
-
-            fn inject_dial_failure(&mut self, peer_id: &#peer_id, handlers: Self::ProtocolsHandler, error: #dial_error) {
+            fn inject_dial_failure(&mut self, peer_id: Option<#peer_id>, handlers: Self::ProtocolsHandler, error: &#dial_error) {
                 #(#inject_dial_failure_stmts);*
             }
 

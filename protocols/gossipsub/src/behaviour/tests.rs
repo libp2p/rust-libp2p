@@ -72,6 +72,7 @@ mod tests {
             let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
                 MessageAuthenticity::Signed(keypair),
                 self.gs_config,
+                None,
                 self.subscription_filter,
                 self.data_transform,
             )
@@ -195,6 +196,7 @@ mod tests {
                     send_back_addr: address,
                 }
             },
+            None,
         );
         <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
@@ -533,6 +535,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 },
+                None,
             );
             gs.inject_connected(&random_peer);
 
@@ -1340,11 +1343,9 @@ mod tests {
             .events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::DialPeer {
-                    peer_id,
-                    condition: DialPeerCondition::Disconnected,
-                    handler: _,
-                } => peer_id == &peer,
+                NetworkBehaviourAction::Dial { opts, handler: _ } => {
+                    opts.get_peer_id() == Some(peer)
+                }
                 _ => false,
             })
             .collect();
@@ -1386,11 +1387,8 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Disconnected,
-                        handler: _,
-                    } => peer_id == peer,
+                    NetworkBehaviourAction::Dial { opts, handler: _ } =>
+                        opts.get_peer_id() == Some(*peer),
                     _ => false,
                 })
                 .count(),
@@ -1405,11 +1403,8 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Disconnected,
-                        handler: _,
-                    } => peer_id == peer,
+                    NetworkBehaviourAction::Dial { opts, handler: _ } =>
+                        opts.get_peer_id() == Some(*peer),
                     _ => false,
                 })
                 .count()
@@ -1819,11 +1814,7 @@ mod tests {
             .events
             .iter()
             .filter_map(|e| match e {
-                NetworkBehaviourAction::DialPeer {
-                    peer_id,
-                    condition: DialPeerCondition::Disconnected,
-                    handler: _,
-                } => Some(peer_id.clone()),
+                NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id(),
                 _ => None,
             })
             .collect();
@@ -2442,7 +2433,7 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer { .. } => true,
+                    NetworkBehaviourAction::Dial { .. } => true,
                     _ => false,
                 })
                 .count(),
@@ -3045,7 +3036,7 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer { .. } => true,
+                    NetworkBehaviourAction::Dial { .. } => true,
                     _ => false,
                 })
                 .count(),
@@ -3070,7 +3061,7 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::DialPeer { .. } => true,
+                    NetworkBehaviourAction::Dial { .. } => true,
                     _ => false,
                 })
                 .count()
@@ -4085,6 +4076,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: addr.clone(),
                 },
+                None,
             );
         }
 
@@ -4103,6 +4095,7 @@ mod tests {
                 &ConnectedPoint::Dialer {
                     address: addr2.clone(),
                 },
+                None,
             );
         }
 
@@ -4130,6 +4123,7 @@ mod tests {
             &ConnectedPoint::Dialer {
                 address: addr.clone(),
             },
+            None,
         );
 
         //nothing changed

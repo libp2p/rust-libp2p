@@ -24,6 +24,7 @@ use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
+use instant::Instant;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
@@ -33,7 +34,6 @@ use std::iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
-use wasm_timer::Instant;
 
 pub enum Upgrade {
     Reserve,

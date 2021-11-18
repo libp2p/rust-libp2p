@@ -1,4 +1,20 @@
-# 0.32.0 [unreleased]
+# 0.33.0 [2021-11-16]
+
+- Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Rename `KademliaEvent::InboundRequestServed` to `KademliaEvent::InboundRequest` and move
+  `InboundPutRecordRequest` into `InboundRequest::PutRecord` and `InboundAddProviderRequest` into
+  `InboundRequest::AddProvider` (see [PR 2297]).
+
+- Populate the `key` field when converting `KadRequestMsg::PutValue` to `proto::Message` (see [PR 2309]).
+
+- Update dependencies.
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2297]: https://github.com/libp2p/rust-libp2p/pull/2297
+[PR 2309]: https://github.com/libp2p/rust-libp2p/pull/2309
+
+# 0.32.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)

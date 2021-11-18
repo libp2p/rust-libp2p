@@ -265,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to other nodes if specified
     for to_dial in std::env::args().skip(1) {
         let addr: Multiaddr = parse_legacy_multiaddr(&to_dial)?;
-        swarm.dial_addr(addr)?;
+        swarm.dial(addr)?;
         println!("Dialed {:?}", to_dial)
     }
 
