@@ -603,8 +603,16 @@ where
                 Poll::Pending => network_not_ready = true,
                 Poll::Ready(NetworkEvent::ConnectionEvent { connection, event }) => {
                     let peer = connection.peer_id();
-                    let connection = connection.id();
-                    this.behaviour.inject_event(peer, connection, event);
+                    let conn_id = connection.id();
+                    if connection.is_allowed() {
+                        this.behaviour.inject_event(peer, conn_id, event);
+                    } else {
+                        log::debug!(
+                            "Ignoring event from disallowed connection: {:?} {:?}.",
+                            peer,
+                            conn_id,
+                        );
+                    }
                 }
                 Poll::Ready(NetworkEvent::AddressChange {
                     connection,
@@ -612,22 +620,26 @@ where
                     old_endpoint,
                 }) => {
                     let peer = connection.peer_id();
-                    let connection = connection.id();
-                    this.behaviour.inject_address_change(
-                        &peer,
-                        &connection,
-                        &old_endpoint,
-                        &new_endpoint,
-                    );
+                    let conn_id = connection.id();
+                    if connection.is_allowed() {
+                        this.behaviour.inject_address_change(
+                            &peer,
+                            &conn_id,
+                            &old_endpoint,
+                            &new_endpoint,
+                        );
+                    }
                 }
                 Poll::Ready(NetworkEvent::ConnectionEstablished {
-                    connection,
+                    mut connection,
                     num_established,
                     concurrent_dial_errors,
                 }) => {
                     let peer_id = connection.peer_id();
                     let endpoint = connection.endpoint().clone();
                     if this.banned_peers.contains(&peer_id) {
+                        // Mark the connection for the banned peer as disallowed.
+                        connection.disallow();
                         this.network
                             .peer(peer_id)
                             .into_connected()
@@ -676,14 +688,16 @@ where
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
-                    this.behaviour.inject_connection_closed(
-                        &peer_id,
-                        &id,
-                        &endpoint,
-                        handler.into_protocols_handler(),
-                    );
-                    if num_established == 0 {
-                        this.behaviour.inject_disconnected(&peer_id);
+                    if connected.is_allowed {
+                        this.behaviour.inject_connection_closed(
+                            &peer_id,
+                            &id,
+                            &endpoint,
+                            handler.into_protocols_handler(),
+                        );
+                        if num_established == 0 {
+                            this.behaviour.inject_disconnected(&peer_id);
+                        }
                     }
                     return Poll::Ready(SwarmEvent::ConnectionClosed {
                         peer_id,
