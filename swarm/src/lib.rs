@@ -1803,4 +1803,58 @@ mod tests {
             }
         }))
     }
+
+    #[test]
+    fn test_banning_respects_contract() {
+        let handler_proto = DummyProtocolsHandler {
+            keep_alive: KeepAlive::Yes,
+        };
+
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
+
+        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
+
+        swarm1.listen_on(addr1.clone().into()).unwrap();
+        swarm2.listen_on(addr2.clone().into()).unwrap();
+
+        let swarm1_id = *swarm1.local_peer_id();
+
+        async fn poll(
+            id: usize,
+            swarm: &mut Swarm<CallTraceBehaviour<MockBehaviour<DummyProtocolsHandler, ()>>>,
+        ) {
+            let ev = swarm.select_next_some().await;
+            log::info!("[{}] {:?}", id, ev);
+        }
+
+        executor::block_on(async {
+            // Wait for the swarms to establish listeners
+            poll(1, &mut swarm1).await;
+            poll(2, &mut swarm2).await;
+
+            swarm1.dial(addr2.clone()).unwrap();
+            log::info!("Swarm 2 banning swarm 1\n\n");
+            swarm2.ban_peer_id(swarm1_id);
+
+            // Incoming connection
+            poll(2, &mut swarm2).await;
+
+            // Connection established
+            poll(2, &mut swarm2).await;
+            // Connection established
+            poll(1, &mut swarm1).await;
+
+            // Both see connections as closed
+            poll(1, &mut swarm1).await;
+            poll(2, &mut swarm2).await;
+
+            // Check what swarm2's behaviour got
+            assert_eq!(
+                swarm2.behaviour.inject_connection_established,
+                swarm2.behaviour.inject_connection_closed
+            );
+        })
+    }
 }
