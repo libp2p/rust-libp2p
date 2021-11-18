@@ -37,7 +37,7 @@ use libp2p_gossipsub::{
     ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{dial_opts::DialOpts, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {
@@ -98,7 +98,7 @@ impl Graph {
                 p2p_suffix_connected.unwrap()
             );
 
-            Swarm::dial_addr(&mut next.1, connected_addr_no_p2p).unwrap();
+            next.1.dial(connected_addr_no_p2p).unwrap();
 
             connected_nodes.push(next);
         }

@@ -1,4 +1,4 @@
-// Copyright 2021 COMIT Network.
+// Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,26 +18,35 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
+use open_metrics_client::metrics::counter::Counter;
+use open_metrics_client::registry::Registry;
 
-mod codec;
-mod handler;
-mod substream_handler;
+pub struct Metrics {
+    messages: Counter,
+}
 
-/// If unspecified, rendezvous nodes should assume a TTL of 2h.
-///
-/// See <https://github.com/libp2p/specs/blob/d21418638d5f09f2a4e5a1ceca17058df134a300/rendezvous/README.md#L116-L117>.
-pub const DEFAULT_TTL: Ttl = 60 * 60 * 2;
+impl Metrics {
+    pub fn new(registry: &mut Registry) -> Self {
+        let sub_registry = registry.sub_registry_with_prefix("gossipsub");
 
-/// By default, nodes should require a minimum TTL of 2h
-///
-/// <https://github.com/libp2p/specs/tree/master/rendezvous#recommendations-for-rendezvous-points-configurations>.
-pub const MIN_TTL: Ttl = 60 * 60 * 2;
+        let messages = Counter::default();
+        sub_registry.register(
+            "messages",
+            "Number of messages received",
+            Box::new(messages.clone()),
+        );
 
-/// By default, nodes should allow a maximum TTL of 72h
-///
-/// <https://github.com/libp2p/specs/tree/master/rendezvous#recommendations-for-rendezvous-points-configurations>.
-pub const MAX_TTL: Ttl = 60 * 60 * 72;
+        Self { messages }
+    }
+}
 
-pub mod client;
-pub mod server;
+impl super::Recorder<libp2p_gossipsub::GossipsubEvent> for super::Metrics {
+    fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
+        match event {
+            libp2p_gossipsub::GossipsubEvent::Message { .. } => {
+                self.gossipsub.messages.inc();
+            }
+            _ => {}
+        }
+    }
+}

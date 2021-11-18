@@ -22,6 +22,7 @@ use crate::protocol::{
     IdentifyInfo, IdentifyProtocol, IdentifyPushProtocol, InboundPush, OutboundPush, ReplySubstream,
 };
 use futures::prelude::*;
+use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{
     EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade, UpgradeError,
@@ -32,7 +33,6 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
-use wasm_timer::Delay;
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -189,14 +189,13 @@ impl ProtocolsHandler for IdentifyHandler {
         // Poll the future that fires when we need to identify the node again.
         match Future::poll(Pin::new(&mut self.next_id), cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(())) => {
+            Poll::Ready(()) => {
                 self.next_id.reset(self.interval);
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: SubstreamProtocol::new(EitherUpgrade::A(IdentifyProtocol), ()),
                 };
                 Poll::Ready(ev)
             }
-            Poll::Ready(Err(err)) => Poll::Ready(ProtocolsHandlerEvent::Close(err)),
         }
     }
 }

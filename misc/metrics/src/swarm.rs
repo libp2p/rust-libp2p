@@ -37,7 +37,7 @@ pub struct Metrics {
     listener_error: Counter,
 
     dial_attempt: Counter,
-    dial_unreachable_addr: Family<Vec<(String, String)>, Counter>,
+    outgoing_connection_error: Family<OutgoingConnectionErrorLabels, Counter>,
     connected_to_banned_peer: Counter,
 }
 
@@ -94,11 +94,11 @@ impl Metrics {
             Box::new(dial_attempt.clone()),
         );
 
-        let dial_unreachable_addr = Family::default();
+        let outgoing_connection_error = Family::default();
         sub_registry.register(
-            "dial_unreachable_addr",
-            "Number of unreachable addresses dialed",
-            Box::new(dial_unreachable_addr.clone()),
+            "outgoing_connection_error",
+            "Number outgoing connection errors",
+            Box::new(outgoing_connection_error.clone()),
         );
 
         let connected_to_banned_peer = Counter::default();
@@ -132,7 +132,7 @@ impl Metrics {
             listener_closed,
             listener_error,
             dial_attempt,
-            dial_unreachable_addr,
+            outgoing_connection_error,
             connected_to_banned_peer,
         }
     }
@@ -171,20 +171,61 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     })
                     .inc();
             }
+            libp2p_swarm::SwarmEvent::OutgoingConnectionError { error, peer_id } => {
+                let peer = match peer_id {
+                    Some(_) => PeerStatus::Known,
+                    None => PeerStatus::Unknown,
+                };
+
+                let record = |error| {
+                    self.swarm
+                        .outgoing_connection_error
+                        .get_or_create(&OutgoingConnectionErrorLabels { peer, error })
+                        .inc();
+                };
+
+                match error {
+                    libp2p_swarm::DialError::Transport(errors) => {
+                        for (_multiaddr, error) in errors {
+                            match error {
+                                libp2p_core::transport::TransportError::MultiaddrNotSupported(
+                                    _,
+                                ) => record(
+                                    OutgoingConnectionErrorError::TransportMultiaddrNotSupported,
+                                ),
+                                libp2p_core::transport::TransportError::Other(_) => {
+                                    record(OutgoingConnectionErrorError::TransportOther)
+                                }
+                            };
+                        }
+                    }
+
+                    libp2p_swarm::DialError::Banned => record(OutgoingConnectionErrorError::Banned),
+                    libp2p_swarm::DialError::ConnectionLimit(_) => {
+                        record(OutgoingConnectionErrorError::ConnectionLimit)
+                    }
+                    libp2p_swarm::DialError::LocalPeerId => {
+                        record(OutgoingConnectionErrorError::LocalPeerId)
+                    }
+                    libp2p_swarm::DialError::NoAddresses => {
+                        record(OutgoingConnectionErrorError::NoAddresses)
+                    }
+                    libp2p_swarm::DialError::DialPeerConditionFalse(_) => {
+                        record(OutgoingConnectionErrorError::DialPeerConditionFalse)
+                    }
+                    libp2p_swarm::DialError::Aborted => {
+                        record(OutgoingConnectionErrorError::Aborted)
+                    }
+                    libp2p_swarm::DialError::InvalidPeerId => {
+                        record(OutgoingConnectionErrorError::InvalidPeerId)
+                    }
+                    libp2p_swarm::DialError::ConnectionIo(_) => {
+                        record(OutgoingConnectionErrorError::ConnectionIo)
+                    }
+                };
+            }
             libp2p_swarm::SwarmEvent::BannedPeer { .. } => {
                 self.swarm.connected_to_banned_peer.inc();
-            }
-            libp2p_swarm::SwarmEvent::UnreachableAddr { .. } => {
-                self.swarm
-                    .dial_unreachable_addr
-                    .get_or_create(&vec![("peer".into(), "known".into())])
-                    .inc();
-            }
-            libp2p_swarm::SwarmEvent::UnknownPeerUnreachableAddr { .. } => {
-                self.swarm
-                    .dial_unreachable_addr
-                    .get_or_create(&vec![("peer".into(), "unknown".into())])
-                    .inc();
             }
             libp2p_swarm::SwarmEvent::NewListenAddr { .. } => {
                 self.swarm.new_listen_addr.inc();
@@ -231,37 +272,69 @@ impl From<&libp2p_core::ConnectedPoint> for Role {
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
-struct IncomingConnectionErrorLabels {
-    error: PendingConnectionError,
+struct OutgoingConnectionErrorLabels {
+    peer: PeerStatus,
+    error: OutgoingConnectionErrorError,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq, Copy)]
+enum PeerStatus {
+    Known,
+    Unknown,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
-enum PendingConnectionError {
+enum OutgoingConnectionErrorError {
+    Banned,
+    ConnectionLimit,
+    LocalPeerId,
+    NoAddresses,
+    DialPeerConditionFalse,
+    Aborted,
+    InvalidPeerId,
+    ConnectionIo,
+    TransportMultiaddrNotSupported,
+    TransportOther,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct IncomingConnectionErrorLabels {
+    error: PendingInboundConnectionError,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+enum PendingInboundConnectionError {
     InvalidPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
     Io,
+    ConnectionLimit,
 }
 
-impl<TTransErr> From<&libp2p_core::connection::PendingConnectionError<TTransErr>>
-    for PendingConnectionError
+impl<TTransErr> From<&libp2p_core::connection::PendingInboundConnectionError<TTransErr>>
+    for PendingInboundConnectionError
 {
-    fn from(point: &libp2p_core::connection::PendingConnectionError<TTransErr>) -> Self {
-        match point {
-            libp2p_core::connection::PendingConnectionError::InvalidPeerId => {
-                PendingConnectionError::InvalidPeerId
+    fn from(error: &libp2p_core::connection::PendingInboundConnectionError<TTransErr>) -> Self {
+        match error {
+            libp2p_core::connection::PendingInboundConnectionError::InvalidPeerId => {
+                PendingInboundConnectionError::InvalidPeerId
             }
-            libp2p_core::connection::PendingConnectionError::Transport(
+            libp2p_core::connection::PendingInboundConnectionError::ConnectionLimit(_) => {
+                PendingInboundConnectionError::ConnectionLimit
+            }
+            libp2p_core::connection::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
-            ) => PendingConnectionError::TransportErrorMultiaddrNotSupported,
-            libp2p_core::connection::PendingConnectionError::Transport(
+            ) => PendingInboundConnectionError::TransportErrorMultiaddrNotSupported,
+            libp2p_core::connection::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::Other(_),
-            ) => PendingConnectionError::TransportErrorOther,
-            libp2p_core::connection::PendingConnectionError::Aborted => {
-                PendingConnectionError::Aborted
+            ) => PendingInboundConnectionError::TransportErrorOther,
+            libp2p_core::connection::PendingInboundConnectionError::Aborted => {
+                PendingInboundConnectionError::Aborted
             }
-            libp2p_core::connection::PendingConnectionError::IO(_) => PendingConnectionError::Io,
+            libp2p_core::connection::PendingInboundConnectionError::IO(_) => {
+                PendingInboundConnectionError::Io
+            }
         }
     }
 }

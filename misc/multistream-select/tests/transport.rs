@@ -107,6 +107,7 @@ fn transport_upgrade() {
     run(upgrade::Version::V1Lazy);
 }
 
+#[derive(Debug)]
 struct TestHandler();
 
 impl ConnectionHandler for TestHandler {

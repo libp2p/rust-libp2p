@@ -30,8 +30,9 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId, ListenerId};
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::PeerId;
 use libp2p_swarm::{
-    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::{self, DialOpts},
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -203,6 +204,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection_id: &ConnectionId,
         _: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
     ) {
         let is_first = self
             .connected_peers
@@ -305,47 +307,49 @@ impl NetworkBehaviour for Relay {
 
     fn inject_dial_failure(
         &mut self,
-        peer_id: &PeerId,
+        peer_id: Option<PeerId>,
         _: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
         if let DialError::DialPeerConditionFalse(
-            DialPeerCondition::Disconnected | DialPeerCondition::NotDialing,
+            dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
         ) = error
         {
             // Return early. The dial, that this dial was canceled for, might still succeed.
             return;
         }
 
-        if let Entry::Occupied(o) = self.listeners.entry(*peer_id) {
-            if matches!(o.get(), RelayListener::Connecting { .. }) {
-                // By removing the entry, the channel to the listener is dropped and thus the
-                // listener is notified that dialing the relay failed.
-                o.remove_entry();
+        if let Some(peer_id) = peer_id {
+            if let Entry::Occupied(o) = self.listeners.entry(peer_id) {
+                if matches!(o.get(), RelayListener::Connecting { .. }) {
+                    // By removing the entry, the channel to the listener is dropped and thus the
+                    // listener is notified that dialing the relay failed.
+                    o.remove_entry();
+                }
             }
-        }
 
-        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer_id) {
-            for req in reqs {
-                let _ = req.send_back.send(Err(OutgoingRelayReqError::DialingRelay));
+            if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(&peer_id) {
+                for req in reqs {
+                    let _ = req.send_back.send(Err(OutgoingRelayReqError::DialingRelay));
+                }
             }
-        }
 
-        if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
-            for req in reqs {
-                let IncomingRelayReq::DialingDst {
-                    src_peer_id,
-                    incoming_relay_req,
-                    ..
-                } = req;
-                self.outbox_to_swarm
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: src_peer_id,
-                        handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::DenyIncomingRelayReq(
-                            incoming_relay_req.deny(circuit_relay::Status::HopCantDialDst),
-                        ),
-                    })
+            if let Some(reqs) = self.incoming_relay_reqs.remove(&peer_id) {
+                for req in reqs {
+                    let IncomingRelayReq::DialingDst {
+                        src_peer_id,
+                        incoming_relay_req,
+                        ..
+                    } = req;
+                    self.outbox_to_swarm
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: src_peer_id,
+                            handler: NotifyHandler::Any,
+                            event: RelayHandlerIn::DenyIncomingRelayReq(
+                                incoming_relay_req.deny(circuit_relay::Status::HopCantDialDst),
+                            ),
+                        })
+                }
             }
         }
     }
@@ -410,15 +414,6 @@ impl NetworkBehaviour for Relay {
                 }
             }
         }
-    }
-
-    fn inject_addr_reach_failure(
-        &mut self,
-        _peer_id: Option<&PeerId>,
-        _addr: &Multiaddr,
-        _error: &dyn std::error::Error,
-    ) {
-        // Handled in `inject_dial_failure`.
     }
 
     fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
@@ -490,9 +485,10 @@ impl NetworkBehaviour for Relay {
                         );
                         let handler = self.new_handler();
                         self.outbox_to_swarm
-                            .push_back(NetworkBehaviourAction::DialPeer {
-                                peer_id: dest_id,
-                                condition: DialPeerCondition::NotDialing,
+                            .push_back(NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(dest_id)
+                                    .condition(dial_opts::PeerCondition::NotDialing)
+                                    .build(),
                                 handler,
                             });
                     } else {
@@ -683,9 +679,10 @@ impl NetworkBehaviour for Relay {
                                 dst_peer_id,
                                 send_back,
                             });
-                        return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                            peer_id: relay_peer_id,
-                            condition: DialPeerCondition::Disconnected,
+                        return Poll::Ready(NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(relay_peer_id)
+                                .condition(dial_opts::PeerCondition::Disconnected)
+                                .build(),
                             handler: self.new_handler(),
                         });
                     }
@@ -750,9 +747,10 @@ impl NetworkBehaviour for Relay {
                                         to_listener,
                                     },
                                 );
-                                return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                                    peer_id: relay_peer_id,
-                                    condition: DialPeerCondition::Disconnected,
+                                return Poll::Ready(NetworkBehaviourAction::Dial {
+                                    opts: DialOpts::peer_id(relay_peer_id)
+                                        .condition(dial_opts::PeerCondition::Disconnected)
+                                        .build(),
                                     handler: self.new_handler(),
                                 });
                             }

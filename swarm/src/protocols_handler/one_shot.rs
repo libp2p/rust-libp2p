@@ -22,10 +22,9 @@ use crate::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-
+use instant::Instant;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
-use wasm_timer::Instant;
 
 /// A `ProtocolsHandler` that opens a new substream for each request.
 // TODO: Debug
