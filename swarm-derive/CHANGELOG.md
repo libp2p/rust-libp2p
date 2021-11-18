@@ -1,3 +1,9 @@
+# 0.26.1 [unreleased]
+
+- Remove unnecessary clone of error in `inject_dial_failure` (see [PR 2349]).
+
+[PR 2349]: https://github.com/libp2p/rust-libp2p/pull/2349
+
 # 0.26.0 [2021-11-16]
 
 - Adjust to advanced dialing requests API changes (see [PR 2317]).
