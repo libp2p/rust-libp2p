@@ -22,9 +22,9 @@
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use libp2p_core::{Multiaddr, PeerId};
-use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
-use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
 /// DNS TXT records can have up to 255 characters as a single string value.
 ///
@@ -153,7 +153,12 @@ pub fn build_query_response(
     // If no packets have been built at all, because `addresses` is empty,
     // construct an empty response packet.
     if packets.is_empty() {
-        packets.push(query_response_packet(id, &peer_name_bytes, &Vec::new(), ttl));
+        packets.push(query_response_packet(
+            id,
+            &peer_name_bytes,
+            &Vec::new(),
+            ttl,
+        ));
     }
 
     packets

@@ -199,11 +199,7 @@ pub struct MdnsPeer {
 
 impl MdnsPeer {
     /// Creates a new `MdnsPeer` based on the provided `Packet`.
-    pub fn new(
-        packet: &Packet<'_>,
-        record_value: String,
-        ttl: u32,
-    ) -> Option<MdnsPeer> {
+    pub fn new(packet: &Packet<'_>, record_value: String, ttl: u32) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
             .additional
@@ -258,12 +254,11 @@ impl MdnsPeer {
             .collect();
 
         match my_peer_id {
-            Some(peer_id) =>
-                Some(MdnsPeer {
-                    addrs,
-                    peer_id,
-                    ttl,
-                }),
+            Some(peer_id) => Some(MdnsPeer {
+                addrs,
+                peer_id,
+                ttl,
+            }),
             None => None,
         }
     }
@@ -299,8 +294,8 @@ impl fmt::Debug for MdnsPeer {
 #[cfg(test)]
 mod tests {
 
-    use crate::dns::build_query_response;
     use super::*;
+    use crate::dns::build_query_response;
 
     #[test]
     fn test_create_mdns_peer() {
@@ -333,12 +328,12 @@ mod tests {
                         _ => return None,
                     };
                     return Some(record_value);
-                }).next().unwrap();
+                })
+                .next()
+                .unwrap();
 
             let peer = MdnsPeer::new(&packet, record_value, ttl).unwrap();
             assert_eq!(peer.peer_id, peer_id);
         }
     }
 }
-
-
