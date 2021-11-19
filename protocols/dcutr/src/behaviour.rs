@@ -168,9 +168,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_disconnected(&mut self, _peer: &PeerId) {
-        todo!();
-    }
+    fn inject_disconnected(&mut self, _peer: &PeerId) {}
 
     fn inject_connection_closed(
         &mut self,
@@ -179,7 +177,6 @@ impl NetworkBehaviour for Behaviour {
         _: &ConnectedPoint,
         _handler: <<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
-        todo!();
     }
 
     fn inject_event(

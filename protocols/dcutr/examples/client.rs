@@ -225,7 +225,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Got identify event");
 
     if matches!(opts.mode, Mode::Dial) {
-        println!("dialing remote peer");
         swarm
             .dial(
                 opts.relay_address
@@ -238,10 +237,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
-            println!(
-                "External addresses: {:?}",
-                swarm.external_addresses().collect::<Vec<_>>()
-            );
+            println!("loop");
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
                     println!("Listening on {:?}", address);
@@ -255,13 +251,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Identify(event)))) => {
                     println!("{:?}", event)
                 }
+                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Ping(_)))) => {}
                 Poll::Ready(Some(SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 })) => {
                     println!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 Poll::Ready(Some(e)) => {
-                    println!("{:?}", e)
+                    // panic!("{:?}", e)
                 }
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => {
