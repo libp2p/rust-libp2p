@@ -281,6 +281,7 @@ impl NetworkBehaviour for Behaviour {
             {
                 *obs_addrs = poll_parameters
                     .external_addresses()
+                    .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
                     .map(|a| {
                         a.addr
                             .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
