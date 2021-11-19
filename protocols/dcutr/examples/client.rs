@@ -33,6 +33,7 @@ use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId};
+use log::info;
 use std::convert::TryInto;
 use std::error::Error;
 use std::net::Ipv4Addr;
@@ -84,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    info!("Local peer id: {:?}", local_peer_id);
 
     let (transport, client) = Client::new_transport_and_behaviour(
         local_peer_id,
@@ -169,25 +170,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Wait to listen on localhost.
     block_on(async {
-        let mut delay = futures_timer::Delay::new(std::time::Duration::from_secs(2)).fuse();
+        let mut delay = futures_timer::Delay::new(std::time::Duration::from_secs(1)).fuse();
         loop {
             futures::select! {
-                event = swarm.next() => {
-                    match event.unwrap() {
-                        SwarmEvent::NewListenAddr { address, .. } => {
-                            println!("Listening on {:?}", address);
+                            event = swarm.next() => {
+                                match event.unwrap() {
+                                    SwarmEvent::NewListenAddr { address, .. } => {
+            info!("Listening on {:?}", address);
+                                    }
+                                    event => panic!("{:?}", event),
+                                }
+                            }
+                            _ = delay => {
+                                break;
+                            }
                         }
-                        event => panic!("{:?}", event),
-                    }
-                }
-                _ = delay => {
-                    break;
-                }
-            }
         }
     });
-
-    println!("Ready listening");
 
     match opts.mode {
         Mode::Dial => {
@@ -214,15 +213,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info: IdentifyInfo { observed_addr, .. },
                     ..
                 })) => {
-                    println!("Observed address: {:?}", observed_addr);
+                    info!("Observed address: {:?}", observed_addr);
                     break;
                 }
                 event => panic!("{:?}", event),
             }
         }
     });
-
-    println!("Got identify event");
 
     if matches!(opts.mode, Mode::Dial) {
         swarm
@@ -237,25 +234,27 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
-            println!("loop");
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
-                    println!("Listening on {:?}", address);
+                    info!("Listening on {:?}", address);
                 }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {
-                    println!("{:?}", event)
+                    info!("{:?}", event)
                 }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Dcutr(event)))) => {
-                    println!("{:?}", event)
+                    info!("{:?}", event)
                 }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Identify(event)))) => {
-                    println!("{:?}", event)
+                    info!("{:?}", event)
                 }
                 Poll::Ready(Some(SwarmEvent::Behaviour(Event::Ping(_)))) => {}
                 Poll::Ready(Some(SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 })) => {
-                    println!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                }
+                Poll::Ready(Some(SwarmEvent::OutgoingConnectionError { peer_id, error })) => {
+                    info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
                 Poll::Ready(Some(e)) => {
                     // panic!("{:?}", e)
