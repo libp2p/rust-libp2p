@@ -1509,7 +1509,6 @@ mod tests {
             keep_alive: KeepAlive::Yes,
         };
 
-        env_logger::init();
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
 
