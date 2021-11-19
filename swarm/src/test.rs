@@ -144,6 +144,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
         self.inject_connected = Vec::new();

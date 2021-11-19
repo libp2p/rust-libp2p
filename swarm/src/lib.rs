@@ -1509,6 +1509,7 @@ mod tests {
             keep_alive: KeepAlive::Yes,
         };
 
+        env_logger::init();
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
 
@@ -1520,62 +1521,103 @@ mod tests {
 
         let swarm1_id = *swarm1.local_peer_id();
 
-        let mut banned = false;
-        let mut unbanned = false;
+        enum Stage {
+            /// Waiting for the peers to connect. Banning has not occurred.
+            Connecting,
+            /// Ban occurred.
+            Banned,
+            // Ban is in place and a dial is ongoing.
+            BannedDial,
+            // Mid-ban dial was registered and the peer was unbanned.
+            Unbanned,
+            // There are dial attempts ongoing for the no longer banned peers.
+            Reconnecting,
+        }
 
-        let num_connections = 10;
+        let num_connections = 2;
 
         for _ in 0..num_connections {
             swarm1.dial(addr2.clone()).unwrap();
         }
-        let mut state = State::Connecting;
 
-        executor::block_on(future::poll_fn(move |cx| {
-            loop {
-                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-                match state {
-                    State::Connecting => {
-                        if swarms_connected(&swarm1, &swarm2, num_connections) {
-                            // Behaviours get the notification of `num_connections` connections if:
-                            // - They are connecting for the first time. Here neither banning nor
-                            //   unbanning has happened.
-                            // - Banning has ocurred and unbanning too. If only banning has
-                            //   occurred, the behaviours should have not gotten connection
-                            //   notifications.
-                            assert!(banned == unbanned);
-                            if unbanned {
-                                return Poll::Ready(());
-                            }
-                            swarm2.ban_peer_id(swarm1_id.clone());
-                            banned = true;
-                            state = State::Disconnecting;
-                        }
-                    }
-                    State::Disconnecting => {
-                        if swarms_disconnected(&swarm1, &swarm2, num_connections) {
-                            if banned {
-                                swarm1.dial(addr2.clone()).unwrap();
-                                state = State::Connecting;
-                                continue;
-                            }
-                            if unbanned {
-                                return Poll::Ready(());
-                            }
-                            // Unban the first peer and reconnect.
-                            swarm2.unban_peer_id(swarm1_id.clone());
-                            unbanned = true;
-                            for _ in 0..num_connections {
-                                swarm2.dial(addr1.clone()).unwrap();
-                            }
-                            state = State::Connecting;
-                        }
+        let mut swarm1_expected_conns = num_connections;
+        let mut swarm2_expected_conns = num_connections;
+
+        log::info!("Starting test");
+        let mut stage = Stage::Connecting;
+
+        executor::block_on(future::poll_fn(move |cx| loop {
+            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+            match stage {
+                Stage::Connecting => {
+                    if swarms_connected(&swarm1, &swarm2, num_connections) {
+                        log::info!("1");
+                        // Setup to test that already established connections are correctly closed
+                        // and reported as such after the peer in banned.
+                        swarm2.ban_peer_id(swarm1_id.clone());
+                        stage = Stage::Banned;
                     }
                 }
-
-                if poll1.is_pending() && poll2.is_pending() {
-                    return Poll::Pending;
+                Stage::Banned => {
+                    if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                        log::info!("2");
+                        // Setup to test that new connections of banned peers are not reported.
+                        swarm1.dial(addr2.clone()).unwrap();
+                        swarm1_expected_conns += 1;
+                        stage = Stage::BannedDial;
+                    }
                 }
+                Stage::BannedDial => {
+                    if swarm1.behaviour.inject_connection_established.len() == swarm1_expected_conns
+                        && swarm2.network_info().num_peers() == 1
+                    {
+                        log::info!("3");
+                        // The banned connection was established. Check that then banning swarm was
+                        // not reported about the connection.
+                        assert_eq!(
+                            swarm2.behaviour.inject_connection_established.len(), swarm2_expected_conns,
+                            "No additional closed connections should be reported for the banned peer"
+                        );
+                        // Setup to test that the banned connection is not reported upon closing
+                        // even if the peer is unbanned.
+                        swarm2.unban_peer_id(swarm1_id);
+                        stage = Stage::Unbanned;
+                    }
+                }
+                Stage::Unbanned => {
+                    if swarm2.network_info().num_peers() == 0 {
+                        log::info!("4");
+                        // The banned connection has closed. Check that it was not reported.
+                        assert_eq!(
+                            swarm2.behaviour.inject_connection_closed.len(), swarm2_expected_conns,
+                            "No additional closed connections should be reported for the banned peer"
+                        );
+                        assert!(swarm2.banned_connections.is_empty());
+                        // Setup to test that a ban lifted does not affect future connections.
+                        for _ in 0..num_connections {
+                            swarm1.dial(addr2.clone()).unwrap();
+                        }
+                        swarm1_expected_conns += num_connections;
+                        swarm2_expected_conns += num_connections;
+                        stage = Stage::Reconnecting;
+                    }
+                }
+                Stage::Reconnecting => {
+                    if swarm1.behaviour.inject_connection_established.len() == swarm1_expected_conns
+                    {
+                        log::info!("5");
+                        assert_eq!(
+                            swarm2.behaviour.inject_connection_established.len(),
+                            swarm2_expected_conns
+                        );
+                        return Poll::Ready(());
+                    }
+                }
+            }
+
+            if poll1.is_pending() && poll2.is_pending() {
+                return Poll::Pending;
             }
         }))
     }
@@ -1625,8 +1667,6 @@ mod tests {
                         swarm2
                             .disconnect_peer_id(swarm1_id.clone())
                             .expect("Error disconnecting");
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
                         state = State::Disconnecting;
                     }
                 }
@@ -1636,8 +1676,6 @@ mod tests {
                             return Poll::Ready(());
                         }
                         reconnected = true;
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
                         for _ in 0..num_connections {
                             swarm2.dial(addr1.clone()).unwrap();
                         }
@@ -1701,8 +1739,6 @@ mod tests {
                                 connection: CloseConnection::All,
                             },
                         );
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
                         state = State::Disconnecting;
                     }
                 }
@@ -1712,8 +1748,6 @@ mod tests {
                             return Poll::Ready(());
                         }
                         reconnected = true;
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
                         for _ in 0..num_connections {
                             swarm2.dial(addr1.clone()).unwrap();
                         }
@@ -1780,16 +1814,17 @@ mod tests {
                             );
                             Some(conn_id)
                         };
-                        swarm1.behaviour.reset();
-                        swarm2.behaviour.reset();
                         state = State::Disconnecting;
                     }
                 }
                 State::Disconnecting => {
                     for s in &[&swarm1, &swarm2] {
                         assert_eq!(s.behaviour.inject_disconnected.len(), 0);
-                        assert_eq!(s.behaviour.inject_connection_established.len(), 0);
-                        assert_eq!(s.behaviour.inject_connected.len(), 0);
+                        assert_eq!(
+                            s.behaviour.inject_connection_established.len(),
+                            num_connections
+                        );
+                        assert_eq!(s.behaviour.inject_connected.len(), 1);
                     }
                     if [&swarm1, &swarm2]
                         .iter()
