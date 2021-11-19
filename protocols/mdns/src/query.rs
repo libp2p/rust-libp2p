@@ -253,14 +253,11 @@ impl MdnsPeer {
             })
             .collect();
 
-        match my_peer_id {
-            Some(peer_id) => Some(MdnsPeer {
-                addrs,
-                peer_id,
-                ttl,
-            }),
-            None => None,
-        }
+        my_peer_id.map(|peer_id| MdnsPeer {
+            addrs,
+            peer_id,
+            ttl,
+        })
     }
 
     /// Returns the id of the peer.
@@ -302,8 +299,8 @@ mod tests {
         let ttl = 300;
         let peer_id = PeerId::random();
 
-        let mut addr1: Multiaddr = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
-        let mut addr2: Multiaddr = "/ip6/::1/udp/10000".parse().unwrap();
+        let mut addr1: Multiaddr = "/ip4/1.2.3.4/tcp/5000".parse().expect("bad multiaddress");
+        let mut addr2: Multiaddr = "/ip6/::1/udp/10000".parse().expect("bad multiaddress");
         addr1.push(Protocol::P2p(peer_id.clone().into()));
         addr2.push(Protocol::P2p(peer_id.clone().into()));
 
@@ -315,7 +312,7 @@ mod tests {
         );
 
         for bytes in packets {
-            let packet = Packet::parse(&bytes).unwrap();
+            let packet = Packet::parse(&bytes).expect("unable to parse packet");
             let record_value = packet
                 .answers
                 .iter()
@@ -330,9 +327,9 @@ mod tests {
                     return Some(record_value);
                 })
                 .next()
-                .unwrap();
+                .expect("empty record value");
 
-            let peer = MdnsPeer::new(&packet, record_value, ttl).unwrap();
+            let peer = MdnsPeer::new(&packet, record_value, ttl).expect("fail to create peer");
             assert_eq!(peer.peer_id, peer_id);
         }
     }
