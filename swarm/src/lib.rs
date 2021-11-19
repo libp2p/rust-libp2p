@@ -1468,15 +1468,6 @@ mod tests {
         TBehaviour: NetworkBehaviour,
         <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Clone,
     {
-        for s in &[swarm1, swarm2] {
-            if s.behaviour.inject_connection_established.len() > 0 {
-                assert_eq!(s.behaviour.inject_connected.len(), 1);
-            } else {
-                assert_eq!(s.behaviour.inject_connected.len(), 0);
-            }
-            assert!(s.behaviour.inject_connection_closed.is_empty());
-            assert!(s.behaviour.inject_disconnected.is_empty());
-        }
         [swarm1, swarm2]
             .iter()
             .all(|s| s.behaviour.inject_connection_established.len() == num_connections)
@@ -1491,10 +1482,6 @@ mod tests {
         TBehaviour: NetworkBehaviour,
         <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Clone
     {
-        for s in &[swarm1, swarm2] {
-            assert_eq!(s.behaviour.inject_connection_established.len(), 0);
-            assert_eq!(s.behaviour.inject_connected.len(), 0);
-        }
         [swarm1, swarm2]
             .iter()
             .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
@@ -1508,7 +1495,12 @@ mod tests {
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// inject_connected / inject_disconnected as well as
-    /// inject_connection_established / inject_connection_closed calls.
+    /// inject_connection_established / inject_connection_closed calls
+    /// while unbanned.
+    ///
+    /// While the ban is in effect, further dials occur. For these connections no
+    /// `inject_connected`, `inject_connection_established`, `inject_disconnected`,
+    /// `inject_connection_closed` calls should be registered.
     #[test]
     fn test_connect_disconnect_ban() {
         // Since the test does not try to open any substreams, we can
@@ -1545,25 +1537,33 @@ mod tests {
                 match state {
                     State::Connecting => {
                         if swarms_connected(&swarm1, &swarm2, num_connections) {
-                            if banned {
+                            // Behaviours get the notification of `num_connections` connections if:
+                            // - They are connecting for the first time. Here neither banning nor
+                            //   unbanning has happened.
+                            // - Banning has ocurred and unbanning too. If only banning has
+                            //   occurred, the behaviours should have not gotten connection
+                            //   notifications.
+                            assert!(banned == unbanned);
+                            if unbanned {
                                 return Poll::Ready(());
                             }
                             swarm2.ban_peer_id(swarm1_id.clone());
-                            swarm1.behaviour.reset();
-                            swarm2.behaviour.reset();
                             banned = true;
                             state = State::Disconnecting;
                         }
                     }
                     State::Disconnecting => {
                         if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                            if banned {
+                                swarm1.dial(addr2.clone()).unwrap();
+                                state = State::Connecting;
+                                continue;
+                            }
                             if unbanned {
                                 return Poll::Ready(());
                             }
                             // Unban the first peer and reconnect.
                             swarm2.unban_peer_id(swarm1_id.clone());
-                            swarm1.behaviour.reset();
-                            swarm2.behaviour.reset();
                             unbanned = true;
                             for _ in 0..num_connections {
                                 swarm2.dial(addr1.clone()).unwrap();
@@ -1806,60 +1806,5 @@ mod tests {
                 return Poll::Pending;
             }
         }))
-    }
-
-    #[test]
-    fn test_banning_respects_contract() {
-        let handler_proto = DummyProtocolsHandler {
-            keep_alive: KeepAlive::Yes,
-        };
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
-
-        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
-        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
-
-        swarm1.listen_on(addr1.clone().into()).unwrap();
-        swarm2.listen_on(addr2.clone().into()).unwrap();
-
-        let swarm1_id = *swarm1.local_peer_id();
-
-        async fn poll(
-            id: usize,
-            swarm: &mut Swarm<CallTraceBehaviour<MockBehaviour<DummyProtocolsHandler, ()>>>,
-        ) {
-            let ev = swarm.select_next_some().await;
-            log::info!("[{}] {:?}", id, ev);
-        }
-
-        executor::block_on(async {
-            // Wait for the swarms to establish listeners
-            poll(1, &mut swarm1).await;
-            poll(2, &mut swarm2).await;
-
-            swarm1.dial(addr2.clone()).unwrap();
-            log::info!("Swarm 2 banning swarm 1\n\n");
-            swarm2.ban_peer_id(swarm1_id);
-
-            // Incoming connection
-            poll(2, &mut swarm2).await;
-
-            // Connection established
-            poll(2, &mut swarm2).await;
-            // Connection established
-            poll(1, &mut swarm1).await;
-
-            // Both see connections as closed
-            poll(1, &mut swarm1).await;
-            poll(2, &mut swarm2).await;
-
-            // Check what swarm2's behaviour got
-            assert_eq!(
-                swarm2.behaviour.inject_connection_established,
-                swarm2.behaviour.inject_connection_closed
-            );
-            assert_eq!(swarm2.banned_connections.len(), 0);
-        })
     }
 }

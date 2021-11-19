@@ -184,6 +184,13 @@ where
     }
 
     fn inject_connected(&mut self, peer: &PeerId) {
+        assert!(
+            self.inject_connection_established
+                .iter()
+                .find(|(peer_id, _, _)| peer_id == peer)
+                .is_some(),
+            "`inject_connected` is called after at least one `inject_connection_established`."
+        );
         self.inject_connected.push(peer.clone());
         self.inner.inject_connected(peer);
     }
@@ -201,7 +208,14 @@ where
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inject_disconnected.push(peer.clone());
+        assert!(
+            self.inject_connection_closed
+                .iter()
+                .find(|(peer_id, _, _)| peer_id == peer)
+                .is_some(),
+            "`inject_disconnected` is called after at least one `inject_connection_closed`."
+        );
+        self.inject_disconnected.push(*peer);
         self.inner.inject_disconnected(peer);
     }
 
@@ -212,8 +226,13 @@ where
         e: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
-        self.inject_connection_closed
-            .push((p.clone(), c.clone(), e.clone()));
+        let connection = (p.clone(), c.clone(), e.clone());
+        assert!(
+            self.inject_connection_established.contains(&connection),
+            "`inject_connection_closed` is called only for connections for \
+            which `inject_connection_established` was called first."
+        );
+        self.inject_connection_closed.push(connection);
         self.inner.inject_connection_closed(p, c, e, handler);
     }
 
@@ -223,6 +242,21 @@ where
         c: ConnectionId,
         e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     ) {
+        assert!(
+            self.inject_connection_established
+                .iter()
+                .find(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id)
+                .is_some(),
+            "`inject_event` is called for reported connections."
+        );
+        assert!(
+            self.inject_connection_closed
+                .iter()
+                .find(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id)
+                .is_none(),
+            "`inject_event` is never called for closed connections."
+        );
+
         self.inject_event.push((p.clone(), c.clone(), e.clone()));
         self.inner.inject_event(p, c, e);
     }
