@@ -275,6 +275,9 @@ where
     /// List of nodes for which we deny any incoming connection.
     banned_peers: HashSet<PeerId>,
 
+    /// Connections for which we withhold any reporting. These belong to banned peers.
+    banned_connections: HashSet<ConnectionId>,
+
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
@@ -604,7 +607,7 @@ where
                 Poll::Ready(NetworkEvent::ConnectionEvent { connection, event }) => {
                     let peer = connection.peer_id();
                     let conn_id = connection.id();
-                    if connection.is_allowed() {
+                    if !this.banned_connections.contains(&conn_id) {
                         this.behaviour.inject_event(peer, conn_id, event);
                     } else {
                         log::debug!(
@@ -621,7 +624,7 @@ where
                 }) => {
                     let peer = connection.peer_id();
                     let conn_id = connection.id();
-                    if connection.is_allowed() {
+                    if !this.banned_connections.contains(&conn_id) {
                         this.behaviour.inject_address_change(
                             &peer,
                             &conn_id,
@@ -631,7 +634,7 @@ where
                     }
                 }
                 Poll::Ready(NetworkEvent::ConnectionEstablished {
-                    mut connection,
+                    connection,
                     num_established,
                     concurrent_dial_errors,
                 }) => {
@@ -639,7 +642,7 @@ where
                     let endpoint = connection.endpoint().clone();
                     if this.banned_peers.contains(&peer_id) {
                         // Mark the connection for the banned peer as disallowed.
-                        connection.disallow();
+                        this.banned_connections.insert(connection.id());
                         this.network
                             .peer(peer_id)
                             .into_connected()
@@ -688,7 +691,7 @@ where
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
-                    if connected.is_allowed {
+                    if !this.banned_connections.remove(&id) {
                         this.behaviour.inject_connection_closed(
                             &peer_id,
                             &id,
@@ -1267,6 +1270,7 @@ where
             listened_addrs: SmallVec::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
+            banned_connections: HashSet::new(),
             pending_event: None,
             substream_upgrade_protocol_override: self.substream_upgrade_protocol_override,
         }
@@ -1855,6 +1859,7 @@ mod tests {
                 swarm2.behaviour.inject_connection_established,
                 swarm2.behaviour.inject_connection_closed
             );
+            assert_eq!(swarm2.banned_connections.len(), 0);
         })
     }
 }

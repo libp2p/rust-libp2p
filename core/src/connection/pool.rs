@@ -112,8 +112,6 @@ struct EstablishedConnectionInfo<TInEvent> {
     /// [`PeerId`] of the remote peer.
     peer_id: PeerId,
     endpoint: ConnectedPoint,
-    /// Whether the connection was allowed.
-    is_allowed: bool,
     /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
 }
@@ -692,11 +690,8 @@ where
                     .established
                     .get_mut(&peer_id)
                     .expect("`Closed` event for established connection");
-                let EstablishedConnectionInfo {
-                    endpoint,
-                    is_allowed,
-                    ..
-                } = connections.remove(&id).expect("Connection to be present");
+                let EstablishedConnectionInfo { endpoint, .. } =
+                    connections.remove(&id).expect("Connection to be present");
                 self.counters.dec_established(&endpoint);
                 let num_established = u32::try_from(connections.len()).unwrap();
                 if num_established == 0 {
@@ -704,11 +699,7 @@ where
                 }
                 return Poll::Ready(PoolEvent::ConnectionClosed {
                     id,
-                    connected: Connected {
-                        endpoint,
-                        peer_id,
-                        is_allowed,
-                    },
+                    connected: Connected { endpoint, peer_id },
                     error,
                     num_established,
                     pool: self,
@@ -864,23 +855,16 @@ where
 
                     let (command_sender, command_receiver) =
                         mpsc::channel(self.task_command_buffer_size);
-                    // Any new connection is allowed by default.
-                    let is_allowed = true;
                     conns.insert(
                         id,
                         EstablishedConnectionInfo {
                             peer_id,
                             endpoint: endpoint.clone(),
-                            is_allowed,
                             sender: command_sender,
                         },
                     );
 
-                    let connected = Connected {
-                        peer_id,
-                        endpoint,
-                        is_allowed,
-                    };
+                    let connected = Connected { peer_id, endpoint };
 
                     let connection =
                         super::Connection::new(muxer, handler.into_handler(&connected));
@@ -1024,16 +1008,6 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     /// Returns the local connection ID.
     pub fn id(&self) -> ConnectionId {
         *self.entry.key()
-    }
-
-    /// Return whether the connection was allowed from the network.
-    pub fn is_allowed(&self) -> bool {
-        self.entry.get().is_allowed
-    }
-
-    /// Marks the connection as disallowed by the network.
-    pub fn disallow(&mut self) {
-        self.entry.get_mut().is_allowed = false;
     }
 
     /// (Asynchronously) sends an event to the connection handler.
