@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::v1::message_proto::circuit_relay;
-use crate::v1::{protocol, RequestId, Connection};
+use crate::v1::{protocol, Connection, RequestId};
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -92,10 +92,7 @@ pub struct RelayHandler {
     accept_dst_futures: FuturesUnordered<
         BoxFuture<
             'static,
-            Result<
-                (PeerId, Connection, oneshot::Receiver<()>),
-                protocol::IncomingDstReqError,
-            >,
+            Result<(PeerId, Connection, oneshot::Receiver<()>), protocol::IncomingDstReqError>,
         >,
     >,
     /// Futures that copy from a source to a destination.
