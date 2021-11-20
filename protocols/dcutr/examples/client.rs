@@ -256,9 +256,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Ready(Some(SwarmEvent::OutgoingConnectionError { peer_id, error })) => {
                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
-                Poll::Ready(Some(e)) => {
-                    // panic!("{:?}", e)
-                }
+                Poll::Ready(Some(_)) => {}
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => {
                     break;

@@ -30,7 +30,7 @@ use libp2p_swarm::{
     DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters, ProtocolsHandler,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 
 /// The events produced by the [`Behaviour`].
@@ -60,12 +60,16 @@ pub struct Behaviour {
             <Self as NetworkBehaviour>::ProtocolsHandler,
         >,
     >,
+
+    /// All direct (non-relayed) connections.
+    direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Behaviour {
             queued_actions: Default::default(),
+            direct_connections: Default::default(),
         }
     }
 }
@@ -91,10 +95,8 @@ impl NetworkBehaviour for Behaviour {
         connected_point: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
-        match connected_point {
-            ConnectedPoint::Listener { local_addr, .. }
-                if local_addr.iter().any(|p| p == Protocol::P2pCircuit) =>
-            {
+        if is_relayed_connection(connected_point) {
+            if connected_point.is_listener() && !self.direct_connections.contains_key(peer_id) {
                 // TODO: Try dialing the remote peer directly. Specification:
                 //
                 // > The protocol starts with the completion of a relay connection from A to B. Upon
@@ -104,8 +106,6 @@ impl NetworkBehaviour for Behaviour {
                 // connection upgrade by initiating a direct connection to A.
                 //
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                //
-                // TODO: Only do this in case there is not already a direct connection.
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: *peer_id,
@@ -115,6 +115,10 @@ impl NetworkBehaviour for Behaviour {
                             attempt: 1,
                         }),
                     });
+                let local_addr = match connected_point {
+                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
+                    ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
+                };
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         Event::InitiateDirectConnectionUpgrade {
@@ -123,7 +127,11 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
-            _ => {}
+        } else {
+            self.direct_connections
+                .entry(*peer_id)
+                .or_default()
+                .insert(*connection_id);
         }
     }
 
@@ -167,15 +175,30 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_disconnected(&mut self, _peer: &PeerId) {}
+    fn inject_disconnected(&mut self, peer_id: &PeerId) {
+        assert!(!self.direct_connections.contains_key(peer_id));
+    }
 
     fn inject_connection_closed(
         &mut self,
-        _peer_id: &PeerId,
-        _connection_id: &ConnectionId,
-        _: &ConnectedPoint,
+        peer_id: &PeerId,
+        connection_id: &ConnectionId,
+        connected_point: &ConnectedPoint,
         _handler: <<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
+        if !is_relayed_connection(connected_point) {
+            let connections = self
+                .direct_connections
+                .get_mut(peer_id)
+                .expect("Peer of direct connection to be tracked.");
+            connections
+                .remove(connection_id)
+                .then(|| ())
+                .expect("Direct connection to be tracked.");
+            if connections.is_empty() {
+                self.direct_connections.remove(peer_id);
+            }
+        }
     }
 
     fn inject_event(
@@ -293,4 +316,13 @@ impl NetworkBehaviour for Behaviour {
 
         Poll::Pending
     }
+}
+
+fn is_relayed_connection(connected_point: &ConnectedPoint) -> bool {
+    match connected_point {
+        ConnectedPoint::Dialer { address } => address,
+        ConnectedPoint::Listener { local_addr, .. } => local_addr,
+    }
+    .iter()
+    .any(|p| p == Protocol::P2pCircuit)
 }
