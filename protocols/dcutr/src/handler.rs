@@ -23,7 +23,7 @@ use either::Either;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_core::{upgrade, ConnectedPoint, PeerId};
 use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
@@ -108,8 +108,6 @@ impl fmt::Debug for RelayedConnectionEvent {
 }
 
 pub enum Prototype {
-    // TODO: Variant needed?
-    RelayedConnection,
     DirectConnection { role: Role },
     UnknownConnection,
 }
@@ -127,35 +125,29 @@ impl IntoProtocolsHandler for Prototype {
         Either<RelayedConnectionHandler, Either<DirectConnectionHandler, DummyProtocolsHandler>>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        let is_relayed_addr = match endpoint {
-            ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { local_addr, .. } => local_addr,
-        }
-        .iter()
-        .any(|p| p == Protocol::P2pCircuit);
+        let is_relayed_connection = crate::is_relayed_connection(endpoint);
 
-        match (self, is_relayed_addr) {
-            (Self::RelayedConnection | Self::UnknownConnection, true) => {
-                // TODO: When handler is created via new_handler, the connection is inbound. It should only
-                // ever be us initiating a dcutr request on this handler then, as one never initiates a
-                // request on an outbound handler. Should this be enforced?
-                Either::Left(RelayedConnectionHandler {
-                    remote_addr: endpoint.get_remote_address().clone(),
-                    queued_events: Default::default(),
-                    inbound_connects: Default::default(),
-                })
+        match self {
+            Self::UnknownConnection => {
+                if is_relayed_connection {
+                    // TODO: When handler is created via new_handler, the connection is inbound. It should only
+                    // ever be us initiating a dcutr request on this handler then, as one never initiates a
+                    // request on an outbound handler. Should this be enforced?
+                    Either::Left(RelayedConnectionHandler {
+                        remote_addr: endpoint.get_remote_address().clone(),
+                        queued_events: Default::default(),
+                        inbound_connects: Default::default(),
+                    })
+                } else {
+                    Either::Right(Either::Right(DummyProtocolsHandler::default()))
+                }
             }
-            (Self::DirectConnection { .. }, false) => {
+            Self::DirectConnection { .. } => {
+                assert!(
+                    !is_relayed_connection,
+                    "`Prototype::DirectConnection` is never created for relayed connection."
+                );
                 Either::Right(Either::Left(DirectConnectionHandler { reported: false }))
-            }
-            (Self::UnknownConnection, false) => {
-                Either::Right(Either::Right(DummyProtocolsHandler::default()))
-            }
-            (Self::RelayedConnection, false) => {
-                todo!("Expected relayed connection.")
-            }
-            (Self::DirectConnection { .. }, true) => {
-                todo!("Expected non-relayed connection.")
             }
         }
     }
@@ -260,7 +252,6 @@ impl ProtocolsHandler for RelayedConnectionHandler {
         todo!()
     }
 
-    // TODO: Why is this not a mut reference? If it were the case, we could do all keep alive handling in here.
     fn connection_keep_alive(&self) -> KeepAlive {
         // TODO
         //
@@ -334,22 +325,11 @@ impl ProtocolsHandler for DirectConnectionHandler {
 
     fn inject_event(&mut self, _: Self::InEvent) {}
 
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
         _: ProtocolsHandlerUpgrErr<
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
     }

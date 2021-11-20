@@ -95,7 +95,7 @@ impl NetworkBehaviour for Behaviour {
         connected_point: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
-        if is_relayed_connection(connected_point) {
+        if crate::is_relayed_connection(connected_point) {
             if connected_point.is_listener() && !self.direct_connections.contains_key(peer_id) {
                 // TODO: Try dialing the remote peer directly. Specification:
                 //
@@ -150,9 +150,8 @@ impl NetworkBehaviour for Behaviour {
                     },
             } => {
                 let peer_id =
-                    peer_id.expect("Prototype::DirectConnection to always connect to known peer.");
+                    peer_id.expect("Prototype::DirectConnection is always for known peer.");
                 if attempt < 3 {
-                    // TODO: Emit event that attempt failed and another attempt is started.
                     self.queued_actions
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id: peer_id,
@@ -186,7 +185,7 @@ impl NetworkBehaviour for Behaviour {
         connected_point: &ConnectedPoint,
         _handler: <<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
-        if !is_relayed_connection(connected_point) {
+        if !crate::is_relayed_connection(connected_point) {
             let connections = self
                 .direct_connections
                 .get_mut(peer_id)
@@ -316,13 +315,4 @@ impl NetworkBehaviour for Behaviour {
 
         Poll::Pending
     }
-}
-
-fn is_relayed_connection(connected_point: &ConnectedPoint) -> bool {
-    match connected_point {
-        ConnectedPoint::Dialer { address } => address,
-        ConnectedPoint::Listener { local_addr, .. } => local_addr,
-    }
-    .iter()
-    .any(|p| p == Protocol::P2pCircuit)
 }
