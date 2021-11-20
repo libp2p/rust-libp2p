@@ -224,7 +224,7 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            handler::relayed::Event::InboundConnectReq {
+            handler::relayed::Event::InboundConnectRequest {
                 inbound_connect,
                 remote_addr,
             } => {
@@ -245,7 +245,7 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
-            handler::relayed::Event::InboundConnectNeg(remote_addrs) => {
+            handler::relayed::Event::InboundConnectNegotiated(remote_addrs) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
                     // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
@@ -257,7 +257,7 @@ impl NetworkBehaviour for Behaviour {
                     },
                 });
             }
-            handler::relayed::Event::OutboundConnectNeg {
+            handler::relayed::Event::OutboundConnectNegotiated {
                 remote_addrs,
                 attempt,
             } => {

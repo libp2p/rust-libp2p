@@ -68,13 +68,12 @@ impl fmt::Debug for Command {
 }
 
 pub enum Event {
-    InboundConnectReq {
+    InboundConnectRequest {
         inbound_connect: protocol::InboundConnect,
         remote_addr: Multiaddr,
     },
-    // TODO: Rename to InboundConnectNegotiated?
-    InboundConnectNeg(Vec<Multiaddr>),
-    OutboundConnectNeg {
+    InboundConnectNegotiated(Vec<Multiaddr>),
+    OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
         attempt: u8,
     },
@@ -83,22 +82,22 @@ pub enum Event {
 impl fmt::Debug for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Event::InboundConnectReq {
+            Event::InboundConnectRequest {
                 inbound_connect: _,
                 remote_addr,
             } => f
-                .debug_struct("Event::InboundConnectReq")
+                .debug_struct("Event::InboundConnectRequest")
                 .field("remote_addrs", remote_addr)
                 .finish(),
-            Event::InboundConnectNeg(addrs) => f
-                .debug_tuple("Event::InboundConnectNeg")
+            Event::InboundConnectNegotiated(addrs) => f
+                .debug_tuple("Event::InboundConnectNegotiated")
                 .field(addrs)
                 .finish(),
-            Event::OutboundConnectNeg {
+            Event::OutboundConnectNegotiated {
                 remote_addrs,
                 attempt,
             } => f
-                .debug_struct("Event::OutboundConnectNeg")
+                .debug_struct("Event::OutboundConnectNegotiated")
                 .field("remote_addrs", remote_addrs)
                 .field("attempt", attempt)
                 .finish(),
@@ -165,7 +164,7 @@ impl ProtocolsHandler for Handler {
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ProtocolsHandler>::listen_protocol` denies all incoming substreams as a listener."),
                 };
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::InboundConnectReq {
+                    Event::InboundConnectRequest {
                         inbound_connect,
                         remote_addr: remote_addr,
                     },
@@ -187,11 +186,12 @@ impl ProtocolsHandler for Handler {
             self.endpoint.is_listener(),
             "A connection dialer never initiates a connection upgrade."
         );
-        self.queued_events
-            .push_back(ProtocolsHandlerEvent::Custom(Event::OutboundConnectNeg {
+        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+            Event::OutboundConnectNegotiated {
                 remote_addrs: obs_addrs,
                 attempt,
-            }));
+            },
+        ));
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
@@ -256,9 +256,9 @@ impl ProtocolsHandler for Handler {
         }
 
         while let Poll::Ready(Some(remote_addrs)) = self.inbound_connects.poll_next_unpin(cx) {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(Event::InboundConnectNeg(
-                remote_addrs.unwrap(),
-            )));
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                Event::InboundConnectNegotiated(remote_addrs.unwrap()),
+            ));
         }
 
         Poll::Pending
