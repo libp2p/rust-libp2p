@@ -21,7 +21,7 @@
 use crate::codec::MAX_FRAME_SIZE;
 use std::cmp;
 
-pub(crate) const DEFAULT_MPLEX_PROTOCOL: &'static [u8] = b"/mplex/6.7.0";
+pub(crate) const DEFAULT_MPLEX_PROTOCOL_NAME: &'static [u8] = b"/mplex/6.7.0";
 
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone)]
@@ -94,8 +94,12 @@ impl MplexConfig {
         self.protocol
     }
 
-    /// Sets protocol, muxer.set_protocol(b"/mplex/6.7.0")
-    pub fn set_protocol(&mut self, protocol: &'static [u8]) -> &mut Self {
+    /// Set protocol name.
+    ///
+    /// ```rust
+    /// muxer_config.set_protocol(b"/mplex/6.7.0");
+    /// ```
+    pub fn set_protocol_name(&mut self, protocol: &'static [u8]) -> &mut Self {
         self.protocol = protocol;
         self
     }
@@ -135,7 +139,7 @@ impl Default for MplexConfig {
             max_buffer_len: 32,
             max_buffer_behaviour: MaxBufferBehaviour::Block,
             split_send_size: 8 * 1024,
-            protocol: DEFAULT_MPLEX_PROTOCOL,
+            protocol_name: DEFAULT_MPLEX_PROTOCOL,
         }
     }
 }
