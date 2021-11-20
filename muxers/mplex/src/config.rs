@@ -35,8 +35,8 @@ pub struct MplexConfig {
     /// When sending data, split it into frames whose maximum size is this value
     /// (max 1MByte, as per the Mplex spec).
     pub(crate) split_send_size: usize,
-    /// Protocol defaults to b"/mplex/6.7.0"
-    pub(crate) protocol: &'static [u8],
+    /// Protocol name, defaults to b"/mplex/6.7.0"
+    pub(crate) protocol_name: &'static [u8],
 }
 
 impl MplexConfig {
@@ -89,18 +89,20 @@ impl MplexConfig {
         self
     }
 
-    /// Gets protocol
-    pub fn protocol(&self) -> &[u8] {
-        self.protocol
+    /// Gets the protocol anme
+    pub fn protocol_name(&self) -> &[u8] {
+        self.protocol_name
     }
 
-    /// Set protocol name.
+    /// Set the protocol name.
     ///
     /// ```rust
-    /// muxer_config.set_protocol(b"/mplex/6.7.0");
+    /// use libp2p_mplex::MplexConfig;
+    /// let mut muxer_config = MplexConfig::new();
+    /// muxer_config.set_protocol_name(b"/mplex/6.7.0");
     /// ```
-    pub fn set_protocol_name(&mut self, protocol: &'static [u8]) -> &mut Self {
-        self.protocol = protocol;
+    pub fn set_protocol_name(&mut self, protocol_name: &'static [u8]) -> &mut Self {
+        self.protocol_name = protocol_name;
         self
     }
 }
@@ -139,7 +141,7 @@ impl Default for MplexConfig {
             max_buffer_len: 32,
             max_buffer_behaviour: MaxBufferBehaviour::Block,
             split_send_size: 8 * 1024,
-            protocol_name: DEFAULT_MPLEX_PROTOCOL,
+            protocol_name: DEFAULT_MPLEX_PROTOCOL_NAME,
         }
     }
 }

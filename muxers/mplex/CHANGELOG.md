@@ -1,3 +1,7 @@
+# unreleased
+
+- Add `set_protocol_name` to MplexConfig
+
 # 0.30.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.

@@ -208,7 +208,7 @@ fn protocol_not_match() {
     async_std::task::block_on(async {
         // Make sure they do not connect when protocols do not match
         let mut mplex = libp2p_mplex::MplexConfig::new();
-        mplex.set_protocol(b"/mplextest/1.0.0");
+        mplex.set_protocol_name(b"/mplextest/1.0.0");
         let transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
         match transport.dial(rx.await.unwrap()).unwrap().await {
