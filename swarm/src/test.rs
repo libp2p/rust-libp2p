@@ -164,6 +164,40 @@ where
     pub fn inner(&mut self) -> &mut TInner {
         &mut self.inner
     }
+
+    /// Checks that when the expected number of closed connection notifications are received, a
+    /// given number of expected disconnections have been received as well.
+    ///
+    /// Returns if the first condition is met.
+    pub fn assert_disconnected(
+        &self,
+        expected_closed_connections: usize,
+        expected_disconnections: usize,
+    ) -> bool {
+        if self.inject_connection_closed.len() == expected_closed_connections {
+            assert_eq!(self.inject_disconnected.len(), expected_disconnections);
+            return true;
+        }
+
+        false
+    }
+
+    /// Checks that when the expected number of established connection notifications are received,
+    /// a given number of expected connections have been received as well.
+    ///
+    /// Returns if the first condition is met.
+    pub fn assert_connected(
+        &self,
+        expected_established_connections: usize,
+        expected_connections: usize,
+    ) -> bool {
+        if self.inject_connection_established.len() == expected_established_connections {
+            assert_eq!(self.inject_connected.len(), expected_connections);
+            return true;
+        }
+
+        false
+    }
 }
 
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
