@@ -34,8 +34,7 @@ use std::iter;
 use std::time::Instant;
 use unsigned_varint::codec::UviBytes;
 
-// TODO: Golang seems to use "/libp2p/holepunch/1.0.0"
-const PROTOCOL_NAME: &[u8; 15] = b"/libp2p/connect";
+const PROTOCOL_NAME: &[u8; 13] = b"/libp2p/dcutr";
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -61,7 +60,7 @@ impl OutboundUpgrade {
 }
 
 impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
-    type Output = Connect;
+    type Output = OutboundConnect;
     type Error = OutboundUpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -82,7 +81,6 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
         async move {
             substream.send(encoded_msg.freeze()).await?;
 
-            // TODO: Should we do this before or after flushing?
             let sent_time = Instant::now();
 
             let msg: bytes::BytesMut = substream
@@ -125,7 +123,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
 
             Delay::new(rtt / 2).await;
 
-            Ok(Connect { obs_addrs })
+            Ok(OutboundConnect { obs_addrs })
         }
         .boxed()
     }
@@ -228,7 +226,7 @@ impl upgrade::UpgradeInfo for InboundUpgrade {
 }
 
 impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
-    type Output = InboundConnect;
+    type Output = InboundPendingConnect;
     type Error = InboundUpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -263,7 +261,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
                 hole_punch::Type::Sync => return Err(InboundUpgradeError::UnexpectedTypeSync),
             }
 
-            Ok(InboundConnect {
+            Ok(InboundPendingConnect {
                 substream,
                 remote_obs_addrs: obs_addrs,
             })
@@ -272,17 +270,16 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
     }
 }
 
-// TODO: Should we rename this to OutboundConnect?
-pub struct Connect {
+pub struct OutboundConnect {
     pub obs_addrs: Vec<Multiaddr>,
 }
 
-pub struct InboundConnect {
+pub struct InboundPendingConnect {
     substream: Framed<NegotiatedSubstream, UviBytes>,
     remote_obs_addrs: Vec<Multiaddr>,
 }
 
-impl InboundConnect {
+impl InboundPendingConnect {
     // TODO: Should this really use InboundUpgradeError?
     pub async fn accept(
         mut self,

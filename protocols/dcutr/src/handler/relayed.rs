@@ -44,7 +44,7 @@ pub enum Command {
     },
     AcceptInboundConnect {
         obs_addrs: Vec<Multiaddr>,
-        inbound_connect: protocol::InboundConnect,
+        inbound_connect: protocol::InboundPendingConnect,
     },
 }
 
@@ -69,7 +69,7 @@ impl fmt::Debug for Command {
 
 pub enum Event {
     InboundConnectRequest {
-        inbound_connect: protocol::InboundConnect,
+        inbound_connect: protocol::InboundPendingConnect,
         remote_addr: Multiaddr,
     },
     InboundConnectNegotiated(Vec<Multiaddr>),
@@ -177,7 +177,7 @@ impl ProtocolsHandler for Handler {
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol::Connect { obs_addrs }: <Self::OutboundProtocol as upgrade::OutboundUpgrade<
+        protocol::OutboundConnect { obs_addrs }: <Self::OutboundProtocol as upgrade::OutboundUpgrade<
             NegotiatedSubstream,
         >>::Output,
         attempt: Self::OutboundOpenInfo,
