@@ -222,8 +222,7 @@ where
         assert!(
             self.inject_connection_established
                 .iter()
-                .find(|(peer_id, _, _)| peer_id == peer)
-                .is_some(),
+                .any(|(peer_id, _, _)| peer_id == peer),
             "`inject_connected` is called after at least one `inject_connection_established`."
         );
         self.inject_connected.push(peer.clone());
@@ -246,8 +245,7 @@ where
         assert!(
             self.inject_connection_closed
                 .iter()
-                .find(|(peer_id, _, _)| peer_id == peer)
-                .is_some(),
+                .any(|(peer_id, _, _)| peer_id == peer),
             "`inject_disconnected` is called after at least one `inject_connection_closed`."
         );
         self.inject_disconnected.push(*peer);
@@ -280,15 +278,14 @@ where
         assert!(
             self.inject_connection_established
                 .iter()
-                .find(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id)
-                .is_some(),
+                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
             "`inject_event` is called for reported connections."
         );
         assert!(
-            self.inject_connection_closed
+            !self
+                .inject_connection_closed
                 .iter()
-                .find(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id)
-                .is_none(),
+                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
             "`inject_event` is never called for closed connections."
         );
 

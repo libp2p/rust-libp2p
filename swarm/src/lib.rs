@@ -1548,8 +1548,8 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone().into()).unwrap();
-        swarm2.listen_on(addr2.clone().into()).unwrap();
+        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
 
@@ -1587,7 +1587,7 @@ mod tests {
                     {
                         // Setup to test that already established connections are correctly closed
                         // and reported as such after the peer in banned.
-                        swarm2.ban_peer_id(swarm1_id.clone());
+                        swarm2.ban_peer_id(swarm1_id);
                         stage = Stage::Banned;
                     }
                 }
@@ -1669,8 +1669,8 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone().into()).unwrap();
-        swarm2.listen_on(addr2.clone().into()).unwrap();
+        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
 
@@ -1692,7 +1692,7 @@ mod tests {
                             return Poll::Ready(());
                         }
                         swarm2
-                            .disconnect_peer_id(swarm1_id.clone())
+                            .disconnect_peer_id(swarm1_id)
                             .expect("Error disconnecting");
                         state = State::Disconnecting;
                     }
@@ -1738,8 +1738,8 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone().into()).unwrap();
-        swarm2.listen_on(addr2.clone().into()).unwrap();
+        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
 
@@ -1762,7 +1762,7 @@ mod tests {
                         }
                         swarm2.behaviour.inner().next_action.replace(
                             NetworkBehaviourAction::CloseConnection {
-                                peer_id: swarm1_id.clone(),
+                                peer_id: swarm1_id,
                                 connection: CloseConnection::All,
                             },
                         );
@@ -1810,8 +1810,8 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone().into()).unwrap();
-        swarm2.listen_on(addr2.clone().into()).unwrap();
+        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
 
@@ -1835,7 +1835,7 @@ mod tests {
                                 .1;
                             swarm2.behaviour.inner().next_action.replace(
                                 NetworkBehaviourAction::CloseConnection {
-                                    peer_id: swarm1_id.clone(),
+                                    peer_id: swarm1_id,
                                     connection: CloseConnection::One(conn_id),
                                 },
                             );
