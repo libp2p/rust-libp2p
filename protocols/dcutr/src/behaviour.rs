@@ -44,7 +44,6 @@ pub enum Event {
         remote_peer_id: PeerId,
         remote_relayed_addr: Multiaddr,
     },
-    // TODO: Emit
     DirectConnectionUpgradeSucceeded {
         remote_peer_id: PeerId,
     },
