@@ -43,13 +43,11 @@ use std::time::Duration;
 pub struct Config {
     pub max_reservations: usize,
     pub reservation_duration: Duration,
-    // TODO: Mutable state in a config. Good idea?
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
     pub max_circuits: usize,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
-    // TODO: Mutable state in a config. Good idea?
     pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 }
 
