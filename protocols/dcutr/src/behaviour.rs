@@ -110,7 +110,7 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: *peer_id,
                         handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::In::Connect {
+                        event: Either::Left(handler::relayed::Command::Connect {
                             obs_addrs: vec![],
                             attempt: 1,
                         }),
@@ -156,7 +156,7 @@ impl NetworkBehaviour for Behaviour {
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id: peer_id,
                             handler: NotifyHandler::One(relay_connection_id),
-                            event: Either::Left(handler::In::Connect {
+                            event: Either::Left(handler::relayed::Command::Connect {
                                 obs_addrs: vec![],
                                 attempt: attempt + 1,
                             }),
@@ -210,7 +210,7 @@ impl NetworkBehaviour for Behaviour {
             Either::Left(event) => event,
             // TODO: Clean up.
             Either::Right(Either::Left(
-                handler::DirectConnectionEvent::DirectConnectionUpgradeSucceeded,
+                handler::direct::Event::DirectConnectionUpgradeSucceeded,
             )) => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
@@ -224,7 +224,7 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            handler::RelayedConnectionEvent::InboundConnectReq {
+            handler::relayed::Event::InboundConnectReq {
                 inbound_connect,
                 remote_addr,
             } => {
@@ -232,7 +232,7 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
                         handler: NotifyHandler::One(connection),
-                        event: Either::Left(handler::In::AcceptInboundConnect {
+                        event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
                             inbound_connect,
                             obs_addrs: vec![],
                         }),
@@ -245,7 +245,7 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
-            handler::RelayedConnectionEvent::InboundConnectNeg(remote_addrs) => {
+            handler::relayed::Event::InboundConnectNeg(remote_addrs) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
                     // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
@@ -257,7 +257,7 @@ impl NetworkBehaviour for Behaviour {
                     },
                 });
             }
-            handler::RelayedConnectionEvent::OutboundConnectNeg {
+            handler::relayed::Event::OutboundConnectNeg {
                 remote_addrs,
                 attempt,
             } => {
@@ -287,15 +287,16 @@ impl NetworkBehaviour for Behaviour {
             // Set obs addresses.
             if let NetworkBehaviourAction::NotifyHandler {
                 event:
-                    Either::Left(handler::In::Connect {
+                    Either::Left(handler::relayed::Command::Connect {
                         ref mut obs_addrs, ..
                     }),
                 ..
             }
             | NetworkBehaviourAction::NotifyHandler {
                 event:
-                    Either::Left(handler::In::AcceptInboundConnect {
-                        ref mut obs_addrs, ..
+                    Either::Left(handler::relayed::Command::AcceptInboundConnect {
+                        ref mut obs_addrs,
+                        ..
                     }),
                 ..
             } = &mut event
