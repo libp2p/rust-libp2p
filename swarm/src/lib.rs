@@ -1635,7 +1635,7 @@ mod tests {
                     }
                 }
                 Stage::Reconnecting => {
-                    if swarm1.behaviour.assert_connected(s1_expected_conns, 3)
+                    if swarm1.behaviour.inject_connection_established.len() == s1_expected_conns
                         && swarm2.behaviour.assert_connected(s2_expected_conns, 2)
                     {
                         return Poll::Ready(());
