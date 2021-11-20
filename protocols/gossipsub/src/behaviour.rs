@@ -32,6 +32,7 @@ use std::{
 
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
+use open_metrics_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
@@ -50,6 +51,7 @@ use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
@@ -302,6 +304,9 @@ pub struct Gossipsub<
     /// calculating the message-id and sending to the application. This is designed to allow the
     /// user to implement arbitrary topic-based compression algorithms.
     data_transform: D,
+
+    /// Keep track of a set of internal metrics relating to gossipsub.
+    metrics: Option<Metrics>,
 }
 
 impl<D, F> Gossipsub<D, F>
@@ -318,6 +323,25 @@ where
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            None,
+            F::default(),
+            D::default(),
+        )
+    }
+
+    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
+    /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    pub fn new_with_metrics(
+        privacy: MessageAuthenticity,
+        config: GossipsubConfig,
+        metrics_registry: &mut Registry,
+        metrics_config: MetricsConfig,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_subscription_filter_and_transform(
+            privacy,
+            config,
+            Some((metrics_registry, metrics_config)),
             F::default(),
             D::default(),
         )
@@ -334,11 +358,13 @@ where
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             subscription_filter,
             D::default(),
         )
@@ -355,11 +381,13 @@ where
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         data_transform: D,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
+            metrics,
             F::default(),
             data_transform,
         )
@@ -376,6 +404,7 @@ where
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: GossipsubConfig,
+        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
         data_transform: D,
     ) -> Result<Self, &'static str> {
@@ -385,9 +414,8 @@ where
         // were received locally.
         validate_config(&privacy, config.validation_mode())?;
 
-        // Set up message publishing parameters.
-
         Ok(Gossipsub {
+            metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
@@ -604,6 +632,7 @@ where
         debug!("Publishing message: {:?}", msg_id);
 
         let topic_hash = raw_message.topic.clone();
+        let msg_bytes = raw_message.data.len();
 
         // If we are not flood publishing forward the message to mesh peers.
         let mesh_peers_sent =
@@ -700,6 +729,10 @@ where
         for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);
             self.send_message(*peer_id, event.clone())?;
+
+            if let Some(m) = self.metrics.as_mut() {
+                m.msg_sent(&topic_hash, msg_bytes);
+            }
         }
 
         debug!("Published message: {:?}", &msg_id);
@@ -868,6 +901,10 @@ where
 
         let mut added_peers = HashSet::new();
 
+        if let Some(m) = self.metrics.as_mut() {
+            m.joined(topic_hash)
+        }
+
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
         if let Some((_, mut peers)) = self.fanout.remove_entry(topic_hash) {
@@ -899,8 +936,14 @@ where
                 topic_hash.clone(),
                 peers.into_iter().take(add_peers).collect(),
             );
+
             // remove the last published time
             self.fanout_last_pub.remove(topic_hash);
+        }
+
+        let fanaout_added = added_peers.len();
+        if let Some(m) = self.metrics.as_mut() {
+            m.peers_included(topic_hash, Inclusion::Fanaout, fanaout_added)
         }
 
         // check if we need to get more peers, which we randomly select
@@ -931,6 +974,11 @@ where
             mesh_peers.extend(new_peers);
         }
 
+        let random_added = added_peers.len() - fanaout_added;
+        if let Some(m) = self.metrics.as_mut() {
+            m.peers_included(topic_hash, Inclusion::Random, random_added)
+        }
+
         for peer_id in added_peers {
             // Send a GRAFT control message
             debug!("JOIN: Sending Graft message to peer: {:?}", peer_id);
@@ -955,6 +1003,12 @@ where
                 &self.connected_peers,
             );
         }
+
+        let mesh_peers = self.mesh_peers(topic_hash).count();
+        if let Some(m) = self.metrics.as_mut() {
+            m.set_mesh_peers(topic_hash, mesh_peers)
+        }
+
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
@@ -1020,6 +1074,9 @@ where
 
         // If our mesh contains the topic, send prune to peers and delete it from the mesh
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
+            if let Some(m) = self.metrics.as_mut() {
+                m.left(topic_hash)
+            }
             for peer in peers {
                 // Send a PRUNE control message
                 debug!("LEAVE: Sending PRUNE to peer: {:?}", peer);
@@ -1218,7 +1275,18 @@ where
         if !cached_messages.is_empty() {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
-            let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
+            let message_list: Vec<_> = cached_messages.into_iter().map(|entry| entry.1).collect();
+
+            let mut topic_msgs = HashMap::<TopicHash, Vec<usize>>::default();
+            if self.metrics.is_some() {
+                for msg in message_list.iter() {
+                    topic_msgs
+                        .entry(msg.topic.clone())
+                        .or_default()
+                        .push(msg.data.len());
+                }
+            }
+
             if self
                 .send_message(
                     *peer_id,
@@ -1232,6 +1300,13 @@ where
                 .is_err()
             {
                 error!("Failed to send cached messages. Messages too large");
+            } else if let Some(m) = self.metrics.as_mut() {
+                // Sending of messages succeeded, register them on the internal metrics.
+                for (topic, msg_bytes_vec) in topic_msgs.into_iter() {
+                    for msg_bytes in msg_bytes_vec {
+                        m.msg_sent(&topic, msg_bytes);
+                    }
+                }
             }
         }
         debug!("Completed IWANT handling for peer: {}", peer_id);
@@ -1338,7 +1413,13 @@ where
                         "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
                         peer_id, &topic_hash
                     );
-                    peers.insert(*peer_id);
+
+                    if peers.insert(*peer_id) {
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
+                        }
+                    }
+
                     // If the peer did not previously exist in any mesh, inform the handler
                     peer_added_to_mesh(
                         *peer_id,
@@ -1401,6 +1482,7 @@ where
         topic_hash: &TopicHash,
         backoff: Option<u64>,
         always_update_backoff: bool,
+        reason: Churn,
     ) {
         let mut update_backoff = always_update_backoff;
         if let Some(peers) = self.mesh.get_mut(topic_hash) {
@@ -1411,6 +1493,9 @@ where
                     peer_id.to_string(),
                     topic_hash
                 );
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_removed(topic_hash, reason, 1)
+                }
 
                 if let Some((peer_score, ..)) = &mut self.peer_score {
                     peer_score.prune(peer_id, topic_hash.clone());
@@ -1450,7 +1535,7 @@ where
         let (below_threshold, score) =
             self.score_below_threshold(peer_id, |pst| pst.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
-            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true);
+            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
                 //connect to px peers
@@ -1779,9 +1864,10 @@ where
 
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
+            let topic_hash = &subscription.topic_hash;
             let peer_list = self
                 .topic_peers
-                .entry(subscription.topic_hash.clone())
+                .entry(topic_hash.clone())
                 .or_insert_with(Default::default);
 
             match subscription.action {
@@ -1790,12 +1876,12 @@ where
                         debug!(
                             "SUBSCRIPTION: Adding gossip peer: {} to topic: {:?}",
                             propagation_source.to_string(),
-                            subscription.topic_hash
+                            topic_hash
                         );
                     }
 
                     // add to the peer_topics mapping
-                    subscribed_topics.insert(subscription.topic_hash.clone());
+                    subscribed_topics.insert(topic_hash.clone());
 
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source)
@@ -1813,28 +1899,30 @@ where
                         .0
                         && !self
                             .backoffs
-                            .is_backoff_with_slack(&subscription.topic_hash, propagation_source)
+                            .is_backoff_with_slack(topic_hash, propagation_source)
                     {
-                        if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
+                        if let Some(peers) = self.mesh.get_mut(topic_hash) {
                             if peers.len() < self.config.mesh_n_low()
                                 && peers.insert(*propagation_source)
                             {
                                 debug!(
                                     "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
                                     propagation_source.to_string(),
-                                    subscription.topic_hash
+                                    topic_hash
                                 );
+                                if let Some(m) = self.metrics.as_mut() {
+                                    m.peers_included(topic_hash, Inclusion::Subscribed, 1)
+                                }
                                 // send graft to the peer
                                 debug!(
                                     "Sending GRAFT to peer {} for topic {:?}",
                                     propagation_source.to_string(),
-                                    subscription.topic_hash
+                                    topic_hash
                                 );
                                 if let Some((peer_score, ..)) = &mut self.peer_score {
-                                    peer_score
-                                        .graft(propagation_source, subscription.topic_hash.clone());
+                                    peer_score.graft(propagation_source, topic_hash.clone());
                                 }
-                                topics_to_graft.push(subscription.topic_hash.clone());
+                                topics_to_graft.push(topic_hash.clone());
                             }
                         }
                     }
@@ -1842,7 +1930,7 @@ where
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Subscribed {
                             peer_id: *propagation_source,
-                            topic: subscription.topic_hash.clone(),
+                            topic: topic_hash.clone(),
                         },
                     ));
                 }
@@ -1851,26 +1939,31 @@ where
                         debug!(
                             "SUBSCRIPTION: Removing gossip peer: {} from topic: {:?}",
                             propagation_source.to_string(),
-                            subscription.topic_hash
+                            topic_hash
                         );
                     }
+
                     // remove topic from the peer_topics mapping
-                    subscribed_topics.remove(&subscription.topic_hash);
-                    unsubscribed_peers.push((*propagation_source, subscription.topic_hash.clone()));
+                    subscribed_topics.remove(topic_hash);
+                    unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Unsubscribed {
                             peer_id: *propagation_source,
-                            topic: subscription.topic_hash.clone(),
+                            topic: topic_hash.clone(),
                         },
                     ));
                 }
+            }
+
+            if let Some(m) = self.metrics.as_mut() {
+                m.set_topic_peers(topic_hash, peer_list.len());
             }
         }
 
         // remove unsubscribed peers from the mesh if it exists
         for (peer_id, topic_hash) in unsubscribed_peers {
-            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false);
+            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
         }
 
         // Potentially inform the handler if we have added this peer to a mesh for the first time.
@@ -1994,6 +2087,11 @@ where
                 })
                 .cloned()
                 .collect();
+
+            if let Some(m) = self.metrics.as_mut() {
+                m.peers_removed(topic_hash, Churn::BadScore, to_remove.len())
+            }
+
             for peer in to_remove {
                 peers.remove(&peer);
             }
@@ -2026,6 +2124,9 @@ where
                 }
                 // update the mesh
                 debug!("Updating mesh, new mesh: {:?}", peer_list);
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
+                }
                 peers.extend(peer_list);
             }
 
@@ -2080,6 +2181,10 @@ where
                     current_topic.push(topic_hash.clone());
                     removed += 1;
                 }
+
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_removed(topic_hash, Churn::Excess, removed)
+                }
             }
 
             // do we have enough outbound peers?
@@ -2109,6 +2214,9 @@ where
                     }
                     // update the mesh
                     debug!("Updating mesh, new mesh: {:?}", peer_list);
+                    if let Some(m) = self.metrics.as_mut() {
+                        m.peers_included(topic_hash, Inclusion::Outbound, peer_list.len())
+                    }
                     peers.extend(peer_list);
                 }
             }
@@ -2168,9 +2276,16 @@ where
                             "Opportunistically graft in topic {} with peers {:?}",
                             topic_hash, peer_list
                         );
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
+                        }
                         peers.extend(peer_list);
                     }
                 }
+            }
+            // Register the final count of peers in the mesh
+            if let Some(m) = self.metrics.as_mut() {
+                m.set_mesh_peers(topic_hash, peers.len())
             }
         }
 
@@ -2523,6 +2638,9 @@ where
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
+                if let Some(m) = self.metrics.as_mut() {
+                    m.msg_sent(&message.topic, message.data.len());
+                }
             }
             debug!("Completed forwarding message");
             Ok(true)
@@ -2887,7 +3005,12 @@ where
                 // check the mesh for the topic
                 if let Some(mesh_peers) = self.mesh.get_mut(topic) {
                     // check if the peer is in the mesh and remove it
-                    mesh_peers.remove(peer_id);
+                    if mesh_peers.remove(peer_id) {
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.peers_removed(topic, Churn::Dc, 1);
+                            m.set_mesh_peers(topic, mesh_peers.len());
+                        }
+                    };
                 }
 
                 // remove from topic_peers
@@ -2898,6 +3021,9 @@ where
                             "Disconnected node: {} not in topic_peers peer list",
                             peer_id
                         );
+                    }
+                    if let Some(m) = self.metrics.as_mut() {
+                        m.set_topic_peers(topic, peer_list.len())
                     }
                 } else {
                     warn!(
