@@ -66,7 +66,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = HolePunch {
-            r#type: Some(hole_punch::Type::Connect.into()),
+            r#type: hole_punch::Type::Connect.into(),
             obs_addrs: self.obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
@@ -92,9 +92,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
 
             let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
 
-            // TODO: Unwrap safe here?
-            let r#type = hole_punch::Type::from_i32(r#type.unwrap())
-                .ok_or(OutboundUpgradeError::ParseTypeField)?;
+            let r#type =
+                hole_punch::Type::from_i32(r#type).ok_or(OutboundUpgradeError::ParseTypeField)?;
             match r#type {
                 hole_punch::Type::Connect => {}
                 hole_punch::Type::Sync => return Err(OutboundUpgradeError::UnexpectedTypeSync),
@@ -111,7 +110,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
             };
 
             let msg = HolePunch {
-                r#type: Some(hole_punch::Type::Sync.into()),
+                r#type: hole_punch::Type::Sync.into(),
                 obs_addrs: vec![],
             };
 
@@ -253,8 +252,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for InboundUpgrade {
                     .map_err(|_| InboundUpgradeError::InvalidAddrs)?
             };
 
-            let r#type = hole_punch::Type::from_i32(r#type.unwrap())
-                .ok_or(InboundUpgradeError::ParseTypeField)?;
+            let r#type =
+                hole_punch::Type::from_i32(r#type).ok_or(InboundUpgradeError::ParseTypeField)?;
 
             match r#type {
                 hole_punch::Type::Connect => {}
@@ -286,7 +285,7 @@ impl InboundPendingConnect {
         local_obs_addrs: Vec<Multiaddr>,
     ) -> Result<Vec<Multiaddr>, InboundUpgradeError> {
         let msg = HolePunch {
-            r#type: Some(hole_punch::Type::Connect.into()),
+            r#type: hole_punch::Type::Connect.into(),
             obs_addrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
@@ -303,9 +302,8 @@ impl InboundPendingConnect {
 
         let HolePunch { r#type, .. } = HolePunch::decode(Cursor::new(msg))?;
 
-        // TODO: Unwrap safe here?
-        let r#type = hole_punch::Type::from_i32(r#type.unwrap())
-            .ok_or(InboundUpgradeError::ParseTypeField)?;
+        let r#type =
+            hole_punch::Type::from_i32(r#type).ok_or(InboundUpgradeError::ParseTypeField)?;
         match r#type {
             hole_punch::Type::Connect => return Err(InboundUpgradeError::UnexpectedTypeConnect),
             hole_punch::Type::Sync => {}
