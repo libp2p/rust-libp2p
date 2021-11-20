@@ -333,6 +333,7 @@ where
                             *this.state = SeqState::SendProtocol { io, protocol };
                         }
                         Role::Responder => {
+                            #[allow(clippy::needless_collect)]
                             let protocols: Vec<_> = this.protocols.collect();
                             *this.state = SeqState::Responder {
                                 responder: crate::listener_select::listener_select_proto_no_header(
