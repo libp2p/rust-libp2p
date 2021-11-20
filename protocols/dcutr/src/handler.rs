@@ -23,9 +23,10 @@ use either::Either;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p_core::connection::ConnectionId;
+use libp2p_core::either::EitherOutput;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-use libp2p_core::{upgrade, ConnectedPoint, PeerId};
+use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use libp2p_swarm::{
@@ -40,7 +41,7 @@ use void::Void;
 pub enum In {
     Connect {
         obs_addrs: Vec<Multiaddr>,
-        // Use new-type.
+        // TODO: Use new-type.
         attempt: u8,
     },
     AcceptInboundConnect {
@@ -134,7 +135,7 @@ impl IntoProtocolsHandler for Prototype {
                     // ever be us initiating a dcutr request on this handler then, as one never initiates a
                     // request on an outbound handler. Should this be enforced?
                     Either::Left(RelayedConnectionHandler {
-                        remote_addr: endpoint.get_remote_address().clone(),
+                        endpoint: endpoint.clone(),
                         queued_events: Default::default(),
                         inbound_connects: Default::default(),
                     })
@@ -153,12 +154,19 @@ impl IntoProtocolsHandler for Prototype {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(protocol::InboundUpgrade {}))
+        match self {
+            Prototype::UnknownConnection => upgrade::EitherUpgrade::A(SendWrapper(
+                upgrade::EitherUpgrade::A(protocol::InboundUpgrade {}),
+            )),
+            Prototype::DirectConnection { .. } => {
+                upgrade::EitherUpgrade::A(SendWrapper(upgrade::EitherUpgrade::B(DeniedUpgrade)))
+            }
+        }
     }
 }
 
 pub struct RelayedConnectionHandler {
-    remote_addr: Multiaddr,
+    endpoint: ConnectedPoint,
     /// Queue of events to return when polled.
     queued_events: VecDeque<
         ProtocolsHandlerEvent<
@@ -177,27 +185,44 @@ impl ProtocolsHandler for RelayedConnectionHandler {
     type InEvent = In;
     type OutEvent = RelayedConnectionEvent;
     type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
-    type InboundProtocol = protocol::InboundUpgrade;
+    type InboundProtocol = upgrade::EitherUpgrade<protocol::InboundUpgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::OutboundUpgrade;
     // TODO: Use new type for attempt instead of u8.
     type OutboundOpenInfo = u8;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(protocol::InboundUpgrade {}, ())
+        match self.endpoint {
+            ConnectedPoint::Dialer { .. } => {
+                SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::InboundUpgrade {}), ())
+            }
+            ConnectedPoint::Listener { .. } => {
+                SubstreamProtocol::new(upgrade::EitherUpgrade::B(DeniedUpgrade), ())
+            }
+        }
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        inbound_connect: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
+        output: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-            RelayedConnectionEvent::InboundConnectReq {
-                inbound_connect,
-                remote_addr: self.remote_addr.clone(),
-            },
-        ));
+        match output {
+            EitherOutput::First(inbound_connect) => {
+                let remote_addr = match & self.endpoint {
+                    ConnectedPoint::Dialer { address } => address.clone(),
+                    ConnectedPoint::Listener { ..} => unreachable!("`<RelayedConnectionHandler as ProtocolsHandler>::listen_protocol` denies all incoming substreams as a listener."),
+                };
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    RelayedConnectionEvent::InboundConnectReq {
+                        inbound_connect,
+                        remote_addr: remote_addr,
+                    },
+                ));
+            }
+            // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
+            EitherOutput::Second(output) => void::unreachable(output),
+        }
     }
 
     fn inject_fully_negotiated_outbound(
@@ -207,6 +232,10 @@ impl ProtocolsHandler for RelayedConnectionHandler {
         >>::Output,
         attempt: Self::OutboundOpenInfo,
     ) {
+        assert!(
+            self.endpoint.is_listener(),
+            "A connection dialer never initiates a connection upgrade."
+        );
         self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
             RelayedConnectionEvent::OutboundConnectNeg {
                 remote_addrs: obs_addrs,
