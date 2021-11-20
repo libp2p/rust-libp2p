@@ -27,11 +27,10 @@ use libp2p_core::{upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::convert::TryFrom;
-use std::error;
-use std::fmt;
 use std::io::Cursor;
 use std::iter;
 use std::time::Instant;
+use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
 
 const PROTOCOL_NAME: &[u8; 13] = b"/libp2p/dcutr";
@@ -128,89 +127,38 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutboundUpgrade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum OutboundUpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
+    #[error("Failed to decode response: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error("Io error {0}")]
+    Io(
+        #[from]
+        #[source]
+        std::io::Error,
+    ),
+    #[error("Expected 'status' field to be set.")]
     MissingStatusField,
+    #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
+    #[error("Expected at least one address in reservation.")]
     NoAddresses,
+    #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
+    #[error("Invalid addresses in reservation.")]
     InvalidAddrs,
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
+    #[error("Unexpected message type 'sync'")]
     UnexpectedTypeSync,
+    #[error("Failed to parse response type field.")]
     ParseStatusField,
-}
-
-impl From<std::io::Error> for OutboundUpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        OutboundUpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for OutboundUpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        OutboundUpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for OutboundUpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            OutboundUpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            OutboundUpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            OutboundUpgradeError::MissingStatusField => {
-                write!(f, "Expected 'status' field to be set.")
-            }
-            OutboundUpgradeError::MissingReservationField => {
-                write!(f, "Expected 'reservation' field to be set.")
-            }
-            OutboundUpgradeError::NoAddresses => {
-                write!(f, "Expected at least one address in reservation.")
-            }
-            OutboundUpgradeError::InvalidReservationExpiration => {
-                write!(f, "Invalid expiration timestamp in reservation.")
-            }
-            OutboundUpgradeError::InvalidAddrs => {
-                write!(f, "Invalid addresses in reservation.")
-            }
-            OutboundUpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            OutboundUpgradeError::UnexpectedTypeConnect => {
-                write!(f, "Unexpected message type 'connect'")
-            }
-            OutboundUpgradeError::UnexpectedTypeSync => {
-                write!(f, "Unexpected message type 'sync'")
-            }
-            OutboundUpgradeError::ParseStatusField => {
-                write!(f, "Failed to parse response type field.")
-            }
-        }
-    }
-}
-
-impl error::Error for OutboundUpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            OutboundUpgradeError::Decode(e) => Some(e),
-            OutboundUpgradeError::Io(e) => Some(e),
-            OutboundUpgradeError::MissingStatusField => None,
-            OutboundUpgradeError::MissingReservationField => None,
-            OutboundUpgradeError::NoAddresses => None,
-            OutboundUpgradeError::InvalidReservationExpiration => None,
-            OutboundUpgradeError::InvalidAddrs => None,
-            OutboundUpgradeError::ParseTypeField => None,
-            OutboundUpgradeError::UnexpectedTypeConnect => None,
-            OutboundUpgradeError::UnexpectedTypeSync => None,
-            OutboundUpgradeError::ParseStatusField => None,
-        }
-    }
 }
 
 pub struct InboundUpgrade {}
@@ -279,7 +227,6 @@ pub struct InboundPendingConnect {
 }
 
 impl InboundPendingConnect {
-    // TODO: Should this really use InboundUpgradeError?
     pub async fn accept(
         mut self,
         local_obs_addrs: Vec<Multiaddr>,
@@ -313,88 +260,28 @@ impl InboundPendingConnect {
     }
 }
 
-// TODO: Are all of these needed?
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum InboundUpgradeError {
-    Decode(prost::DecodeError),
-    Io(std::io::Error),
-    MissingStatusField,
-    MissingReservationField,
+    #[error("Failed to decode response: {0}.")]
+    Decode(
+        #[from]
+        #[source]
+        prost::DecodeError,
+    ),
+    #[error("Io error {0}")]
+    Io(
+        #[from]
+        #[source]
+        std::io::Error,
+    ),
+    #[error("Expected at least one address in reservation.")]
     NoAddresses,
-    InvalidReservationExpiration,
+    #[error("Invalid addresses.")]
     InvalidAddrs,
+    #[error("Failed to parse response type field.")]
     ParseTypeField,
+    #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
+    #[error("Unexpected message type 'sync'")]
     UnexpectedTypeSync,
-    ParseStatusField,
-}
-
-impl From<std::io::Error> for InboundUpgradeError {
-    fn from(e: std::io::Error) -> Self {
-        InboundUpgradeError::Io(e)
-    }
-}
-
-impl From<prost::DecodeError> for InboundUpgradeError {
-    fn from(e: prost::DecodeError) -> Self {
-        InboundUpgradeError::Decode(e)
-    }
-}
-
-impl fmt::Display for InboundUpgradeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InboundUpgradeError::Decode(e) => {
-                write!(f, "Failed to decode response: {}.", e)
-            }
-            InboundUpgradeError::Io(e) => {
-                write!(f, "Io error {}", e)
-            }
-            InboundUpgradeError::MissingStatusField => {
-                write!(f, "Expected 'status' field to be set.")
-            }
-            InboundUpgradeError::MissingReservationField => {
-                write!(f, "Expected 'reservation' field to be set.")
-            }
-            InboundUpgradeError::NoAddresses => {
-                write!(f, "Expected at least one address in reservation.")
-            }
-            InboundUpgradeError::InvalidReservationExpiration => {
-                write!(f, "Invalid expiration timestamp in reservation.")
-            }
-            InboundUpgradeError::InvalidAddrs => {
-                write!(f, "Invalid addresses.")
-            }
-            InboundUpgradeError::ParseTypeField => {
-                write!(f, "Failed to parse response type field.")
-            }
-            InboundUpgradeError::UnexpectedTypeConnect => {
-                write!(f, "Unexpected message type 'connect'")
-            }
-            InboundUpgradeError::UnexpectedTypeSync => {
-                write!(f, "Unexpected message type 'sync'")
-            }
-            InboundUpgradeError::ParseStatusField => {
-                write!(f, "Failed to parse response type field.")
-            }
-        }
-    }
-}
-
-impl error::Error for InboundUpgradeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            InboundUpgradeError::Decode(e) => Some(e),
-            InboundUpgradeError::Io(e) => Some(e),
-            InboundUpgradeError::MissingStatusField => None,
-            InboundUpgradeError::MissingReservationField => None,
-            InboundUpgradeError::NoAddresses => None,
-            InboundUpgradeError::InvalidReservationExpiration => None,
-            InboundUpgradeError::InvalidAddrs => None,
-            InboundUpgradeError::ParseTypeField => None,
-            InboundUpgradeError::UnexpectedTypeConnect => None,
-            InboundUpgradeError::UnexpectedTypeSync => None,
-            InboundUpgradeError::ParseStatusField => None,
-        }
-    }
 }

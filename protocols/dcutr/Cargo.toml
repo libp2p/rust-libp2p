@@ -19,6 +19,7 @@ libp2p-core = { version = "0.30", path = "../../core" }
 libp2p-swarm = { version = "0.32", path = "../../swarm" }
 log = "0.4"
 prost = "0.7"
+thiserror = "1.0"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
 
