@@ -29,7 +29,7 @@ use crate::{
     transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
-use std::{fmt, num::NonZeroU32};
+use std::fmt;
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
@@ -100,9 +100,9 @@ where
     ConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent>,
-        /// The total number of established connections to the same peer,
-        /// including the one that has just been opened.
-        num_established: NonZeroU32,
+        /// The ids of the open connections for the peer, not including the open that was just
+        /// opened.
+        established_ids: Vec<ConnectionId>,
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
@@ -128,8 +128,8 @@ where
         connected: Connected,
         /// The error that occurred.
         error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
-        /// The remaining number of established connections to the same peer.
-        num_established: u32,
+        /// The remaining established connections to the same peer.
+        established_ids: Vec<ConnectionId>,
         handler: THandler::Handler,
     },
 

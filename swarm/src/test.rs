@@ -91,7 +91,7 @@ where
 
 /// A `CallTraceBehaviour` is a `NetworkBehaviour` that tracks
 /// invocations of callback methods and their arguments, wrapping
-/// around an inner behaviour.
+/// around an inner behaviour. It ensures certain invariants are met.
 pub struct CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,

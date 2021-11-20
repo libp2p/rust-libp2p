@@ -43,7 +43,7 @@ use substream::{Muxing, SubstreamEvent};
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ConnectionId(usize);
+pub struct ConnectionId(pub usize);
 
 impl ConnectionId {
     /// Creates a `ConnectionId` from a non-negative integer.
