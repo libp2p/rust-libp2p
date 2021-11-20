@@ -303,7 +303,7 @@ impl<R> MessageIO<R> {
         }
     }
 
-    /// Draops the [`MessageIO`] resource, yielding the underlying I/O stream.
+    /// Drops the [`MessageIO`] resource, yielding the underlying I/O stream.
     ///
     /// # Panics
     ///
