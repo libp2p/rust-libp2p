@@ -21,8 +21,8 @@
 use crate::v1::message_proto::{circuit_relay, CircuitRelay};
 use crate::v1::protocol::incoming_dst_req::IncomingDstReq;
 use crate::v1::protocol::incoming_relay_req::IncomingRelayReq;
-use crate::v1::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use crate::v1::protocol::{Peer, PeerParseError};
+use crate::v1::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
 use asynchronous_codec::Framed;
 use futures::channel::oneshot;
 use futures::{future::BoxFuture, prelude::*};

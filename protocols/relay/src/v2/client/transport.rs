@@ -396,9 +396,10 @@ impl<T: Transport> Stream for RelayListener<T> {
                         return Poll::Ready(Some(Err(EitherError::B(RelayError::Reservation))));
                     }
                     Poll::Ready(None) => {
-                        panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
-
-                    },
+                        panic!(
+                            "Expect sender of `from_behaviour` not to be dropped before listener."
+                        );
+                    }
                     Poll::Pending => {}
                 }
             }
@@ -454,7 +455,9 @@ pub enum RelayError {
     SendingMessageToBehaviour(#[from] mpsc::SendError),
     #[error("Response from behaviour was canceled")]
     ResponseFromBehaviourCanceled(#[from] oneshot::Canceled),
-    #[error("Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported.")]
+    #[error(
+        "Address contains multiple circuit relay protocols (`p2p-circuit`) which is not supported."
+    )]
     MultipleCircuitRelayProtocolsUnsupported,
     #[error("One of the provided multiaddresses is malformed.")]
     MalformedMultiaddr,
@@ -469,8 +472,6 @@ impl<E> From<RelayError> for TransportError<EitherError<E, RelayError>> {
         TransportError::Other(EitherError::B(error))
     }
 }
-
-
 
 /// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::relay::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).

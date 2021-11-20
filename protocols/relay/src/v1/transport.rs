@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v1::{RequestId, Connection};
 use crate::v1::behaviour::BehaviourToListenerMsg;
+use crate::v1::{Connection, RequestId};
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
