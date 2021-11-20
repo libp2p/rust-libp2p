@@ -543,7 +543,6 @@ where
     /// This function has no effect if the peer is already banned.
     pub fn ban_peer_id(&mut self, peer_id: PeerId) {
         if self.banned_peers.insert(peer_id) {
-            log::info!("Banned peer {}", peer_id);
             if let Some(peer) = self.network.peer(peer_id).into_connected() {
                 peer.disconnect();
             }
@@ -644,11 +643,6 @@ where
                     let endpoint = connection.endpoint().clone();
                     if this.banned_peers.contains(&peer_id) {
                         // Mark the connection for the banned peer as disallowed.
-                        log::info!(
-                            "Register banned connection {} {}",
-                            peer_id,
-                            connection.id().0
-                        );
                         this.banned_peer_connections.insert(connection.id());
                         this.network
                             .peer(peer_id)
@@ -662,11 +656,10 @@ where
                                 .expect("n + 1 is always non-zero; qed");
 
                         log::info!(
-                            "Connection established: {} {} .",
+                            "Connection established: {:?} {:?}; Total (peer): {}.",
                             connection.peer_id(),
-                            connection.id().0,
-                            // connection.endpoint(),
-                            // num_established
+                            connection.endpoint(),
+                            num_established
                         );
                         let endpoint = connection.endpoint().clone();
                         let failed_addresses = concurrent_dial_errors
@@ -712,7 +705,6 @@ where
                     let num_established = u32::try_from(established_ids.len()).unwrap();
                     let conn_was_informed = !this.banned_peer_connections.remove(&id);
                     if conn_was_informed {
-                        log::info!("Closed normal connection {} {}", peer_id, id.0);
                         this.behaviour.inject_connection_closed(
                             &peer_id,
                             &id,
@@ -727,11 +719,6 @@ where
                             .all(|conn_id| this.banned_peer_connections.contains(&conn_id));
 
                         if last_allowed {
-                            log::info!(
-                                "Peer disconnected: {}. Last closed connection {}",
-                                peer_id,
-                                id.0,
-                            );
                             this.behaviour.inject_disconnected(&peer_id)
                         }
                     }
