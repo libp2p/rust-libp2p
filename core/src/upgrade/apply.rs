@@ -323,6 +323,15 @@ impl From<AuthenticationVersion> for multistream_select::Version {
     }
 }
 
+impl From<Version> for AuthenticationVersion {
+    fn from(v: Version) -> Self {
+        match v {
+            Version::V1 => AuthenticationVersion::V1,
+            Version::V1Lazy => AuthenticationVersion::V1Lazy,
+        }
+    }
+}
+
 /// Applies an authentication upgrade to the inbound or outbound direction of a connection.
 ///
 /// Note: This is like [`apply`] with additional support for transports allowing simultaneously
