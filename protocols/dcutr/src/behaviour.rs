@@ -143,11 +143,8 @@ impl NetworkBehaviour for Behaviour {
     ) {
         match handler {
             handler::Prototype::DirectConnection {
-                role:
-                    handler::Role::Initiator {
-                        attempt,
-                        relay_connection_id,
-                    },
+                relayed_connection_id,
+                role: handler::Role::Initiator { attempt },
             } => {
                 let peer_id =
                     peer_id.expect("Prototype::DirectConnection is always for known peer.");
@@ -155,13 +152,21 @@ impl NetworkBehaviour for Behaviour {
                     self.queued_actions
                         .push_back(NetworkBehaviourAction::NotifyHandler {
                             peer_id: peer_id,
-                            handler: NotifyHandler::One(relay_connection_id),
+                            handler: NotifyHandler::One(relayed_connection_id),
                             event: Either::Left(handler::relayed::Command::Connect {
                                 obs_addrs: vec![],
                                 attempt: attempt + 1,
                             }),
                         });
                 } else {
+                    self.queued_actions
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: peer_id,
+                            handler: NotifyHandler::One(relayed_connection_id),
+                            event: Either::Left(
+                                handler::relayed::Command::UpgradeFinishedDontKeepAlive,
+                            ),
+                        });
                     self.queued_actions
                         .push_back(NetworkBehaviourAction::GenerateEvent(
                             Event::DirectConnectionUpgradeFailed {
@@ -206,28 +211,11 @@ impl NetworkBehaviour for Behaviour {
         connection: ConnectionId,
         handler_event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     ) {
-        let handler_event = match handler_event {
-            Either::Left(event) => event,
-            // TODO: Clean up.
-            Either::Right(Either::Left(
-                handler::direct::Event::DirectConnectionUpgradeSucceeded,
-            )) => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::DirectConnectionUpgradeSucceeded {
-                            remote_peer_id: event_source,
-                        },
-                    ));
-                return;
-            }
-            Either::Right(Either::Right(event)) => void::unreachable(event),
-        };
-
         match handler_event {
-            handler::relayed::Event::InboundConnectRequest {
+            Either::Left(handler::relayed::Event::InboundConnectRequest {
                 inbound_connect,
                 remote_addr,
-            } => {
+            }) => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -245,7 +233,7 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
-            handler::relayed::Event::InboundConnectNegotiated(remote_addrs) => {
+            Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
                     // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
@@ -253,14 +241,15 @@ impl NetworkBehaviour for Behaviour {
                         .condition(dial_opts::PeerCondition::Always)
                         .build(),
                     handler: handler::Prototype::DirectConnection {
+                        relayed_connection_id: connection,
                         role: handler::Role::Listener,
                     },
                 });
             }
-            handler::relayed::Event::OutboundConnectNegotiated {
+            Either::Left(handler::relayed::Event::OutboundConnectNegotiated {
                 remote_addrs,
                 attempt,
-            } => {
+            }) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
                     // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
@@ -268,14 +257,34 @@ impl NetworkBehaviour for Behaviour {
                         .addresses(remote_addrs)
                         .build(),
                     handler: handler::Prototype::DirectConnection {
-                        role: handler::Role::Initiator {
-                            attempt: attempt,
-                            relay_connection_id: connection,
-                        },
+                        relayed_connection_id: connection,
+                        role: handler::Role::Initiator { attempt: attempt },
                     },
                 });
             }
-        }
+            Either::Right(Either::Left(
+                handler::direct::Event::DirectConnectionUpgradeSucceeded {
+                    relayed_connection_id,
+                },
+            )) => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: event_source,
+                        handler: NotifyHandler::One(relayed_connection_id),
+                        event: Either::Left(
+                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
+                        ),
+                    });
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::DirectConnectionUpgradeSucceeded {
+                            remote_peer_id: event_source,
+                        },
+                    ));
+                return;
+            }
+            Either::Right(Either::Right(event)) => void::unreachable(event),
+        };
     }
 
     fn poll(

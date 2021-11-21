@@ -23,6 +23,7 @@
 use crate::protocol;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
+use instant::Instant;
 use libp2p_core::either::EitherOutput;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{self, DeniedUpgrade};
@@ -35,6 +36,7 @@ use libp2p_swarm::{
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 pub enum Command {
     Connect {
@@ -46,6 +48,10 @@ pub enum Command {
         obs_addrs: Vec<Multiaddr>,
         inbound_connect: protocol::InboundPendingConnect,
     },
+    /// Upgrading the relayed connection to a direct connection either failed for good or succeeded.
+    /// There is no need to keep the relayed connection alive for the sake of upgrading to a direct
+    /// connection.
+    UpgradeFinishedDontKeepAlive,
 }
 
 impl fmt::Debug for Command {
@@ -62,6 +68,9 @@ impl fmt::Debug for Command {
             } => f
                 .debug_struct("Command::AcceptInboundConnect")
                 .field("obs_addrs", obs_addrs)
+                .finish(),
+            Command::UpgradeFinishedDontKeepAlive => f
+                .debug_struct("Command::UpgradeFinishedDontKeepAlive")
                 .finish(),
         }
     }
@@ -116,9 +125,10 @@ pub struct Handler {
             <Self as ProtocolsHandler>::Error,
         >,
     >,
-
+    /// Inbound connects, accepted by the behaviour, pending completion.
     inbound_connects:
         FuturesUnordered<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::InboundUpgradeError>>>,
+    keep_alive: KeepAlive,
 }
 
 impl Handler {
@@ -127,6 +137,7 @@ impl Handler {
             endpoint,
             queued_events: Default::default(),
             inbound_connects: Default::default(),
+            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(30)),
         }
     }
 }
@@ -212,6 +223,9 @@ impl ProtocolsHandler for Handler {
                 self.inbound_connects
                     .push(inbound_connect.accept(obs_addrs).boxed());
             }
+            Command::UpgradeFinishedDontKeepAlive => {
+                self.keep_alive = KeepAlive::No;
+            }
         }
     }
 
@@ -232,11 +246,7 @@ impl ProtocolsHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // TODO
-        //
-        // How about a KeepAlive::Until of ~10 seconds, to enable coordination of hole punching
-        // retries on same relayed connection.
-        KeepAlive::Yes
+        self.keep_alive
     }
 
     fn poll(

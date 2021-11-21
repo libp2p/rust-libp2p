@@ -31,15 +31,15 @@ pub mod direct;
 pub mod relayed;
 
 pub enum Prototype {
-    DirectConnection { role: Role },
+    DirectConnection {
+        role: Role,
+        relayed_connection_id: ConnectionId,
+    },
     UnknownConnection,
 }
 
 pub enum Role {
-    Initiator {
-        attempt: u8,
-        relay_connection_id: ConnectionId,
-    },
+    Initiator { attempt: u8 },
     Listener,
 }
 
@@ -60,12 +60,15 @@ impl IntoProtocolsHandler for Prototype {
                     Either::Right(Either::Right(DummyProtocolsHandler::default()))
                 }
             }
-            Self::DirectConnection { .. } => {
+            Self::DirectConnection {
+                relayed_connection_id,
+                ..
+            } => {
                 assert!(
                     !is_relayed_connection,
                     "`Prototype::DirectConnection` is never created for relayed connection."
                 );
-                Either::Right(Either::Left(direct::Handler::default()))
+                Either::Right(Either::Left(direct::Handler::new(relayed_connection_id)))
             }
         }
     }

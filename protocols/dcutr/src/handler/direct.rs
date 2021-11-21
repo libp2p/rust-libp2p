@@ -20,6 +20,7 @@
 
 //! [`ProtocolsHandler`] handling direct connection upgraded through a relayed connection.
 
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -30,16 +31,20 @@ use void::Void;
 
 #[derive(Debug)]
 pub enum Event {
-    DirectConnectionUpgradeSucceeded,
+    DirectConnectionUpgradeSucceeded { relayed_connection_id: ConnectionId },
 }
 
 pub struct Handler {
+    relayed_connection_id: ConnectionId,
     reported: bool,
 }
 
-impl Default for Handler {
-    fn default() -> Self {
-        Self { reported: false }
+impl Handler {
+    pub(crate) fn new(relayed_connection_id: ConnectionId) -> Self {
+        Self {
+            reported: false,
+            relayed_connection_id,
+        }
     }
 }
 
@@ -56,7 +61,6 @@ impl ProtocolsHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    // TODO: Can some of these methods be removed?
     fn inject_fully_negotiated_inbound(
         &mut self,
         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
@@ -100,7 +104,9 @@ impl ProtocolsHandler for Handler {
         if !self.reported {
             self.reported = true;
             return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                Event::DirectConnectionUpgradeSucceeded,
+                Event::DirectConnectionUpgradeSucceeded {
+                    relayed_connection_id: self.relayed_connection_id,
+                },
             ));
         }
         Poll::Pending
