@@ -47,6 +47,7 @@
 //!        version = "0.1.0"
 //!        authors = ["Max Inden <mail@max-inden.de>"]
 //!        edition = "2021"
+//!        rust-version = "1.56.1"
 //!
 //!    [dependencies]
 //!        libp2p = "<insert-current-version-here>"
