@@ -2,8 +2,8 @@
 name = "libp2p-mdns"
 edition = "2021"
 rust-version = "1.56.1"
-version = "0.33.0"
 description = "Implementation of the libp2p mDNS discovery method"
+version = "0.33.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
