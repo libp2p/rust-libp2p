@@ -212,6 +212,17 @@ impl Behaviour {
         self.ongoing_outbound.as_ref()
     }
 
+    pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
+        self.static_servers.push(peer);
+        if let Some(addr) = address {
+            self.inner.add_address(&peer, addr);
+        }
+    }
+
+    pub fn remove_server(&mut self, peer: &PeerId) {
+        self.static_servers.retain(|p| p != peer)
+    }
+
     fn new_probe(
         &self,
         required_success: usize,
