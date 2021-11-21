@@ -88,6 +88,12 @@ pub enum Reachability {
     Unknown,
 }
 
+impl Reachability {
+    pub fn is_public(&self) -> bool {
+        matches!(self, Reachability::Public(_))
+    }
+}
+
 impl From<&NatStatus> for Reachability {
     fn from(status: &NatStatus) -> Self {
         match status {
@@ -514,6 +520,20 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_new_external_addr(addr);
+        if self.reachability.is_public() || self.pending_probe.is_some() {
+            return;
+        }
+        if let Some((ref auto_retry, _)) = self.auto_retry {
+            let probe = self.new_probe(
+                auto_retry.required_success,
+                Vec::new(),
+                true,
+                auto_retry.extend_with_connected,
+                auto_retry.max_peers,
+                auto_retry.min_valid,
+            );
+            self.pending_probe.replace(probe);
+        }
     }
 
     fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
