@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{AutoNatCodec, AutoNatProtocol, DialRequest, DialResponse, ResponseError};
+use futures::FutureExt;
+use futures_timer::Delay;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     multiaddr::Protocol,
@@ -37,7 +39,7 @@ use std::{
     collections::{HashMap, HashSet},
     iter,
     task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 #[derive(Debug, Clone)]
@@ -151,9 +153,7 @@ pub struct Behaviour {
 
     server_config: Option<ServerConfig>,
 
-    auto_retry: Option<AutoRetry>,
-
-    last_probe: Instant,
+    auto_retry: Option<(AutoRetry, Delay)>,
 }
 
 impl Behaviour {
@@ -166,6 +166,9 @@ impl Behaviour {
         let mut cfg = RequestResponseConfig::default();
         cfg.set_request_timeout(config.timeout);
         let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
+        let auto_retry = config
+            .auto_retry
+            .map(|a| (a, Delay::new(Duration::new(0, 0))));
         Self {
             inner,
             ongoing_inbound: HashMap::default(),
@@ -175,8 +178,7 @@ impl Behaviour {
             connected: HashMap::default(),
             reachability: Reachability::Unknown,
             server_config: config.server,
-            auto_retry: None,
-            last_probe: Instant::now(),
+            auto_retry,
         }
     }
 
@@ -508,6 +510,27 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+        if let Some((ref auto_retry, ref mut delay)) = self.auto_retry {
+            if delay.poll_unpin(cx).is_ready()
+                && self.ongoing_outbound.is_none()
+                && self.pending_probe.is_none()
+            {
+                let probe = self.new_probe(
+                    auto_retry.required_success,
+                    Vec::new(),
+                    true,
+                    auto_retry.extend_with_connected,
+                    auto_retry.max_peers,
+                    auto_retry.min_valid,
+                );
+                let records: Vec<_> = params.external_addresses().collect();
+                self.do_probe(probe, records);
+            }
+        };
+        if let Some(probe) = self.pending_probe.take() {
+            let records: Vec<_> = params.external_addresses().collect();
+            self.do_probe(probe, records);
+        }
         loop {
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => match event {
@@ -538,7 +561,9 @@ impl NetworkBehaviour for Behaviour {
                         } => {
                             if let Some(status) = self.handle_response(peer, Some(response)) {
                                 self.reachability = Reachability::from(&status);
-                                self.last_probe = Instant::now();
+                                if let Some((ref auto_retry, ref mut delay)) = self.auto_retry {
+                                    delay.reset(auto_retry.interval);
+                                }
                                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(status));
                             }
                         }
@@ -547,7 +572,9 @@ impl NetworkBehaviour for Behaviour {
                     RequestResponseEvent::OutboundFailure { peer, .. } => {
                         if let Some(status) = self.handle_response(peer, None) {
                             self.reachability = Reachability::from(&status);
-                            self.last_probe = Instant::now();
+                            if let Some((ref auto_retry, ref mut delay)) = self.auto_retry {
+                                delay.reset(auto_retry.interval);
+                            }
                             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(status));
                         }
                     }
@@ -557,23 +584,6 @@ impl NetworkBehaviour for Behaviour {
                 },
                 Poll::Ready(action) => return Poll::Ready(action.map_out(|_| unreachable!())),
                 Poll::Pending => return Poll::Pending,
-            }
-            if let Some(probe) = self.pending_probe.take() {
-                let records: Vec<_> = params.external_addresses().collect();
-                self.do_probe(probe, records)
-            } else if let Some(auto_retry) = self.auto_retry.as_ref() {
-                if Instant::now().duration_since(self.last_probe) > auto_retry.interval {
-                    let probe = self.new_probe(
-                        auto_retry.required_success,
-                        Vec::new(),
-                        true,
-                        auto_retry.extend_with_connected,
-                        auto_retry.max_peers,
-                        auto_retry.min_valid,
-                    );
-                    let records: Vec<_> = params.external_addresses().collect();
-                    self.do_probe(probe, records);
-                }
             }
         }
     }

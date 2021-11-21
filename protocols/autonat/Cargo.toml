@@ -14,6 +14,7 @@ prost-build = "0.6"
 [dependencies]
 async-trait = "0.1"
 futures = "0.3"
+futures-timer = "3.0.2"
 libp2p-core = { version = "0.30.1", path = "../../core" }
 libp2p-swarm = { version = "0.32.0", path = "../../swarm" }
 libp2p-request-response = { version = "0.14.0", path = "../request-response" }
