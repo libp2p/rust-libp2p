@@ -50,6 +50,7 @@
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
+use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::ping::{Ping, PingConfig};
 use libp2p::swarm::SwarmEvent;
@@ -74,8 +75,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     if let Some(addr) = std::env::args().nth(1) {
-        let remote = addr.parse()?;
-        swarm.dial_addr(remote)?;
+        let remote: Multiaddr = addr.parse()?;
+        swarm.dial(remote)?;
         tide::log::info!("Dialed {}", addr)
     }
 

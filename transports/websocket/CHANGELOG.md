@@ -1,4 +1,4 @@
-# v0.32.0 [unreleased]
+# v0.32.0 [2021-11-16]
 
 - Handle websocket CLOSE with reason code (see [PR 2085]).
 

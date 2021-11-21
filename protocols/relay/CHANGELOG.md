@@ -1,6 +1,8 @@
-# 0.4.1 [unreleased]
+# 0.5.0 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
+
+- Update dependencies.
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
 

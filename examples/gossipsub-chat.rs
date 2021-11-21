@@ -53,7 +53,7 @@ use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
-use libp2p::{gossipsub, identity, swarm::SwarmEvent, PeerId};
+use libp2p::{gossipsub, identity, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
@@ -122,14 +122,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
-        let dialing = to_dial.clone();
-        match to_dial.parse() {
-            Ok(to_dial) => match swarm.dial_addr(to_dial) {
-                Ok(_) => println!("Dialed {:?}", dialing),
-                Err(e) => println!("Dial {:?} failed: {:?}", dialing, e),
-            },
-            Err(err) => println!("Failed to parse address to dial: {:?}", err),
-        }
+        let address: Multiaddr = to_dial.parse().expect("User to provide valid address.");
+        match swarm.dial(address.clone()) {
+            Ok(_) => println!("Dialed {:?}", address),
+            Err(e) => println!("Dial {:?} failed: {:?}", address, e),
+        };
     }
 
     // Read full lines from stdin
