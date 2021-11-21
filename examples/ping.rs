@@ -45,7 +45,6 @@ use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, PeerId};
 use std::error::Error;
-use std::task::Poll;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
@@ -75,17 +74,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Dialed {}", addr)
     }
 
-    block_on(future::poll_fn(move |cx| loop {
-        match swarm.poll_next_unpin(cx) {
-            Poll::Ready(Some(event)) => match event {
+    block_on(async move {
+        loop {
+            match swarm.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
                 SwarmEvent::Behaviour(event) => println!("{:?}", event),
                 _ => {}
-            },
-            Poll::Ready(None) => return Poll::Ready(()),
-            Poll::Pending => return Poll::Pending,
+            }
         }
-    }));
+    });
 
     Ok(())
 }
