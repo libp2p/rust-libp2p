@@ -233,6 +233,14 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
+            Either::Left(handler::relayed::Event::InboundNegotiationFailed) => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::DirectConnectionUpgradeFailed {
+                            remote_peer_id: event_source,
+                        },
+                    ));
+            }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(event_source)
@@ -244,6 +252,14 @@ impl NetworkBehaviour for Behaviour {
                         role: handler::Role::Listener,
                     },
                 });
+            }
+            Either::Left(handler::relayed::Event::OutboundNegotiationFailed) => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::DirectConnectionUpgradeFailed {
+                            remote_peer_id: event_source,
+                        },
+                    ));
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated {
                 remote_addrs,

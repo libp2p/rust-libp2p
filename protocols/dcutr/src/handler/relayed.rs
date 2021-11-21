@@ -26,6 +26,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use instant::Instant;
 use libp2p_core::either::EitherOutput;
 use libp2p_core::multiaddr::Multiaddr;
+use libp2p_core::upgrade::UpgradeError;
 use libp2p_core::upgrade::{self, DeniedUpgrade};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -33,6 +34,7 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use log::debug;
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
@@ -80,7 +82,9 @@ pub enum Event {
         inbound_connect: protocol::inbound::PendingConnect,
         remote_addr: Multiaddr,
     },
+    InboundNegotiationFailed,
     InboundConnectNegotiated(Vec<Multiaddr>),
+    OutboundNegotiationFailed,
     OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
         attempt: u8,
@@ -97,10 +101,16 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::InboundConnectRequest")
                 .field("remote_addrs", remote_addr)
                 .finish(),
+            Event::InboundNegotiationFailed => {
+                f.debug_tuple("Event::InboundNegotiationFailed").finish()
+            }
             Event::InboundConnectNegotiated(addrs) => f
                 .debug_tuple("Event::InboundConnectNegotiated")
                 .field(addrs)
                 .finish(),
+            Event::OutboundNegotiationFailed => {
+                f.debug_tuple("Event::OutboundNegotiationFailed").finish()
+            }
             Event::OutboundConnectNegotiated {
                 remote_addrs,
                 attempt,
@@ -233,15 +243,27 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        todo!("{:?}", error)
+        if let ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) = error {
+            debug!("Inbound negotiation failed: {:?}", e);
+            self.keep_alive = KeepAlive::No;
+            self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                Event::InboundNegotiationFailed,
+            ));
+        }
     }
 
     fn inject_dial_upgrade_error(
         &mut self,
         _open_info: Self::OutboundOpenInfo,
-        _error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
-        todo!()
+        if let ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) = error {
+            debug!("Outbound negotiation failed: {:?}", e);
+            self.keep_alive = KeepAlive::No;
+            self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                Event::OutboundNegotiationFailed,
+            ));
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -264,10 +286,21 @@ impl ProtocolsHandler for Handler {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some(remote_addrs)) = self.inbound_connects.poll_next_unpin(cx) {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                Event::InboundConnectNegotiated(remote_addrs.unwrap()),
-            ));
+        while let Poll::Ready(Some(result)) = self.inbound_connects.poll_next_unpin(cx) {
+            match result {
+                Ok(addresses) => {
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                        Event::InboundConnectNegotiated(addresses),
+                    ));
+                }
+                Err(e) => {
+                    debug!("Inbound negotiation failed: {:?}", e);
+                    self.keep_alive = KeepAlive::No;
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                        Event::InboundNegotiationFailed,
+                    ));
+                }
+            }
         }
 
         Poll::Pending
