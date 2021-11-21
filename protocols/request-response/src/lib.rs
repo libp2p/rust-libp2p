@@ -450,6 +450,11 @@ where
         }
     }
 
+    /// List of currently connected peers.
+    pub fn connected_peers(&self) -> Vec<&PeerId> {
+        self.connected.keys().collect()
+    }
+
     /// Checks whether an outbound request to the peer with the provided
     /// [`PeerId`] initiated by [`RequestResponse::send_request`] is still
     /// pending, i.e. waiting for a response.
@@ -686,7 +691,7 @@ where
                     self.pending_events
                         .push_back(NetworkBehaviourAction::GenerateEvent(
                             RequestResponseEvent::OutboundFailure {
-                                peer: peer,
+                                peer,
                                 request_id: request.request_id,
                                 error: OutboundFailure::DialFailure,
                             },

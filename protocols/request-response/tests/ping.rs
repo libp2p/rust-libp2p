@@ -122,6 +122,11 @@ fn ping_protocol() {
                     assert_eq!(&peer, &peer2_id);
                 }
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    assert_eq!(peer_id, peer2_id);
+                    assert!(swarm1.behaviour().is_connected(&peer_id));
+                    assert_eq!(swarm1.behaviour().connected_peers(), vec![&peer_id]);
+                }
                 _ => {}
             }
         }
@@ -157,6 +162,11 @@ fn ping_protocol() {
                     }
                 }
                 SwarmEvent::Behaviour(e) => panic!("Peer2: Unexpected event: {:?}", e),
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    assert_eq!(peer_id, peer1_id);
+                    assert!(swarm2.behaviour().is_connected(&peer_id));
+                    assert_eq!(swarm2.behaviour().connected_peers(), vec![&peer_id]);
+                }
                 _ => {}
             }
         }
