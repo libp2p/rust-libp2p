@@ -32,11 +32,11 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    AddressRecord, DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    AddressRecord, AddressScore, DialError, IntoProtocolsHandler, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
@@ -154,6 +154,8 @@ pub struct Behaviour {
     server_config: Option<ServerConfig>,
 
     auto_retry: Option<(AutoRetry, Delay)>,
+
+    pending_out_event: VecDeque<NatStatus>,
 }
 
 impl Behaviour {
@@ -179,6 +181,7 @@ impl Behaviour {
             reachability: Reachability::Unknown,
             server_config: config.server,
             auto_retry,
+            pending_out_event: VecDeque::new(),
         }
     }
 
@@ -544,6 +547,9 @@ impl NetworkBehaviour for Behaviour {
             self.do_probe(probe, records);
         }
         loop {
+            if let Some(event) = self.pending_out_event.pop_front() {
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            }
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => match event {
                     RequestResponseEvent::Message { peer, message } => match message {
@@ -571,12 +577,31 @@ impl NetworkBehaviour for Behaviour {
                             request_id: _,
                             response,
                         } => {
+                            let mut report_addr = None;
+                            if let DialResponse::Ok(ref addr) = response {
+                                // Update observed address score if it is finite.
+                                let score = params
+                                    .external_addresses()
+                                    .find_map(|r| (&r.addr == addr).then(|| r.score))
+                                    .unwrap_or(AddressScore::Finite(0));
+                                if let AddressScore::Finite(finite_score) = score {
+                                    report_addr =
+                                        Some(NetworkBehaviourAction::ReportObservedAddr {
+                                            address: addr.clone(),
+                                            score: AddressScore::Finite(finite_score + 1),
+                                        });
+                                }
+                            }
                             if let Some(status) = self.handle_response(peer, Some(response)) {
-                                self.reachability = Reachability::from(&status);
                                 if let Some((ref auto_retry, ref mut delay)) = self.auto_retry {
                                     delay.reset(auto_retry.interval);
                                 }
-                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(status));
+                                self.reachability = Reachability::from(&status);
+                                // Enqueue event, as only one event can be returned at a time.
+                                self.pending_out_event.push_back(status)
+                            }
+                            if let Some(action) = report_addr {
+                                return Poll::Ready(action);
                             }
                         }
                     },
