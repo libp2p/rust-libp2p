@@ -247,9 +247,7 @@ impl Behaviour {
         }
     }
 
-    fn do_probe(&mut self, probe: Probe, mut addr_records: Vec<AddressRecord>) {
-        // Sort so that the address with the highest score will be dialed first by the remote.
-        addr_records.sort_by(|record_a, record_b| record_b.score.cmp(&record_a.score));
+    fn do_probe(&mut self, probe: Probe, addr_records: Vec<AddressRecord>) {
         let addrs: Vec<Multiaddr> = addr_records.into_iter().map(|r| r.addr).collect();
         for peer_id in probe.pending_servers.clone() {
             self.inner.send_request(
@@ -372,11 +370,7 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        if let Some(addrs) = self.ongoing_inbound.get(peer).map(|(a, _)| a.clone()) {
-            addrs
-        } else {
-            self.inner.addresses_of_peer(peer)
-        }
+        self.inner.addresses_of_peer(peer)
     }
 
     fn inject_connected(&mut self, peer: &PeerId) {
@@ -513,10 +507,11 @@ impl NetworkBehaviour for Behaviour {
                             channel,
                         } => match self.handle_request(peer, request) {
                             Some(addrs) => {
-                                self.ongoing_inbound.insert(peer, (addrs, channel));
+                                self.ongoing_inbound.insert(peer, (addrs.clone(), channel));
                                 return Poll::Ready(NetworkBehaviourAction::Dial {
                                     opts: DialOpts::peer_id(peer)
                                         .condition(PeerCondition::Always)
+                                        .addresses(addrs)
                                         .build(),
                                     handler: self.inner.new_handler(),
                                 });
