@@ -849,7 +849,7 @@ where
 
                     // Add the connection to the pool.
                     let conns = self.established.entry(peer_id).or_default();
-                    let established = conns.keys().cloned().collect();
+                    let established_ids = conns.keys().cloned().collect();
                     self.counters.inc_established(&endpoint);
 
                     let (command_sender, command_receiver) =
@@ -882,7 +882,7 @@ where
                         Some(PoolConnection::Established(connection)) => {
                             return Poll::Ready(PoolEvent::ConnectionEstablished {
                                 connection,
-                                established_ids: established,
+                                established_ids,
                                 concurrent_dial_errors,
                             })
                         }

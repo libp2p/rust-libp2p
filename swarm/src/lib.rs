@@ -608,11 +608,13 @@ where
                 Poll::Ready(NetworkEvent::ConnectionEvent { connection, event }) => {
                     let peer = connection.peer_id();
                     let conn_id = connection.id();
-                    if !this.banned_peer_connections.contains(&conn_id) {
+                    if !this.banned_peer_connections.contains(&conn_id)
+                        || this.banned_peers.contains(&peer)
+                    {
                         this.behaviour.inject_event(peer, conn_id, event);
                     } else {
                         log::debug!(
-                            "Ignoring event from disallowed connection: {:?} {:?}.",
+                            "Ignoring event from disallowed connection or peer: {:?} {:?}.",
                             peer,
                             conn_id,
                         );
@@ -655,7 +657,7 @@ where
                             NonZeroU32::new(u32::try_from(established_ids.len() + 1).unwrap())
                                 .expect("n + 1 is always non-zero; qed");
 
-                        log::info!(
+                        log::debug!(
                             "Connection established: {:?} {:?}; Total (peer): {}.",
                             connection.peer_id(),
                             connection.endpoint(),
@@ -698,7 +700,7 @@ where
                     if let Some(error) = error.as_ref() {
                         log::debug!("Connection {:?} closed: {:?}", connected, error);
                     } else {
-                        log::warn!("Connection {:?} closed (active close).", connected);
+                        log::debug!("Connection {:?} closed (active close).", connected);
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;

@@ -100,7 +100,7 @@ where
     ConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent>,
-        /// The ids of the open connections for the peer, not including the open that was just
+        /// The ids of the open connections for the peer, not including the one that has just been
         /// opened.
         established_ids: Vec<ConnectionId>,
         /// [`Some`] when the new connection is an outgoing connection.
