@@ -44,8 +44,8 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    DialError, DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    dial_opts::{self, DialOpts},
+    DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -564,12 +564,12 @@ where
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
                         let handler = self.new_handler();
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::DialPeer {
-                                peer_id: disconnected.into_preimage(),
-                                condition: DialPeerCondition::Disconnected,
-                                handler,
-                            });
+                        self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(disconnected.into_preimage())
+                                .condition(dial_opts::PeerCondition::Disconnected)
+                                .build(),
+                            handler,
+                        });
                         RoutingUpdate::Pending
                     }
                 }
@@ -1152,12 +1152,12 @@ where
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
                                     let handler = self.new_handler();
-                                    self.queued_events
-                                        .push_back(NetworkBehaviourAction::DialPeer {
-                                            peer_id: disconnected.into_preimage(),
-                                            condition: DialPeerCondition::Disconnected,
-                                            handler,
-                                        })
+                                    self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                                        opts: DialOpts::peer_id(disconnected.into_preimage())
+                                            .condition(dial_opts::PeerCondition::Disconnected)
+                                            .build(),
+                                        handler,
+                                    })
                                 }
                             }
                         }
@@ -1934,12 +1934,12 @@ where
                 }
             }
             DialError::DialPeerConditionFalse(
-                DialPeerCondition::Disconnected | DialPeerCondition::NotDialing,
+                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
             ) => {
                 // We might (still) be connected, or about to be connected, thus do not report the
                 // failure to the queries.
             }
-            DialError::DialPeerConditionFalse(DialPeerCondition::Always) => {
+            DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
         }
@@ -2321,12 +2321,12 @@ where
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
                             let handler = self.new_handler();
-                            self.queued_events
-                                .push_back(NetworkBehaviourAction::DialPeer {
-                                    peer_id,
-                                    condition: DialPeerCondition::Disconnected,
-                                    handler,
-                                });
+                            self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(peer_id)
+                                    .condition(dial_opts::PeerCondition::Disconnected)
+                                    .build(),
+                                handler,
+                            });
                         }
                     }
                     QueryPoolState::Waiting(None) | QueryPoolState::Idle => break,

@@ -29,8 +29,9 @@ use libp2p_request_response::{
     RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    AddressRecord, DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters,
+    dial_opts::{DialOpts, PeerCondition},
+    AddressRecord, DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -513,10 +514,11 @@ impl NetworkBehaviour for Behaviour {
                         } => match self.handle_request(peer, request) {
                             Some(addrs) => {
                                 self.ongoing_inbound.insert(peer, (addrs, channel));
-                                return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                                    peer_id: peer,
+                                return Poll::Ready(NetworkBehaviourAction::Dial {
+                                    opts: DialOpts::peer_id(peer)
+                                        .condition(PeerCondition::Always)
+                                        .build(),
                                     handler: self.inner.new_handler(),
-                                    condition: DialPeerCondition::Always,
                                 });
                             }
                             None => {
