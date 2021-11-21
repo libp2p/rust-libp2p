@@ -52,9 +52,6 @@ impl IntoProtocolsHandler for Prototype {
         match self {
             Self::UnknownConnection => {
                 if is_relayed_connection {
-                    // TODO: When handler is created via new_handler, the connection is inbound. It should only
-                    // ever be us initiating a dcutr request on this handler then, as one never initiates a
-                    // request on an outbound handler. Should this be enforced?
                     Either::Left(relayed::Handler::new(endpoint.clone()))
                 } else {
                     Either::Right(Either::Right(DummyProtocolsHandler::default()))
@@ -76,7 +73,7 @@ impl IntoProtocolsHandler for Prototype {
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         match self {
             Prototype::UnknownConnection => upgrade::EitherUpgrade::A(SendWrapper(
-                upgrade::EitherUpgrade::A(protocol::InboundUpgrade {}),
+                upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}),
             )),
             Prototype::DirectConnection { .. } => {
                 upgrade::EitherUpgrade::A(SendWrapper(upgrade::EitherUpgrade::B(DeniedUpgrade)))

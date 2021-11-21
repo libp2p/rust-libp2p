@@ -235,7 +235,6 @@ impl NetworkBehaviour for Behaviour {
             }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
-                    // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
                         .addresses(remote_addrs)
                         .condition(dial_opts::PeerCondition::Always)
@@ -251,7 +250,6 @@ impl NetworkBehaviour for Behaviour {
                 attempt,
             }) => {
                 self.queued_actions.push_back(NetworkBehaviourAction::Dial {
-                    // TODO: Handle empty addresses.
                     opts: DialOpts::peer_id(event_source)
                         .condition(dial_opts::PeerCondition::Always)
                         .addresses(remote_addrs)

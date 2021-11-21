@@ -41,12 +41,11 @@ use std::time::Duration;
 pub enum Command {
     Connect {
         obs_addrs: Vec<Multiaddr>,
-        // TODO: Use new-type.
         attempt: u8,
     },
     AcceptInboundConnect {
         obs_addrs: Vec<Multiaddr>,
-        inbound_connect: protocol::InboundPendingConnect,
+        inbound_connect: protocol::inbound::PendingConnect,
     },
     /// Upgrading the relayed connection to a direct connection either failed for good or succeeded.
     /// There is no need to keep the relayed connection alive for the sake of upgrading to a direct
@@ -78,7 +77,7 @@ impl fmt::Debug for Command {
 
 pub enum Event {
     InboundConnectRequest {
-        inbound_connect: protocol::InboundPendingConnect,
+        inbound_connect: protocol::inbound::PendingConnect,
         remote_addr: Multiaddr,
     },
     InboundConnectNegotiated(Vec<Multiaddr>),
@@ -126,8 +125,9 @@ pub struct Handler {
         >,
     >,
     /// Inbound connects, accepted by the behaviour, pending completion.
-    inbound_connects:
-        FuturesUnordered<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::InboundUpgradeError>>>,
+    inbound_connects: FuturesUnordered<
+        BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>,
+    >,
     keep_alive: KeepAlive,
 }
 
@@ -146,16 +146,15 @@ impl ProtocolsHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
     type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
-    type InboundProtocol = upgrade::EitherUpgrade<protocol::InboundUpgrade, DeniedUpgrade>;
-    type OutboundProtocol = protocol::OutboundUpgrade;
-    // TODO: Use new type for attempt instead of u8.
-    type OutboundOpenInfo = u8;
+    type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
+    type OutboundProtocol = protocol::outbound::Upgrade;
+    type OutboundOpenInfo = u8; // Number of upgrade attempts.
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self.endpoint {
             ConnectedPoint::Dialer { .. } => {
-                SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::InboundUpgrade {}), ())
+                SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}), ())
             }
             ConnectedPoint::Listener { .. } => {
                 SubstreamProtocol::new(upgrade::EitherUpgrade::B(DeniedUpgrade), ())
@@ -188,7 +187,7 @@ impl ProtocolsHandler for Handler {
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol::OutboundConnect { obs_addrs }: <Self::OutboundProtocol as upgrade::OutboundUpgrade<
+        protocol::outbound::Connect { obs_addrs }: <Self::OutboundProtocol as upgrade::OutboundUpgrade<
             NegotiatedSubstream,
         >>::Output,
         attempt: Self::OutboundOpenInfo,
@@ -211,7 +210,7 @@ impl ProtocolsHandler for Handler {
                 self.queued_events
                     .push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
-                            protocol::OutboundUpgrade::new(obs_addrs),
+                            protocol::outbound::Upgrade::new(obs_addrs),
                             attempt,
                         ),
                     });
