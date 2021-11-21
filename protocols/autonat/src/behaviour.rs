@@ -146,8 +146,8 @@ pub struct Behaviour {
     // List of trusted public peers that are probed when attempting to determine the auto-nat status.
     static_servers: Vec<PeerId>,
 
-    // List of connected peers and the address we last observed them at.
-    connected: HashMap<PeerId, Multiaddr>,
+    // List of connected peers.
+    connected: Vec<PeerId>,
 
     reachability: Reachability,
 
@@ -175,7 +175,7 @@ impl Behaviour {
             ongoing_outbound: None,
             pending_probe: None,
             static_servers: Vec::default(),
-            connected: HashMap::default(),
+            connected: Vec::default(),
             reachability: Reachability::Unknown,
             server_config: config.server,
             auto_retry,
@@ -242,7 +242,7 @@ impl Behaviour {
             let mut connected = self.connected.iter();
             // TODO: use random set
             for _ in 0..connected.len() {
-                let (peer, _) = connected.next().unwrap();
+                let peer = connected.next().unwrap();
                 servers.push(*peer);
                 if servers.len() >= max_peers {
                     break;
@@ -294,8 +294,12 @@ impl Behaviour {
             return None;
         }
 
+        let known_addrs = self.inner.addresses_of_peer(&sender);
+        // At least one observed address was added, either in the `RequestResponse` protocol
+        // if we dialed the remote, or in Self::inject_connection_established if the
+        // remote dialed us.
+        let observed_addr = known_addrs.first().expect("An address is known.");
         // Filter valid addresses.
-        let observed_addr = self.connected.get(&sender).expect("Peer is connected");
         let mut addrs = filter_valid_addrs(sender, request.addrs, observed_addr);
         addrs.truncate(config.max_addresses);
 
@@ -405,20 +409,25 @@ impl NetworkBehaviour for Behaviour {
         self.inner
             .inject_connection_established(peer, conn, endpoint, failed_addresses);
 
-        if let ConnectedPoint::Dialer { address } = endpoint {
-            if let Some((addrs, _)) = self.ongoing_inbound.get(peer) {
-                if addrs.contains(address) {
-                    // Successfully dialed one of the addresses from the remote peer.
-                    let channel = self.ongoing_inbound.remove(peer).unwrap().1;
-                    let _ = self
-                        .inner
-                        .send_response(channel, DialResponse::Ok(address.clone()));
-                    return;
+        match endpoint {
+            ConnectedPoint::Dialer { address } => {
+                if let Some((addrs, _)) = self.ongoing_inbound.get(peer) {
+                    if addrs.contains(address) {
+                        // Successfully dialed one of the addresses from the remote peer.
+                        let channel = self.ongoing_inbound.remove(peer).unwrap().1;
+                        let _ = self
+                            .inner
+                            .send_response(channel, DialResponse::Ok(address.clone()));
+                    }
                 }
             }
+            ConnectedPoint::Listener { send_back_addr, .. } => {
+                // `RequestResponse::addresses_of_peer` only includes addresses from connected peers
+                // where the remote is ConnectedPoint::Dialer.
+                // Add the send_back_addr so its observed ip can be used for `filter_valid_addrs`.
+                self.inner.add_address(peer, send_back_addr.clone());
+            }
         }
-        self.connected
-            .insert(*peer, endpoint.get_remote_address().clone());
     }
 
     fn inject_connection_closed(
@@ -430,7 +439,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner
             .inject_connection_closed(peer, conn, endpoint, handler);
-        self.connected.retain(|p, _| p != peer);
+        self.connected.retain(|p| p != peer);
     }
 
     fn inject_address_change(
@@ -441,6 +450,9 @@ impl NetworkBehaviour for Behaviour {
         new: &ConnectedPoint,
     ) {
         self.inner.inject_address_change(peer, conn, old, new);
+        if let ConnectedPoint::Listener { send_back_addr, .. } = new {
+            self.inner.add_address(peer, send_back_addr.clone());
+        }
     }
 
     fn inject_event(
