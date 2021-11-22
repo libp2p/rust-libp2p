@@ -396,11 +396,11 @@ where
             Poll::Pending => return Poll::Pending,
             Poll::Ready(PoolEvent::ConnectionEstablished {
                 connection,
-                established_ids,
+                other_established_connection_ids: established_ids,
                 concurrent_dial_errors,
             }) => NetworkEvent::ConnectionEstablished {
                 connection,
-                established_ids,
+                other_established_connection_ids: established_ids,
                 concurrent_dial_errors,
             },
             Poll::Ready(PoolEvent::PendingOutboundConnectionError {
@@ -441,7 +441,7 @@ where
             }) => NetworkEvent::ConnectionClosed {
                 id,
                 connected,
-                established_ids,
+                remaining_established_connection_ids: established_ids,
                 error,
                 handler,
             },

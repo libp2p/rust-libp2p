@@ -100,9 +100,10 @@ where
     ConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent>,
-        /// The ids of the open connections for the peer, not including the one that has just been
-        /// opened.
-        established_ids: Vec<ConnectionId>,
+        /// List of other connections to the same peer.
+        ///
+        /// Note: Does not include the connection reported through this event.
+        other_established_connection_ids: Vec<ConnectionId>,
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
@@ -128,8 +129,8 @@ where
         connected: Connected,
         /// The error that occurred.
         error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
-        /// The remaining established connections to the same peer.
-        established_ids: Vec<ConnectionId>,
+        /// List of remaining established connections to the same peer.
+        remaining_established_connection_ids: Vec<ConnectionId>,
         handler: THandler::Handler,
     },
 

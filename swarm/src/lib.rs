@@ -277,6 +277,9 @@ where
     banned_peers: HashSet<PeerId>,
 
     /// Connections for which we withhold any reporting. These belong to banned peers.
+    ///
+    /// Note: Connections to a peer that are established at the time of banning that peer
+    /// are not added here. Instead they are simply closed.
     banned_peer_connections: HashSet<ConnectionId>,
 
     /// Pending event to be delivered to connection handlers
@@ -613,11 +616,7 @@ where
                     {
                         this.behaviour.inject_event(peer, conn_id, event);
                     } else {
-                        log::debug!(
-                            "Ignoring event from disallowed connection or peer: {:?} {:?}.",
-                            peer,
-                            conn_id,
-                        );
+                        log::debug!("Ignoring event from banned peer: {} {:?}.", peer, conn_id);
                     }
                 }
                 Poll::Ready(NetworkEvent::AddressChange {
@@ -638,13 +637,14 @@ where
                 }
                 Poll::Ready(NetworkEvent::ConnectionEstablished {
                     connection,
-                    established_ids,
+                    other_established_connection_ids: established_ids,
                     concurrent_dial_errors,
                 }) => {
                     let peer_id = connection.peer_id();
                     let endpoint = connection.endpoint().clone();
                     if this.banned_peers.contains(&peer_id) {
-                        // Mark the connection for the banned peer as disallowed.
+                        // Mark the connection for the banned peer as banned, thus withholding any
+                        // future events from the connection to the behaviour.
                         this.banned_peer_connections.insert(connection.id());
                         this.network
                             .peer(peer_id)
@@ -674,12 +674,12 @@ where
                             failed_addresses.as_ref(),
                         );
                         // The peer is not banned, but there could be previous banned connections
-                        // if the peer was just unbanned. Check if this is the first allowed
+                        // if the peer was just unbanned. Check if this is the first non-banned
                         // connection.
-                        let first_allowed = established_ids
+                        let first_non_banned = established_ids
                             .into_iter()
                             .all(|conn_id| this.banned_peer_connections.contains(&conn_id));
-                        if first_allowed {
+                        if first_non_banned {
                             this.behaviour.inject_connected(&peer_id);
                         }
                         return Poll::Ready(SwarmEvent::ConnectionEstablished {
@@ -694,7 +694,7 @@ where
                     id,
                     connected,
                     error,
-                    established_ids,
+                    remaining_established_connection_ids: established_ids,
                     handler,
                 }) => {
                     if let Some(error) = error.as_ref() {
@@ -714,13 +714,13 @@ where
                             handler.into_protocols_handler(),
                         );
 
-                        // This connection was informed. Check if this is the last allowed
-                        // connection for the peer.
-                        let last_allowed = established_ids
+                        // This connection was reported as open to the behaviour. Check if this is
+                        // the last non-banned connection for the peer.
+                        let last_non_banned = established_ids
                             .into_iter()
                             .all(|conn_id| this.banned_peer_connections.contains(&conn_id));
 
-                        if last_allowed {
+                        if last_non_banned {
                             this.behaviour.inject_disconnected(&peer_id)
                         }
                     }
@@ -1575,7 +1575,7 @@ mod tests {
                         && swarm2.behaviour.assert_connected(s2_expected_conns, 1)
                     {
                         // Setup to test that already established connections are correctly closed
-                        // and reported as such after the peer in banned.
+                        // and reported as such after the peer is banned.
                         swarm2.ban_peer_id(swarm1_id);
                         stage = Stage::Banned;
                     }
@@ -1592,8 +1592,8 @@ mod tests {
                 }
                 Stage::BannedDial => {
                     if swarm2.network_info().num_peers() == 1 {
-                        // The banned connection was established. Check that the banning swarm was
-                        // not reported about the connection.
+                        // The banned connection was established. Check that it was not reported to
+                        // the behaviour of the banning swarm.
                         assert_eq!(
                             swarm2.behaviour.inject_connection_established.len(), s2_expected_conns,
                             "No additional closed connections should be reported for the banned peer"
