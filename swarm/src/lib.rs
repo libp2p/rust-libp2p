@@ -705,8 +705,8 @@ where
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
                     let num_established = u32::try_from(established_ids.len()).unwrap();
-                    let conn_was_informed = !this.banned_peer_connections.remove(&id);
-                    if conn_was_informed {
+                    let conn_was_reported = !this.banned_peer_connections.remove(&id);
+                    if conn_was_reported {
                         this.behaviour.inject_connection_closed(
                             &peer_id,
                             &id,
