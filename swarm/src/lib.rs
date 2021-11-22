@@ -547,6 +547,10 @@ where
     pub fn ban_peer_id(&mut self, peer_id: PeerId) {
         if self.banned_peers.insert(peer_id) {
             if let Some(peer) = self.network.peer(peer_id).into_connected() {
+                // Note that established connections to the now banned peer are closed but not
+                // added to [`Swarm::banned_peer_connections`]. They have been previously reported
+                // as open to the behaviour and need be reported as closed once closing the
+                // connection finishes.
                 peer.disconnect();
             }
         }
