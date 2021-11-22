@@ -1,3 +1,7 @@
+# 0.15.0 [unreleased]
+
+- Update dependencies.
+
 # 0.14.0 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
