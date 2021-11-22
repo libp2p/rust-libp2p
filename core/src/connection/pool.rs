@@ -187,7 +187,7 @@ where
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<THandler, TTrans>,
         /// The remaining established connections to the same peer.
-        established_ids: Vec<ConnectionId>,
+        remaining_established_connection_ids: Vec<ConnectionId>,
         handler: THandler::Handler,
     },
 
@@ -696,15 +696,16 @@ where
                 let EstablishedConnectionInfo { endpoint, .. } =
                     connections.remove(&id).expect("Connection to be present");
                 self.counters.dec_established(&endpoint);
-                let established_ids: Vec<ConnectionId> = connections.keys().cloned().collect();
-                if established_ids.is_empty() {
+                let remaining_established_connection_ids: Vec<ConnectionId> =
+                    connections.keys().cloned().collect();
+                if remaining_established_connection_ids.is_empty() {
                     self.established.remove(&peer_id);
                 }
                 return Poll::Ready(PoolEvent::ConnectionClosed {
                     id,
                     connected: Connected { endpoint, peer_id },
                     error,
-                    established_ids,
+                    remaining_established_connection_ids,
                     pool: self,
                     handler,
                 });
@@ -852,7 +853,7 @@ where
 
                     // Add the connection to the pool.
                     let conns = self.established.entry(peer_id).or_default();
-                    let established_ids = conns.keys().cloned().collect();
+                    let other_established_connection_ids = conns.keys().cloned().collect();
                     self.counters.inc_established(&endpoint);
 
                     let (command_sender, command_receiver) =
@@ -885,7 +886,7 @@ where
                         Some(PoolConnection::Established(connection)) => {
                             return Poll::Ready(PoolEvent::ConnectionEstablished {
                                 connection,
-                                other_established_connection_ids: established_ids,
+                                other_established_connection_ids,
                                 concurrent_dial_errors,
                             })
                         }

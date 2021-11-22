@@ -637,7 +637,7 @@ where
                 }
                 Poll::Ready(NetworkEvent::ConnectionEstablished {
                     connection,
-                    other_established_connection_ids: established_ids,
+                    other_established_connection_ids,
                     concurrent_dial_errors,
                 }) => {
                     let peer_id = connection.peer_id();
@@ -653,9 +653,10 @@ where
                             .disconnect();
                         return Poll::Ready(SwarmEvent::BannedPeer { peer_id, endpoint });
                     } else {
-                        let num_established =
-                            NonZeroU32::new(u32::try_from(established_ids.len() + 1).unwrap())
-                                .expect("n + 1 is always non-zero; qed");
+                        let num_established = NonZeroU32::new(
+                            u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
+                        )
+                        .expect("n + 1 is always non-zero; qed");
 
                         log::debug!(
                             "Connection established: {:?} {:?}; Total (peer): {}.",
@@ -676,7 +677,7 @@ where
                         // The peer is not banned, but there could be previous banned connections
                         // if the peer was just unbanned. Check if this is the first non-banned
                         // connection.
-                        let first_non_banned = established_ids
+                        let first_non_banned = other_established_connection_ids
                             .into_iter()
                             .all(|conn_id| this.banned_peer_connections.contains(&conn_id));
                         if first_non_banned {
@@ -694,7 +695,7 @@ where
                     id,
                     connected,
                     error,
-                    remaining_established_connection_ids: established_ids,
+                    remaining_established_connection_ids,
                     handler,
                 }) => {
                     if let Some(error) = error.as_ref() {
@@ -704,7 +705,8 @@ where
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
-                    let num_established = u32::try_from(established_ids.len()).unwrap();
+                    let num_established =
+                        u32::try_from(remaining_established_connection_ids.len()).unwrap();
                     let conn_was_reported = !this.banned_peer_connections.remove(&id);
                     if conn_was_reported {
                         this.behaviour.inject_connection_closed(
@@ -716,7 +718,7 @@ where
 
                         // This connection was reported as open to the behaviour. Check if this is
                         // the last non-banned connection for the peer.
-                        let last_non_banned = established_ids
+                        let last_non_banned = remaining_established_connection_ids
                             .into_iter()
                             .all(|conn_id| this.banned_peer_connections.contains(&conn_id));
 
