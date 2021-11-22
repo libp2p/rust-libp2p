@@ -1,3 +1,7 @@
+# 0.42.0 [unreleased]
+
+- Update dependencies.
+
 # Individual crates
 
 ## Main APIs
