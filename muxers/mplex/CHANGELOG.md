@@ -1,7 +1,6 @@
-# unreleased
+# 0.30.1
 
 - Add `fn set_protocol_name(&mut self, protocol_name: &'static [u8])` to MplexConfig
-- Add `fn protocol_name(&self)` to MplexConfig
 
 # 0.30.0 [2021-11-01]
 

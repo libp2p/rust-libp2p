@@ -89,11 +89,6 @@ impl MplexConfig {
         self
     }
 
-    /// Gets the protocol anme
-    pub fn protocol_name(&self) -> &[u8] {
-        self.protocol_name
-    }
-
     /// Set the protocol name.
     ///
     /// ```rust
