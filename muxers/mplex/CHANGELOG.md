@@ -1,3 +1,7 @@
+# 0.30.1 [unreleased]
+
+- Add `fn set_protocol_name(&mut self, protocol_name: &'static [u8])` to MplexConfig
+
 # 0.30.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
