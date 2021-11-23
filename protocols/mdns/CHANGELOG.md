@@ -1,6 +1,11 @@
 # 0.33.1 [unreleased]
 
-- Use a random alphanumeric string for mDNS peer name (see [PR 2311]).
+- Use a random alphanumeric string instead of the local peer ID for mDNS peer
+  name (see [PR 2311]).
+
+  Note that previous versions of `libp2p-mdns` expect the peer name to be a
+  valid peer ID. Thus they will be unable to discover nodes running this new
+  version of `libp2p-mdns`.
 
 [PR 2311]: https://github.com/libp2p/rust-libp2p/pull/2311/
 
