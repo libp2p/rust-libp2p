@@ -162,12 +162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off.
     loop {
         select! {
-            line = stdin.next() => match line {
-                Some(line) => {
-                    handle_input_line(&mut swarm.behaviour_mut().kademlia, line?)
-                },
-                None => panic!("Stdin closed")
-            },
+            line = stdin.next() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")?),
             event = swarm.select_next_some() => match event {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     println!("Listening in {:?}", address);

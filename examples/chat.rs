@@ -141,8 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            line = stdin.next() => match line {
-                Some(line) => swarm
+            line = stdin.next() => swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.expect("Stdin not to close")?.as_bytes())
                     .behaviour_mut()
                     .floodsub
                     .publish(floodsub_topic.clone(), line?.as_bytes()),
