@@ -46,6 +46,7 @@
 
 - Update individual crates.
     - `libp2p-swarm-derive`
+    - `libp2p-mdns` (breaking compatibility with previous versions)
 
 ## Version 0.41.0 [2021-11-16]
 
