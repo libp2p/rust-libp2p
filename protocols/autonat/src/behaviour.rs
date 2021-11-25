@@ -404,11 +404,10 @@ impl Behaviour {
             return None;
         }
 
-        let known_addrs = self.inner.addresses_of_peer(&sender);
-        // At least one observed address was added, either in the `RequestResponse` protocol
-        // if we dialed the remote, or in Self::inject_connection_established if the
-        // remote dialed us.
-        let observed_addr = known_addrs.first().expect("An address is known.");
+        let observed_addr = self
+            .connected
+            .get(&sender)
+            .expect("We are connected to the peer.");
         // Filter valid addresses.
         let mut addrs = filter_valid_addrs(sender, request.addrs, observed_addr);
         addrs.truncate(config.max_addresses);
@@ -483,6 +482,7 @@ impl NetworkBehaviour for Behaviour {
     fn inject_disconnected(&mut self, peer: &PeerId) {
         self.inner.inject_disconnected(peer);
         self.ongoing_inbound.remove(peer);
+        self.connected.remove(peer);
     }
 
     fn inject_connection_established(
@@ -520,7 +520,6 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner
             .inject_connection_closed(peer, conn, endpoint, handler);
-        self.connected.remove(peer);
     }
 
     fn inject_address_change(
@@ -531,9 +530,9 @@ impl NetworkBehaviour for Behaviour {
         new: &ConnectedPoint,
     ) {
         self.inner.inject_address_change(peer, conn, old, new);
-        if let ConnectedPoint::Listener { send_back_addr, .. } = new {
-            self.inner.add_address(peer, send_back_addr.clone());
-        }
+        // Update observed address.
+        self.connected
+            .insert(*peer, new.get_remote_address().clone());
     }
 
     fn inject_event(
