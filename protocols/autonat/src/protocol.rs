@@ -52,11 +52,8 @@ impl RequestResponseCodec for AutoNatCodec {
     where
         T: AsyncRead + Send + Unpin,
     {
-        let bytes = upgrade::read_length_prefixed(io, 1024)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let request = DialRequest::from_bytes(&bytes)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let bytes = upgrade::read_length_prefixed(io, 1024).await?;
+        let request = DialRequest::from_bytes(&bytes)?;
         Ok(request)
     }
 
@@ -68,11 +65,8 @@ impl RequestResponseCodec for AutoNatCodec {
     where
         T: AsyncRead + Send + Unpin,
     {
-        let bytes = upgrade::read_length_prefixed(io, 1024)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let response = DialResponse::from_bytes(&bytes)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let bytes = upgrade::read_length_prefixed(io, 1024).await?;
+        let response = DialResponse::from_bytes(&bytes)?;
         Ok(response)
     }
 
