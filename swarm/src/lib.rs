@@ -615,9 +615,7 @@ where
                 Poll::Ready(NetworkEvent::ConnectionEvent { connection, event }) => {
                     let peer = connection.peer_id();
                     let conn_id = connection.id();
-                    if this.banned_peer_connections.contains(&conn_id)
-                        || this.banned_peers.contains(&peer)
-                    {
+                    if this.banned_peer_connections.contains(&conn_id) {
                         log::debug!("Ignoring event from banned peer: {} {:?}.", peer, conn_id);
                     } else {
                         this.behaviour.inject_event(peer, conn_id, event);
