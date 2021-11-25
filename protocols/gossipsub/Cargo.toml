@@ -2,7 +2,7 @@
 name = "libp2p-gossipsub"
 edition = "2018"
 description = "Gossipsub protocol for libp2p"
-version = "0.34.0"
+version = "0.35.0"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -30,7 +30,7 @@ futures-timer = "3.0.2"
 pin-project = "1.0.8"
 instant = "0.1.11"
 # Metrics dependencies
-open-metrics-client = "0.12"
+open-metrics-client = "0.13"
 
 [dev-dependencies]
 async-std = "1.6.3"

@@ -1,3 +1,7 @@
+# 0.3.0 [unreleased]
+
+- Update dependencies.
+
 # 0.2.0 [2021-11-16]
 
 - Include gossipsub metrics (see [PR 2316]).
