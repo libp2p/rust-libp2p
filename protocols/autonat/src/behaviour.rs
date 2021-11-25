@@ -733,6 +733,10 @@ fn filter_valid_addrs(
     demanded: Vec<Multiaddr>,
     observed_remote_at: &Multiaddr,
 ) -> Vec<Multiaddr> {
+    // Skip if the observed address is a relay address.
+    if observed_remote_at.iter().any(|p| p == Protocol::P2pCircuit) {
+        return Vec::new();
+    }
     let observed_ip = observed_remote_at.into_iter().find(|p| match p {
         Protocol::Ip4(ip) => {
             // NOTE: The below logic is copied from `std::net::Ipv4Addr::is_global`, which at the current
