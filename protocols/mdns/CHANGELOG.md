@@ -1,3 +1,9 @@
+# 0.35.0 [unreleased]
+
+- Fix generation of the peer expiration event, see [PR 2359]
+
+[PR 2359]: https://github.com/libp2p/rust-libp2p/pull/2359
+
 # 0.34.0 [unreleased]
 
 - Update dependencies.
