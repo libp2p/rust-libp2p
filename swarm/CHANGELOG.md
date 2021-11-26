@@ -1,9 +1,12 @@
 # 0.33.0 [unreleased]
 
-- Patch reporting on banned peers and their non-banned and banned connections (see [PR 2350]). 
+- Patch reporting on banned peers and their non-banned and banned connections (see [PR 2350]).
 
 - Update dependencies.
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 
 # 0.32.0 [2021-11-16]

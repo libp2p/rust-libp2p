@@ -2,6 +2,10 @@
 
 - Update dependencies.
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
 # v0.32.0 [2021-11-16]
 
 - Handle websocket CLOSE with reason code (see [PR 2085]).
