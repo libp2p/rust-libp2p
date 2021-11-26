@@ -1,5 +1,7 @@
 # 0.31.0 [unreleased]
 
+- Update dependencies.
+
 - Report concrete connection IDs in `NetworkEvent::ConnectionEstablished` and
   `NetworkEvent::ConnectionClosed` (see [PR 2350]).
 
