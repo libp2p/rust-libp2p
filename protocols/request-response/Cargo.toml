@@ -18,7 +18,6 @@ instant = "0.1.11"
 libp2p-core = { version = "0.31.0", path = "../../core", default-features = false  }
 libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
 log = "0.4.11"
-lru = "0.7"
 rand = "0.7"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["std", "futures"] }

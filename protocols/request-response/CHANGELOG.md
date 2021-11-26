@@ -2,9 +2,12 @@
 
 - Update dependencies.
 
+- Remove unused `lru` crate (see [PR 2358]).
+
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2358]: https://github.com/libp2p/rust-libp2p/pull/2358
 
 # 0.14.0 [2021-11-16]
 
