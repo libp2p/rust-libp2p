@@ -68,6 +68,7 @@
     - `libp2p-wasm-ext`
     - `libp2p-websocket`
     - `libp2p-yamux`
+    - `libp2p-mdns` (breaking compatibility with previous versions)
 
 ## Version 0.41.0 [2021-11-16]
 
