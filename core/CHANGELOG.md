@@ -3,6 +3,9 @@
 - Report concrete connection IDs in `NetworkEvent::ConnectionEstablished` and
   `NetworkEvent::ConnectionClosed` (see [PR 2350]).
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350/
 
 # 0.30.1 [2021-11-16]

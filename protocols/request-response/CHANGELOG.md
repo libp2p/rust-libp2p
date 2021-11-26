@@ -2,6 +2,10 @@
 
 - Update dependencies.
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
 # 0.14.0 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
