@@ -1,9 +1,10 @@
 [package]
 name = "libp2p-wasm-ext"
+edition = "2021"
+rust-version = "1.56.1"
+description = "Allows passing in an external transport in a WASM environment"
 version = "0.31.0"
 authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>"]
-edition = "2018"
-description = "Allows passing in an external transport in a WASM environment"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]

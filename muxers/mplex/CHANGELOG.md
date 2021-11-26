@@ -4,6 +4,10 @@
 
 - Add `fn set_protocol_name(&mut self, protocol_name: &'static [u8])` to MplexConfig
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
 # 0.30.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.

@@ -1,6 +1,7 @@
 [package]
 name = "libp2p"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "Peer-to-peer networking library"
 version = "0.42.0"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -87,7 +88,7 @@ libp2p-rendezvous = { version = "0.3.0", path = "protocols/rendezvous", optional
 libp2p-request-response = { version = "0.15.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.33.0", path = "swarm" }
 libp2p-swarm-derive = { version = "0.26.1", path = "swarm-derive" }
-libp2p-uds = { version = "0.30.0", path = "transports/uds", optional = true }
+libp2p-uds = { version = "0.31.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.31.0", path = "transports/wasm-ext", default-features = false, optional = true }
 libp2p-yamux = { version = "0.35.0", path = "muxers/yamux", optional = true }
 multiaddr = { version = "0.13.0" }
@@ -111,7 +112,6 @@ structopt = "0.3.21"
 tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
-resolver = "2"
 members = [
     "core",
     "misc/metrics",

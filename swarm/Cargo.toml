@@ -1,6 +1,7 @@
 [package]
 name = "libp2p-swarm"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "The libp2p swarm"
 version = "0.33.0"
 authors = ["Parity Technologies <admin@parity.io>"]

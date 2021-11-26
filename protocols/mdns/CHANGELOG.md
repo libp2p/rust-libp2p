@@ -9,6 +9,10 @@
   valid peer ID. Thus they will be unable to discover nodes running this new
   version of `libp2p-mdns`.
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
 [PR 2311]: https://github.com/libp2p/rust-libp2p/pull/2311/
 
 # 0.33.0 [2021-11-16]
