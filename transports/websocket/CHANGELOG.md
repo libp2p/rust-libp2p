@@ -1,3 +1,7 @@
+# 0.33.0 [unreleased]
+
+- Update dependencies.
+
 # v0.32.0 [2021-11-16]
 
 - Handle websocket CLOSE with reason code (see [PR 2085]).

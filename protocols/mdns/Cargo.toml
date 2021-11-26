@@ -16,8 +16,8 @@ dns-parser = "0.8.0"
 futures = "0.3.13"
 if-watch = "0.2.0"
 lazy_static = "1.4.0"
-libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.32.0", path = "../../swarm" }
+libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
 log = "0.4.14"
 rand = "0.8.3"
 smallvec = "1.6.1"

@@ -1,5 +1,7 @@
 # 0.34.0 [unreleased]
 
+- Update dependencies.
+
 - Use a random alphanumeric string instead of the local peer ID for mDNS peer
   name (see [PR 2311]).
 
