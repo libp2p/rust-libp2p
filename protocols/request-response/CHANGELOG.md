@@ -1,4 +1,6 @@
-# 0.14.1 [unreleased]
+# 0.15.0 [unreleased]
+
+- Update dependencies.
 
 - Remove unused `lru` crate.
 
