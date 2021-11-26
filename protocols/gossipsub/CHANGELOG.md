@@ -1,3 +1,7 @@
+# 0.35.0 [unreleased]
+
+- Update dependencies.
+
 # 0.34.0 [2021-11-16]
 
 - Add topic and mesh metrics (see [PR 2316]).
