@@ -22,7 +22,7 @@ use futures::{channel::oneshot, FutureExt, StreamExt};
 use libp2p::{
     development_transport,
     identity::Keypair,
-    swarm::{NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{AddressScore, Swarm, SwarmEvent},
     Multiaddr, PeerId,
 };
 use libp2p_autonat::{
@@ -115,16 +115,9 @@ async fn test_public() {
         }
     }
 
-    // Hack to create a dummy ListenerId
-    let listener_id = init_swarm(Config::default())
-        .await
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        .unwrap();
     // Artificially add a faulty address.
-    let unreachable_addr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-    client
-        .behaviour_mut()
-        .inject_new_listen_addr(listener_id, &unreachable_addr);
+    let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
+    client.add_external_address(unreachable_addr.clone(), AddressScore::Infinite);
 
     // Auto-Probe should resolve to private since no server can reach the client at this address.
     loop {
@@ -142,6 +135,7 @@ async fn test_public() {
             _ => {}
         }
     }
+    client.remove_external_address(&unreachable_addr);
 
     client
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
@@ -157,6 +151,7 @@ async fn test_public() {
     loop {
         match client.select_next_some().await {
             SwarmEvent::Behaviour(status) => {
+                println!("{:?}", status);
                 assert!(status.errors.is_empty());
                 assert!(status.outbound_failures.is_empty());
                 assert!(status.reachability.is_public());

@@ -287,9 +287,6 @@ pub struct Behaviour {
     // Connected peers with their observed address
     connected: HashMap<PeerId, Multiaddr>,
 
-    // Tracked listening addresses.
-    listen_addrs: Vec<Multiaddr>,
-
     // Assumed reachability derived from the most recent probe.
     reachability: Reachability,
 
@@ -323,7 +320,6 @@ impl Behaviour {
             ongoing_outbound: None,
             pending_probes: VecDeque::new(),
             connected: HashMap::default(),
-            listen_addrs: Vec::new(),
             reachability: Reachability::Unknown,
             server_config: config.server,
             auto_probe,
@@ -602,12 +598,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
-        self.listen_addrs.push(addr.clone());
     }
 
     fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_expired_listen_addr(id, addr);
-        self.listen_addrs.retain(|a| a != addr);
     }
 
     fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
@@ -656,7 +650,9 @@ impl NetworkBehaviour for Behaviour {
                         .external_addresses()
                         .map(|record| record.addr)
                         .collect();
-                    external_addrs.extend(self.listen_addrs.clone());
+                    if external_addrs.is_empty() {
+                        external_addrs.extend(params.listened_addresses());
+                    }
                     let probe =
                         config.build(probe_id, external_addrs, self.connected.keys().collect());
                     self.do_probe(probe);
