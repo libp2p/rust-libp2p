@@ -4,7 +4,6 @@ edition = "2021"
 rust-version = "1.56.1"
 version = "0.20.0"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
-edition = "2018"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -17,9 +16,9 @@ prost-build = "0.6"
 async-trait = "0.1"
 futures = "0.3"
 futures-timer = "3.0.2"
-libp2p-core = { version = "0.30.1", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.32.0", path = "../../swarm" }
-libp2p-request-response = { version = "0.14.0", path = "../request-response" }
+libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
+libp2p-request-response = { version = "0.15.0", path = "../request-response" }
 prost = "0.8"
 
 [dev-dependencies]
