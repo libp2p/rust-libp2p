@@ -490,24 +490,6 @@ impl NetworkBehaviour for Behaviour {
     type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
     type OutEvent = NatStatus;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        self.inner.new_handler()
-    }
-
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.inner.addresses_of_peer(peer)
-    }
-
-    fn inject_connected(&mut self, peer: &PeerId) {
-        self.inner.inject_connected(peer)
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inner.inject_disconnected(peer);
-        self.ongoing_inbound.remove(peer);
-        self.connected.remove(peer);
-    }
-
     fn inject_connection_established(
         &mut self,
         peer: &PeerId,
@@ -534,39 +516,6 @@ impl NetworkBehaviour for Behaviour {
             .insert(*peer, endpoint.get_remote_address().clone());
     }
 
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
-    ) {
-        self.inner
-            .inject_connection_closed(peer, conn, endpoint, handler);
-    }
-
-    fn inject_address_change(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        self.inner.inject_address_change(peer, conn, old, new);
-        // Update observed address.
-        self.connected
-            .insert(*peer, new.get_remote_address().clone());
-    }
-
-    fn inject_event(
-        &mut self,
-        peer_id: PeerId,
-        conn: ConnectionId,
-        event: RequestResponseHandlerEvent<AutoNatCodec>,
-    ) {
-        self.inner.inject_event(peer_id, conn, event)
-    }
-
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
@@ -582,34 +531,22 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_listen_failure(
+    fn inject_disconnected(&mut self, peer: &PeerId) {
+        self.inner.inject_disconnected(peer);
+        self.connected.remove(peer);
+    }
+
+    fn inject_address_change(
         &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ProtocolsHandler,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        old: &ConnectedPoint,
+        new: &ConnectedPoint,
     ) {
-        self.inner
-            .inject_listen_failure(local_addr, send_back_addr, handler)
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        self.inner.inject_new_listener(id)
-    }
-
-    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        self.inner.inject_new_listen_addr(id, addr);
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        self.inner.inject_expired_listen_addr(id, addr);
-    }
-
-    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
-        self.inner.inject_listener_error(id, err)
-    }
-
-    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
-        self.inner.inject_listener_closed(id, reason)
+        self.inner.inject_address_change(peer, conn, old, new);
+        // Update observed address.
+        self.connected
+            .insert(*peer, new.get_remote_address().clone());
     }
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
@@ -622,10 +559,6 @@ impl NetworkBehaviour for Behaviour {
             let probe_id = self.next_probe_id();
             self.pending_probes.push_back((probe_id, config));
         }
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        self.inner.inject_expired_external_addr(addr);
     }
 
     fn poll(
@@ -734,6 +667,72 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Pending => return Poll::Pending,
             }
         }
+    }
+
+    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        self.inner.new_handler()
+    }
+
+    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+        self.inner.addresses_of_peer(peer)
+    }
+
+    fn inject_connected(&mut self, peer: &PeerId) {
+        self.inner.inject_connected(peer)
+    }
+
+    fn inject_connection_closed(
+        &mut self,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        endpoint: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
+        self.inner
+            .inject_connection_closed(peer, conn, endpoint, handler);
+    }
+
+    fn inject_event(
+        &mut self,
+        peer_id: PeerId,
+        conn: ConnectionId,
+        event: RequestResponseHandlerEvent<AutoNatCodec>,
+    ) {
+        self.inner.inject_event(peer_id, conn, event)
+    }
+
+    fn inject_listen_failure(
+        &mut self,
+        local_addr: &Multiaddr,
+        send_back_addr: &Multiaddr,
+        handler: Self::ProtocolsHandler,
+    ) {
+        self.inner
+            .inject_listen_failure(local_addr, send_back_addr, handler)
+    }
+
+    fn inject_new_listener(&mut self, id: ListenerId) {
+        self.inner.inject_new_listener(id)
+    }
+
+    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
+        self.inner.inject_new_listen_addr(id, addr);
+    }
+
+    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
+        self.inner.inject_expired_listen_addr(id, addr);
+    }
+
+    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
+        self.inner.inject_listener_error(id, err)
+    }
+
+    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
+        self.inner.inject_listener_closed(id, reason)
+    }
+
+    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
+        self.inner.inject_expired_external_addr(addr);
     }
 }
 
