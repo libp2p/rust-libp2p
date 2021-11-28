@@ -823,12 +823,12 @@ fn filter_valid_addrs(
     let mut distinct = HashSet::new();
     demanded
         .into_iter()
-        .filter_map(|mut addr| {
+        .filter_map(|addr| {
             // Replace the demanded ip with the observed one.
             let i = addr
                 .iter()
                 .position(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))?;
-            addr.replace(i, |_| Some(observed_ip.clone()))?;
+            let mut addr = addr.replace(i, |_| Some(observed_ip.clone()))?;
             // Filter relay addresses and addresses with invalid peer id.
             let is_valid = addr.iter().all(|proto| match proto {
                 Protocol::P2pCircuit => false,
@@ -846,4 +846,86 @@ fn filter_valid_addrs(
             distinct.insert(addr.clone()).then(|| addr)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use std::net::Ipv4Addr;
+
+    fn random_ip<'a>() -> Protocol<'a> {
+        Protocol::Ip4(Ipv4Addr::new(
+            rand::random(),
+            rand::random(),
+            rand::random(),
+            rand::random(),
+        ))
+    }
+    fn random_port<'a>() -> Protocol<'a> {
+        Protocol::Tcp(rand::random())
+    }
+
+    #[test]
+    fn filter_addresses() {
+        let peer_id = PeerId::random();
+        let observed_ip = random_ip();
+        let observed_addr = Multiaddr::empty()
+            .with(observed_ip.clone())
+            .with(random_port())
+            .with(Protocol::P2p(peer_id.into()));
+        // Valid address with matching peer-id
+        let demanded_1 = Multiaddr::empty()
+            .with(random_ip())
+            .with(random_port())
+            .with(Protocol::P2p(peer_id.into()));
+        // Invalid because peer_id does not match
+        let demanded_2 = Multiaddr::empty()
+            .with(random_ip())
+            .with(random_port())
+            .with(Protocol::P2p(PeerId::random().into()));
+        // Valid address without peer-id
+        let demanded_3 = Multiaddr::empty().with(random_ip()).with(random_port());
+        // Invalid because relayed
+        let demanded_4 = Multiaddr::empty()
+            .with(random_ip())
+            .with(random_port())
+            .with(Protocol::P2p(PeerId::random().into()))
+            .with(Protocol::P2pCircuit)
+            .with(Protocol::P2p(peer_id.into()));
+        let demanded = vec![
+            demanded_1.clone(),
+            demanded_2,
+            demanded_3.clone(),
+            demanded_4,
+        ];
+        let filtered = filter_valid_addrs(peer_id, demanded, &observed_addr, false);
+        let expected_1 = demanded_1
+            .replace(0, |_| Some(observed_ip.clone()))
+            .unwrap();
+        let expected_2 = demanded_3
+            .replace(0, |_| Some(observed_ip))
+            .unwrap()
+            .with(Protocol::P2p(peer_id.into()));
+        assert_eq!(filtered, vec![expected_1, expected_2]);
+    }
+
+    #[test]
+    fn skip_relayed_addr() {
+        let peer_id = PeerId::random();
+        let observed_ip = random_ip();
+        // Observed address is relayed.
+        let observed_addr = Multiaddr::empty()
+            .with(observed_ip.clone())
+            .with(random_port())
+            .with(Protocol::P2p(PeerId::random().into()))
+            .with(Protocol::P2pCircuit)
+            .with(Protocol::P2p(peer_id.into()));
+        let demanded = Multiaddr::empty()
+            .with(random_ip())
+            .with(random_port())
+            .with(Protocol::P2p(peer_id.into()));
+        let filtered = filter_valid_addrs(peer_id, vec![demanded], &observed_addr, false);
+        assert!(filtered.is_empty());
+    }
 }
