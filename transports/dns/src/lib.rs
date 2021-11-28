@@ -210,7 +210,11 @@ where
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Asynchronlously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         Ok(async move {
@@ -293,7 +297,7 @@ where
                     log::debug!("Dialing {}", addr);
 
                     let transport = inner.clone();
-                    let result = match transport.dial(addr) {
+                    let result = match transport.dial(addr, as_listener) {
                         Ok(out) => {
                             // We only count attempts that the inner transport
                             // actually accepted, i.e. for which it produced

@@ -58,9 +58,16 @@ where
         })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial(addr.clone())?;
-        let p = ConnectedPoint::Dialer { address: addr };
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.transport.dial(addr.clone(), as_listener)?;
+        let p = ConnectedPoint::Dialer {
+            address: addr,
+            as_listener,
+        };
         Ok(MapFuture {
             inner: future,
             args: Some((self.fun, p)),

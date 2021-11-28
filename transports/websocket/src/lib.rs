@@ -123,10 +123,14 @@ where
             .listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.transport
             .map(wrap_connection as WrapperFn<T::Output>)
-            .dial(addr)
+            .dial(addr, as_listener)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

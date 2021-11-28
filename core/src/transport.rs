@@ -126,7 +126,12 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial(
+        self,
+        addr: Multiaddr,
+        // TODO: In case the transport doesn't support as_listener, should we return an error at runtime?
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
 

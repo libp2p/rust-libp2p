@@ -365,10 +365,15 @@ where
     ) -> Result<(), DialError> {
         match opts.0 {
             // Dial a known peer.
-            dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
+            dial_opts::Opts::WithPeerId(dial_opts::WithPeerId {
+                peer_id,
+                condition,
+                as_listener,
+            })
             | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
                 peer_id,
                 condition,
+                as_listener,
                 ..
             }) => {
                 // Check [`PeerCondition`] if provided.
@@ -440,7 +445,11 @@ where
                         self.substream_upgrade_protocol_override,
                     );
 
-                match self.network.peer(peer_id).dial(addresses, handler) {
+                match self
+                    .network
+                    .peer(peer_id)
+                    .dial(addresses, handler, as_listener)
+                {
                     Ok(_connection_id) => Ok(()),
                     Err(error) => {
                         let (error, handler) = DialError::from_network_dial_error(error);
@@ -456,6 +465,7 @@ where
             // Dial an unknown peer.
             dial_opts::Opts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress {
                 address,
+                as_listener,
             }) => {
                 let handler = handler
                     .into_node_handler_builder()
@@ -463,7 +473,11 @@ where
                         self.substream_upgrade_protocol_override,
                     );
 
-                match self.network.dial(&address, handler).map(|_id| ()) {
+                match self
+                    .network
+                    .dial(&address, handler, as_listener)
+                    .map(|_id| ())
+                {
                     Ok(_connection_id) => Ok(()),
                     Err(error) => {
                         let (error, handler) = DialError::from_network_dial_error(error);

@@ -388,7 +388,11 @@ where
         self.do_listen(socket_addr).map_err(TransportError::Other)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        _as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 return Err(TransportError::MultiaddrNotSupported(addr));

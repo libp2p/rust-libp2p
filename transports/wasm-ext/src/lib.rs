@@ -61,7 +61,11 @@ pub mod ffi {
         /// If the multiaddress is not supported, you should return an instance of `Error` whose
         /// `name` property has been set to the string `"NotSupportedError"`.
         #[wasm_bindgen(method, catch)]
-        pub fn dial(this: &Transport, multiaddr: &str) -> Result<js_sys::Promise, JsValue>;
+        pub fn dial(
+            this: &Transport,
+            multiaddr: &str,
+            _as_listener: bool,
+        ) -> Result<js_sys::Promise, JsValue>;
 
         /// Start listening on the given multiaddress.
         ///
@@ -187,14 +191,21 @@ impl Transport for ExtTransport {
         })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let promise = self.inner.dial(&addr.to_string()).map_err(|err| {
-            if is_not_supported_error(&err) {
-                TransportError::MultiaddrNotSupported(addr)
-            } else {
-                TransportError::Other(JsErr::from(err))
-            }
-        })?;
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let promise = self
+            .inner
+            .dial(&addr.to_string(), as_listener)
+            .map_err(|err| {
+                if is_not_supported_error(&err) {
+                    TransportError::MultiaddrNotSupported(addr)
+                } else {
+                    TransportError::Other(JsErr::from(err))
+                }
+            })?;
 
         Ok(Dial {
             inner: SendWrapper::new(promise.into()),

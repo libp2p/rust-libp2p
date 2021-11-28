@@ -67,9 +67,13 @@ where
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0 {
-            inner.dial(addr)
+            inner.dial(addr, as_listener)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }

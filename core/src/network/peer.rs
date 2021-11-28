@@ -160,6 +160,7 @@ where
         self,
         addresses: I,
         handler: THandler,
+        as_listener: bool,
     ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
     where
         I: IntoIterator<Item = Multiaddr>,
@@ -176,6 +177,7 @@ where
             peer: peer_id,
             handler,
             addresses: addresses.into_iter(),
+            as_listener,
         })?;
 
         Ok((id, DialingPeer { network, peer_id }))

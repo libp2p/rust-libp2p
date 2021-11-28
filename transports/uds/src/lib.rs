@@ -104,7 +104,8 @@ impl Transport for $uds_config {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr, _as_listener: bool) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // TODO: Should we dial at all?
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             Ok(async move { <$unix_stream>::connect(&path).await }.boxed())

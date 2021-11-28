@@ -98,10 +98,14 @@ where
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
-            .dial(addr)
+            .dial(addr, as_listener)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,

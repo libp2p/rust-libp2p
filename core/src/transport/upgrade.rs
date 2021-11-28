@@ -336,8 +336,12 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial(addr)
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr, as_listener)
     }
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
@@ -382,10 +386,14 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
-            .dial(addr)
+            .dial(addr, as_listener)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),

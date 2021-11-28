@@ -50,6 +50,7 @@ impl DialOpts {
         WithPeerId {
             peer_id,
             condition: Default::default(),
+            as_listener: false,
         }
     }
 
@@ -73,6 +74,20 @@ impl DialOpts {
                 peer_id, ..
             })) => Some(*peer_id),
             DialOpts(Opts::WithoutPeerIdWithAddress(_)) => None,
+        }
+    }
+
+    pub fn get_as_listener(&self) -> bool {
+        match self {
+            DialOpts(Opts::WithPeerId(WithPeerId { as_listener, .. })) => *as_listener,
+            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                as_listener,
+                ..
+            })) => *as_listener,
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
+                as_listener,
+                ..
+            })) => *as_listener,
         }
     }
 }
@@ -106,6 +121,7 @@ pub(super) enum Opts {
 pub struct WithPeerId {
     pub(crate) peer_id: PeerId,
     pub(crate) condition: PeerCondition,
+    pub(crate) as_listener: bool,
 }
 
 impl WithPeerId {
@@ -122,7 +138,13 @@ impl WithPeerId {
             condition: self.condition,
             addresses,
             extend_addresses_through_behaviour: false,
+            as_listener: self.as_listener,
         }
+    }
+
+    pub fn as_listener(mut self) -> Self {
+        self.as_listener = true;
+        self
     }
 
     /// Build the final [`DialOpts`].
@@ -140,6 +162,7 @@ pub struct WithPeerIdWithAddresses {
     pub(crate) condition: PeerCondition,
     pub(crate) addresses: Vec<Multiaddr>,
     pub(crate) extend_addresses_through_behaviour: bool,
+    pub(crate) as_listener: bool,
 }
 
 impl WithPeerIdWithAddresses {
@@ -156,6 +179,10 @@ impl WithPeerIdWithAddresses {
         self
     }
 
+    pub fn as_listener(mut self) -> Self {
+        self.as_listener = true;
+        self
+    }
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts(Opts::WithPeerIdWithAddresses(self))
@@ -168,16 +195,24 @@ pub struct WithoutPeerId {}
 impl WithoutPeerId {
     /// Specify a single address to dial the unknown peer.
     pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
-        WithoutPeerIdWithAddress { address }
+        WithoutPeerIdWithAddress {
+            address,
+            as_listener: false,
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct WithoutPeerIdWithAddress {
     pub(crate) address: Multiaddr,
+    pub(crate) as_listener: bool,
 }
 
 impl WithoutPeerIdWithAddress {
+    pub fn as_listener(mut self) -> Self {
+        self.as_listener = true;
+        self
+    }
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts(Opts::WithoutPeerIdWithAddress(self))

@@ -220,10 +220,14 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         match parse_relayed_multiaddr(addr)? {
             // Address does not contain circuit relay protocol. Use inner transport.
-            Err(addr) => match self.inner_transport.dial(addr) {
+            Err(addr) => match self.inner_transport.dial(addr, as_listener) {
                 Ok(dialer) => Ok(EitherFuture::First(dialer)),
                 Err(TransportError::MultiaddrNotSupported(addr)) => {
                     Err(TransportError::MultiaddrNotSupported(addr))

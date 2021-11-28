@@ -191,7 +191,11 @@ impl Transport for MemoryTransport {
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        _as_listener: bool,
+    ) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port

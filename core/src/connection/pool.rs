@@ -460,7 +460,7 @@ where
                     local_addr,
                     send_back_addr,
                 }),
-                PendingPoint::Dialer => None,
+                PendingPoint::Dialer { .. } => None,
             })
     }
 
@@ -535,6 +535,7 @@ where
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
         handler: THandler,
+        as_listener: bool,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Clone + Send,
@@ -544,7 +545,13 @@ where
             return Err(DialError::ConnectionLimit { limit, handler });
         };
 
-        let dial = ConcurrentDial::new(transport, peer, addresses, self.dial_concurrency_factor);
+        let dial = ConcurrentDial::new(
+            transport,
+            peer,
+            addresses,
+            self.dial_concurrency_factor,
+            as_listener,
+        );
 
         let connection_id = self.next_connection_id();
 
@@ -560,13 +567,15 @@ where
             .boxed(),
         );
 
-        self.counters.inc_pending(&PendingPoint::Dialer);
+        let endpoint = PendingPoint::Dialer { as_listener };
+
+        self.counters.inc_pending(&endpoint);
         self.pending.insert(
             connection_id,
             PendingConnectionInfo {
                 peer_id: peer,
                 handler,
-                endpoint: PendingPoint::Dialer,
+                endpoint: endpoint,
                 _drop_notifier: drop_notifier,
             },
         );
@@ -739,9 +748,13 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer, Some((address, errors))) => {
-                            (ConnectedPoint::Dialer { address }, Some(errors))
-                        }
+                        (PendingPoint::Dialer { as_listener }, Some((address, errors))) => (
+                            ConnectedPoint::Dialer {
+                                address,
+                                as_listener,
+                            },
+                            Some(errors),
+                        ),
                         (
                             PendingPoint::Listener {
                                 local_addr,
@@ -755,7 +768,7 @@ where
                             },
                             None,
                         ),
-                        (PendingPoint::Dialer, None) => unreachable!(
+                        (PendingPoint::Dialer { .. }, None) => unreachable!(
                             "Established incoming connection via pending outgoing connection."
                         ),
                         (PendingPoint::Listener { .. }, Some(_)) => unreachable!(
@@ -904,7 +917,7 @@ where
                         self.counters.dec_pending(&endpoint);
 
                         match (endpoint, error) {
-                            (PendingPoint::Dialer, Either::Left(error)) => {
+                            (PendingPoint::Dialer { .. }, Either::Left(error)) => {
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
                                     error,
@@ -927,7 +940,7 @@ where
                                     local_addr,
                                 });
                             }
-                            (PendingPoint::Dialer, Either::Right(_)) => {
+                            (PendingPoint::Dialer { .. }, Either::Right(_)) => {
                                 unreachable!("Inbound error for outbound connection.")
                             }
                             (PendingPoint::Listener { .. }, Either::Left(_)) => {
@@ -1170,7 +1183,7 @@ impl ConnectionCounters {
 
     fn inc_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            PendingPoint::Dialer => {
+            PendingPoint::Dialer { .. } => {
                 self.pending_outgoing += 1;
             }
             PendingPoint::Listener { .. } => {
@@ -1185,7 +1198,7 @@ impl ConnectionCounters {
 
     fn dec_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            PendingPoint::Dialer => {
+            PendingPoint::Dialer { .. } => {
                 self.pending_outgoing -= 1;
             }
             PendingPoint::Listener { .. } => {

@@ -610,7 +610,7 @@ where
         _errors: Option<&Vec<Multiaddr>>,
     ) {
         let address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
             ConnectedPoint::Listener { .. } => None,
         };
         self.connected

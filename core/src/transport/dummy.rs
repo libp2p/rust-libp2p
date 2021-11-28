@@ -66,7 +66,11 @@ impl<TOut> Transport for DummyTransport<TOut> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        _as_listener: bool,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

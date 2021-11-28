@@ -95,7 +95,7 @@ where
         self.pool
             .iter_pending_info()
             .filter(move |(_, endpoint, peer_id)| {
-                matches!(endpoint, PendingPoint::Dialer) && peer_id.as_ref() == Some(&peer)
+                matches!(endpoint, PendingPoint::Dialer { .. }) && peer_id.as_ref() == Some(&peer)
             })
             .map(|(connection_id, _, _)| connection_id)
     }
@@ -195,6 +195,7 @@ where
         &mut self,
         address: &Multiaddr,
         handler: THandler,
+        as_listener: bool,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Transport + Send,
@@ -213,6 +214,7 @@ where
                     peer,
                     addresses: std::iter::once(address.clone()),
                     handler,
+                    as_listener,
                 });
             }
         }
@@ -222,6 +224,7 @@ where
             std::iter::once(address.clone()),
             None,
             handler,
+            as_listener,
         )
     }
 
@@ -242,6 +245,7 @@ where
             opts.addresses,
             Some(opts.peer),
             opts.handler,
+            opts.as_listener,
         )?;
 
         Ok(id)
@@ -279,7 +283,7 @@ where
     pub fn dialing_peers(&self) -> impl Iterator<Item = &PeerId> {
         self.pool
             .iter_pending_info()
-            .filter(|(_, endpoint, _)| matches!(endpoint, PendingPoint::Dialer))
+            .filter(|(_, endpoint, _)| matches!(endpoint, PendingPoint::Dialer { .. }))
             .filter_map(|(_, _, peer)| peer.as_ref())
     }
 
@@ -469,6 +473,7 @@ struct DialingOpts<THandler, I> {
     peer: PeerId,
     handler: THandler,
     addresses: I,
+    as_listener: bool,
 }
 
 /// Information about the network obtained by [`Network::info()`].

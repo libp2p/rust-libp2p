@@ -96,7 +96,10 @@ pub enum PendingPoint {
     /// There is no single address associated with the Dialer of a pending
     /// connection. Addresses are dialed in parallel. Only once the first dial
     /// is successful is the address of the connection known.
-    Dialer,
+    Dialer {
+        // TODO: Document
+        as_listener: bool,
+    },
     /// The socket comes from a listener.
     Listener {
         /// Local connection address.
@@ -109,7 +112,7 @@ pub enum PendingPoint {
 impl From<ConnectedPoint> for PendingPoint {
     fn from(endpoint: ConnectedPoint) -> Self {
         match endpoint {
-            ConnectedPoint::Dialer { .. } => PendingPoint::Dialer,
+            ConnectedPoint::Dialer { as_listener, .. } => PendingPoint::Dialer { as_listener },
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr,
@@ -128,6 +131,8 @@ pub enum ConnectedPoint {
     Dialer {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
+        // TODO: Document
+        as_listener: bool,
     },
     /// We received the node.
     Listener {
@@ -183,7 +188,7 @@ impl ConnectedPoint {
     /// not be usable to establish new connections.
     pub fn get_remote_address(&self) -> &Multiaddr {
         match self {
-            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
         }
     }
@@ -193,7 +198,7 @@ impl ConnectedPoint {
     /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.
     pub fn set_remote_address(&mut self, new_address: Multiaddr) {
         match self {
-            ConnectedPoint::Dialer { address } => *address = new_address,
+            ConnectedPoint::Dialer { address, .. } => *address = new_address,
             ConnectedPoint::Listener { send_back_addr, .. } => *send_back_addr = new_address,
         }
     }

@@ -63,9 +63,10 @@ where
         peer: Option<PeerId>,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         concurrency_factor: NonZeroU8,
+        as_listener: bool,
     ) -> Self {
         let mut pending_dials = addresses.map(move |address| match p2p_addr(peer, address) {
-            Ok(address) => match transport.clone().dial(address.clone()) {
+            Ok(address) => match transport.clone().dial(address.clone(), as_listener) {
                 Ok(fut) => fut
                     .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
                     .boxed(),
