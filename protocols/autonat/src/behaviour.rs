@@ -410,7 +410,11 @@ impl Behaviour {
     }
 
     // Handle the inbound request and collect the valid addresses to be dialed.
-    fn handle_request(&mut self, sender: PeerId, request: DialRequest) -> Option<Vec<Multiaddr>> {
+    fn handle_request(
+        &mut self,
+        sender: PeerId,
+        request: DialRequest,
+    ) -> Result<Vec<Multiaddr>, ResponseError> {
         let config = self
             .server_config
             .as_ref()
@@ -418,15 +422,15 @@ impl Behaviour {
 
         // Validate that the peer to be dialed is the request's sender.
         if request.peer_id != sender {
-            return None;
+            return Err(ResponseError::BadRequest);
         }
         // Check that there is no ongoing dial to the remote.
         if self.ongoing_inbound.contains_key(&sender) {
-            return None;
+            return Err(ResponseError::DialRefused);
         }
         // Check if max simultaneous autonat dial-requests are reached.
         if self.ongoing_inbound.len() >= config.max_ongoing {
-            return None;
+            return Err(ResponseError::DialRefused);
         }
 
         let observed_addr = self
@@ -443,10 +447,10 @@ impl Behaviour {
         addrs.truncate(config.max_addresses);
 
         if addrs.is_empty() {
-            return None;
+            return Err(ResponseError::DialError);
         }
 
-        Some(addrs)
+        Ok(addrs)
     }
 
     // Update the ongoing outbound probe according to the result of our dial-request.
@@ -610,7 +614,7 @@ impl NetworkBehaviour for Behaviour {
                         request,
                         channel,
                     } => match self.handle_request(peer, request) {
-                        Some(addrs) => {
+                        Ok(addrs) => {
                             self.ongoing_inbound.insert(peer, (addrs.clone(), channel));
                             return Poll::Ready(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer)
@@ -620,8 +624,8 @@ impl NetworkBehaviour for Behaviour {
                                 handler: self.inner.new_handler(),
                             });
                         }
-                        None => {
-                            let response = DialResponse::Err(ResponseError::DialRefused);
+                        Err(e) => {
+                            let response = DialResponse::Err(e);
                             let _ = self.inner.send_response(channel, response);
                         }
                     },
