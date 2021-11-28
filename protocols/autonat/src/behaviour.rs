@@ -172,16 +172,23 @@ impl Probe {
             return Err(self);
         }
 
-        let error_responses = self
+        let error_response_count = self
             .errors
             .iter()
             .filter(|(_, e)| matches!(e, ResponseError::DialError))
             .count();
-        if error_responses >= self.min_confidence {
-            Ok(self.into_nat_status(Reachability::Private))
-        } else {
-            Ok(self.into_nat_status(Reachability::Unknown))
+
+        // Check if enough errors were received to reach min confidence.
+        if error_response_count >= self.min_confidence {
+            return Ok(self.into_nat_status(Reachability::Private));
         }
+
+        // Check if min confidence for errors can still be reached.
+        if self.pending_servers.len() >= self.min_confidence - error_response_count {
+            return Err(self);
+        }
+
+        Ok(self.into_nat_status(Reachability::Unknown))
     }
 
     fn into_nat_status(self, reachability: Reachability) -> NatStatus {
