@@ -192,13 +192,15 @@ impl Probe {
     }
 
     fn into_nat_status(self, reachability: Reachability) -> NatStatus {
-        NatStatus {
+        let status = NatStatus {
             reachability,
             errors: self.errors,
             tried_addresses: self.addresses.into_iter().collect(),
             outbound_failures: self.outbound_failures,
             probe_id: self.id,
-        }
+        };
+        log::debug!("Probe {:?} resolved to NAT Status: {:?}.", self.id, status);
+        status
     }
 }
 
@@ -422,25 +424,43 @@ impl Behaviour {
 
         // Validate that the peer to be dialed is the request's sender.
         if request.peer_id != sender {
+            let status_text = "peer id mismatch".to_string();
+            log::debug!(
+                "Reject inbound dial request from peer {}: {}.",
+                sender,
+                status_text
+            );
             let response = DialResponse {
                 response: Err(ResponseError::BadRequest),
-                status_text: Some("peer id mismatch".to_string()),
+                status_text: Some(status_text),
             };
             return Err(response);
         }
         // Check that there is no ongoing dial to the remote.
         if self.ongoing_inbound.contains_key(&sender) {
+            let status_text = "too many dials".to_string();
+            log::debug!(
+                "Reject inbound dial request from peer {}: {}.",
+                sender,
+                status_text
+            );
             let response = DialResponse {
                 response: Err(ResponseError::DialRefused),
-                status_text: Some("too many dials".to_string()),
+                status_text: Some(status_text),
             };
             return Err(response);
         }
         // Check if max simultaneous autonat dial-requests are reached.
         if self.ongoing_inbound.len() >= config.max_ongoing {
+            let status_text = "too many dials".to_string();
+            log::debug!(
+                "Reject inbound dial request from peer {}: {}.",
+                sender,
+                status_text
+            );
             let response = DialResponse {
                 response: Err(ResponseError::DialRefused),
-                status_text: Some("too many dials".to_string()),
+                status_text: Some(status_text),
             };
             return Err(response);
         }
@@ -459,9 +479,15 @@ impl Behaviour {
         addrs.truncate(config.max_addresses);
 
         if addrs.is_empty() {
+            let status_text = "no dialable addresses".to_string();
+            log::debug!(
+                "Reject inbound dial request from peer {}: {}.",
+                sender,
+                status_text
+            );
             let response = DialResponse {
                 response: Err(ResponseError::DialError),
-                status_text: Some("no dialable addresses".to_string()),
+                status_text: Some(status_text),
             };
             return Err(response);
         }
@@ -495,13 +521,24 @@ impl Behaviour {
             Ok(DialResponse {
                 response: Ok(addr), ..
             }) => {
+                log::debug!(
+                    "Successful dial-back from peer {} to address {:?}",
+                    sender,
+                    addr
+                );
                 let score = probe.addresses.entry(addr).or_insert(0);
                 *score += 1;
             }
             Ok(DialResponse {
                 response: Err(error),
-                ..
+                status_text,
             }) => {
+                log::debug!(
+                    "Failed dial-back from peer {}: {:?} {:?}",
+                    sender,
+                    error,
+                    status_text
+                );
                 probe.errors.push((sender, error));
             }
             Err(err) => {
@@ -536,6 +573,11 @@ impl NetworkBehaviour for Behaviour {
             if let Some((addrs, _)) = self.ongoing_inbound.get(peer) {
                 // Check if the dialed address was among the requested addresses.
                 if addrs.contains(address) {
+                    log::debug!(
+                        "Dial-back to peer {} succeeded at addr {:?}.",
+                        peer,
+                        address
+                    );
                     // Successfully dialed one of the addresses from the remote peer.
                     let channel = self.ongoing_inbound.remove(peer).unwrap().1;
                     let response = DialResponse {
@@ -558,6 +600,11 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner.inject_dial_failure(peer_id, handler, error);
         if let Some((_, channel)) = peer_id.and_then(|p| self.ongoing_inbound.remove(&p)) {
+            log::debug!(
+                "Dial-back to peer {} failed with error {:?}.",
+                peer_id.unwrap(),
+                error
+            );
             // Failed to dial any of the addresses sent by the remote peer in their dial-request.
             let response = DialResponse {
                 response: Err(ResponseError::DialError),
@@ -622,6 +669,11 @@ impl NetworkBehaviour for Behaviour {
                     if external_addrs.is_empty() {
                         external_addrs.extend(params.listened_addresses());
                     }
+                    log::debug!(
+                        "Starting outbound probe {:?} with dial-back addresses {:?}.",
+                        probe_id,
+                        external_addrs
+                    );
                     let probe =
                         config.build(probe_id, external_addrs, self.connected.keys().collect());
                     self.do_probe(probe);
@@ -638,21 +690,24 @@ impl NetworkBehaviour for Behaviour {
                         request_id: _,
                         request,
                         channel,
-                    } => match self.handle_request(peer, request) {
-                        Ok(addrs) => {
-                            self.ongoing_inbound.insert(peer, (addrs.clone(), channel));
-                            return Poll::Ready(NetworkBehaviourAction::Dial {
-                                opts: DialOpts::peer_id(peer)
-                                    .condition(PeerCondition::Always)
-                                    .addresses(addrs)
-                                    .build(),
-                                handler: self.inner.new_handler(),
-                            });
+                    } => {
+                        match self.handle_request(peer, request) {
+                            Ok(addrs) => {
+                                log::debug!("Inbound dial request from Peer {} with dial-back addresses {:?}.", peer, addrs);
+                                self.ongoing_inbound.insert(peer, (addrs.clone(), channel));
+                                return Poll::Ready(NetworkBehaviourAction::Dial {
+                                    opts: DialOpts::peer_id(peer)
+                                        .condition(PeerCondition::Always)
+                                        .addresses(addrs)
+                                        .build(),
+                                    handler: self.inner.new_handler(),
+                                });
+                            }
+                            Err(response) => {
+                                let _ = self.inner.send_response(channel, response);
+                            }
                         }
-                        Err(response) => {
-                            let _ = self.inner.send_response(channel, response);
-                        }
-                    },
+                    }
                     RequestResponseMessage::Response {
                         request_id,
                         response,

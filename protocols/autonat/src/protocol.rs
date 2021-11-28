@@ -120,6 +120,7 @@ impl DialRequest {
         {
             (peer_id, addrs)
         } else {
+            log::debug!("Received malformed dial message.");
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid dial message",
@@ -192,10 +193,13 @@ impl TryFrom<i32> for ResponseError {
             101 => Ok(ResponseError::DialRefused),
             200 => Ok(ResponseError::BadRequest),
             300 => Ok(ResponseError::InternalError),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid response error type",
-            )),
+            _ => {
+                log::debug!("Received response with invalid status code.");
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid response error type",
+                ))
+            }
         }
     }
 }
@@ -236,6 +240,7 @@ impl DialResponse {
                 response: Err(ResponseError::try_from(status)?),
             },
             _ => {
+                log::debug!("Received malformed response message.");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid dial response message",
