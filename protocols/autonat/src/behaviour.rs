@@ -228,7 +228,9 @@ impl ProbeConfig {
         if pending_servers.len() < self.max_peers && self.extend_with_connected {
             // TODO: use random set
             for peer in connected {
-                pending_servers.push(*peer);
+                if !pending_servers.contains(peer) {
+                    pending_servers.push(*peer);
+                }
                 if pending_servers.len() >= self.max_peers {
                     break;
                 }
