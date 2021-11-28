@@ -233,13 +233,11 @@ impl ProbeConfig {
         let mut pending_servers = self.servers.clone();
         pending_servers.truncate(self.max_peers);
         if pending_servers.len() < self.max_peers && self.extend_with_connected {
-            // TODO: use random set
-            for peer in connected {
-                if !pending_servers.contains(peer) {
-                    pending_servers.push(*peer);
-                }
-                if pending_servers.len() >= self.max_peers {
-                    break;
+            let mut connected: Vec<_> = connected.into_iter().copied().collect();
+            while connected.len() > 0 && pending_servers.len() >= self.max_peers {
+                let peer = connected.remove(rand::random::<usize>() % connected.len());
+                if !pending_servers.contains(&peer) {
+                    pending_servers.push(peer);
                 }
             }
         }

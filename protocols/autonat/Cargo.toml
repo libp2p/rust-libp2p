@@ -19,6 +19,7 @@ futures-timer = "3.0.2"
 libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
 libp2p-request-response = { version = "0.15.0", path = "../request-response" }
+rand = "0.8"
 prost = "0.8"
 
 [dev-dependencies]
