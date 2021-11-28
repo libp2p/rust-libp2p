@@ -234,7 +234,7 @@ impl ProbeConfig {
         pending_servers.truncate(self.max_peers);
         if pending_servers.len() < self.max_peers && self.extend_with_connected {
             let mut connected: Vec<_> = connected.into_iter().copied().collect();
-            while connected.len() > 0 && pending_servers.len() >= self.max_peers {
+            while !connected.is_empty() && pending_servers.len() >= self.max_peers {
                 let peer = connected.remove(rand::random::<usize>() % connected.len());
                 if !pending_servers.contains(&peer) {
                     pending_servers.push(peer);
@@ -414,7 +414,7 @@ impl Behaviour {
         &mut self,
         sender: PeerId,
         request: DialRequest,
-    ) -> Result<Vec<Multiaddr>, ResponseError> {
+    ) -> Result<Vec<Multiaddr>, DialResponse> {
         let config = self
             .server_config
             .as_ref()
@@ -422,15 +422,27 @@ impl Behaviour {
 
         // Validate that the peer to be dialed is the request's sender.
         if request.peer_id != sender {
-            return Err(ResponseError::BadRequest);
+            let response = DialResponse {
+                response: Err(ResponseError::BadRequest),
+                status_text: Some("peer id mismatch".to_string()),
+            };
+            return Err(response);
         }
         // Check that there is no ongoing dial to the remote.
         if self.ongoing_inbound.contains_key(&sender) {
-            return Err(ResponseError::DialRefused);
+            let response = DialResponse {
+                response: Err(ResponseError::DialRefused),
+                status_text: Some("too many dials".to_string()),
+            };
+            return Err(response);
         }
         // Check if max simultaneous autonat dial-requests are reached.
         if self.ongoing_inbound.len() >= config.max_ongoing {
-            return Err(ResponseError::DialRefused);
+            let response = DialResponse {
+                response: Err(ResponseError::DialRefused),
+                status_text: Some("too many dials".to_string()),
+            };
+            return Err(response);
         }
 
         let observed_addr = self
@@ -447,7 +459,11 @@ impl Behaviour {
         addrs.truncate(config.max_addresses);
 
         if addrs.is_empty() {
-            return Err(ResponseError::DialError);
+            let response = DialResponse {
+                response: Err(ResponseError::DialError),
+                status_text: Some("no dialable addresses".to_string()),
+            };
+            return Err(response);
         }
 
         Ok(addrs)
@@ -476,12 +492,17 @@ impl Behaviour {
 
         probe.pending_servers.retain(|(p, _)| p != &sender);
         match response {
-            Ok(DialResponse::Ok(addr)) => {
+            Ok(DialResponse {
+                response: Ok(addr), ..
+            }) => {
                 let score = probe.addresses.entry(addr).or_insert(0);
                 *score += 1;
             }
-            Ok(DialResponse::Err(err)) => {
-                probe.errors.push((sender, err));
+            Ok(DialResponse {
+                response: Err(error),
+                ..
+            }) => {
+                probe.errors.push((sender, error));
             }
             Err(err) => {
                 probe.outbound_failures.push((sender, err));
@@ -517,9 +538,11 @@ impl NetworkBehaviour for Behaviour {
                 if addrs.contains(address) {
                     // Successfully dialed one of the addresses from the remote peer.
                     let channel = self.ongoing_inbound.remove(peer).unwrap().1;
-                    let _ = self
-                        .inner
-                        .send_response(channel, DialResponse::Ok(address.clone()));
+                    let response = DialResponse {
+                        response: Ok(address.clone()),
+                        status_text: None,
+                    };
+                    let _ = self.inner.send_response(channel, response);
                 }
             }
         }
@@ -536,9 +559,11 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_dial_failure(peer_id, handler, error);
         if let Some((_, channel)) = peer_id.and_then(|p| self.ongoing_inbound.remove(&p)) {
             // Failed to dial any of the addresses sent by the remote peer in their dial-request.
-            let _ = self
-                .inner
-                .send_response(channel, DialResponse::Err(ResponseError::DialError));
+            let response = DialResponse {
+                response: Err(ResponseError::DialError),
+                status_text: Some("dial failed".to_string()),
+            };
+            let _ = self.inner.send_response(channel, response);
         }
     }
 
@@ -624,8 +649,7 @@ impl NetworkBehaviour for Behaviour {
                                 handler: self.inner.new_handler(),
                             });
                         }
-                        Err(e) => {
-                            let response = DialResponse::Err(e);
+                        Err(response) => {
                             let _ = self.inner.send_response(channel, response);
                         }
                     },
@@ -634,7 +658,7 @@ impl NetworkBehaviour for Behaviour {
                         response,
                     } => {
                         let mut report_addr = None;
-                        if let DialResponse::Ok(ref addr) = response {
+                        if let Ok(ref addr) = response.response {
                             // Update observed address score if it is finite.
                             let score = params
                                 .external_addresses()

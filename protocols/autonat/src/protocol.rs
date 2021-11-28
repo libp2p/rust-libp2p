@@ -201,9 +201,9 @@ impl TryFrom<i32> for ResponseError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DialResponse {
-    Ok(Multiaddr),
-    Err(ResponseError),
+pub struct DialResponse {
+    pub status_text: Option<String>,
+    pub response: Result<Multiaddr, ResponseError>,
 }
 
 impl DialResponse {
@@ -217,21 +217,24 @@ impl DialResponse {
         Ok(match msg.dial_response {
             Some(structs_proto::message::DialResponse {
                 status: Some(0),
-                status_text: None,
+                status_text,
                 addr: Some(addr),
             }) => {
                 let addr = Multiaddr::try_from(addr)
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-                Self::Ok(addr)
+                Self {
+                    status_text,
+                    response: Ok(addr),
+                }
             }
             Some(structs_proto::message::DialResponse {
                 status: Some(status),
-                status_text: _,
+                status_text,
                 addr: None,
-            }) => {
-                let status = ResponseError::try_from(status)?;
-                Self::Err(status)
-            }
+            }) => Self {
+                status_text,
+                response: Err(ResponseError::try_from(status)?),
+            },
             _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -242,15 +245,15 @@ impl DialResponse {
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
-        let dial_response = match self {
-            Self::Ok(addr) => structs_proto::message::DialResponse {
+        let dial_response = match self.response {
+            Ok(addr) => structs_proto::message::DialResponse {
                 status: Some(0),
-                status_text: None,
+                status_text: self.status_text,
                 addr: Some(addr.to_vec()),
             },
-            Self::Err(status) => structs_proto::message::DialResponse {
-                status: Some(status.into()),
-                status_text: None,
+            Err(error) => structs_proto::message::DialResponse {
+                status: Some(error.into()),
+                status_text: self.status_text,
                 addr: None,
             },
         };
@@ -288,7 +291,10 @@ mod tests {
 
     #[test]
     fn test_response_ok_encode_decode() {
-        let response = DialResponse::Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap());
+        let response = DialResponse {
+            response: Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap()),
+            status_text: None,
+        };
         let bytes = response.clone().into_bytes();
         let response2 = DialResponse::from_bytes(&bytes).unwrap();
         assert_eq!(response, response2);
@@ -296,7 +302,10 @@ mod tests {
 
     #[test]
     fn test_response_err_encode_decode() {
-        let response = DialResponse::Err(ResponseError::DialError);
+        let response = DialResponse {
+            response: Err(ResponseError::DialError),
+            status_text: Some("dial failed".to_string()),
+        };
         let bytes = response.clone().into_bytes();
         let response2 = DialResponse::from_bytes(&bytes).unwrap();
         assert_eq!(response, response2);
