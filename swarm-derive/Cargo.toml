@@ -1,6 +1,7 @@
 [package]
 name = "libp2p-swarm-derive"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "Procedural macros of libp2p-core"
 version = "0.26.1"
 authors = ["Parity Technologies <admin@parity.io>"]

@@ -45,7 +45,7 @@ use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
     fmt,
-    num::{NonZeroU32, NonZeroU8},
+    num::NonZeroU8,
     pin::Pin,
     task::Context,
     task::Poll,
@@ -156,7 +156,10 @@ where
     /// A new connection has been established.
     ConnectionEstablished {
         connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
-        num_established: NonZeroU32,
+        /// List of other connections to the same peer.
+        ///
+        /// Note: Does not include the connection reported through this event.
+        other_established_connection_ids: Vec<ConnectionId>,
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
@@ -183,8 +186,8 @@ where
         error: Option<ConnectionError<THandlerError<THandler>>>,
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<THandler, TTrans>,
-        /// The remaining number of established connections to the same peer.
-        num_established: u32,
+        /// The remaining established connections to the same peer.
+        remaining_established_connection_ids: Vec<ConnectionId>,
         handler: THandler::Handler,
     },
 
@@ -693,15 +696,16 @@ where
                 let EstablishedConnectionInfo { endpoint, .. } =
                     connections.remove(&id).expect("Connection to be present");
                 self.counters.dec_established(&endpoint);
-                let num_established = u32::try_from(connections.len()).unwrap();
-                if num_established == 0 {
+                let remaining_established_connection_ids: Vec<ConnectionId> =
+                    connections.keys().cloned().collect();
+                if remaining_established_connection_ids.is_empty() {
                     self.established.remove(&peer_id);
                 }
                 return Poll::Ready(PoolEvent::ConnectionClosed {
                     id,
                     connected: Connected { endpoint, peer_id },
                     error,
-                    num_established,
+                    remaining_established_connection_ids,
                     pool: self,
                     handler,
                 });
@@ -849,8 +853,7 @@ where
 
                     // Add the connection to the pool.
                     let conns = self.established.entry(peer_id).or_default();
-                    let num_established = NonZeroU32::new(u32::try_from(conns.len() + 1).unwrap())
-                        .expect("n + 1 is always non-zero; qed");
+                    let other_established_connection_ids = conns.keys().cloned().collect();
                     self.counters.inc_established(&endpoint);
 
                     let (command_sender, command_receiver) =
@@ -883,7 +886,7 @@ where
                         Some(PoolConnection::Established(connection)) => {
                             return Poll::Ready(PoolEvent::ConnectionEstablished {
                                 connection,
-                                num_established,
+                                other_established_connection_ids,
                                 concurrent_dial_errors,
                             })
                         }

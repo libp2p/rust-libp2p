@@ -19,11 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the AutoNAT protocol.
-
-pub use self::behaviour::{Behaviour, Config};
-
 mod behaviour;
 mod protocol;
+
+pub use self::{
+    behaviour::{AutoProbe, Behaviour, Config, NatStatus, ProbeConfig, Reachability, ServerConfig},
+    protocol::ResponseError,
+};
 
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));
