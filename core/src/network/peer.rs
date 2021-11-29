@@ -21,7 +21,7 @@
 use super::{DialError, DialingOpts, Network};
 use crate::{
     connection::{
-        handler::THandlerInEvent, pool::Pool, ConnectionHandler, ConnectionId,
+        handler::THandlerInEvent, pool::Pool, ConnectionHandler, ConnectionId, DialAsListener,
         EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler, PendingConnection,
     },
     Multiaddr, PeerId, Transport,
@@ -151,16 +151,13 @@ where
 
     /// Initiates a new dialing attempt to this peer using the given addresses.
     ///
-    /// The connection ID of the first connection attempt, i.e. to `address`,
-    /// is returned, together with a [`DialingPeer`] for further use. The
-    /// `remaining` addresses are tried in order in subsequent connection
-    /// attempts in the context of the same dialing attempt, if the connection
-    /// attempt to the first address fails.
+    /// The [`ConnectionId`] of the connection attempt is returned together with
+    /// a [`DialingPeer`] for further use.
     pub fn dial<I>(
         self,
         addresses: I,
         handler: THandler,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
     where
         I: IntoIterator<Item = Multiaddr>,

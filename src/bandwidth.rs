@@ -20,6 +20,7 @@
 
 use crate::{
     core::{
+        connection::DialAsListener,
         transport::{ListenerEvent, TransportError},
         Transport,
     },
@@ -82,10 +83,14 @@ where
             .map(move |inner| BandwidthListener { inner, sinks })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        self,
+        addr: Multiaddr,
+        as_listener: DialAsListener,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let sinks = self.sinks;
         self.inner
-            .dial(addr)
+            .dial(addr, as_listener)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 

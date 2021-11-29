@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    connection::{ConnectedPoint, DialAsListener},
     transport::{ListenerEvent, Transport, TransportError},
-    ConnectedPoint,
 };
 use futures::prelude::*;
 use multiaddr::Multiaddr;
@@ -61,7 +61,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial(addr.clone(), as_listener)?;
         let p = ConnectedPoint::Dialer {

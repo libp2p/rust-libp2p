@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::ConnectedPoint;
+use crate::connection::{ConnectedPoint, DialAsListener};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
@@ -130,7 +130,7 @@ pub trait Transport {
         self,
         addr: Multiaddr,
         // TODO: In case the transport doesn't support as_listener, should we return an error at runtime?
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;

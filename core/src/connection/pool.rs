@@ -22,9 +22,9 @@
 use crate::{
     connection::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
-        IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
-        PendingOutboundConnectionError, PendingPoint, Substream,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
+        DialAsListener, IncomingInfo, IntoConnectionHandler, PendingConnectionError,
+        PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
     network::DialError,
@@ -535,7 +535,7 @@ where
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
         handler: THandler,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Clone + Send,

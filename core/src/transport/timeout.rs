@@ -25,6 +25,7 @@
 // TODO: add example
 
 use crate::{
+    connection::DialAsListener,
     transport::{ListenerEvent, TransportError},
     Multiaddr, Transport,
 };
@@ -101,7 +102,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner

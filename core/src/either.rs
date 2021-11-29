@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    connection::DialAsListener,
     muxing::{StreamMuxer, StreamMuxerEvent},
     transport::{ListenerEvent, Transport, TransportError},
     Multiaddr, ProtocolName,
@@ -516,7 +517,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {

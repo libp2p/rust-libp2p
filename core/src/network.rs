@@ -21,7 +21,7 @@
 mod event;
 pub mod peer;
 
-pub use crate::connection::{ConnectionCounters, ConnectionLimits};
+pub use crate::connection::{ConnectionCounters, ConnectionLimits, DialAsListener};
 pub use event::{IncomingConnection, NetworkEvent};
 pub use peer::Peer;
 
@@ -195,7 +195,7 @@ where
         &mut self,
         address: &Multiaddr,
         handler: THandler,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Transport + Send,
@@ -473,7 +473,7 @@ struct DialingOpts<THandler, I> {
     peer: PeerId,
     handler: THandler,
     addresses: I,
-    as_listener: bool,
+    as_listener: DialAsListener,
 }
 
 /// Information about the network obtained by [`Network::info()`].

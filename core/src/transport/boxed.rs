@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::DialAsListener;
 use crate::transport::{ListenerEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
@@ -54,7 +55,7 @@ trait Abstract<O> {
     fn dial(
         &self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 }
@@ -85,7 +86,7 @@ where
     fn dial(
         &self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Dial<O>, TransportError<io::Error>> {
         let fut = Transport::dial(self.clone(), addr, as_listener)
             .map(|r| r.map_err(box_err))
@@ -126,7 +127,7 @@ impl<O> Transport for Boxed<O> {
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.dial(addr, as_listener)
     }

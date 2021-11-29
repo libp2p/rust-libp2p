@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    connection::{ConnectedPoint, DialAsListener},
     either::EitherError,
     transport::{ListenerEvent, Transport, TransportError},
-    ConnectedPoint,
 };
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
@@ -72,7 +72,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport

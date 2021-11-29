@@ -23,6 +23,7 @@
 pub use crate::upgrade::Version;
 
 use crate::{
+    connection::{ConnectedPoint, DialAsListener},
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
         and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerEvent, Transport,
@@ -32,7 +33,7 @@ use crate::{
         self, apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
         OutboundUpgradeApply, UpgradeError,
     },
-    ConnectedPoint, Negotiated, PeerId,
+    Negotiated, PeerId,
 };
 use futures::{prelude::*, ready};
 use multiaddr::Multiaddr;
@@ -339,7 +340,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr, as_listener)
     }
@@ -389,7 +390,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner

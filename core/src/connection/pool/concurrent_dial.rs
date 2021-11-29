@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use crate::connection::{ConnectionCounters, ConnectionLimits};
-
 use crate::{
+    connection::DialAsListener,
     transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
@@ -63,7 +62,7 @@ where
         peer: Option<PeerId>,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         concurrency_factor: NonZeroU8,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Self {
         let mut pending_dials = addresses.map(move |address| match p2p_addr(peer, address) {
             Ok(address) => match transport.clone().dial(address.clone(), as_listener) {

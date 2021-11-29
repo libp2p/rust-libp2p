@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::DialAsListener;
 use crate::transport::{ListenerEvent, Transport, TransportError};
 use crate::Multiaddr;
 use futures::{prelude::*, task::Context, task::Poll};
@@ -69,7 +70,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
     fn dial(
         self,
         addr: Multiaddr,
-        _as_listener: bool,
+        _as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }

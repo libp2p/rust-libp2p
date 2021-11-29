@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_core::connection::DialAsListener;
 use libp2p_core::{Multiaddr, PeerId};
 
 /// Options to configure a dial to a known or unknown peer.
@@ -50,7 +51,7 @@ impl DialOpts {
         WithPeerId {
             peer_id,
             condition: Default::default(),
-            as_listener: false,
+            as_listener: Default::default(),
         }
     }
 
@@ -74,20 +75,6 @@ impl DialOpts {
                 peer_id, ..
             })) => Some(*peer_id),
             DialOpts(Opts::WithoutPeerIdWithAddress(_)) => None,
-        }
-    }
-
-    pub(crate) fn get_as_listener(&self) -> bool {
-        match self {
-            DialOpts(Opts::WithPeerId(WithPeerId { as_listener, .. })) => *as_listener,
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                as_listener,
-                ..
-            })) => *as_listener,
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
-                as_listener,
-                ..
-            })) => *as_listener,
         }
     }
 }
@@ -121,7 +108,7 @@ pub(super) enum Opts {
 pub struct WithPeerId {
     pub(crate) peer_id: PeerId,
     pub(crate) condition: PeerCondition,
-    pub(crate) as_listener: bool,
+    pub(crate) as_listener: DialAsListener,
 }
 
 impl WithPeerId {
@@ -144,10 +131,9 @@ impl WithPeerId {
 
     /// Execute the dial _as a listener_.
     ///
-    /// See [`ConnectedPoint::Dialer`](libp2p_core::ConnectedPoint::Dialer) for
-    /// details.
+    /// See [`DialAsListener`] for details.
     pub fn as_listener(mut self) -> Self {
-        self.as_listener = true;
+        self.as_listener = true.into();
         self
     }
 
@@ -166,7 +152,7 @@ pub struct WithPeerIdWithAddresses {
     pub(crate) condition: PeerCondition,
     pub(crate) addresses: Vec<Multiaddr>,
     pub(crate) extend_addresses_through_behaviour: bool,
-    pub(crate) as_listener: bool,
+    pub(crate) as_listener: DialAsListener,
 }
 
 impl WithPeerIdWithAddresses {
@@ -185,10 +171,9 @@ impl WithPeerIdWithAddresses {
 
     /// Execute the dial _as a listener_.
     ///
-    /// See [`ConnectedPoint::Dialer`](libp2p_core::ConnectedPoint::Dialer) for
-    /// details.
+    /// See [`DialAsListener`] for details.
     pub fn as_listener(mut self) -> Self {
-        self.as_listener = true;
+        self.as_listener = true.into();
         self
     }
     /// Build the final [`DialOpts`].
@@ -205,7 +190,7 @@ impl WithoutPeerId {
     pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
         WithoutPeerIdWithAddress {
             address,
-            as_listener: false,
+            as_listener: Default::default(),
         }
     }
 }
@@ -213,16 +198,15 @@ impl WithoutPeerId {
 #[derive(Debug)]
 pub struct WithoutPeerIdWithAddress {
     pub(crate) address: Multiaddr,
-    pub(crate) as_listener: bool,
+    pub(crate) as_listener: DialAsListener,
 }
 
 impl WithoutPeerIdWithAddress {
     /// Execute the dial _as a listener_.
     ///
-    /// See [`ConnectedPoint::Dialer`](libp2p_core::ConnectedPoint::Dialer) for
-    /// details.
+    /// See [`DialAsListener`] for details.
     pub fn as_listener(mut self) -> Self {
-        self.as_listener = true;
+        self.as_listener = true.into();
         self
     }
     /// Build the final [`DialOpts`].

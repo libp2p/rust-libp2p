@@ -50,6 +50,7 @@ use futures::{
 use futures_timer::Delay;
 use libp2p_core::{
     address_translation,
+    connection::DialAsListener,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, Transport, TransportError},
 };
@@ -391,7 +392,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        _as_listener: bool,
+        _as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {

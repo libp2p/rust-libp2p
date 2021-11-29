@@ -26,6 +26,7 @@ use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
+use libp2p_core::connection::DialAsListener;
 use libp2p_core::either::{EitherError, EitherFuture, EitherOutput};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{ListenerEvent, TransportError};
@@ -223,7 +224,7 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         match parse_relayed_multiaddr(addr)? {
             // Address does not contain circuit relay protocol. Use inner transport.

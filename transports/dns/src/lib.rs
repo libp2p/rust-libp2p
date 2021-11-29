@@ -58,6 +58,7 @@
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
+    connection::DialAsListener,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     Transport,
@@ -213,7 +214,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Asynchronlously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.

@@ -98,9 +98,7 @@ pub enum PendingPoint {
     /// is successful is the address of the connection known.
     Dialer {
         /// Whether the connection is dialed _as a listener_.
-        ///
-        /// See [`ConnectedPoint::Dialer`] for details.
-        as_listener: bool,
+        as_listener: DialAsListener,
     },
     /// The socket comes from a listener.
     Listener {
@@ -134,20 +132,7 @@ pub enum ConnectedPoint {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
         /// Whether the connection is dialed _as a listener_.
-        ///
-        /// This option is needed for NAT and firewall hole punching.
-        ///
-        /// The concrete realization of this option depends on the transport
-        /// protocol. E.g. in the case of TCP, both endpoints dial each other,
-        /// resulting in a _simultaneous open_ TCP connection. On this new
-        /// connection both endpoints assume to be the dialer of the connection.
-        /// This is problematic during the connection upgrade process where an
-        /// upgrade assumes one side to be the listener. With the help of this
-        /// option, both peers can negotiate the roles (dialer and listener) for
-        /// the new connection ahead of time, through some external channel, and
-        /// thus have one peer dial the other as a dialer and one peer dial the
-        /// other _as a listener_.
-        as_listener: bool,
+        as_listener: DialAsListener,
     },
     /// We received the node.
     Listener {
@@ -216,6 +201,41 @@ impl ConnectedPoint {
             ConnectedPoint::Dialer { address, .. } => *address = new_address,
             ConnectedPoint::Listener { send_back_addr, .. } => *send_back_addr = new_address,
         }
+    }
+}
+
+/// Whether a connection is dialed _as a listener_.
+///
+/// This option is needed for NAT and firewall hole punching.
+///
+/// The concrete realization of this option depends on the transport
+/// protocol. E.g. in the case of TCP, both endpoints dial each other,
+/// resulting in a _simultaneous open_ TCP connection. On this new
+/// connection both endpoints assume to be the dialer of the connection.
+/// This is problematic during the connection upgrade process where an
+/// upgrade assumes one side to be the listener. With the help of this
+/// option, both peers can negotiate the roles (dialer and listener) for
+/// the new connection ahead of time, through some external channel, and
+/// thus have one peer dial the other as a dialer and one peer dial the
+/// other _as a listener_.
+#[derive(Debug, Default, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct DialAsListener(bool);
+
+impl From<bool> for DialAsListener {
+    fn from(b: bool) -> Self {
+        Self(b)
+    }
+}
+
+impl From<DialAsListener> for bool {
+    fn from(b: DialAsListener) -> Self {
+        b.0
+    }
+}
+
+impl PartialEq<bool> for DialAsListener {
+    fn eq(&self, other: &bool) -> bool {
+        self.0 == *other
     }
 }
 

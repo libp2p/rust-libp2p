@@ -33,7 +33,11 @@
 //!
 
 use futures::{future::Ready, prelude::*};
-use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
+use libp2p_core::{
+    connection::DialAsListener,
+    transport::{ListenerEvent, TransportError},
+    Multiaddr, Transport,
+};
 use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -194,11 +198,11 @@ impl Transport for ExtTransport {
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let promise = self
             .inner
-            .dial(&addr.to_string(), as_listener)
+            .dial(&addr.to_string(), as_listener.into())
             .map_err(|err| {
                 if is_not_supported_error(&err) {
                     TransportError::MultiaddrNotSupported(addr)

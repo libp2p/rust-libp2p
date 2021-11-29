@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError};
-use crate::{ConnectedPoint, Negotiated};
+use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
@@ -40,9 +40,9 @@ where
     U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
 {
     match cp {
-        ConnectedPoint::Dialer {
-            as_listener: false, ..
-        } => Either::Right(apply_outbound(conn, up, v)),
+        ConnectedPoint::Dialer { as_listener, .. } if as_listener == false => {
+            Either::Right(apply_outbound(conn, up, v))
+        }
         _ => Either::Left(apply_inbound(conn, up)),
     }
 }

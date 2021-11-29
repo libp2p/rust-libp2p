@@ -23,6 +23,7 @@ use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
 use libp2p_core::{
+    connection::DialAsListener,
     either::EitherOutput,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
@@ -247,7 +248,7 @@ where
     fn dial(
         self,
         addr: Multiaddr,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         // TODO: Ignore as_listener?
         let addr = match parse_ws_dial_addr(addr) {
@@ -296,7 +297,7 @@ where
     async fn dial_once(
         self,
         addr: WsAddress,
-        as_listener: bool,
+        as_listener: DialAsListener,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("Dialing websocket address: {:?}", addr);
 
