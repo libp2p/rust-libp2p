@@ -21,14 +21,14 @@
 use futures::prelude::*;
 use libp2p::autonat;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
-use libp2p::swarm::{AddressScore, Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
 use std::error::Error;
 use std::time::Duration;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "libp2p relay")]
+#[structopt(name = "libp2p autonat")]
 struct Opt {
     #[structopt(long)]
     server_address: Multiaddr,
@@ -57,11 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm
         .behaviour_mut()
         .auto_nat
-        .add_server(opt.server_peer_id, Some(opt.server_address))
-        .then(|| Some(()))
-        .expect("Auto retry to be enabled.");
-
-    swarm.add_external_address(Multiaddr::empty(), AddressScore::Infinite);
+        .add_server(opt.server_peer_id, Some(opt.server_address));
 
     loop {
         match swarm.select_next_some().await {
@@ -76,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[behaviour(out_event = "Event")]
 struct Behaviour {
     identify: Identify,
-    auto_nat: autonat::behaviour::Behaviour,
+    auto_nat: autonat::Behaviour,
 }
 
 impl Behaviour {
@@ -86,14 +82,17 @@ impl Behaviour {
                 "/ipfs/0.1.0".into(),
                 local_public_key.clone(),
             )),
-            auto_nat: autonat::behaviour::Behaviour::new(
+            auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
-                autonat::behaviour::Config {
-                    auto_retry: Some(autonat::behaviour::AutoRetry {
+                autonat::Config {
+                    auto_probe: Some(autonat::AutoProbe {
                         interval: Duration::from_secs(10),
-                        config: autonat::behaviour::ProbeConfig::default(),
+                        config: autonat::ProbeConfig {
+                            min_confidence: 1, // set to 1 since we only have one server
+                            ..Default::default()
+                        },
                     }),
-                    ..autonat::behaviour::Config::default()
+                    ..autonat::Config::default()
                 },
             ),
         }
@@ -102,7 +101,7 @@ impl Behaviour {
 
 #[derive(Debug)]
 enum Event {
-    AutoNat(autonat::behaviour::NatStatus),
+    AutoNat(autonat::NatStatus),
     Identify(IdentifyEvent),
 }
 
@@ -112,8 +111,8 @@ impl From<IdentifyEvent> for Event {
     }
 }
 
-impl From<autonat::behaviour::NatStatus> for Event {
-    fn from(v: autonat::behaviour::NatStatus) -> Self {
+impl From<autonat::NatStatus> for Event {
+    fn from(v: autonat::NatStatus) -> Self {
         Self::AutoNat(v)
     }
 }
