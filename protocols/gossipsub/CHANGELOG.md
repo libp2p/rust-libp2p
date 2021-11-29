@@ -1,8 +1,13 @@
-# 0.34.1 [unreleased]
+# 0.35.0 [unreleased]
+
+- Update dependencies.
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
 
 - Add metrics for network and configuration performance analysis (see [PR 2346]).
 
 [PR 2346]: https://github.com/libp2p/rust-libp2p/pull/2346
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
 # 0.34.0 [2021-11-16]
 
