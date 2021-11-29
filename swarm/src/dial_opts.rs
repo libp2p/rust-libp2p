@@ -77,7 +77,7 @@ impl DialOpts {
         }
     }
 
-    pub fn get_as_listener(&self) -> bool {
+    pub(crate) fn get_as_listener(&self) -> bool {
         match self {
             DialOpts(Opts::WithPeerId(WithPeerId { as_listener, .. })) => *as_listener,
             DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
@@ -142,6 +142,10 @@ impl WithPeerId {
         }
     }
 
+    /// Execute the dial _as a listener_.
+    ///
+    /// See [`ConnectedPoint::Dialer`](libp2p_core::ConnectedPoint::Dialer) for
+    /// details.
     pub fn as_listener(mut self) -> Self {
         self.as_listener = true;
         self
@@ -179,6 +183,10 @@ impl WithPeerIdWithAddresses {
         self
     }
 
+    /// Execute the dial _as a listener_.
+    ///
+    /// See [`ConnectedPoint::Dialer`](libp2p_core::ConnectedPoint::Dialer) for
+    /// details.
     pub fn as_listener(mut self) -> Self {
         self.as_listener = true;
         self
@@ -209,6 +217,10 @@ pub struct WithoutPeerIdWithAddress {
 }
 
 impl WithoutPeerIdWithAddress {
+    /// Execute the dial _as a listener_.
+    ///
+    /// See [`ConnectedPoint::Dialer`](libp2p_core::ConnectedPoint::Dialer) for
+    /// details.
     pub fn as_listener(mut self) -> Self {
         self.as_listener = true;
         self

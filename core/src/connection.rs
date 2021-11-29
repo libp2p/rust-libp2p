@@ -97,7 +97,9 @@ pub enum PendingPoint {
     /// connection. Addresses are dialed in parallel. Only once the first dial
     /// is successful is the address of the connection known.
     Dialer {
-        // TODO: Document
+        /// Whether the connection is dialed _as a listener_.
+        ///
+        /// See [`ConnectedPoint::Dialer`] for details.
         as_listener: bool,
     },
     /// The socket comes from a listener.
@@ -131,7 +133,20 @@ pub enum ConnectedPoint {
     Dialer {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
-        // TODO: Document
+        /// Whether the connection is dialed _as a listener_.
+        ///
+        /// This option is needed for NAT and firewall hole punching.
+        ///
+        /// The concrete realization of this option depends on the transport
+        /// protocol. E.g. in the case of TCP, both endpoints dial each other,
+        /// resulting in a _simultaneous open_ TCP connection. On this new
+        /// connection both endpoints assume to be the dialer of the connection.
+        /// This is problematic during the connection upgrade process where an
+        /// upgrade assumes one side to be the listener. With the help of this
+        /// option, both peers can negotiate the roles (dialer and listener) for
+        /// the new connection ahead of time, through some external channel, and
+        /// thus have one peer dial the other as a dialer and one peer dial the
+        /// other _as a listener_.
         as_listener: bool,
     },
     /// We received the node.
