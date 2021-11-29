@@ -30,6 +30,7 @@ use open_metrics_client::metrics::gauge::Gauge;
 use open_metrics_client::registry::Registry;
 
 use crate::topic::TopicHash;
+use crate::types::PeerKind;
 
 // Default value that limits for how many topics do we store metrics.
 const DEFAULT_MAX_TOPICS: usize = 300;
@@ -139,11 +140,21 @@ pub struct Metrics {
     /// Bytes from gossip messages sent to each topic .
     topic_msg_sent_bytes: Family<TopicHash, Counter>,
 
+    /* General Metrics */
+    /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers are classified based
+    /// on which protocol they support. This metric keeps track of the number of peers that are
+    /// connected of each type.
+    peers_per_protocol: Family<&'static str, Gauge>,
+
     /* Performance metrics */
     /// When the user validates a message, it tries to re propagate it to its mesh peers. If the
     /// message expires from the memcache before it can be validated, we count this a cache miss
     /// and it is an indicator that the memcache size should be increased.
     memcache_misses: Counter,
+    /// If we request a message via an IWANT and the peer does not respond in time, this counter is
+    /// increased. This measures unresponsive peers or peers that have no set the correct
+    /// message-id function.
+    broken_promises: Counter,
     /// The number of times we have decided that an IWANT control message is required for this
     /// topic. A very high metric might indicate an underperforming network.
     topic_iwant_msgs: Family<TopicHash, Counter>,
@@ -195,6 +206,12 @@ impl Metrics {
             "topic_msg_sent_bytes",
             "Bytes from gossip messages sent to each topic."
         );
+
+        let peers_per_protocol = register_family!(
+            "peers_per_protocol",
+            "Number of connected peers by protocol type."
+        );
+
         let topic_iwant_msgs = register_family!(
             "topic_iwant_msgs",
             "Number of times we have decided an IWANT is required for this topic."
@@ -204,6 +221,15 @@ impl Metrics {
             registry.register(
                 "memcache_misses",
                 "Number of times a message is not found in the duplicate cache when validating.",
+                Box::new(metric.clone()),
+            );
+            metric
+        };
+        let broken_promises = {
+            let metric = Counter::default();
+            registry.register(
+                "broken_promises",
+                "Number of broken IWANT promises. i.e the number of times peers failed to respond to message requests on time.",
                 Box::new(metric.clone()),
             );
             metric
@@ -220,7 +246,9 @@ impl Metrics {
             mesh_peer_churn_events,
             topic_msg_sent_counts,
             topic_msg_sent_bytes,
+            peers_per_protocol,
             memcache_misses,
+            broken_promises,
             topic_iwant_msgs,
         }
     }
@@ -332,9 +360,34 @@ impl Metrics {
     }
 
     /// Register sending an IWANT msg for this topic.
-    pub fn iwant(&mut self, topic: &TopicHash) {
+    pub fn register_iwant(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
             self.topic_iwant_msgs.get_or_create(topic).inc();
+        }
+    }
+
+    /// Register a broken promise. A peer can have many broken promises, but we only register one
+    /// broken promise per peer per heartbeat. This way the number isn't skewed too heavily if a
+    /// single peer becomes unresponsive.
+    pub fn register_broken_promise(&mut self) {
+        self.broken_promises.inc();
+    }
+
+    /// Register a new peers connection based on its protocol.
+    pub fn peer_protocol_connected(&mut self, kind: &PeerKind) {
+        self.peers_per_protocol
+            .get_or_create(&kind.as_static_ref())
+            .inc();
+    }
+
+    /// Removes a peer from the counter based on its protocol when it disconnects.
+    pub fn peer_protocol_disconnected(&mut self, kind: &PeerKind) {
+        let metric = self.peers_per_protocol.get_or_create(&kind.as_static_ref());
+        if metric.get() == 0 {
+            return;
+        } else {
+            // decrement the counter
+            metric.set(metric.get() - 1);
         }
     }
 }

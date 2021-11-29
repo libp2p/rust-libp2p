@@ -1222,7 +1222,7 @@ where
             for (id, topic) in iwant_ids_vec {
                 message_ids.push(id.clone());
                 if let Some(m) = self.metrics.as_mut() {
-                    m.iwant(topic)
+                    m.register_iwant(topic)
                 }
             }
 
@@ -2023,6 +2023,9 @@ where
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             for (peer, count) in gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.register_broken_promise();
+                }
             }
         }
     }
@@ -3054,6 +3057,17 @@ where
         // NOTE: It is possible the peer has already been removed from all mappings if it does not
         // support the protocol.
         self.peer_topics.remove(peer_id);
+
+        // If metrics are enabled, register the disconnection of a peer based on its protocol.
+        if let Some(metrics) = self.metrics.as_mut() {
+            let peer_kind = &self
+                .connected_peers
+                .get(peer_id)
+                .expect("Connected peer must be registered")
+                .kind;
+            metrics.peer_protocol_disconnected(peer_kind);
+        }
+
         self.connected_peers.remove(peer_id);
 
         if let Some((peer_score, ..)) = &mut self.peer_score {
@@ -3201,6 +3215,11 @@ where
         match handler_event {
             HandlerEvent::PeerKind(kind) => {
                 // We have identified the protocol this peer is using
+
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.peer_protocol_connected(&kind);
+                }
+
                 if let PeerKind::NotSupported = kind {
                     debug!(
                         "Peer does not support gossipsub protocols. {}",
