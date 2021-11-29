@@ -593,6 +593,29 @@ where
         addresses
     }
 
+    fn inject_address_change(
+        &mut self,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        _old: &ConnectedPoint,
+        new: &ConnectedPoint,
+    ) {
+        let new_address = match new {
+            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        let connections = self
+            .connected
+            .get_mut(peer)
+            .expect("Address change can only happen on an established connection.");
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| &c.id == conn)
+            .expect("Address change can only happen on an established connection.");
+        connection.address = new_address;
+    }
+
     fn inject_connected(&mut self, peer: &PeerId) {
         if let Some(pending) = self.pending_outbound_requests.remove(peer) {
             for request in pending {
