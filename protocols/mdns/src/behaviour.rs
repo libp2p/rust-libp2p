@@ -54,7 +54,11 @@ pub struct MdnsConfig {
     /// peer joins the network. Receiving an mdns packet resets the timer
     /// preventing unnecessary traffic.
     pub query_interval: Duration,
-    /// IP address for multicast.
+    /// Internet protocol version (v4 or v6) to use.
+    ///
+    /// Note that the provided IP address itself is ignored and instead the
+    /// unspecified address (`0.0.0.0` or `::`) of the corresponding version is
+    /// used.
     pub multicast_addr: IpAddr,
 }
 
