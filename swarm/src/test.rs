@@ -91,7 +91,7 @@ where
 
 /// A `CallTraceBehaviour` is a `NetworkBehaviour` that tracks
 /// invocations of callback methods and their arguments, wrapping
-/// around an inner behaviour.
+/// around an inner behaviour. It ensures certain invariants are met.
 pub struct CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
@@ -144,6 +144,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
         self.inject_connected = Vec::new();
@@ -162,6 +163,40 @@ where
 
     pub fn inner(&mut self) -> &mut TInner {
         &mut self.inner
+    }
+
+    /// Checks that when the expected number of closed connection notifications are received, a
+    /// given number of expected disconnections have been received as well.
+    ///
+    /// Returns if the first condition is met.
+    pub fn assert_disconnected(
+        &self,
+        expected_closed_connections: usize,
+        expected_disconnections: usize,
+    ) -> bool {
+        if self.inject_connection_closed.len() == expected_closed_connections {
+            assert_eq!(self.inject_disconnected.len(), expected_disconnections);
+            return true;
+        }
+
+        false
+    }
+
+    /// Checks that when the expected number of established connection notifications are received,
+    /// a given number of expected connections have been received as well.
+    ///
+    /// Returns if the first condition is met.
+    pub fn assert_connected(
+        &self,
+        expected_established_connections: usize,
+        expected_connections: usize,
+    ) -> bool {
+        if self.inject_connection_established.len() == expected_established_connections {
+            assert_eq!(self.inject_connected.len(), expected_connections);
+            return true;
+        }
+
+        false
     }
 }
 
@@ -184,6 +219,12 @@ where
     }
 
     fn inject_connected(&mut self, peer: &PeerId) {
+        assert!(
+            self.inject_connection_established
+                .iter()
+                .any(|(peer_id, _, _)| peer_id == peer),
+            "`inject_connected` is called after at least one `inject_connection_established`."
+        );
         self.inject_connected.push(peer.clone());
         self.inner.inject_connected(peer);
     }
@@ -201,7 +242,13 @@ where
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inject_disconnected.push(peer.clone());
+        assert!(
+            self.inject_connection_closed
+                .iter()
+                .any(|(peer_id, _, _)| peer_id == peer),
+            "`inject_disconnected` is called after at least one `inject_connection_closed`."
+        );
+        self.inject_disconnected.push(*peer);
         self.inner.inject_disconnected(peer);
     }
 
@@ -212,8 +259,13 @@ where
         e: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
-        self.inject_connection_closed
-            .push((p.clone(), c.clone(), e.clone()));
+        let connection = (p.clone(), c.clone(), e.clone());
+        assert!(
+            self.inject_connection_established.contains(&connection),
+            "`inject_connection_closed` is called only for connections for \
+            which `inject_connection_established` was called first."
+        );
+        self.inject_connection_closed.push(connection);
         self.inner.inject_connection_closed(p, c, e, handler);
     }
 
@@ -223,6 +275,20 @@ where
         c: ConnectionId,
         e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     ) {
+        assert!(
+            self.inject_connection_established
+                .iter()
+                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
+            "`inject_event` is called for reported connections."
+        );
+        assert!(
+            !self
+                .inject_connection_closed
+                .iter()
+                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
+            "`inject_event` is never called for closed connections."
+        );
+
         self.inject_event.push((p.clone(), c.clone(), e.clone()));
         self.inner.inject_event(p, c, e);
     }

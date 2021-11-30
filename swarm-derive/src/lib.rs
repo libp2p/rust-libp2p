@@ -276,10 +276,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 let inject = match field.ident {
                     Some(ref i) => {
-                        quote! { self.#i.inject_dial_failure(peer_id, handler, error.clone()) }
+                        quote! { self.#i.inject_dial_failure(peer_id, handler, error) }
                     }
                     None => {
-                        quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error.clone()) }
+                        quote! { self.#enum_n.inject_dial_failure(peer_id, handler, error) }
                     }
                 };
 

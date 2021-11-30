@@ -1,8 +1,9 @@
 [package]
 name = "libp2p-identify"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.32.0"
+version = "0.33.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,10 +13,10 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures = "0.3.1"
 futures-timer = "3.0.2"
-libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.32.0", path = "../../swarm" }
+libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
 log = "0.4.1"
-lru = "0.6"
+lru = "0.7"
 prost = "0.9"
 smallvec = "1.6.1"
 
