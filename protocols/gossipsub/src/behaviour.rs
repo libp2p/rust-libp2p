@@ -629,10 +629,9 @@ where
             return Err(PublishError::Duplicate);
         }
 
-        debug!("Publishing message: {:?}", msg_id);
+        trace!("Publishing message: {:?}", msg_id);
 
         let topic_hash = raw_message.topic.clone();
-        let msg_bytes = raw_message.data.len();
 
         // If we are not flood publishing forward the message to mesh peers.
         let mesh_peers_sent =
@@ -726,8 +725,9 @@ where
         }
 
         // Send to peers we know are subscribed to the topic.
+        let msg_bytes = event.encoded_len();
         for peer_id in recipient_peers.iter() {
-            debug!("Sending message to peer: {:?}", peer_id);
+            trace!("Sending message to peer: {:?}", peer_id);
             self.send_message(*peer_id, event.clone())?;
 
             if let Some(m) = self.metrics.as_mut() {
@@ -736,6 +736,11 @@ where
         }
 
         debug!("Published message: {:?}", &msg_id);
+
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.register_published_message(&topic_hash);
+        }
+
         Ok(msg_id)
     }
 
@@ -776,6 +781,11 @@ where
                         return Ok(false);
                     }
                 };
+
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.register_msg_validation(&raw_message.topic, &acceptance);
+                }
+
                 self.forward_msg(msg_id, raw_message, Some(propagation_source))?;
                 return Ok(true);
             }
@@ -784,6 +794,10 @@ where
         };
 
         if let Some(raw_message) = self.mcache.remove(msg_id) {
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.register_msg_validation(&raw_message.topic, &acceptance);
+            }
+
             // Tell peer_score about reject
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.reject_message(
@@ -1284,35 +1298,26 @@ where
             // Send the messages to the peer
             let message_list: Vec<_> = cached_messages.into_iter().map(|entry| entry.1).collect();
 
-            let mut topic_msgs = HashMap::<TopicHash, Vec<usize>>::default();
-            if self.metrics.is_some() {
-                for msg in message_list.iter() {
-                    topic_msgs
-                        .entry(msg.topic.clone())
-                        .or_default()
-                        .push(msg.data.len());
-                }
-            }
+            let topics = message_list
+                .iter()
+                .map(|message| message.topic.clone())
+                .collect::<HashSet<TopicHash>>();
 
-            if self
-                .send_message(
-                    *peer_id,
-                    GossipsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: message_list,
-                        control_msgs: Vec::new(),
-                    }
-                    .into_protobuf(),
-                )
-                .is_err()
-            {
+            let message = GossipsubRpc {
+                subscriptions: Vec::new(),
+                messages: message_list,
+                control_msgs: Vec::new(),
+            }
+            .into_protobuf();
+
+            let msg_bytes = message.encoded_len();
+
+            if self.send_message(*peer_id, message).is_err() {
                 error!("Failed to send cached messages. Messages too large");
             } else if let Some(m) = self.metrics.as_mut() {
                 // Sending of messages succeeded, register them on the internal metrics.
-                for (topic, msg_bytes_vec) in topic_msgs.into_iter() {
-                    for msg_bytes in msg_bytes_vec {
-                        m.msg_sent(&topic, msg_bytes);
-                    }
+                for topic in topics.iter() {
+                    m.msg_sent(&topic, msg_bytes);
                 }
             }
         }
@@ -1701,6 +1706,11 @@ where
         mut raw_message: RawGossipsubMessage,
         propagation_source: &PeerId,
     ) {
+        // Record the received metric
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.msg_recvd_unfiltered(&raw_message.topic, raw_message.raw_protobuf_len());
+        }
+
         let fast_message_id = self.config.fast_message_id(&raw_message);
         if let Some(fast_message_id) = fast_message_id.as_ref() {
             if let Some(msg_id) = self.fast_messsage_id_cache.get(fast_message_id) {
@@ -1735,6 +1745,9 @@ where
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
         // and instead continually penalize peers that repeatedly send this message.
         if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.register_invalid_message(&raw_message.topic);
+            }
             return;
         }
 
@@ -1756,6 +1769,11 @@ where
             "Put message {:?} in duplicate_cache and resolve promises",
             msg_id
         );
+
+        // Record the received message with the metrics
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.msg_recvd(&message.topic);
+        }
 
         // Tells score that message arrived (but is maybe not fully validated yet).
         // Consider the message as delivered for gossip promises.
@@ -2645,11 +2663,12 @@ where
             }
             .into_protobuf();
 
+            let msg_bytes = event.encoded_len();
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
                 if let Some(m) = self.metrics.as_mut() {
-                    m.msg_sent(&message.topic, message.data.len());
+                    m.msg_sent(&message.topic, msg_bytes);
                 }
             }
             debug!("Completed forwarding message");

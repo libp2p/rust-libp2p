@@ -30,7 +30,7 @@ use open_metrics_client::metrics::gauge::Gauge;
 use open_metrics_client::registry::Registry;
 
 use crate::topic::TopicHash;
-use crate::types::PeerKind;
+use crate::types::{MessageAcceptance, PeerKind};
 
 // Default value that limits for how many topics do we store metrics.
 const DEFAULT_MAX_TOPICS: usize = 300;
@@ -124,6 +124,14 @@ pub struct Metrics {
     /// Number of peers subscribed to each topic. This allows us to analyze a topic's behaviour
     /// regardless of our subscription status.
     topic_peers_count: Family<TopicHash, Gauge>,
+    /// The number of invalid messages received for a given topic.
+    invalid_messages: Family<TopicHash, Counter>,
+    /// The number of messages accepted by the application (validation result).
+    accepted_messages: Family<TopicHash, Counter>,
+    /// The number of messages ignored by the application (validation result).
+    ignored_messages: Family<TopicHash, Counter>,
+    /// The number of messages rejected by the application (validation result).
+    rejected_messages: Family<TopicHash, Counter>,
 
     /* Metrics regarding mesh state */
     /// Number of peers in our mesh. This metric should be updated with the count of peers for a
@@ -134,11 +142,20 @@ pub struct Metrics {
     /// Number of times we remove peers in a topic mesh for different reasons.
     mesh_peer_churn_events: Family<ChurnLabel, Counter>,
 
-    /* Metrics regarding messages sent */
+    /* Metrics regarding messages sent/received */
     /// Number of gossip messages sent to each topic.
     topic_msg_sent_counts: Family<TopicHash, Counter>,
-    /// Bytes from gossip messages sent to each topic .
+    /// Bytes from gossip messages sent to each topic.
     topic_msg_sent_bytes: Family<TopicHash, Counter>,
+    /// Number of gossipsub messages published to each topic.
+    topic_msg_published: Family<TopicHash, Counter>,
+
+    /// Number of gossipsub messages received on each topic (without filtering duplicates).
+    topic_msg_recv_counts_unfiltered: Family<TopicHash, Counter>,
+    /// Number of gossipsub messages received on each topic (after filtering duplicates).
+    topic_msg_recv_counts: Family<TopicHash, Counter>,
+    /// Bytes received from gossip messages for each topic.
+    topic_msg_recv_bytes: Family<TopicHash, Counter>,
 
     /* General Metrics */
     /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers are classified based
@@ -185,6 +202,26 @@ impl Metrics {
             "Number of peers subscribed to each topic"
         );
 
+        let invalid_messages = register_family!(
+            "invalid_messages_per_topic",
+            "Number of invalid messages received for each topic"
+        );
+
+        let accepted_messages = register_family!(
+            "accepted_messages_per_topic",
+            "Number of accepted messages received for each topic"
+        );
+
+        let ignored_messages = register_family!(
+            "ignored_messages_per_topic",
+            "Number of ignored messages received for each topic"
+        );
+
+        let rejected_messages = register_family!(
+            "accepted_messages_per_topic",
+            "Number of rejected messages received for each topic"
+        );
+
         let mesh_peer_counts = register_family!(
             "mesh_peer_counts",
             "Number of peers in each topic in our mesh"
@@ -197,30 +234,47 @@ impl Metrics {
             "mesh_peer_churn_events",
             "Number of times a peer gets removed from our mesh for different reasons"
         );
-
         let topic_msg_sent_counts = register_family!(
             "topic_msg_sent_counts",
-            "Number of gossip messages sent to each topic."
+            "Number of gossip messages sent to each topic"
+        );
+        let topic_msg_published = register_family!(
+            "topic_msg_published",
+            "Number of gossip messages published to each topic"
         );
         let topic_msg_sent_bytes = register_family!(
             "topic_msg_sent_bytes",
-            "Bytes from gossip messages sent to each topic."
+            "Bytes from gossip messages sent to each topic"
+        );
+
+        let topic_msg_recv_counts_unfiltered = register_family!(
+            "topic_msg_recv_counts_unfiltered",
+            "Number of gossip messages received on each topic (without duplicates being filtered)"
+        );
+
+        let topic_msg_recv_counts = register_family!(
+            "topic_msg_recv_counts",
+            "Number of gossip messages received on each topic (after duplicates have been filtered)"
+        );
+        let topic_msg_recv_bytes = register_family!(
+            "topic_msg_recv_bytes",
+            "Bytes received from gossip messages for each topic"
         );
 
         let peers_per_protocol = register_family!(
             "peers_per_protocol",
-            "Number of connected peers by protocol type."
+            "Number of connected peers by protocol type"
         );
 
         let topic_iwant_msgs = register_family!(
             "topic_iwant_msgs",
-            "Number of times we have decided an IWANT is required for this topic."
+            "Number of times we have decided an IWANT is required for this topic"
         );
         let memcache_misses = {
             let metric = Counter::default();
             registry.register(
                 "memcache_misses",
-                "Number of times a message is not found in the duplicate cache when validating.",
+                "Number of times a message is not found in the duplicate cache when validating",
                 Box::new(metric.clone()),
             );
             metric
@@ -229,7 +283,7 @@ impl Metrics {
             let metric = Counter::default();
             registry.register(
                 "broken_promises",
-                "Number of broken IWANT promises. i.e the number of times peers failed to respond to message requests on time.",
+                "Number of broken IWANT promises. i.e the number of times peers failed to respond to message requests on time",
                 Box::new(metric.clone()),
             );
             metric
@@ -241,11 +295,19 @@ impl Metrics {
             topic_info: HashMap::default(),
             topic_subscription_status,
             topic_peers_count,
+            invalid_messages,
+            accepted_messages,
+            ignored_messages,
+            rejected_messages,
             mesh_peer_counts,
             mesh_peer_inclusion_events,
             mesh_peer_churn_events,
             topic_msg_sent_counts,
             topic_msg_sent_bytes,
+            topic_msg_published,
+            topic_msg_recv_counts_unfiltered,
+            topic_msg_recv_counts,
+            topic_msg_recv_bytes,
             peers_per_protocol,
             memcache_misses,
             broken_promises,
@@ -344,6 +406,20 @@ impl Metrics {
         }
     }
 
+    /// Register that an invalid message was received on a specific topic.
+    pub fn register_invalid_message(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.invalid_messages.get_or_create(topic).inc();
+        }
+    }
+
+    /// Registers that a message was published on a specific topic.
+    pub fn register_published_message(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_published.get_or_create(topic).inc();
+        }
+    }
+
     /// Register sending a message over a topic.
     pub fn msg_sent(&mut self, topic: &TopicHash, bytes: usize) {
         if self.register_topic(topic).is_ok() {
@@ -351,6 +427,35 @@ impl Metrics {
             self.topic_msg_sent_bytes
                 .get_or_create(topic)
                 .inc_by(bytes as u64);
+        }
+    }
+
+    /// Register that a message was received (and was not a duplicate).
+    pub fn msg_recvd(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_recv_counts.get_or_create(topic).inc();
+        }
+    }
+
+    /// Register that a message was received (could have been a duplicate).
+    pub fn msg_recvd_unfiltered(&mut self, topic: &TopicHash, bytes: usize) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_recv_counts_unfiltered
+                .get_or_create(topic)
+                .inc();
+            self.topic_msg_recv_bytes
+                .get_or_create(topic)
+                .inc_by(bytes as u64);
+        }
+    }
+
+    pub fn register_msg_validation(&mut self, topic: &TopicHash, validation: &MessageAcceptance) {
+        if self.register_topic(topic).is_ok() {
+            match validation {
+                MessageAcceptance::Accept => self.accepted_messages.get_or_create(topic).inc(),
+                MessageAcceptance::Ignore => self.ignored_messages.get_or_create(topic).inc(),
+                MessageAcceptance::Reject => self.rejected_messages.get_or_create(topic).inc(),
+            };
         }
     }
 
