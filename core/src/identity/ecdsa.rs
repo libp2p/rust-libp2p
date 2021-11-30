@@ -154,9 +154,9 @@ impl PublicKey {
 
     /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
     pub fn decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        let buf = Self::del_asn1_header(k).ok_or(DecodingError::new(
-            "failed to parse asn.1 encoded ecdsa p256 public key",
-        ))?;
+        let buf = Self::del_asn1_header(k).ok_or_else(|| {
+            DecodingError::new("failed to parse asn.1 encoded ecdsa p256 public key")
+        })?;
         Self::from_bytes(&buf)
     }
 
