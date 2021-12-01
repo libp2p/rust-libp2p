@@ -26,7 +26,6 @@ use libp2p::{
     PeerId,
 };
 use std::error::Error;
-use std::future::Future;
 use std::time::Duration;
 
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>> {
@@ -141,12 +140,10 @@ async fn test_expired_async_std_ipv4() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
 
-    run_timebound_test(
-        TestRuntime::StdAsync,
-        run_peer_expiration_test(config),
-        Duration::from_secs(6),
-    )
-    .await
+    async_std::future::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
+        .await
+        .map(|_| ())
+        .map_err(|e| Box::new(e) as Box<dyn Error>)
 }
 
 #[async_std::test]
@@ -157,12 +154,10 @@ async fn test_expired_async_std_ipv6() -> Result<(), Box<dyn Error>> {
         multicast_addr: *IPV6_MDNS_MULTICAST_ADDRESS,
     };
 
-    run_timebound_test(
-        TestRuntime::StdAsync,
-        run_peer_expiration_test(config),
-        Duration::from_secs(6),
-    )
-    .await
+    async_std::future::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
+        .await
+        .map(|_| ())
+        .map_err(|e| Box::new(e) as Box<dyn Error>)
 }
 
 #[tokio::test]
@@ -173,12 +168,9 @@ async fn test_expired_tokio_ipv4() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
 
-    run_timebound_test(
-        TestRuntime::Tokio,
-        run_peer_expiration_test(config),
-        Duration::from_secs(6),
-    )
-    .await
+    tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -189,31 +181,7 @@ async fn test_expired_tokio_ipv6() -> Result<(), Box<dyn Error>> {
         multicast_addr: *IPV6_MDNS_MULTICAST_ADDRESS,
     };
 
-    run_timebound_test(
-        TestRuntime::Tokio,
-        run_peer_expiration_test(config),
-        Duration::from_secs(6),
-    )
-    .await
-}
-
-async fn run_timebound_test(
-    runtime: TestRuntime,
-    fut: impl Future<Output = Result<(), Box<dyn Error>>>,
-    bound: Duration,
-) -> Result<(), Box<dyn Error>> {
-    match runtime {
-        TestRuntime::Tokio => tokio::time::timeout(bound, fut)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn Error>),
-        TestRuntime::StdAsync => async_std::future::timeout(bound, fut)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn Error>),
-    }
-    .map(|_| ())
-}
-
-enum TestRuntime {
-    Tokio,
-    StdAsync,
+    tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
+        .await
+        .unwrap()
 }
