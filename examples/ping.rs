@@ -40,18 +40,18 @@
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
-use futures::executor::block_on;
 use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, PeerId};
 use std::error::Error;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let transport = block_on(libp2p::development_transport(local_key))?;
+    let transport = libp2p::development_transport(local_key).await?;
 
     // Create a ping network behaviour.
     //
@@ -74,15 +74,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Dialed {}", addr)
     }
 
-    block_on(async move {
-        loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-                SwarmEvent::Behaviour(event) => println!("{:?}", event),
-                _ => {}
-            }
+    loop {
+        match swarm.select_next_some().await {
+            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+            SwarmEvent::Behaviour(event) => println!("{:?}", event),
+            _ => {}
         }
-    });
-
-    Ok(())
+    }
 }
