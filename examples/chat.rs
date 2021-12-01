@@ -141,12 +141,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            line = stdin.next() => swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.expect("Stdin not to close")?.as_bytes())
-                    .behaviour_mut()
-                    .floodsub
-                    .publish(floodsub_topic.clone(), line?.as_bytes()),
-                None => panic!("Stdin closed")
-            },
+            line = stdin.select_next_some() => swarm
+                .behaviour_mut()
+                .floodsub
+                .publish(floodsub_topic.clone(), line.expect("Stdin not to close").as_bytes()),
             event = swarm.select_next_some() => match event {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     println!("Listening on {:?}", address);

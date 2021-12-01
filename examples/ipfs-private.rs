@@ -271,14 +271,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            line = stdin.next() => {
-                if let Err(e) = match line {
-                    Some(line) => swarm
-                        .behaviour_mut()
-                        .gossipsub
-                        .publish(gossipsub_topic.clone(), line?.as_bytes()),
-                    None => panic!("Stdin closed")
-                } {
+            line = stdin.select_next_some() => {
+                if let Err(e) = swarm
+                    .behaviour_mut()
+                    .gossipsub
+                    .publish(gossipsub_topic.clone(), line.expect("Stdin not to close").as_bytes())
+                {
                     println!("Publish error: {:?}", e);
                 }
             },
