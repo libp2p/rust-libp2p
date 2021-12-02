@@ -39,7 +39,7 @@
 //! 1. Creating a new crate: `cargo init rust-libp2p-tutorial`
 //!
 //! 2. Adding `libp2p` as well as `futures` as a dependency in the
-//!    `Cargo.toml` file. We will also include `async-std` with the 
+//!    `Cargo.toml` file. We will also include `async-std` with the
 //!    "attributes" feature to allow for an `async main`:
 //!
 //!    ```yaml
