@@ -102,17 +102,30 @@ struct InclusionLabel {
 impl Encode for InclusionLabel {
     fn encode(&self, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
         self.topic.encode(writer)?;
+        writer.write_all(b",")?;
         writer.write_all(b"reason=\"")?;
         self.reason.encode(writer)?;
+        writer.write_all(b"\"")?;
         Ok(())
     }
 }
 
 /// Label for the mesh churn event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 struct ChurnLabel {
     topic: TopicHash,
     reason: Churn,
+}
+
+impl Encode for ChurnLabel {
+    fn encode(&self, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.topic.encode(writer)?;
+        writer.write_all(b",")?;
+        writer.write_all(b"reason=\"")?;
+        self.reason.encode(writer)?;
+        writer.write_all(b"\"")?;
+        Ok(())
+    }
 }
 
 /// A collection of metrics used throughout the Gossipsub behaviour.
