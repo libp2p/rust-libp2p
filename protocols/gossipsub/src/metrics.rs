@@ -91,10 +91,21 @@ pub enum Churn {
 }
 
 /// Label for the mesh inclusion event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 struct InclusionLabel {
     topic: TopicHash,
     reason: Inclusion,
+}
+
+// Custom implementation is necessary because TopicHash encodes as "hash=", when using the derive
+// gives topic="hash="...""
+impl Encode for InclusionLabel {
+    fn encode(&self, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.topic.encode(writer)?;
+        writer.write_all(b"reason=\"")?;
+        self.reason.encode(writer)?;
+        Ok(())
+    }
 }
 
 /// Label for the mesh churn event metrics.
