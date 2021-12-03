@@ -86,7 +86,7 @@ impl GossipPromises {
                     let count = result.entry(*peer_id).or_insert(0);
                     *count += 1;
                     debug!(
-                        "The peer {} broke the promise to deliver message {} in time!",
+                        "[Penalty] The peer {} broke the promise to deliver message {} in time!",
                         peer_id, msg
                     );
                     false

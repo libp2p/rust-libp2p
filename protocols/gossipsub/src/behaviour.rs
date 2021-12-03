@@ -1372,11 +1372,14 @@ where
                     {
                         if backoff_time > now {
                             warn!(
-                                "GRAFT: peer attempted graft within backoff time, penalizing {}",
+                                "[Penalty] Peer attempted graft within backoff time, penalizing {}",
                                 peer_id
                             );
                             // add behavioural penalty
                             if let Some((peer_score, ..)) = &mut self.peer_score {
+                                if let Some(metrics) = self.metrics.as_mut() {
+                                    metrics.register_score_penalty("graft-backoff");
+                                }
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
@@ -1649,15 +1652,11 @@ where
                     "Rejecting message from peer {} because of blacklisted source: {}",
                     propagation_source, source
                 );
-                if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-                    peer_score.reject_message(
-                        propagation_source,
-                        msg_id,
-                        &raw_message.topic,
-                        RejectReason::BlackListedSource,
-                    );
-                    gossip_promises.reject_message(msg_id, &RejectReason::BlackListedSource);
-                }
+                self.handle_invalid_message(
+                    propagation_source,
+                    raw_message,
+                    RejectReason::BlackListedSource,
+                );
                 return false;
             }
         }
@@ -1683,15 +1682,7 @@ where
                 "Dropping message {} claiming to be from self but forwarded from {}",
                 msg_id, propagation_source
             );
-            if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
-                peer_score.reject_message(
-                    propagation_source,
-                    msg_id,
-                    &raw_message.topic,
-                    RejectReason::SelfOrigin,
-                );
-                gossip_promises.reject_message(msg_id, &RejectReason::SelfOrigin);
-            }
+            self.handle_invalid_message(propagation_source, raw_message, RejectReason::SelfOrigin);
             return false;
         }
 
@@ -1731,8 +1722,8 @@ where
                 // Reject the message and return
                 self.handle_invalid_message(
                     propagation_source,
-                    raw_message,
-                    ValidationError::TransformFailed,
+                    &raw_message,
+                    RejectReason::ValidationError(ValidationError::TransformFailed),
                 );
                 return;
             }
@@ -1745,9 +1736,6 @@ where
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
         // and instead continually penalize peers that repeatedly send this message.
         if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
-            if let Some(metrics) = self.metrics.as_mut() {
-                metrics.register_invalid_message(&raw_message.topic);
-            }
             return;
         }
 
@@ -1819,19 +1807,27 @@ where
     fn handle_invalid_message(
         &mut self,
         propagation_source: &PeerId,
-        raw_message: RawGossipsubMessage,
-        validation_error: ValidationError,
+        raw_message: &RawGossipsubMessage,
+        reject_reason: RejectReason,
     ) {
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-            let reason = RejectReason::ValidationError(validation_error);
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.register_invalid_message(&raw_message.topic);
+            }
+
             let fast_message_id_cache = &self.fast_messsage_id_cache;
             if let Some(msg_id) = self
                 .config
-                .fast_message_id(&raw_message)
+                .fast_message_id(raw_message)
                 .and_then(|id| fast_message_id_cache.get(&id))
             {
-                peer_score.reject_message(propagation_source, msg_id, &raw_message.topic, reason);
-                gossip_promises.reject_message(msg_id, &reason);
+                peer_score.reject_message(
+                    propagation_source,
+                    msg_id,
+                    &raw_message.topic,
+                    reject_reason,
+                );
+                gossip_promises.reject_message(msg_id, &reject_reason);
             } else {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
@@ -2042,7 +2038,7 @@ where
             for (peer, count) in gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.register_broken_promise();
+                    metrics.register_score_penalty("broken_promise");
                 }
             }
         }
@@ -2051,6 +2047,7 @@ where
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
         debug!("Starting heartbeat");
+        let start = Instant::now();
 
         self.heartbeat_ticks += 1;
 
@@ -2075,13 +2072,15 @@ where
             }
         }
 
-        // cache scores throughout the heartbeat
-        let mut scores = HashMap::new();
-        let peer_score = &self.peer_score;
-        let mut score = |p: &PeerId| match peer_score {
-            Some((peer_score, ..)) => *scores.entry(*p).or_insert_with(|| peer_score.score(p)),
-            _ => 0.0,
-        };
+        // Cache the scores of all connected peers, and record metrics for current penalties.
+        let mut scores = HashMap::with_capacity(self.connected_peers.len());
+        if let Some((peer_score, ..)) = &self.peer_score {
+            for peer_id in self.connected_peers.keys() {
+                scores
+                    .entry(peer_id)
+                    .or_insert_with(|| peer_score.metric_score(&peer_id, self.metrics.as_mut()));
+            }
+        }
 
         // maintain the mesh for each topic
         for (topic_hash, peers) in self.mesh.iter_mut() {
@@ -2093,35 +2092,35 @@ where
             // drop all peers with negative score, without PX
             // if there is at some point a stable retain method for BTreeSet the following can be
             // written more efficiently with retain.
-            let to_remove: Vec<_> = peers
-                .iter()
-                .filter(|&p| {
-                    if score(p) < 0.0 {
-                        debug!(
-                            "HEARTBEAT: Prune peer {:?} with negative score [score = {}, topic = \
+            let mut to_remove_peers = Vec::new();
+            for peer_id in peers.iter() {
+                let peer_score = *scores.get(peer_id).unwrap_or(&0.0);
+
+                // Record the score per mesh
+                if let Some(metrics) = self.metrics.as_mut() {
+                    metrics.observe_mesh_peers_score(topic_hash, peer_score);
+                }
+
+                if peer_score < 0.0 {
+                    debug!(
+                        "HEARTBEAT: Prune peer {:?} with negative score [score = {}, topic = \
                              {}]",
-                            p,
-                            score(p),
-                            topic_hash
-                        );
+                        peer_id, peer_score, topic_hash
+                    );
 
-                        let current_topic = to_prune.entry(*p).or_insert_with(Vec::new);
-                        current_topic.push(topic_hash.clone());
-                        no_px.insert(*p);
-                        true
-                    } else {
-                        false
-                    }
-                })
-                .cloned()
-                .collect();
-
-            if let Some(m) = self.metrics.as_mut() {
-                m.peers_removed(topic_hash, Churn::BadScore, to_remove.len())
+                    let current_topic = to_prune.entry(*peer_id).or_insert_with(Vec::new);
+                    current_topic.push(topic_hash.clone());
+                    no_px.insert(*peer_id);
+                    to_remove_peers.push(*peer_id);
+                }
             }
 
-            for peer in to_remove {
-                peers.remove(&peer);
+            if let Some(m) = self.metrics.as_mut() {
+                m.peers_removed(topic_hash, Churn::BadScore, to_remove_peers.len())
+            }
+
+            for peer_id in to_remove_peers {
+                peers.remove(&peer_id);
             }
 
             // too little peers - add some
@@ -2143,7 +2142,7 @@ where
                         !peers.contains(peer)
                             && !explicit_peers.contains(peer)
                             && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                            && score(peer) >= 0.0
+                            && *scores.get(peer).unwrap_or(&0.0) >= 0.0
                     },
                 );
                 for peer in &peer_list {
@@ -2172,8 +2171,12 @@ where
                 let mut rng = thread_rng();
                 let mut shuffled = peers.iter().cloned().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
-                shuffled
-                    .sort_by(|p1, p2| score(p1).partial_cmp(&score(p2)).unwrap_or(Ordering::Equal));
+                shuffled.sort_by(|p1, p2| {
+                    let score_p1 = *scores.get(p1).unwrap_or(&0.0);
+                    let score_p2 = *scores.get(p2).unwrap_or(&0.0);
+
+                    score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
+                });
                 // shuffle everything except the last retain_scores many peers (the best ones)
                 shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
 
@@ -2232,7 +2235,7 @@ where
                             !peers.contains(peer)
                                 && !explicit_peers.contains(peer)
                                 && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                                && score(peer) >= 0.0
+                                && *scores.get(peer).unwrap_or(&0.0) >= 0.0
                                 && outbound_peers.contains(peer)
                         },
                     );
@@ -2265,19 +2268,27 @@ where
 
                     // now compute the median peer score in the mesh
                     let mut peers_by_score: Vec<_> = peers.iter().collect();
-                    peers_by_score
-                        .sort_by(|p1, p2| score(p1).partial_cmp(&score(p2)).unwrap_or(Equal));
+                    peers_by_score.sort_by(|p1, p2| {
+                        let p1_score = *scores.get(p1).unwrap_or(&0.0);
+                        let p2_score = *scores.get(p2).unwrap_or(&0.0);
+                        p1_score.partial_cmp(&p2_score).unwrap_or(Equal)
+                    });
 
                     let middle = peers_by_score.len() / 2;
                     let median = if peers_by_score.len() % 2 == 0 {
-                        (score(
-                            *peers_by_score.get(middle - 1).expect(
-                                "middle < vector length and middle > 0 since peers.len() > 0",
-                            ),
-                        ) + score(*peers_by_score.get(middle).expect("middle < vector length")))
-                            * 0.5
+                        let sub_middle_peer = *peers_by_score
+                            .get(middle - 1)
+                            .expect("middle < vector length and middle > 0 since peers.len() > 0");
+                        let sub_middle_score = *scores.get(sub_middle_peer).unwrap_or(&0.0);
+                        let middle_peer =
+                            *peers_by_score.get(middle).expect("middle < vector length");
+                        let middle_score = *scores.get(middle_peer).unwrap_or(&0.0);
+
+                        (sub_middle_score + middle_score) * 0.5
                     } else {
-                        score(*peers_by_score.get(middle).expect("middle < vector length"))
+                        *scores
+                            .get(*peers_by_score.get(middle).expect("middle < vector length"))
+                            .unwrap_or(&0.0)
                     };
 
                     // if the median score is below the threshold, select a better peer (if any) and
@@ -2288,11 +2299,11 @@ where
                             &self.connected_peers,
                             topic_hash,
                             self.config.opportunistic_graft_peers(),
-                            |peer| {
-                                !peers.contains(peer)
-                                    && !explicit_peers.contains(peer)
-                                    && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                                    && score(peer) > median
+                            |peer_id| {
+                                !peers.contains(peer_id)
+                                    && !explicit_peers.contains(peer_id)
+                                    && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
+                                    && *scores.get(peer_id).unwrap_or(&0.0) > median
                             },
                         );
                         for peer in &peer_list {
@@ -2344,9 +2355,10 @@ where
             };
             for peer in peers.iter() {
                 // is the peer still subscribed to the topic?
+                let peer_score = *scores.get(peer).unwrap_or(&0.0);
                 match self.peer_topics.get(peer) {
                     Some(topics) => {
-                        if !topics.contains(topic_hash) || score(peer) < publish_threshold {
+                        if !topics.contains(topic_hash) || peer_score < publish_threshold {
                             debug!(
                                 "HEARTBEAT: Peer removed from fanout for topic: {:?}",
                                 topic_hash
@@ -2378,10 +2390,10 @@ where
                     &self.connected_peers,
                     topic_hash,
                     needed_peers,
-                    |peer| {
-                        !peers.contains(peer)
-                            && !explicit_peers.contains(peer)
-                            && score(peer) < publish_threshold
+                    |peer_id| {
+                        !peers.contains(peer_id)
+                            && !explicit_peers.contains(peer_id)
+                            && *scores.get(peer_id).unwrap_or(&0.0) < publish_threshold
                     },
                 );
                 peers.extend(new_peers);
@@ -2389,12 +2401,6 @@ where
         }
 
         if self.peer_score.is_some() {
-            trace!("Peer_scores: {:?}", {
-                for peer in self.peer_topics.keys() {
-                    score(peer);
-                }
-                scores
-            });
             trace!("Mesh message deliveries: {:?}", {
                 self.mesh
                     .iter()
@@ -2406,7 +2412,7 @@ where
                                 .map(|p| {
                                     (
                                         *p,
-                                        peer_score
+                                        self.peer_score
                                             .as_ref()
                                             .expect("peer_score.is_some()")
                                             .0
@@ -2435,6 +2441,10 @@ where
         self.mcache.shift();
 
         debug!("Completed Heartbeat");
+        if let Some(metrics) = self.metrics.as_mut() {
+            let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+            metrics.observe_heartbeat_duration(duration);
+        }
     }
 
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
@@ -3286,8 +3296,8 @@ where
                     for (raw_message, validation_error) in invalid_messages {
                         self.handle_invalid_message(
                             &propagation_source,
-                            raw_message,
-                            validation_error,
+                            &raw_message,
+                            RejectReason::ValidationError(validation_error),
                         )
                     }
                 } else {

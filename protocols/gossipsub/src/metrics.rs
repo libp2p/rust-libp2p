@@ -25,8 +25,9 @@ use std::collections::HashMap;
 
 use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::Family;
+use open_metrics_client::metrics::family::{Family, MetricConstructor};
 use open_metrics_client::metrics::gauge::Gauge;
+use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
 use open_metrics_client::registry::Registry;
 
 use crate::topic::TopicHash;
@@ -157,21 +158,25 @@ pub struct Metrics {
     /// Bytes received from gossip messages for each topic.
     topic_msg_recv_bytes: Family<TopicHash, Counter>,
 
+    /* Metrics related to scoring */
+    /// Histogram of the scores for each mesh topic.
+    score_per_mesh: Family<TopicHash, Histogram, HistBuilder>,
+    /// A counter of the kind of penalties being applied to peers.
+    scoring_penalties: Family<&'static str, Counter>,
+
     /* General Metrics */
     /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers are classified based
     /// on which protocol they support. This metric keeps track of the number of peers that are
     /// connected of each type.
     peers_per_protocol: Family<&'static str, Gauge>,
+    /// The time it takes to complete one iteration of the heartbeat.
+    heartbeat_duration: Histogram,
 
     /* Performance metrics */
     /// When the user validates a message, it tries to re propagate it to its mesh peers. If the
     /// message expires from the memcache before it can be validated, we count this a cache miss
     /// and it is an indicator that the memcache size should be increased.
     memcache_misses: Counter,
-    /// If we request a message via an IWANT and the peer does not respond in time, this counter is
-    /// increased. This measures unresponsive peers or peers that have no set the correct
-    /// message-id function.
-    broken_promises: Counter,
     /// The number of times we have decided that an IWANT control message is required for this
     /// topic. A very high metric might indicate an underperforming network.
     topic_iwant_msgs: Family<TopicHash, Counter>,
@@ -260,10 +265,47 @@ impl Metrics {
             "topic_msg_recv_bytes",
             "Bytes received from gossip messages for each topic"
         );
+        // TODO: Update default variables once a builder pattern is used.
+        let gossip_threshold = -4000.0;
+        let publish_threshold = -8000.0;
+        let greylist_threshold = -16000.0;
+        let histogram_buckets: Vec<f64> = vec![
+            greylist_threshold,
+            publish_threshold,
+            gossip_threshold,
+            gossip_threshold / 2.0,
+            gossip_threshold / 4.0,
+            0.0,
+            1.0,
+            10.0,
+            100.0,
+        ];
 
+        let hist_builder = HistBuilder {
+            buckets: histogram_buckets,
+        };
+
+        let score_per_mesh: Family<_, _, HistBuilder> = Family::new_with_constructor(hist_builder);
+        registry.register(
+            "score_per_mesh",
+            "Histogram of scores per mesh topic",
+            Box::new(score_per_mesh.clone()),
+        );
+
+        let scoring_penalties = register_family!(
+            "scoring_penalties",
+            "Counter of types of scoring penalties given to peers"
+        );
         let peers_per_protocol = register_family!(
             "peers_per_protocol",
             "Number of connected peers by protocol type"
+        );
+
+        let heartbeat_duration = Histogram::new(linear_buckets(0.0, 100.0, 10));
+        registry.register(
+            "heartbeat_duration",
+            "Histogram of observed heartbeat durations",
+            Box::new(heartbeat_duration.clone()),
         );
 
         let topic_iwant_msgs = register_family!(
@@ -275,15 +317,6 @@ impl Metrics {
             registry.register(
                 "memcache_misses",
                 "Number of times a message is not found in the duplicate cache when validating",
-                Box::new(metric.clone()),
-            );
-            metric
-        };
-        let broken_promises = {
-            let metric = Counter::default();
-            registry.register(
-                "broken_promises",
-                "Number of broken IWANT promises. i.e the number of times peers failed to respond to message requests on time",
                 Box::new(metric.clone()),
             );
             metric
@@ -308,9 +341,11 @@ impl Metrics {
             topic_msg_recv_counts_unfiltered,
             topic_msg_recv_counts,
             topic_msg_recv_bytes,
+            score_per_mesh,
+            scoring_penalties,
             peers_per_protocol,
+            heartbeat_duration,
             memcache_misses,
-            broken_promises,
             topic_iwant_msgs,
         }
     }
@@ -413,6 +448,11 @@ impl Metrics {
         }
     }
 
+    /// Register a score penalty.
+    pub fn register_score_penalty(&mut self, kind: &'static str) {
+        self.scoring_penalties.get_or_create(&kind).inc();
+    }
+
     /// Registers that a message was published on a specific topic.
     pub fn register_published_message(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
@@ -471,11 +511,16 @@ impl Metrics {
         }
     }
 
-    /// Register a broken promise. A peer can have many broken promises, but we only register one
-    /// broken promise per peer per heartbeat. This way the number isn't skewed too heavily if a
-    /// single peer becomes unresponsive.
-    pub fn register_broken_promise(&mut self) {
-        self.broken_promises.inc();
+    /// Observes a heartbeat duration.
+    pub fn observe_heartbeat_duration(&mut self, millis: u64) {
+        self.heartbeat_duration.observe(millis as f64);
+    }
+
+    /// Observe a score of a mesh peer.
+    pub fn observe_mesh_peers_score(&mut self, topic: &TopicHash, score: f64) {
+        if self.register_topic(topic).is_ok() {
+            self.score_per_mesh.get_or_create(topic).observe(score);
+        }
     }
 
     /// Register a new peers connection based on its protocol.
@@ -494,5 +539,16 @@ impl Metrics {
             // decrement the counter
             metric.set(metric.get() - 1);
         }
+    }
+}
+
+#[derive(Clone)]
+struct HistBuilder {
+    buckets: Vec<f64>,
+}
+
+impl MetricConstructor<Histogram> for HistBuilder {
+    fn new_metric(&self) -> Histogram {
+        Histogram::new(self.buckets.clone().into_iter())
     }
 }
