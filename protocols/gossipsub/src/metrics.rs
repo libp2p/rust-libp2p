@@ -62,72 +62,6 @@ impl Default for Config {
 /// Whether we have ever been subscribed to this topic.
 type EverSubscribed = bool;
 
-/// Reasons why a peer was included in the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Inclusion {
-    /// Peer was a fanaout peer.
-    Fanaout,
-    /// Included from random selection.
-    Random,
-    /// Peer subscribed.
-    Subscribed,
-    /// Peer was included to fill the outbound quota.
-    Outbound,
-}
-
-/// Reasons why a peer was removed from the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Churn {
-    /// Peer disconnected.
-    Dc,
-    /// Peer had a bad score.
-    BadScore,
-    /// Peer sent a PRUNE.
-    Prune,
-    /// Peer unsubscribed.
-    Unsub,
-    /// Too many peers.
-    Excess,
-}
-
-/// Label for the mesh inclusion event metrics.
-#[derive(PartialEq, Eq, Hash, Clone)]
-struct InclusionLabel {
-    topic: TopicHash,
-    reason: Inclusion,
-}
-
-// Custom implementation is necessary because TopicHash encodes as "hash=", when using the derive
-// gives topic="hash="...""
-impl Encode for InclusionLabel {
-    fn encode(&self, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
-        self.topic.encode(writer)?;
-        writer.write_all(b",")?;
-        writer.write_all(b"reason=\"")?;
-        self.reason.encode(writer)?;
-        writer.write_all(b"\"")?;
-        Ok(())
-    }
-}
-
-/// Label for the mesh churn event metrics.
-#[derive(PartialEq, Eq, Hash, Clone)]
-struct ChurnLabel {
-    topic: TopicHash,
-    reason: Churn,
-}
-
-impl Encode for ChurnLabel {
-    fn encode(&self, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
-        self.topic.encode(writer)?;
-        writer.write_all(b",")?;
-        writer.write_all(b"reason=\"")?;
-        self.reason.encode(writer)?;
-        writer.write_all(b"\"")?;
-        Ok(())
-    }
-}
-
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct Metrics {
     /* Configuration parameters */
@@ -186,13 +120,13 @@ pub struct Metrics {
     /// Histogram of the scores for each mesh topic.
     score_per_mesh: Family<TopicHash, Histogram, HistBuilder>,
     /// A counter of the kind of penalties being applied to peers.
-    scoring_penalties: Family<&'static str, Counter>,
+    scoring_penalties: Family<PenaltyLabel, Counter>,
 
     /* General Metrics */
     /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers are classified based
     /// on which protocol they support. This metric keeps track of the number of peers that are
     /// connected of each type.
-    peers_per_protocol: Family<&'static str, Gauge>,
+    peers_per_protocol: Family<ProtocolLabel, Gauge>,
     /// The time it takes to complete one iteration of the heartbeat.
     heartbeat_duration: Histogram,
 
@@ -438,7 +372,7 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_inclusion_events
                 .get_or_create(&InclusionLabel {
-                    topic: topic.clone(),
+                    hash: topic.to_string(),
                     reason,
                 })
                 .inc_by(count as u64);
@@ -450,7 +384,7 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_churn_events
                 .get_or_create(&ChurnLabel {
-                    topic: topic.clone(),
+                    hash: topic.to_string(),
                     reason,
                 })
                 .inc_by(count as u64);
@@ -473,8 +407,10 @@ impl Metrics {
     }
 
     /// Register a score penalty.
-    pub fn register_score_penalty(&mut self, kind: &'static str) {
-        self.scoring_penalties.get_or_create(&kind).inc();
+    pub fn register_score_penalty(&mut self, penalty: Penalty) {
+        self.scoring_penalties
+            .get_or_create(&PenaltyLabel { penalty })
+            .inc();
     }
 
     /// Registers that a message was published on a specific topic.
@@ -548,15 +484,17 @@ impl Metrics {
     }
 
     /// Register a new peers connection based on its protocol.
-    pub fn peer_protocol_connected(&mut self, kind: &PeerKind) {
+    pub fn peer_protocol_connected(&mut self, kind: PeerKind) {
         self.peers_per_protocol
-            .get_or_create(&kind.as_static_ref())
+            .get_or_create(&ProtocolLabel { protocol: kind })
             .inc();
     }
 
     /// Removes a peer from the counter based on its protocol when it disconnects.
-    pub fn peer_protocol_disconnected(&mut self, kind: &PeerKind) {
-        let metric = self.peers_per_protocol.get_or_create(&kind.as_static_ref());
+    pub fn peer_protocol_disconnected(&mut self, kind: PeerKind) {
+        let metric = self
+            .peers_per_protocol
+            .get_or_create(&ProtocolLabel { protocol: kind });
         if metric.get() == 0 {
             return;
         } else {
@@ -564,6 +502,73 @@ impl Metrics {
             metric.set(metric.get() - 1);
         }
     }
+}
+
+/// Reasons why a peer was included in the mesh.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Inclusion {
+    /// Peer was a fanaout peer.
+    Fanout,
+    /// Included from random selection.
+    Random,
+    /// Peer subscribed.
+    Subscribed,
+    /// Peer was included to fill the outbound quota.
+    Outbound,
+}
+
+/// Reasons why a peer was removed from the mesh.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Churn {
+    /// Peer disconnected.
+    Dc,
+    /// Peer had a bad score.
+    BadScore,
+    /// Peer sent a PRUNE.
+    Prune,
+    /// Peer unsubscribed.
+    Unsub,
+    /// Too many peers.
+    Excess,
+}
+
+/// Kinds of reasons a peer's score has been penalized
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Penalty {
+    /// A peer grafted before waiting the back-off time.
+    GraftBackoff,
+    /// A Peer did not respond to an IWANT request in time.
+    BrokenPromise,
+    /// A Peer did not send enough messages as expected.
+    MessageDeficit,
+    /// Too many peers under one IP address.
+    IPColocation,
+}
+
+/// Label for the mesh inclusion event metrics.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct InclusionLabel {
+    hash: String,
+    reason: Inclusion,
+}
+
+/// Label for the mesh churn event metrics.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct ChurnLabel {
+    hash: String,
+    reason: Churn,
+}
+
+/// Label for the kinds of protocols peers can connect as.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct ProtocolLabel {
+    protocol: PeerKind,
+}
+
+/// Label for the kinds of scoring penalties that can occur
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct PenaltyLabel {
+    penalty: Penalty,
 }
 
 #[derive(Clone)]

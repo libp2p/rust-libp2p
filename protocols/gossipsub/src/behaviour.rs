@@ -51,7 +51,7 @@ use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
-use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics};
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
@@ -957,7 +957,7 @@ where
 
         let fanaout_added = added_peers.len();
         if let Some(m) = self.metrics.as_mut() {
-            m.peers_included(topic_hash, Inclusion::Fanaout, fanaout_added)
+            m.peers_included(topic_hash, Inclusion::Fanout, fanaout_added)
         }
 
         // check if we need to get more peers, which we randomly select
@@ -1378,7 +1378,7 @@ where
                             // add behavioural penalty
                             if let Some((peer_score, ..)) = &mut self.peer_score {
                                 if let Some(metrics) = self.metrics.as_mut() {
-                                    metrics.register_score_penalty("graft-backoff");
+                                    metrics.register_score_penalty(Penalty::GraftBackoff);
                                 }
                                 peer_score.add_penalty(peer_id, 1);
 
@@ -2038,7 +2038,7 @@ where
             for (peer, count) in gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.register_score_penalty("broken_promise");
+                    metrics.register_score_penalty(Penalty::BrokenPromise);
                 }
             }
         }
@@ -3094,7 +3094,7 @@ where
                 .get(peer_id)
                 .expect("Connected peer must be registered")
                 .kind;
-            metrics.peer_protocol_disconnected(peer_kind);
+            metrics.peer_protocol_disconnected(peer_kind.clone());
         }
 
         self.connected_peers.remove(peer_id);
@@ -3246,7 +3246,7 @@ where
                 // We have identified the protocol this peer is using
 
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.peer_protocol_connected(&kind);
+                    metrics.peer_protocol_connected(kind.clone());
                 }
 
                 if let PeerKind::NotSupported = kind {

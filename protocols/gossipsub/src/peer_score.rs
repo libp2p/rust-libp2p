@@ -21,7 +21,7 @@
 //!
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
-use crate::metrics::Metrics;
+use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
 use instant::Instant;
@@ -272,7 +272,7 @@ impl PeerScore {
                     let p3 = deficit * deficit;
                     topic_score += p3 * topic_params.mesh_message_deliveries_weight;
                     if let Some(metrics) = metrics.as_mut() {
-                        metrics.register_score_penalty("message_deficit");
+                        metrics.register_score_penalty(Penalty::MessageDeficit);
                     }
                     debug!(
                         "[Penalty] The peer {} has a mesh message deliveries deficit of {} in topic\
@@ -324,7 +324,7 @@ impl PeerScore {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
                     if let Some(metrics) = metrics.as_mut() {
-                        metrics.register_score_penalty("ip-colocation");
+                        metrics.register_score_penalty(Penalty::IPColocation);
                     }
                     debug!(
                         "[Penalty] The peer {} gets penalized because of too many peers with the ip {}. \
