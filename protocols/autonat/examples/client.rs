@@ -24,7 +24,6 @@ use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
 use std::error::Error;
-use std::time::Duration;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -84,16 +83,7 @@ impl Behaviour {
             )),
             auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
-                autonat::Config {
-                    auto_probe: Some(autonat::AutoProbe {
-                        interval: Duration::from_secs(10),
-                        config: autonat::ProbeConfig {
-                            min_confidence: 1, // set to 1 since we only have one server
-                            ..Default::default()
-                        },
-                    }),
-                    ..autonat::Config::default()
-                },
+                autonat::Config::default(),
             ),
         }
     }
@@ -101,7 +91,7 @@ impl Behaviour {
 
 #[derive(Debug)]
 enum Event {
-    AutoNat(autonat::NatStatus),
+    AutoNat(autonat::Reachability),
     Identify(IdentifyEvent),
 }
 
@@ -111,8 +101,8 @@ impl From<IdentifyEvent> for Event {
     }
 }
 
-impl From<autonat::NatStatus> for Event {
-    fn from(v: autonat::NatStatus) -> Self {
+impl From<autonat::Reachability> for Event {
+    fn from(v: autonat::Reachability) -> Self {
         Self::AutoNat(v)
     }
 }

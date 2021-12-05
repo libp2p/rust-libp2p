@@ -100,7 +100,7 @@ impl RequestResponseCodec for AutoNatCodec {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DialRequest {
     pub peer_id: PeerId,
-    pub addrs: Vec<Multiaddr>,
+    pub addresses: Vec<Multiaddr>,
 }
 
 impl DialRequest {
@@ -140,12 +140,19 @@ impl DialRequest {
             }
             maddrs
         };
-        Ok(Self { peer_id, addrs })
+        Ok(Self {
+            peer_id,
+            addresses: addrs,
+        })
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
         let peer_id = self.peer_id.to_bytes();
-        let addrs = self.addrs.into_iter().map(|addr| addr.to_vec()).collect();
+        let addrs = self
+            .addresses
+            .into_iter()
+            .map(|addr| addr.to_vec())
+            .collect();
 
         let msg = structs_proto::Message {
             r#type: Some(structs_proto::message::MessageType::Dial as _),
@@ -207,7 +214,7 @@ impl TryFrom<i32> for ResponseError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DialResponse {
     pub status_text: Option<String>,
-    pub response: Result<Multiaddr, ResponseError>,
+    pub result: Result<Multiaddr, ResponseError>,
 }
 
 impl DialResponse {
@@ -228,7 +235,7 @@ impl DialResponse {
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
                 Self {
                     status_text,
-                    response: Ok(addr),
+                    result: Ok(addr),
                 }
             }
             Some(structs_proto::message::DialResponse {
@@ -237,7 +244,7 @@ impl DialResponse {
                 addr: None,
             }) => Self {
                 status_text,
-                response: Err(ResponseError::try_from(status)?),
+                result: Err(ResponseError::try_from(status)?),
             },
             _ => {
                 log::debug!("Received malformed response message.");
@@ -250,7 +257,7 @@ impl DialResponse {
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
-        let dial_response = match self.response {
+        let dial_response = match self.result {
             Ok(addr) => structs_proto::message::DialResponse {
                 status: Some(0),
                 status_text: self.status_text,
@@ -284,7 +291,7 @@ mod tests {
     fn test_request_encode_decode() {
         let request = DialRequest {
             peer_id: PeerId::random(),
-            addrs: vec![
+            addresses: vec![
                 "/ip4/8.8.8.8/tcp/30333".parse().unwrap(),
                 "/ip4/192.168.1.42/tcp/30333".parse().unwrap(),
             ],
@@ -297,7 +304,7 @@ mod tests {
     #[test]
     fn test_response_ok_encode_decode() {
         let response = DialResponse {
-            response: Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap()),
+            result: Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap()),
             status_text: None,
         };
         let bytes = response.clone().into_bytes();
@@ -308,7 +315,7 @@ mod tests {
     #[test]
     fn test_response_err_encode_decode() {
         let response = DialResponse {
-            response: Err(ResponseError::DialError),
+            result: Err(ResponseError::DialError),
             status_text: Some("dial failed".to_string()),
         };
         let bytes = response.clone().into_bytes();
