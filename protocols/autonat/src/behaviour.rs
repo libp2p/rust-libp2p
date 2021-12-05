@@ -47,7 +47,7 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SelectServer {
     /// Prioritize the usage of static servers.
-    /// Fallback on connected peers if there is no server, or the servers are throttled through [`Config::throttlePeerPeriod`].
+    /// Fallback on connected peers if there is no server, or the servers are throttled through [`Config::throttle_peer_period`].
     PrioritizeStatic,
     /// Only use static servers.
     /// Resolve to status unknown if there are none.
