@@ -32,6 +32,8 @@
 //! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
 //! All key types have functions to enable conversion to/from their binary representations.
 
+#[cfg(feature = "ecdsa")]
+pub mod ecdsa;
 pub mod ed25519;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rsa;
@@ -71,6 +73,9 @@ pub enum Keypair {
     /// A Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
     Secp256k1(secp256k1::Keypair),
+    /// An ECDSA keypair.
+    #[cfg(feature = "ecdsa")]
+    Ecdsa(ecdsa::Keypair),
 }
 
 impl Keypair {
@@ -83,6 +88,12 @@ impl Keypair {
     #[cfg(feature = "secp256k1")]
     pub fn generate_secp256k1() -> Keypair {
         Keypair::Secp256k1(secp256k1::Keypair::generate())
+    }
+
+    /// Generate a new ECDSA keypair.
+    #[cfg(feature = "ecdsa")]
+    pub fn generate_ecdsa() -> Keypair {
+        Keypair::Ecdsa(ecdsa::Keypair::generate())
     }
 
     /// Decode an keypair from a DER-encoded secret key in PKCS#8 PrivateKeyInfo
@@ -114,6 +125,8 @@ impl Keypair {
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
             Secp256k1(ref pair) => pair.secret().sign(msg),
+            #[cfg(feature = "ecdsa")]
+            Ecdsa(ref pair) => Ok(pair.secret().sign(msg)),
         }
     }
 
@@ -126,6 +139,8 @@ impl Keypair {
             Rsa(pair) => PublicKey::Rsa(pair.public()),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
+            #[cfg(feature = "ecdsa")]
+            Ecdsa(pair) => PublicKey::Ecdsa(pair.public().clone()),
         }
     }
 
@@ -148,6 +163,12 @@ impl Keypair {
             Self::Secp256k1(_) => {
                 return Err(DecodingError::new(
                     "Encoding Secp256k1 key into Protobuf is unsupported",
+                ))
+            }
+            #[cfg(feature = "ecdsa")]
+            Self::Ecdsa(_) => {
+                return Err(DecodingError::new(
+                    "Encoding ECDSA key into Protobuf is unsupported",
                 ))
             }
         };
@@ -177,6 +198,9 @@ impl Keypair {
             keys_proto::KeyType::Secp256k1 => Err(DecodingError::new(
                 "Decoding Secp256k1 key from Protobuf is unsupported.",
             )),
+            keys_proto::KeyType::Ecdsa => Err(DecodingError::new(
+                "Decoding ECDSA key from Protobuf is unsupported.",
+            )),
         }
     }
 }
@@ -199,6 +223,9 @@ pub enum PublicKey {
     #[cfg(feature = "secp256k1")]
     /// A public Secp256k1 key.
     Secp256k1(secp256k1::PublicKey),
+    /// A public ECDSA key.
+    #[cfg(feature = "ecdsa")]
+    Ecdsa(ecdsa::PublicKey),
 }
 
 impl PublicKey {
@@ -215,6 +242,8 @@ impl PublicKey {
             Rsa(pk) => pk.verify(msg, sig),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pk) => pk.verify(msg, sig),
+            #[cfg(feature = "ecdsa")]
+            Ecdsa(pk) => pk.verify(msg, sig),
         }
     }
 
@@ -266,6 +295,11 @@ impl From<&PublicKey> for keys_proto::PublicKey {
                 r#type: keys_proto::KeyType::Secp256k1 as i32,
                 data: key.encode().to_vec(),
             },
+            #[cfg(feature = "ecdsa")]
+            PublicKey::Ecdsa(key) => keys_proto::PublicKey {
+                r#type: keys_proto::KeyType::Ecdsa as i32,
+                data: key.encode_der(),
+            },
         }
     }
 }
@@ -297,6 +331,15 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
+                Err(DecodingError::new("Unsupported"))
+            }
+            #[cfg(feature = "ecdsa")]
+            keys_proto::KeyType::Ecdsa => {
+                ecdsa::PublicKey::decode_der(&pubkey.data).map(PublicKey::Ecdsa)
+            }
+            #[cfg(not(feature = "ecdsa"))]
+            keys_proto::KeyType::Ecdsa => {
+                log::debug!("support for ECDSA was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))
             }
         }

@@ -28,6 +28,7 @@ pub mod inbound;
 pub mod outbound;
 
 /// Errors that can occur while interacting with a substream.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Reading message {0:?} at this stage is a protocol violation")]

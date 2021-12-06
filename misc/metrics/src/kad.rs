@@ -90,7 +90,7 @@ impl Metrics {
             Box::new(query_result_get_providers_error.clone()),
         );
 
-        let query_result_num_requests =
+        let query_result_num_requests: Family<_, _> =
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_requests",
@@ -98,7 +98,7 @@ impl Metrics {
             Box::new(query_result_num_requests.clone()),
         );
 
-        let query_result_num_success =
+        let query_result_num_success: Family<_, _> =
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_success",
@@ -106,7 +106,7 @@ impl Metrics {
             Box::new(query_result_num_success.clone()),
         );
 
-        let query_result_num_failure =
+        let query_result_num_failure: Family<_, _> =
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_failure",
@@ -114,7 +114,7 @@ impl Metrics {
             Box::new(query_result_num_failure.clone()),
         );
 
-        let query_result_duration =
+        let query_result_duration: Family<_, _> =
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(0.1, 2.0, 10)));
         sub_registry.register_with_unit(
             "query_result_duration",

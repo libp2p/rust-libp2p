@@ -1,8 +1,9 @@
 [package]
 name = "libp2p-gossipsub"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "Gossipsub protocol for libp2p"
-version = "0.34.0"
+version = "0.35.0"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,8 +11,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-swarm = { version = "0.32.0", path = "../../swarm" }
-libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
+libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
 bytes = "1.0"
 byteorder = "1.3.4"
 fnv = "1.0.7"
@@ -30,7 +31,7 @@ futures-timer = "3.0.2"
 pin-project = "1.0.8"
 instant = "0.1.11"
 # Metrics dependencies
-open-metrics-client = "0.12"
+open-metrics-client = "0.13"
 
 [dev-dependencies]
 async-std = "1.6.3"
