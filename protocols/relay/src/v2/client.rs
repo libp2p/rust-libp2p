@@ -40,6 +40,7 @@ use libp2p_swarm::{
 };
 use std::collections::{HashMap, VecDeque};
 use std::io::{Error, IoSlice};
+use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -335,15 +336,13 @@ impl NetworkBehaviour for Client {
 /// A [`NegotiatedSubstream`] acting as a [`RelayedConnection`].
 pub enum RelayedConnection {
     InboundAccepting {
-        accept: BoxFuture<'static, Result<(NegotiatedSubstream, Bytes), std::io::Error>>,
-        drop_notifier: oneshot::Sender<()>,
+        accept: BoxFuture<'static, Result<RelayedConnection, std::io::Error>>,
     },
     Operational {
         read_buffer: Bytes,
         substream: NegotiatedSubstream,
         drop_notifier: oneshot::Sender<()>,
     },
-    Poisoned,
 }
 
 impl Unpin for RelayedConnection {}
@@ -354,8 +353,15 @@ impl RelayedConnection {
         drop_notifier: oneshot::Sender<()>,
     ) -> Self {
         RelayedConnection::InboundAccepting {
-            accept: circuit.accept().boxed(),
-            drop_notifier,
+            accept: async {
+                let (substream, read_buffer) = circuit.accept().await?;
+                Ok(RelayedConnection::Operational {
+                    read_buffer,
+                    substream,
+                    drop_notifier,
+                })
+            }
+            .boxed(),
         }
     }
 
@@ -370,32 +376,6 @@ impl RelayedConnection {
             drop_notifier,
         }
     }
-
-    fn accept_inbound(
-        self: &mut Pin<&mut Self>,
-        cx: &mut Context,
-        mut accept: BoxFuture<'static, Result<(NegotiatedSubstream, Bytes), std::io::Error>>,
-        drop_notifier: oneshot::Sender<()>,
-    ) -> Poll<Result<(), Error>> {
-        match accept.poll_unpin(cx) {
-            Poll::Ready(Ok((substream, read_buffer))) => {
-                **self = RelayedConnection::Operational {
-                    substream,
-                    read_buffer,
-                    drop_notifier,
-                };
-                Poll::Ready(Ok(()))
-            }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => {
-                **self = RelayedConnection::InboundAccepting {
-                    accept,
-                    drop_notifier,
-                };
-                Poll::Pending
-            }
-        }
-    }
 }
 
 impl AsyncWrite for RelayedConnection {
@@ -405,73 +385,37 @@ impl AsyncWrite for RelayedConnection {
         buf: &[u8],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match std::mem::replace(&mut *self, RelayedConnection::Poisoned) {
-                RelayedConnection::InboundAccepting {
-                    accept,
-                    drop_notifier,
-                } => ready!(self.accept_inbound(cx, accept, drop_notifier))?,
-                RelayedConnection::Operational {
-                    mut substream,
-                    read_buffer,
-                    drop_notifier,
-                } => {
-                    let result = Pin::new(&mut substream).poll_write(cx, buf);
-                    *self = RelayedConnection::Operational {
-                        substream,
-                        read_buffer,
-                        drop_notifier,
-                    };
-                    return result;
+            match self.deref_mut() {
+                RelayedConnection::InboundAccepting { accept } => {
+                    *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Poisoned => unreachable!("RelayedConnection is poisoned."),
+                RelayedConnection::Operational { substream, .. } => {
+                    return Pin::new(substream).poll_write(cx, buf);
+                }
             }
         }
     }
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
-            match std::mem::replace(&mut *self, RelayedConnection::Poisoned) {
-                RelayedConnection::InboundAccepting {
-                    accept,
-                    drop_notifier,
-                } => ready!(self.accept_inbound(cx, accept, drop_notifier))?,
-                RelayedConnection::Operational {
-                    mut substream,
-                    read_buffer,
-                    drop_notifier,
-                } => {
-                    let result = Pin::new(&mut substream).poll_flush(cx);
-                    *self = RelayedConnection::Operational {
-                        substream,
-                        read_buffer,
-                        drop_notifier,
-                    };
-                    return result;
+            match self.deref_mut() {
+                RelayedConnection::InboundAccepting { accept } => {
+                    *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Poisoned => unreachable!("RelayedConnection is poisoned."),
+                RelayedConnection::Operational { substream, .. } => {
+                    return Pin::new(substream).poll_flush(cx);
+                }
             }
         }
     }
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
-            match std::mem::replace(&mut *self, RelayedConnection::Poisoned) {
-                RelayedConnection::InboundAccepting {
-                    accept,
-                    drop_notifier,
-                } => ready!(self.accept_inbound(cx, accept, drop_notifier))?,
-                RelayedConnection::Operational {
-                    mut substream,
-                    read_buffer,
-                    drop_notifier,
-                } => {
-                    let result = Pin::new(&mut substream).poll_close(cx);
-                    *self = RelayedConnection::Operational {
-                        substream,
-                        read_buffer,
-                        drop_notifier,
-                    };
-                    return result;
+            match self.deref_mut() {
+                RelayedConnection::InboundAccepting { accept } => {
+                    *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Poisoned => unreachable!("RelayedConnection is poisoned."),
+                RelayedConnection::Operational { substream, .. } => {
+                    return Pin::new(substream).poll_close(cx);
+                }
             }
         }
     }
@@ -482,25 +426,13 @@ impl AsyncWrite for RelayedConnection {
         bufs: &[IoSlice],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match std::mem::replace(&mut *self, RelayedConnection::Poisoned) {
-                RelayedConnection::InboundAccepting {
-                    accept,
-                    drop_notifier,
-                } => ready!(self.accept_inbound(cx, accept, drop_notifier))?,
-                RelayedConnection::Operational {
-                    mut substream,
-                    read_buffer,
-                    drop_notifier,
-                } => {
-                    let result = Pin::new(&mut substream).poll_write_vectored(cx, bufs);
-                    *self = RelayedConnection::Operational {
-                        substream,
-                        read_buffer,
-                        drop_notifier,
-                    };
-                    return result;
+            match self.deref_mut() {
+                RelayedConnection::InboundAccepting { accept } => {
+                    *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Poisoned => unreachable!("RelayedConnection is poisoned."),
+                RelayedConnection::Operational { substream, .. } => {
+                    return Pin::new(substream).poll_write_vectored(cx, bufs);
+                }
             }
         }
     }
@@ -513,37 +445,24 @@ impl AsyncRead for RelayedConnection {
         buf: &mut [u8],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match std::mem::replace(&mut *self, RelayedConnection::Poisoned) {
-                RelayedConnection::InboundAccepting {
-                    accept,
-                    drop_notifier,
-                } => ready!(self.accept_inbound(cx, accept, drop_notifier))?,
+            match self.deref_mut() {
+                RelayedConnection::InboundAccepting { accept } => {
+                    *self = ready!(accept.poll_unpin(cx))?;
+                }
                 RelayedConnection::Operational {
-                    mut substream,
-                    mut read_buffer,
-                    drop_notifier,
+                    read_buffer,
+                    substream,
+                    ..
                 } => {
                     if !read_buffer.is_empty() {
                         let n = std::cmp::min(read_buffer.len(), buf.len());
                         let data = read_buffer.split_to(n);
                         buf[0..n].copy_from_slice(&data[..]);
-                        *self = RelayedConnection::Operational {
-                            substream,
-                            read_buffer,
-                            drop_notifier,
-                        };
                         return Poll::Ready(Ok(n));
                     }
 
-                    let result = Pin::new(&mut substream).poll_read(cx, buf);
-                    *self = RelayedConnection::Operational {
-                        substream,
-                        read_buffer,
-                        drop_notifier,
-                    };
-                    return result;
+                    return Pin::new(substream).poll_read(cx, buf);
                 }
-                RelayedConnection::Poisoned => unreachable!("RelayedConnection is poisoned."),
             }
         }
     }
