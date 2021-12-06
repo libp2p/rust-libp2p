@@ -26,10 +26,7 @@ jobs:
 
     - name: Check protoc
       run: |
-        echo $PROTOC
-        echo $PROTOC_INCLUDE
         whereis protoc
-
 
     - uses: actions/checkout@v2.4.0
 
