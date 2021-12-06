@@ -231,8 +231,6 @@ impl std::error::Error for InboundFailure {}
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
 pub struct ResponseChannel<TResponse> {
-    request_id: RequestId,
-    peer: PeerId,
     sender: oneshot::Sender<TResponse>,
 }
 
@@ -750,11 +748,7 @@ where
                 request,
                 sender,
             } => {
-                let channel = ResponseChannel {
-                    request_id,
-                    peer,
-                    sender,
-                };
+                let channel = ResponseChannel { sender };
                 let message = RequestResponseMessage::Request {
                     request_id,
                     request,
