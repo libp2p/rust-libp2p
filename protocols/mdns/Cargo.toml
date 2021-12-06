@@ -28,4 +28,4 @@ void = "1.0.2"
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
 libp2p = { path = "../.." }
-tokio = { version = "1.2.0", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.2.0", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }

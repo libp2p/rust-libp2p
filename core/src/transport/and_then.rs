@@ -77,7 +77,7 @@ where
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
             args: Some((self.fun, ConnectedPoint::Dialer { address: addr })),
-            marker: PhantomPinned,
+            _marker: PhantomPinned,
         };
         Ok(future)
     }
@@ -132,7 +132,7 @@ where
                             upgrade: AndThenFuture {
                                 inner: Either::Left(Box::pin(upgrade)),
                                 args: Some((this.fun.clone(), point)),
-                                marker: PhantomPinned,
+                                _marker: PhantomPinned,
                             },
                             local_addr,
                             remote_addr,
@@ -159,7 +159,7 @@ where
 pub struct AndThenFuture<TFut, TMap, TMapOut> {
     inner: Either<Pin<Box<TFut>>, Pin<Box<TMapOut>>>,
     args: Option<(TMap, ConnectedPoint)>,
-    marker: PhantomPinned,
+    _marker: PhantomPinned,
 }
 
 impl<TFut, TMap, TMapOut> Future for AndThenFuture<TFut, TMap, TMapOut>
