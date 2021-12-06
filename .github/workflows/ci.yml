@@ -24,10 +24,6 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - name: Check protoc
-      run: |
-        whereis protoc
-
     - uses: actions/checkout@v2.4.0
 
     - uses: Swatinem/rust-cache@v1.3.0
