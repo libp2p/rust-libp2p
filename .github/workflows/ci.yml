@@ -26,6 +26,7 @@ jobs:
 
     - name: Check protoc
       run: |
+        ls -la /lib64/ld-linux-x86-64.so.2
         echo $PROTOC
         echo $PROTOC_INCLUDE
         whereis protoc
