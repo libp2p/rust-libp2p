@@ -23,7 +23,7 @@ use libp2p::autonat;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
-use std::error::Error;
+use std::{error::Error, time::Duration};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -83,7 +83,13 @@ impl Behaviour {
             )),
             auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
-                autonat::Config::default(),
+                autonat::Config {
+                    retry_interval: Duration::from_secs(10),
+                    refresh_interval: Duration::from_secs(30),
+                    boot_delay: Duration::ZERO,
+                    throttle_peer_period: Duration::from_secs(5),
+                    ..Default::default()
+                },
             ),
         }
     }

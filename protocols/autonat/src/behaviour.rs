@@ -148,8 +148,8 @@ pub struct Behaviour {
     // Confidence in the assumed reachability.
     confidence: usize,
 
-    // Delay until next probe. `None` if there is an ongoing probe.
-    schedule_probe: Option<Delay>,
+    // Delay until next probe.
+    schedule_probe: Delay,
 
     // Ongoing inbound requests, where no response has been sent back to the remote yet.
     ongoing_inbound: HashMap<PeerId, (Vec<Multiaddr>, ResponseChannel<DialResponse>)>,
@@ -159,6 +159,8 @@ pub struct Behaviour {
 
     // Used servers in recent outbound probes.
     recent_probes: Vec<(PeerId, Instant)>,
+
+    last_probe: Option<Instant>,
 
     pending_out_event: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
 }
@@ -172,7 +174,7 @@ impl Behaviour {
         Self {
             local_peer_id,
             inner,
-            schedule_probe: Some(Delay::new(config.boot_delay)),
+            schedule_probe: Delay::new(config.boot_delay),
             config,
             static_servers: Vec::new(),
             ongoing_inbound: HashMap::default(),
@@ -180,6 +182,7 @@ impl Behaviour {
             reachability: Reachability::Unknown,
             confidence: 0,
             recent_probes: Vec::new(),
+            last_probe: None,
             pending_out_event: VecDeque::new(),
         }
     }
@@ -217,6 +220,7 @@ impl Behaviour {
     // Return `None` if there are no qualified servers or no addresses.
     fn do_probe(&mut self, addresses: Vec<Multiaddr>) -> Option<RequestId> {
         if addresses.is_empty() {
+            log::debug!("Outbound dial-back request aborted: No server.");
             return None;
         }
         self.recent_probes
@@ -245,6 +249,7 @@ impl Behaviour {
 
         servers.retain(|s| !throttled.contains(&s));
         if servers.is_empty() {
+            log::debug!("Outbound dial-back request aborted: No server.");
             return None;
         }
         let server = servers
@@ -257,7 +262,9 @@ impl Behaviour {
                 addresses,
             },
         );
-        self.schedule_probe = None;
+        self.recent_probes.push((*server, Instant::now()));
+        self.last_probe = Some(Instant::now());
+        log::debug!("Send dial-back request to peer {}.", server);
         Some(request_id)
     }
 
@@ -334,11 +341,10 @@ impl Behaviour {
         Ok(addrs)
     }
 
-    // Adapt confidence and reachability to the result.
-    // Return new reachability if it changed or if it is the first resolved probe after boot.
+    // Adapt confidence and reachability to the result. Return new reachability if it changed.
     fn resolve_probe(&mut self, result: Result<Multiaddr, ResponseError>) -> Option<Reachability> {
         let resolved_reachability = Reachability::from(result);
-        self.schedule_probe = Some(Delay::new(self.config.retry_interval));
+        self.schedule_probe.reset(self.config.retry_interval);
 
         if resolved_reachability == self.reachability {
             if !matches!(self.reachability, Reachability::Unknown) {
@@ -347,20 +353,25 @@ impl Behaviour {
                 }
                 // Delay with (usually longer) refresh-interval if we reached max confidence.
                 if self.confidence >= self.config.confidence_max {
-                    self.schedule_probe = Some(Delay::new(self.config.refresh_interval));
+                    self.schedule_probe = Delay::new(self.config.refresh_interval);
                 }
             }
-            if self.recent_probes.is_empty() {
+            if self.last_probe.is_some() {
+                None
+            } else {
                 // This is the first probe after boot therefore the status should be reported.
                 Some(resolved_reachability)
-            } else {
-                None
             }
         } else if self.confidence > 0 {
             // Reduce confidence but keep old reachability status.
             self.confidence -= 1;
             None
         } else {
+            log::debug!(
+                "Flipped reachability from {:?} to {:?}",
+                self.reachability,
+                resolved_reachability
+            );
             self.reachability = resolved_reachability;
             Some(self.reachability.clone())
         }
@@ -409,19 +420,15 @@ impl NetworkBehaviour for Behaviour {
                     // Retry status already scheduled.
                     return;
                 }
-                if let Some(delay) = self.schedule_probe.as_mut() {
-                    let last_probe_instant = self
-                        .recent_probes
-                        .last()
-                        .expect("Confidence > 0 implies that there was already a probe.")
-                        .1;
-                    if self.reachability.is_public() {
-                        let schedule_next = last_probe_instant + self.config.refresh_interval * 2;
-                        delay.reset(schedule_next - Instant::now());
-                    } else {
-                        let schedule_next = last_probe_instant + self.config.refresh_interval / 5;
-                        delay.reset(schedule_next - Instant::now());
-                    }
+                let last_probe_instant = self
+                    .last_probe
+                    .expect("Confidence > 0 implies that there was already a probe.");
+                if self.reachability.is_public() {
+                    let schedule_next = last_probe_instant + self.config.refresh_interval * 2;
+                    self.schedule_probe.reset(schedule_next - Instant::now());
+                } else {
+                    let schedule_next = last_probe_instant + self.config.refresh_interval / 5;
+                    self.schedule_probe.reset(schedule_next - Instant::now());
                 }
             }
         }
@@ -471,9 +478,7 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_new_listen_addr(id, addr);
         if !self.reachability.is_public() {
             self.confidence = 0;
-            if let Some(delay) = self.schedule_probe.as_mut() {
-                delay.reset(Duration::ZERO);
-            }
+            self.schedule_probe.reset(Duration::ZERO);
         }
     }
 
@@ -483,9 +488,7 @@ impl NetworkBehaviour for Behaviour {
             if public_address == addr {
                 self.confidence = 0;
                 self.reachability = Reachability::Unknown;
-                if let Some(delay) = self.schedule_probe.as_mut() {
-                    delay.reset(Duration::ZERO);
-                }
+                self.schedule_probe.reset(Duration::ZERO);
             }
         }
     }
@@ -494,9 +497,7 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_new_external_addr(addr);
         if !self.reachability.is_public() {
             self.confidence = 0;
-            if let Some(delay) = self.schedule_probe.as_mut() {
-                delay.reset(Duration::ZERO);
-            }
+            self.schedule_probe.reset(Duration::ZERO);
         }
     }
 
@@ -506,9 +507,7 @@ impl NetworkBehaviour for Behaviour {
             if public_address == addr {
                 self.confidence = 0;
                 self.reachability = Reachability::Unknown;
-                if let Some(delay) = self.schedule_probe.as_mut() {
-                    delay.reset(Duration::ZERO);
-                }
+                self.schedule_probe.reset(Duration::ZERO);
             }
         }
     }
@@ -519,10 +518,9 @@ impl NetworkBehaviour for Behaviour {
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         let mut is_probe_due = false;
-        if let Some(delay) = self.schedule_probe.as_mut() {
-            if delay.poll_unpin(cx).is_ready() {
-                is_probe_due = true;
-            }
+        if self.schedule_probe.poll_unpin(cx).is_ready() {
+            is_probe_due = true;
+            self.schedule_probe.reset(self.config.refresh_interval);
         }
         loop {
             if is_probe_due {
@@ -540,6 +538,7 @@ impl NetworkBehaviour for Behaviour {
                         self.pending_out_event.push_back(flipped_reachability);
                     }
                 }
+                is_probe_due = false;
             }
             if let Some(event) = self.pending_out_event.pop_front() {
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -571,6 +570,8 @@ impl NetworkBehaviour for Behaviour {
                         }
                     }
                     RequestResponseMessage::Response { response, .. } => {
+                        log::debug!("Outbound dial-back request returned {:?}.", response);
+
                         let mut report_addr = None;
                         if let Ok(ref addr) = response.result {
                             // Update observed address score if it is finite.
@@ -585,10 +586,10 @@ impl NetworkBehaviour for Behaviour {
                                 });
                             }
                         }
+
                         if let Some(flipped_reachability) = self.resolve_probe(response.result) {
                             self.pending_out_event.push_back(flipped_reachability);
                         }
-                        self.recent_probes.push((peer, Instant::now()));
                         if let Some(action) = report_addr {
                             return Poll::Ready(action);
                         }
@@ -598,10 +599,8 @@ impl NetworkBehaviour for Behaviour {
                     RequestResponseEvent::ResponseSent { .. },
                 )) => {}
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure { peer, .. },
+                    RequestResponseEvent::OutboundFailure { .. },
                 )) => {
-                    // Retry with a different peer.
-                    self.recent_probes.push((peer, Instant::now()));
                     is_probe_due = true;
                 }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
