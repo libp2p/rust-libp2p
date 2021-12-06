@@ -49,7 +49,7 @@ type THandlerInEvent<THandler> =
 /// implementation, potentially building a multi-level hierarchy of [`NetworkBehaviour`]s, one can
 /// use one of the [`NetworkBehaviour`] combinators, and/or use the [`NetworkBehaviour`] derive
 /// macro.
-//G/
+///
 /// ## Combinators
 ///
 /// [`NetworkBehaviour`] combinators wrap one or more [`NetworkBehaviour`] implementations and
