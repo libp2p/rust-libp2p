@@ -68,11 +68,11 @@ type THandlerInEvent<THandler> =
 /// One can derive [`NetworkBehaviour`] for a custom `struct` via the `#[derive(NetworkBehaviour)]`
 /// proc macro re-exported by the `libp2p` crate. The macro generates a delegating `trait`
 /// implementation for the custom `struct`. Each [`NetworkBehaviour`] trait method is simply
-/// delegated to each struct member in the order the struct is defined. For example for
-/// [`NetworkBehaviour::poll`] it will first poll the first struct member until it returns
-/// [`Poll::Pending`] before moving on to later members. For
-/// [`NetworkBehaviour::addresses_of_peer`] it will delegate to each struct member and return a
-/// concatenated array of all addresses returned by the struct members.
+/// delegated to each `struct` member in the order the `struct` is defined. For example for
+/// [`NetworkBehaviour::poll`] it will first poll the first `struct` member until it returns
+/// [`Poll::Pending`] before moving on to later members. For [`NetworkBehaviour::addresses_of_peer`]
+/// it will delegate to each `struct` member and return a concatenated array of all addresses
+/// returned by the struct members.
 ///
 /// By default the derive sets the [`NetworkBehaviour::OutEvent`] as `()` but this can be overridden
 /// with `#[behaviour(out_event = "AnotherType")]`.
