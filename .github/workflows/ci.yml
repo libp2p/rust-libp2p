@@ -9,7 +9,7 @@ on:
 jobs:
   test-desktop:
     name: Build and test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     strategy:
       matrix:
         args: [
@@ -30,7 +30,6 @@ jobs:
         echo $PROTOC
         echo $PROTOC_INCLUDE
         whereis protoc
-        protoc --version
 
 
     - uses: actions/checkout@v2.4.0
