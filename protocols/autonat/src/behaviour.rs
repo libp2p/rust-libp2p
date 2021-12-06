@@ -65,15 +65,21 @@ pub struct Config {
     // == Client Config
     /// Delay on init before starting the fist probe
     pub boot_delay: Duration,
-    /// Interval in which the NAT should be tested again if
+    /// Interval in which the NAT should be tested again if reached max confidence.
     pub refresh_interval: Duration,
-    /// Interval in which the NAT should be re-tried if the current status is unknown.
+    /// Interval in which the NAT should be re-tried if the current status is unknown
+    /// or max confidence was not reached yet.
     pub retry_interval: Duration,
 
+    /// Throttle period for re-using a peer as server for a dial-request.
     pub throttle_peer_period: Duration,
-
+    /// Policy for selecting the server for a dial-request
     pub select_server: SelectServer,
-
+    /// Max confidence that can be reached in a public / private reachability.
+    /// The confidence is increased each time a probe confirms the assumed reachability, and
+    /// reduced each time a different reachability is reported. On confidence 0 the reachability
+    /// is flipped if a different status is reported.
+    /// Note: for [`Reachability::Unknown`] the confidence is always 0.
     pub confidence_max: usize,
 
     //== Server Config
@@ -99,7 +105,7 @@ impl Default for Config {
     }
 }
 
-/// Current reachability derived from the most recent probe.
+/// Assumed reachability.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reachability {
     Public(Multiaddr),
@@ -108,11 +114,8 @@ pub enum Reachability {
 }
 
 impl Reachability {
-    pub fn public_addr(&self) -> Option<&Multiaddr> {
-        match self {
-            Reachability::Public(address) => Some(address),
-            _ => None,
-        }
+    pub fn is_public(&self) -> bool {
+        matches!(self, Reachability::Public(..))
     }
 }
 
@@ -183,7 +186,10 @@ impl Behaviour {
 
     /// Address if we are public.
     pub fn public_address(&self) -> Option<&Multiaddr> {
-        self.reachability.public_addr()
+        match &self.reachability {
+            Reachability::Public(address) => Some(address),
+            _ => None,
+        }
     }
 
     /// Currently assumed reachability.
@@ -397,7 +403,7 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
             }
-            // A remote peer dialing us may mean that we are public, therefore the delay to the next probe should be adjusted.
+            // An inbound connection can indicate that we are public; adjust the delay to the next probe.
             ConnectedPoint::Listener { .. } => {
                 if self.confidence < self.config.confidence_max {
                     // Retry status already scheduled.
@@ -409,7 +415,7 @@ impl NetworkBehaviour for Behaviour {
                         .last()
                         .expect("Confidence > 0 implies that there was already a probe.")
                         .1;
-                    if self.reachability.public_addr().is_some() {
+                    if self.reachability.is_public() {
                         let schedule_next = last_probe_instant + self.config.refresh_interval * 2;
                         delay.reset(schedule_next - Instant::now());
                     } else {
@@ -463,7 +469,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
-        if self.reachability.public_addr().is_none() {
+        if !self.reachability.is_public() {
             self.confidence = 0;
             if let Some(delay) = self.schedule_probe.as_mut() {
                 delay.reset(Duration::ZERO);
@@ -486,7 +492,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_new_external_addr(addr);
-        if self.reachability.public_addr().is_none() {
+        if !self.reachability.is_public() {
             self.confidence = 0;
             if let Some(delay) = self.schedule_probe.as_mut() {
                 delay.reset(Duration::ZERO);
@@ -520,7 +526,7 @@ impl NetworkBehaviour for Behaviour {
         }
         loop {
             if is_probe_due {
-                let mut addresses = match self.reachability.public_addr() {
+                let mut addresses = match self.public_address() {
                     Some(a) => vec![a.clone()], // Remote should try our assumed public address first.
                     None => Vec::new(),
                 };
@@ -664,7 +670,7 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-// Filter demanded dial addresses for validity, to prevent abuse.
+// Filter dial addresses and replace demanded ip with the observed one.
 fn filter_valid_addrs(
     peer: PeerId,
     demanded: Vec<Multiaddr>,
@@ -674,10 +680,10 @@ fn filter_valid_addrs(
     if observed_remote_at.iter().any(|p| p == Protocol::P2pCircuit) {
         return Vec::new();
     }
-    let observed_ip = observed_remote_at
+    let observed_ip = match observed_remote_at
         .into_iter()
-        .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)));
-    let observed_ip = match observed_ip {
+        .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
+    {
         Some(ip) => ip,
         None => return Vec::new(),
     };
@@ -690,7 +696,7 @@ fn filter_valid_addrs(
                 .iter()
                 .position(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))?;
             let mut addr = addr.replace(i, |_| Some(observed_ip.clone()))?;
-            // Filter relay addresses and addresses with invalid peer id.
+
             let is_valid = addr.iter().all(|proto| match proto {
                 Protocol::P2pCircuit => false,
                 Protocol::P2p(hash) => hash == peer.into(),
