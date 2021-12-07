@@ -396,7 +396,6 @@ impl ProtocolsHandler for Handler {
                     async move {
                         let _ = to_listener
                             .send(transport::ToListenerMsg::Reservation(Err(())))
-                            .boxed()
                             .await;
                     }
                     .boxed(),
