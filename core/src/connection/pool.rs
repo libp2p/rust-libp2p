@@ -50,7 +50,8 @@ use std::{
     task::Context,
     task::Poll,
 };
-use void::Void;
+
+use self::task::PendingConnectionCommand;
 
 mod concurrent_dial;
 mod task;
@@ -113,7 +114,7 @@ struct EstablishedConnectionInfo<TInEvent> {
     peer_id: PeerId,
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
-    sender: mpsc::Sender<task::Command<TInEvent>>,
+    sender: mpsc::Sender<task::EstablishedConnectionCommand<TInEvent>>,
 }
 
 impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
@@ -123,7 +124,11 @@ impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
     pub fn start_close(&mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
-        match self.sender.clone().try_send(task::Command::Close) {
+        match self
+            .sender
+            .clone()
+            .try_send(task::EstablishedConnectionCommand::Close)
+        {
             Ok(()) => {}
             Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
         };
@@ -137,7 +142,7 @@ struct PendingConnectionInfo<THandler> {
     handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    _drop_notifier: oneshot::Sender<Void>,
+    abort_notifier: Option<oneshot::Sender<PendingConnectionCommand>>,
 }
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
@@ -341,10 +346,7 @@ where
     /// Returns `None` if the pool has no connection with the given ID.
     pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, THandler>> {
         if let hash_map::Entry::Occupied(entry) = self.pending.entry(id) {
-            Some(PoolConnection::Pending(PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }))
+            Some(PoolConnection::Pending(PendingConnection { entry }))
         } else {
             self.established
                 .iter_mut()
@@ -371,10 +373,7 @@ where
     /// Gets a pending outgoing connection by ID.
     pub fn get_outgoing(&mut self, id: ConnectionId) -> Option<PendingConnection<'_, THandler>> {
         match self.pending.entry(id) {
-            hash_map::Entry::Occupied(entry) => Some(PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }),
+            hash_map::Entry::Occupied(entry) => Some(PendingConnection { entry }),
             hash_map::Entry::Vacant(_) => None,
         }
     }
@@ -418,11 +417,7 @@ where
                 .entry(pending_connection)
                 .expect_occupied("Iterating pending connections");
 
-            PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }
-            .abort();
+            PendingConnection { entry }.abort();
         }
     }
 
@@ -548,13 +543,13 @@ where
 
         let connection_id = self.next_connection_id();
 
-        let (drop_notifier, drop_receiver) = oneshot::channel();
+        let (abort_notifier, abort_receiver) = oneshot::channel();
 
         self.spawn(
             task::new_for_pending_outgoing_connection(
                 connection_id,
                 dial,
-                drop_receiver,
+                abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
             .boxed(),
@@ -567,7 +562,7 @@ where
                 peer_id: peer,
                 handler,
                 endpoint: PendingPoint::Dialer,
-                _drop_notifier: drop_notifier,
+                abort_notifier: Some(abort_notifier),
             },
         );
         Ok(connection_id)
@@ -595,13 +590,13 @@ where
 
         let connection_id = self.next_connection_id();
 
-        let (drop_notifier, drop_receiver) = oneshot::channel();
+        let (abort_notifier, abort_receiver) = oneshot::channel();
 
         self.spawn(
             task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
-                drop_receiver,
+                abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
             .boxed(),
@@ -614,7 +609,7 @@ where
                 peer_id: None,
                 handler,
                 endpoint: endpoint.into(),
-                _drop_notifier: drop_notifier,
+                abort_notifier: Some(abort_notifier),
             },
         );
         Ok(connection_id)
@@ -730,7 +725,7 @@ where
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
-                        _drop_notifier,
+                        abort_notifier: _,
                     } = self
                         .pending
                         .remove(&id)
@@ -898,7 +893,7 @@ where
                         peer_id,
                         handler,
                         endpoint,
-                        _drop_notifier,
+                        abort_notifier: _,
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
@@ -955,7 +950,6 @@ pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
 /// A pending connection in a pool.
 pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
     entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
-    counters: &'a mut ConnectionCounters,
 }
 
 impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
@@ -975,9 +969,10 @@ impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     }
 
     /// Aborts the connection attempt, closing the connection.
-    pub fn abort(self) {
-        self.counters.dec_pending(&self.entry.get().endpoint);
-        self.entry.remove();
+    pub fn abort(mut self) {
+        if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
+            notifier.send(PendingConnectionCommand::Abort);
+        }
     }
 }
 
@@ -1024,13 +1019,13 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     /// of `notify_handler`, it only fails if the connection is now about
     /// to close.
     pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
-        let cmd = task::Command::NotifyHandler(event);
+        let cmd = task::EstablishedConnectionCommand::NotifyHandler(event);
         self.entry
             .get_mut()
             .sender
             .try_send(cmd)
             .map_err(|e| match e.into_inner() {
-                task::Command::NotifyHandler(event) => event,
+                task::EstablishedConnectionCommand::NotifyHandler(event) => event,
                 _ => unreachable!("Expect failed send to return initial event."),
             })
     }
