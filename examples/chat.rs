@@ -50,7 +50,10 @@
 //! The two nodes then connect.
 
 use async_std::{io, task};
-use futures::{future, prelude::*};
+use futures::{
+    prelude::{stream::StreamExt, *},
+    select,
+};
 use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
@@ -58,10 +61,7 @@ use libp2p::{
     swarm::SwarmEvent,
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
-use std::{
-    error::Error,
-    task::{Context, Poll},
-};
+use std::error::Error;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -133,40 +133,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines();
+    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
 
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
-        loop {
-            match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm
-                    .behaviour_mut()
-                    .floodsub
-                    .publish(floodsub_topic.clone(), line.as_bytes()),
-                Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break,
-            }
-        }
-        loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
+    loop {
+        select! {
+            line = stdin.select_next_some() => swarm
+                .behaviour_mut()
+                .floodsub
+                .publish(floodsub_topic.clone(), line.expect("Stdin not to close").as_bytes()),
+            event = swarm.select_next_some() => match event {
+                SwarmEvent::NewListenAddr { address, .. } => {
                     println!("Listening on {:?}", address);
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Floodsub(
-                    FloodsubEvent::Message(message),
-                )))) => {
+                SwarmEvent::Behaviour(OutEvent::Floodsub(
+                    FloodsubEvent::Message(message)
+                )) => {
                     println!(
                         "Received: '{:?}' from {:?}",
                         String::from_utf8_lossy(&message.data),
                         message.source
                     );
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Mdns(
-                    MdnsEvent::Discovered(list),
-                )))) => {
+                SwarmEvent::Behaviour(OutEvent::Mdns(
+                    MdnsEvent::Discovered(list)
+                )) => {
                     for (peer, _) in list {
                         swarm
                             .behaviour_mut()
@@ -174,9 +168,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .add_node_to_partial_view(peer);
                     }
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(OutEvent::Mdns(MdnsEvent::Expired(
-                    list,
-                ))))) => {
+                SwarmEvent::Behaviour(OutEvent::Mdns(MdnsEvent::Expired(
+                    list
+                ))) => {
                     for (peer, _) in list {
                         if !swarm.behaviour_mut().mdns.has_node(&peer) {
                             swarm
@@ -185,12 +179,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 .remove_node_from_partial_view(&peer);
                         }
                     }
-                }
-                Poll::Ready(Some(_)) => {}
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => break,
+                },
+                _ => {}
             }
         }
-        Poll::Pending
-    }))
+    }
 }

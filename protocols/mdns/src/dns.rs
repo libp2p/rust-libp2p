@@ -22,10 +22,9 @@
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use libp2p_core::{Multiaddr, PeerId};
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
-
-/// Maximum size of a DNS label as per RFC1035.
-const MAX_LABEL_LENGTH: usize = 63;
 
 /// DNS TXT records can have up to 255 characters as a single string value.
 ///
@@ -116,8 +115,8 @@ pub fn build_query_response(
     // Add a limit to 2^16-1 addresses, as the protocol limits to this number.
     let addresses = addresses.take(65535);
 
-    let peer_id_bytes = encode_peer_id(&peer_id);
-    debug_assert!(peer_id_bytes.len() <= 0xffff);
+    let peer_name_bytes = generate_peer_name();
+    debug_assert!(peer_name_bytes.len() <= 0xffff);
 
     // The accumulated response packets.
     let mut packets = Vec::new();
@@ -130,7 +129,7 @@ pub fn build_query_response(
     for addr in addresses {
         let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
         let mut txt_record = Vec::with_capacity(txt_to_send.len());
-        match append_txt_record(&mut txt_record, &peer_id_bytes, ttl, &txt_to_send) {
+        match append_txt_record(&mut txt_record, &peer_name_bytes, ttl, &txt_to_send) {
             Ok(()) => {
                 records.push(txt_record);
             }
@@ -140,7 +139,7 @@ pub fn build_query_response(
         }
 
         if records.len() == MAX_RECORDS_PER_PACKET {
-            packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+            packets.push(query_response_packet(id, &peer_name_bytes, &records, ttl));
             records.clear();
         }
     }
@@ -148,13 +147,18 @@ pub fn build_query_response(
     // If there are still unpacked records, i.e. if the number of records is not
     // a multiple of `MAX_RECORDS_PER_PACKET`, create a final packet.
     if !records.is_empty() {
-        packets.push(query_response_packet(id, &peer_id_bytes, &records, ttl));
+        packets.push(query_response_packet(id, &peer_name_bytes, &records, ttl));
     }
 
     // If no packets have been built at all, because `addresses` is empty,
     // construct an empty response packet.
     if packets.is_empty() {
-        packets.push(query_response_packet(id, &peer_id_bytes, &Vec::new(), ttl));
+        packets.push(query_response_packet(
+            id,
+            &peer_name_bytes,
+            &Vec::new(),
+            ttl,
+        ));
     }
 
     packets
@@ -260,40 +264,26 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
     out.push((value & 0xff) as u8);
 }
 
-/// If a peer ID is longer than 63 characters, split it into segments to
-/// be compatible with RFC 1035.
-fn segment_peer_id(peer_id: String) -> String {
-    // Guard for the most common case
-    if peer_id.len() <= MAX_LABEL_LENGTH {
-        return peer_id;
-    }
-
-    // This will only perform one allocation except in extreme circumstances.
-    let mut out = String::with_capacity(peer_id.len() + 8);
-
-    for (idx, chr) in peer_id.chars().enumerate() {
-        if idx > 0 && idx % MAX_LABEL_LENGTH == 0 {
-            out.push('.');
-        }
-        out.push(chr);
-    }
-    out
+/// Generates and returns a random alphanumeric string of `length` size.
+fn random_string(length: usize) -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(length)
+        .map(char::from)
+        .collect()
 }
 
-/// Combines and encodes a `PeerId` and service name for a DNS query.
-fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
-    // DNS-safe encoding for the Peer ID
-    let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.to_bytes());
-    // ensure we don't have any labels over 63 bytes long
-    let encoded_peer_id = segment_peer_id(raw_peer_id);
-    let service_name = str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII");
-    let peer_name = [&encoded_peer_id, service_name].join(".");
+/// Generates a random peer name as bytes for a DNS query.
+fn generate_peer_name() -> Vec<u8> {
+    // Use a variable-length random string for mDNS peer name.
+    // See https://github.com/libp2p/rust-libp2p/pull/2311/
+    let peer_name = random_string(32 + thread_rng().gen_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
-    let mut peer_id_bytes = Vec::with_capacity(peer_name.len() + 32);
-    append_qname(&mut peer_id_bytes, peer_name.as_bytes());
+    let mut peer_name_bytes = Vec::with_capacity(peer_name.len() + 32);
+    append_qname(&mut peer_name_bytes, peer_name.as_bytes());
 
-    peer_id_bytes
+    peer_name_bytes
 }
 
 /// Appends a `QNAME` (as defined by RFC1035) to the `Vec`.
@@ -438,22 +428,11 @@ mod tests {
     }
 
     #[test]
-    fn test_segment_peer_id() {
-        let str_32 = String::from_utf8(vec![b'x'; 32]).unwrap();
-        let str_63 = String::from_utf8(vec![b'x'; 63]).unwrap();
-        let str_64 = String::from_utf8(vec![b'x'; 64]).unwrap();
-        let str_126 = String::from_utf8(vec![b'x'; 126]).unwrap();
-        let str_127 = String::from_utf8(vec![b'x'; 127]).unwrap();
-
-        assert_eq!(segment_peer_id(str_32.clone()), str_32);
-        assert_eq!(segment_peer_id(str_63.clone()), str_63);
-
-        assert_eq!(segment_peer_id(str_64), [&str_63, "x"].join("."));
-        assert_eq!(
-            segment_peer_id(str_126),
-            [&str_63, str_63.as_str()].join(".")
-        );
-        assert_eq!(segment_peer_id(str_127), [&str_63, &str_63, "x"].join("."));
+    fn test_random_string() {
+        let varsize = thread_rng().gen_range(0..32);
+        let size = 32 + varsize;
+        let name = random_string(size);
+        assert_eq!(name.len(), size);
     }
 
     // TODO: test limits and errors
