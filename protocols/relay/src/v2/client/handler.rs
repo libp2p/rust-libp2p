@@ -568,6 +568,16 @@ impl ProtocolsHandler for Handler {
         // Send errors to transport.
         while let Poll::Ready(Some(())) = self.send_error_futs.poll_next_unpin(cx) {}
 
+        // Check status of lend out substreams.
+        loop {
+            match self.alive_lend_out_substreams.poll_next_unpin(cx) {
+                Poll::Ready(Some(Err(oneshot::Canceled))) => {}
+                // TODO: Use void.
+                Poll::Ready(Some(Ok(()))) => unreachable!("Nothing is ever send via oneshot."),
+                Poll::Ready(None) | Poll::Pending => break,
+            }
+        }
+
         // Update keep-alive handling.
         if self.reservation.is_none()
             && self.alive_lend_out_substreams.is_empty()
