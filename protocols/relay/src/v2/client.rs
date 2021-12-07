@@ -341,7 +341,7 @@ pub enum RelayedConnection {
     Operational {
         read_buffer: Bytes,
         substream: NegotiatedSubstream,
-        drop_notifier: oneshot::Sender<()>,
+        drop_notifier: oneshot::Sender<void::Void>,
     },
 }
 
@@ -350,7 +350,7 @@ impl Unpin for RelayedConnection {}
 impl RelayedConnection {
     pub(crate) fn new_inbound(
         circuit: inbound_stop::Circuit,
-        drop_notifier: oneshot::Sender<()>,
+        drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
         RelayedConnection::InboundAccepting {
             accept: async {
@@ -368,7 +368,7 @@ impl RelayedConnection {
     pub(crate) fn new_outbound(
         substream: NegotiatedSubstream,
         read_buffer: Bytes,
-        drop_notifier: oneshot::Sender<()>,
+        drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
         RelayedConnection::Operational {
             substream,

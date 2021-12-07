@@ -154,7 +154,7 @@ pub struct Handler {
     /// Once all substreams are dropped and this handler has no other work,
     /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
     /// eventually.
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
+    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
     circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
 
@@ -573,7 +573,7 @@ impl ProtocolsHandler for Handler {
             match self.alive_lend_out_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Err(oneshot::Canceled))) => {}
                 // TODO: Use void.
-                Poll::Ready(Some(Ok(()))) => unreachable!("Nothing is ever send via oneshot."),
+                Poll::Ready(Some(Ok(v))) => void::unreachable(v),
                 Poll::Ready(None) | Poll::Pending => break,
             }
         }
