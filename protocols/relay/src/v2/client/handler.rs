@@ -394,7 +394,10 @@ impl ProtocolsHandler for Handler {
 
                 self.send_error_futs.push(
                     async move {
-                        let _ = to_listener.send(transport::ToListenerMsg::Reservation(Err(())));
+                        let _ = to_listener
+                            .send(transport::ToListenerMsg::Reservation(Err(())))
+                            .boxed()
+                            .await;
                     }
                     .boxed(),
                 );
