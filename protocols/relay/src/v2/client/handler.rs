@@ -255,12 +255,18 @@ impl ProtocolsHandler for Handler {
                 OutboundOpenInfo::Connect { send_back },
             ) => {
                 let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
-                let _ = send_back.send(Ok(super::RelayedConnection::new_outbound(
+                match send_back.send(Ok(super::RelayedConnection::new_outbound(
                     substream,
                     read_buffer,
                     tx,
-                )));
+                ))) {
+                    Ok(()) => self.alive_lend_out_substreams.push(rx),
+                    Err(_) => debug!(
+                        "Oneshot to `RelayedDial` future dropped. \
+                         Dropping established relayed connection to {:?}.",
+                        self.remote_peer_id,
+                    ),
+                }
             }
             _ => unreachable!(),
         }
