@@ -21,7 +21,7 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 thiserror = "1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 bimap = "0.6.1"
-sha2 = "0.9"
+sha2 = "0.10"
 rand = "0.8"
 futures-timer = "3.0.2"
 instant = "0.1.11"
