@@ -22,6 +22,6 @@ futures-timer = "3.0.2"
 instant = "0.1.11"
 
 [dev-dependencies]
-libp2p = { path = "../", default-features = false, features = ["yamux", "plaintext"] }
+libp2p = { path = "../", default-features = false, features = ["identify", "ping", "plaintext", "yamux"] }
 quickcheck = "0.9.0"
 rand = "0.7.2"
