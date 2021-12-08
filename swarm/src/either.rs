@@ -222,11 +222,11 @@ where
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
-                .map_out(|h| Either::Left(h))
-                .map_handler_and_in_event(|h| IntoEitherHandler::Left(h), |h| Either::Left(h)),
+                .map_out(|e| Either::Left(e))
+                .map_handler_and_in(|h| IntoEitherHandler::Left(h), |e| Either::Left(e)),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
-                .map_out(|h| Either::Right(h))
-                .map_handler_and_in_event(|h| IntoEitherHandler::Right(h), |h| Either::Right(h)),
+                .map_out(|e| Either::Right(e))
+                .map_handler_and_in(|h| IntoEitherHandler::Right(h), |e| Either::Right(e)),
         };
 
         Poll::Ready(event)

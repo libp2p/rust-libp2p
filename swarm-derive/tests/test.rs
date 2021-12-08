@@ -410,10 +410,7 @@ fn no_event_with_either() {
 
     impl From<Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>> for BehaviourOutEvent {
         fn from(event: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>) -> Self {
-            match event {
-                Either::Left(event) => BehaviourOutEvent::PingOrIdentify(Either::Left(event)),
-                Either::Right(event) => BehaviourOutEvent::PingOrIdentify(Either::Right(event)),
-            }
+            BehaviourOutEvent::PingOrIdentify(event)
         }
     }
 
