@@ -60,6 +60,7 @@ mod test;
 mod upgrade;
 
 pub mod dial_opts;
+pub mod either;
 pub mod protocols_handler;
 pub mod toggle;
 
