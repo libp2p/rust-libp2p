@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub mod toggle;
+
 use crate::dial_opts::DialOpts;
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
 use crate::{AddressRecord, AddressScore, DialError};
