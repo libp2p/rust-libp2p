@@ -43,19 +43,6 @@ use std::{
     time::Duration,
 };
 
-/// Configure whether probes should preferably select statically added servers for the next probe.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SelectServer {
-    /// Prioritize the usage of static servers.
-    /// Fallback on connected peers if there is no server, or the servers are throttled through [`Config::throttle_peer_period`].
-    PrioritizeStatic,
-    /// Only use static servers.
-    /// Resolve to status unknown if there are none.
-    ExclusivelyStatic,
-    /// Randomly select a target from the list of static servers and connected peers.
-    Random,
-}
-
 /// Config for the [`Behaviour`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -67,19 +54,19 @@ pub struct Config {
     pub boot_delay: Duration,
     /// Interval in which the NAT should be tested again if reached max confidence.
     pub refresh_interval: Duration,
-    /// Interval in which the NAT should be re-tried if the current status is unknown
+    /// Interval in which the NAT status should be re-tried if it is currently is unknown
     /// or max confidence was not reached yet.
     pub retry_interval: Duration,
 
     /// Throttle period for re-using a peer as server for a dial-request.
     pub throttle_peer_period: Duration,
-    /// Policy for selecting the server for a dial-request
-    pub select_server: SelectServer,
-    /// Max confidence that can be reached in a public / private reachability.
-    /// The confidence is increased each time a probe confirms the assumed reachability, and
-    /// reduced each time a different reachability is reported. On confidence 0 the reachability
-    /// is flipped if a different status is reported.
-    /// Note: for [`Reachability::Unknown`] the confidence is always 0.
+    /// Wether connected peers may be used as server for a probe, in addition to the predefined ones.
+    pub may_use_connected: bool,
+    /// Max confidence that can be reached in a public / private NAT status.
+    /// The confidence is increased each time a probe confirms the assumed status, and
+    /// reduced each time a different status is reported. On confidence 0 the status
+    /// is flipped if a different one is reported.
+    /// Note: for [`NatStatus::Unknown`] the confidence is always 0.
     pub confidence_max: usize,
 
     //== Server Config
@@ -97,7 +84,7 @@ impl Default for Config {
             retry_interval: Duration::from_secs(90),
             refresh_interval: Duration::from_secs(15 * 60),
             throttle_peer_period: Duration::from_secs(90),
-            select_server: SelectServer::Random,
+            may_use_connected: true,
             confidence_max: 3,
             max_peer_addresses: 16,
             throttle_global_max: 30,
@@ -105,28 +92,45 @@ impl Default for Config {
     }
 }
 
-/// Assumed reachability.
+/// Assumed NAT status.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Reachability {
+pub enum NatStatus {
     Public(Multiaddr),
     Private,
     Unknown,
 }
 
-impl Reachability {
+impl NatStatus {
     pub fn is_public(&self) -> bool {
-        matches!(self, Reachability::Public(..))
+        matches!(self, NatStatus::Public(..))
     }
 }
 
-impl From<Result<Multiaddr, ResponseError>> for Reachability {
+impl From<Result<Multiaddr, ResponseError>> for NatStatus {
     fn from(result: Result<Multiaddr, ResponseError>) -> Self {
         match result {
-            Ok(addr) => Reachability::Public(addr),
-            Err(ResponseError::DialError) => Reachability::Private,
-            _ => Reachability::Unknown,
+            Ok(addr) => NatStatus::Public(addr),
+            Err(ResponseError::DialError) => NatStatus::Private,
+            _ => NatStatus::Unknown,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ProbeId(usize);
+
+impl ProbeId {
+    fn next(&mut self) -> ProbeId {
+        let current = *self;
+        self.0 += 1;
+        current
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Event {
+    pub probe_id: ProbeId,
+    pub nat_status: NatStatus,
 }
 
 /// Network Behaviour for AutoNAT.
@@ -134,18 +138,18 @@ pub struct Behaviour {
     // Local peer id
     local_peer_id: PeerId,
 
-    // Inner protocol for sending requests and receiving the response.
+    // Inner behaviour for sending requests and receiving the response.
     inner: RequestResponse<AutoNatCodec>,
 
     config: Config,
 
-    // Peers that may not be connected but still can be used as server in a probe.
-    static_servers: Vec<PeerId>,
+    // Additional peers apart from the currently connected ones, that may be used for probes.
+    servers: Vec<PeerId>,
 
-    // Assumed reachability derived from the most recent probe.
-    reachability: Reachability,
+    // Assumed NAT status.
+    nat_status: NatStatus,
 
-    // Confidence in the assumed reachability.
+    // Confidence in the assumed NAT status.
     confidence: usize,
 
     // Delay until next probe.
@@ -154,15 +158,26 @@ pub struct Behaviour {
     // Ongoing inbound requests, where no response has been sent back to the remote yet.
     ongoing_inbound: HashMap<PeerId, (Vec<Multiaddr>, ResponseChannel<DialResponse>)>,
 
+    // Ongoing outbound requests, where no response has been received from the remote yet.
+    // Map the ID of the inner request to the probe's ID and specify whether the probe was manually triggered.
+    ongoing_outbound: HashMap<RequestId, (ProbeId, bool)>,
+
     // Connected peers with their observed address.
+    // These peers may be used as servers for dial-requests.
     connected: HashMap<PeerId, Multiaddr>,
 
-    // Used servers in recent outbound probes.
+    // Used servers in recent outbound probes that are throttled through Config::throttle_peer_period.
     recent_probes: Vec<(PeerId, Instant)>,
 
     last_probe: Option<Instant>,
 
-    pending_out_event: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
+    probe_id: ProbeId,
+
+    // Pending probes for which a dial-request should be send to a server.
+    // In case of a manually triggered probe the server is set.
+    pending_probes: VecDeque<(ProbeId, Option<PeerId>)>,
+
+    pending_out_events: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
 }
 
 impl Behaviour {
@@ -176,100 +191,113 @@ impl Behaviour {
             inner,
             schedule_probe: Delay::new(config.boot_delay),
             config,
-            static_servers: Vec::new(),
+            servers: Vec::new(),
             ongoing_inbound: HashMap::default(),
+            ongoing_outbound: HashMap::default(),
             connected: HashMap::default(),
-            reachability: Reachability::Unknown,
+            nat_status: NatStatus::Unknown,
             confidence: 0,
             recent_probes: Vec::new(),
             last_probe: None,
-            pending_out_event: VecDeque::new(),
+            pending_out_events: VecDeque::new(),
+            pending_probes: VecDeque::new(),
+            probe_id: ProbeId(0),
         }
     }
 
     /// Address if we are public.
     pub fn public_address(&self) -> Option<&Multiaddr> {
-        match &self.reachability {
-            Reachability::Public(address) => Some(address),
+        match &self.nat_status {
+            NatStatus::Public(address) => Some(address),
             _ => None,
         }
     }
 
-    /// Currently assumed reachability.
-    pub fn reachability(&self) -> Reachability {
-        self.reachability.clone()
+    /// Currently assumed NAT status.
+    pub fn nat_status(&self) -> NatStatus {
+        self.nat_status.clone()
     }
 
-    /// Confidence in out current reachability status.
+    /// Confidence in the assumed NAT status.
     pub fn confidence(&self) -> usize {
         self.confidence
     }
 
+    /// Add a peer to the list over servers that may be used for probes.
+    /// While probes normally use one of the connected peers as server, this allows to add trusted
+    /// peers that can be used even if they are currently not connected, in which case a connection will be
+    /// establish before sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
-        self.static_servers.push(peer);
+        self.servers.push(peer);
         if let Some(addr) = address {
             self.inner.add_address(&peer, addr);
         }
     }
 
+    /// Remove a peer from the list of servers.
+    /// See [`Behaviour::add_server`] for more info.
     pub fn remove_server(&mut self, peer: &PeerId) {
-        self.static_servers.retain(|p| p != peer);
+        self.servers.retain(|p| p != peer);
     }
 
-    // Send a dial request to a randomly selected server.
-    // Return `None` if there are no qualified servers or no addresses.
-    fn do_probe(&mut self, addresses: Vec<Multiaddr>) -> Option<RequestId> {
-        if addresses.is_empty() {
-            log::debug!("Outbound dial-back request aborted: No server.");
-            return None;
-        }
+    /// Manually trigger a probe. Optionally a the server can be set that is used, otherwise
+    /// it will select a server based on [`Config::may_use_connected`]. In case of the latter,
+    /// return `None` if no qualified server is present.
+    pub fn trigger_probe(&mut self, server: Option<PeerId>) -> Option<ProbeId> {
+        let server_id = server.or_else(|| self.random_server())?;
+        let probe_id = self.probe_id.next();
+        self.pending_probes.push_back((probe_id, Some(server_id)));
+        Some(probe_id)
+    }
+
+    // Select a random server for the probe based on [`Config::may_use_connected`].
+    fn random_server(&mut self) -> Option<PeerId> {
         self.recent_probes
             .retain(|(_, time)| *time + self.config.throttle_peer_period > Instant::now());
         let throttled: Vec<_> = self.recent_probes.iter().map(|(id, _)| id).collect();
-        let mut servers = match self.config.select_server {
-            SelectServer::ExclusivelyStatic => self.static_servers.clone(),
-            SelectServer::PrioritizeStatic => {
-                let mut servers = Vec::new();
-                for server in &self.static_servers {
-                    if !throttled.contains(&server) {
-                        servers.push(*server)
-                    }
-                }
-                if servers.is_empty() {
-                    servers.extend(self.connected.iter().map(|(id, _)| *id));
-                }
-                servers
-            }
-            SelectServer::Random => {
-                let mut connected: Vec<_> = self.connected.iter().map(|(id, _)| *id).collect();
-                connected.extend(&self.static_servers);
-                connected
-            }
-        };
+        let mut servers: Vec<&PeerId> = self.servers.iter().collect();
 
-        servers.retain(|s| !throttled.contains(&s));
+        if self.config.may_use_connected {
+            servers.extend(self.connected.iter().map(|(id, _)| id));
+        }
+
+        servers.retain(|s| !throttled.contains(s));
         if servers.is_empty() {
-            log::debug!("Outbound dial-back request aborted: No server.");
             return None;
         }
-        let server = servers
-            .get(rand::random::<usize>() % servers.len())
-            .expect("Element is present.");
+        let server = servers[rand::random::<usize>() % servers.len()];
+        Some(*server)
+    }
+
+    // Send a dial request to the set server or a randomly selected one.
+    // Return `None` if there are no qualified servers or no dial-back addresses.
+    fn do_probe(&mut self, server: Option<PeerId>, addresses: Vec<Multiaddr>) -> Option<RequestId> {
+        if addresses.is_empty() {
+            log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
+            return None;
+        }
+        let server = match server.or_else(|| self.random_server()) {
+            Some(s) => s,
+            None => {
+                log::debug!("Outbound dial-back request aborted: No qualified server.");
+                return None;
+            }
+        };
         let request_id = self.inner.send_request(
-            server,
+            &server,
             DialRequest {
                 peer_id: self.local_peer_id,
                 addresses,
             },
         );
-        self.recent_probes.push((*server, Instant::now()));
+        self.recent_probes.push((server, Instant::now()));
         self.last_probe = Some(Instant::now());
         log::debug!("Send dial-back request to peer {}.", server);
         Some(request_id)
     }
 
-    // Handle the inbound request and collect the valid addresses to be dialed.
-    fn handle_request(
+    // Validate the inbound request and collect the addresses to be dialed.
+    fn resolve_inbound_request(
         &mut self,
         sender: PeerId,
         request: DialRequest,
@@ -341,46 +369,41 @@ impl Behaviour {
         Ok(addrs)
     }
 
-    // Adapt confidence and reachability to the result. Return new reachability if it changed.
-    fn resolve_probe(&mut self, result: Result<Multiaddr, ResponseError>) -> Option<Reachability> {
-        let resolved_reachability = Reachability::from(result);
+    // Adapt current confidence and NAT status to the status reported by the latest probe.
+    // Return whether the currently assumed status was flipped.
+    fn handle_reported_status(&mut self, reported: &NatStatus) -> bool {
         self.schedule_probe.reset(self.config.retry_interval);
 
-        if resolved_reachability == self.reachability {
-            if !matches!(self.reachability, Reachability::Unknown) {
+        if reported == &self.nat_status {
+            if !matches!(self.nat_status, NatStatus::Unknown) {
                 if self.confidence < self.config.confidence_max {
                     self.confidence += 1;
                 }
                 // Delay with (usually longer) refresh-interval if we reached max confidence.
                 if self.confidence >= self.config.confidence_max {
-                    self.schedule_probe = Delay::new(self.config.refresh_interval);
+                    self.schedule_probe.reset(self.config.refresh_interval);
                 }
             }
-            if self.last_probe.is_some() {
-                None
-            } else {
-                // This is the first probe after boot therefore the status should be reported.
-                Some(resolved_reachability)
-            }
+            false
         } else if self.confidence > 0 {
-            // Reduce confidence but keep old reachability status.
+            // Reduce confidence but keep old status.
             self.confidence -= 1;
-            None
+            false
         } else {
             log::debug!(
-                "Flipped reachability from {:?} to {:?}",
-                self.reachability,
-                resolved_reachability
+                "Flipped assumed NAT status from {:?} to {:?}",
+                self.nat_status,
+                reported
             );
-            self.reachability = resolved_reachability;
-            Some(self.reachability.clone())
+            self.nat_status = reported.clone();
+            true
         }
     }
 }
 
 impl NetworkBehaviour for Behaviour {
     type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
-    type OutEvent = Reachability;
+    type OutEvent = Event;
 
     fn inject_connection_established(
         &mut self,
@@ -417,13 +440,13 @@ impl NetworkBehaviour for Behaviour {
             // An inbound connection can indicate that we are public; adjust the delay to the next probe.
             ConnectedPoint::Listener { .. } => {
                 if self.confidence < self.config.confidence_max {
-                    // Retry status already scheduled.
+                    // Retry already scheduled.
                     return;
                 }
                 let last_probe_instant = self
                     .last_probe
                     .expect("Confidence > 0 implies that there was already a probe.");
-                if self.reachability.is_public() {
+                if self.nat_status.is_public() {
                     let schedule_next = last_probe_instant + self.config.refresh_interval * 2;
                     self.schedule_probe.reset(schedule_next - Instant::now());
                 } else {
@@ -476,7 +499,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
-        if !self.reachability.is_public() {
+        if !self.nat_status.is_public() {
             self.confidence = 0;
             self.schedule_probe.reset(Duration::ZERO);
         }
@@ -487,7 +510,7 @@ impl NetworkBehaviour for Behaviour {
         if let Some(public_address) = self.public_address() {
             if public_address == addr {
                 self.confidence = 0;
-                self.reachability = Reachability::Unknown;
+                self.nat_status = NatStatus::Unknown;
                 self.schedule_probe.reset(Duration::ZERO);
             }
         }
@@ -495,7 +518,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_new_external_addr(addr);
-        if !self.reachability.is_public() {
+        if !self.nat_status.is_public() {
             self.confidence = 0;
             self.schedule_probe.reset(Duration::ZERO);
         }
@@ -506,7 +529,7 @@ impl NetworkBehaviour for Behaviour {
         if let Some(public_address) = self.public_address() {
             if public_address == addr {
                 self.confidence = 0;
-                self.reachability = Reachability::Unknown;
+                self.nat_status = NatStatus::Unknown;
                 self.schedule_probe.reset(Duration::ZERO);
             }
         }
@@ -517,13 +540,12 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
-        let mut is_probe_due = false;
-        if self.schedule_probe.poll_unpin(cx).is_ready() {
-            is_probe_due = true;
+        if self.pending_probes.is_empty() && self.schedule_probe.poll_unpin(cx).is_ready() {
+            self.pending_probes.push_back((self.probe_id.next(), None));
             self.schedule_probe.reset(self.config.refresh_interval);
         }
         loop {
-            if is_probe_due {
+            while let Some((probe_id, server)) = self.pending_probes.pop_front() {
                 let mut addresses = match self.public_address() {
                     Some(a) => vec![a.clone()], // Remote should try our assumed public address first.
                     None => Vec::new(),
@@ -531,16 +553,26 @@ impl NetworkBehaviour for Behaviour {
                 addresses.extend(params.external_addresses().map(|r| r.addr));
                 addresses.extend(params.listened_addresses());
 
-                if self.do_probe(addresses).is_none() {
-                    if let Some(flipped_reachability) =
-                        self.resolve_probe(Err(ResponseError::InternalError))
-                    {
-                        self.pending_out_event.push_back(flipped_reachability);
+                let is_manually_triggered = server.is_some();
+                let is_first = self.last_probe.is_none();
+                match self.do_probe(server, addresses) {
+                    Some(request_id) => {
+                        self.ongoing_outbound
+                            .insert(request_id, (probe_id, is_manually_triggered));
+                    }
+                    None => {
+                        let nat_status = NatStatus::Unknown;
+                        let has_flipped = self.handle_reported_status(&nat_status);
+                        if has_flipped || is_first || is_manually_triggered {
+                            self.pending_out_events.push_back(Event {
+                                nat_status,
+                                probe_id,
+                            });
+                        }
                     }
                 }
-                is_probe_due = false;
             }
-            if let Some(event) = self.pending_out_event.pop_front() {
+            if let Some(event) = self.pending_out_events.pop_front() {
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
             }
             match self.inner.poll(cx, params) {
@@ -552,7 +584,7 @@ impl NetworkBehaviour for Behaviour {
                         request,
                         channel,
                     } => {
-                        match self.handle_request(peer, request) {
+                        match self.resolve_inbound_request(peer, request) {
                             Ok(addrs) => {
                                 log::debug!("Inbound dial request from Peer {} with dial-back addresses {:?}.", peer, addrs);
                                 self.ongoing_inbound.insert(peer, (addrs.clone(), channel));
@@ -569,9 +601,16 @@ impl NetworkBehaviour for Behaviour {
                             }
                         }
                     }
-                    RequestResponseMessage::Response { response, .. } => {
+                    RequestResponseMessage::Response {
+                        response,
+                        request_id,
+                    } => {
                         log::debug!("Outbound dial-back request returned {:?}.", response);
 
+                        let (probe_id, is_manually_triggered) = self
+                            .ongoing_outbound
+                            .remove(&request_id)
+                            .expect("Request ID exists.");
                         let mut report_addr = None;
                         if let Ok(ref addr) = response.result {
                             // Update observed address score if it is finite.
@@ -586,9 +625,13 @@ impl NetworkBehaviour for Behaviour {
                                 });
                             }
                         }
-
-                        if let Some(flipped_reachability) = self.resolve_probe(response.result) {
-                            self.pending_out_event.push_back(flipped_reachability);
+                        let new = response.result.into();
+                        let has_flipped = self.handle_reported_status(&new);
+                        if self.last_probe.is_none() || has_flipped || is_manually_triggered {
+                            self.pending_out_events.push_back(Event {
+                                probe_id,
+                                nat_status: new,
+                            });
                         }
                         if let Some(action) = report_addr {
                             return Poll::Ready(action);
@@ -600,9 +643,7 @@ impl NetworkBehaviour for Behaviour {
                 )) => {}
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::OutboundFailure { .. },
-                )) => {
-                    is_probe_due = true;
-                }
+                )) => self.pending_probes.push_back((self.probe_id.next(), None)),
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::InboundFailure { peer, .. },
                 )) => {

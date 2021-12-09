@@ -86,8 +86,8 @@ impl Behaviour {
                 autonat::Config {
                     retry_interval: Duration::from_secs(10),
                     refresh_interval: Duration::from_secs(30),
-                    boot_delay: Duration::ZERO,
-                    throttle_peer_period: Duration::from_secs(5),
+                    boot_delay: Duration::from_secs(5),
+                    throttle_peer_period: Duration::ZERO,
                     ..Default::default()
                 },
             ),
@@ -97,7 +97,7 @@ impl Behaviour {
 
 #[derive(Debug)]
 enum Event {
-    AutoNat(autonat::Reachability),
+    AutoNat(autonat::Event),
     Identify(IdentifyEvent),
 }
 
@@ -107,8 +107,8 @@ impl From<IdentifyEvent> for Event {
     }
 }
 
-impl From<autonat::Reachability> for Event {
-    fn from(v: autonat::Reachability) -> Self {
+impl From<autonat::Event> for Event {
+    fn from(v: autonat::Event) -> Self {
         Self::AutoNat(v)
     }
 }

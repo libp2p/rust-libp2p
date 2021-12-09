@@ -27,7 +27,7 @@ use libp2p::{
     swarm::{AddressScore, Swarm, SwarmEvent},
     Multiaddr, PeerId,
 };
-use libp2p_autonat::{Behaviour, Config, Reachability};
+use libp2p_autonat::{Behaviour, Config, Event, NatStatus};
 
 const SERVER_COUNT: usize = 5;
 
@@ -42,7 +42,11 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
 async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
     let (tx, rx) = oneshot::channel();
     async_std::task::spawn(async move {
-        let mut swarm = init_swarm(Config::default()).await;
+        let mut swarm = init_swarm(Config {
+            boot_delay: Duration::from_secs(60),
+            ..Default::default()
+        })
+        .await;
         let peer_id = *swarm.local_peer_id();
         swarm
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
@@ -87,9 +91,9 @@ async fn test_public() {
     // Auto-Probe should directly resolve to `Unknown` as the local peer has no listening addresses
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(flipped) => {
-                assert_eq!(flipped, Reachability::Unknown);
-                assert_eq!(client.behaviour().reachability(), Reachability::Unknown);
+            SwarmEvent::Behaviour(Event { nat_status, .. }) => {
+                assert_eq!(nat_status, NatStatus::Unknown);
+                assert_eq!(client.behaviour().nat_status(), NatStatus::Unknown);
                 assert!(client.behaviour().public_address().is_none());
                 assert_eq!(client.behaviour().confidence(), 0);
                 break;
@@ -106,11 +110,11 @@ async fn test_public() {
     // Confidence should increase with each iteration
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(flipped) => {
-                assert_eq!(flipped, Reachability::Private);
+            SwarmEvent::Behaviour(Event { nat_status, .. }) => {
+                assert_eq!(nat_status, NatStatus::Private);
                 assert!(matches!(
-                    client.behaviour().reachability(),
-                    Reachability::Private
+                    client.behaviour().nat_status(),
+                    NatStatus::Private
                 ));
                 assert!(client.behaviour().public_address().is_none());
                 assert_eq!(client.behaviour().confidence(), 0);
@@ -134,11 +138,11 @@ async fn test_public() {
     // Client should be reachable by the servers
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(flipped) => {
-                assert!(matches!(flipped, Reachability::Public(_)));
+            SwarmEvent::Behaviour(Event { nat_status, .. }) => {
+                assert!(matches!(nat_status, NatStatus::Public(_)));
                 assert!(matches!(
-                    client.behaviour().reachability(),
-                    Reachability::Public(..)
+                    client.behaviour().nat_status(),
+                    NatStatus::Public(..)
                 ));
                 assert_eq!(client.behaviour().confidence(), 0);
                 assert!(client.behaviour().public_address().is_some());

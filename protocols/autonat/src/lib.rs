@@ -23,7 +23,7 @@ mod behaviour;
 mod protocol;
 
 pub use self::{
-    behaviour::{Behaviour, Config, Reachability},
+    behaviour::{Behaviour, Config, Event, NatStatus, ProbeId},
     protocol::ResponseError,
 };
 
