@@ -126,6 +126,7 @@ pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
     remote_addr: Multiaddr,
+    /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ProtocolsHandlerUpgrErr<
             EitherError<inbound_stop::UpgradeError, outbound_hop::UpgradeError>,
@@ -158,6 +159,10 @@ pub struct Handler {
 
     circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
 
+    /// Futures that try to send errors to the transport.
+    ///
+    /// We may drop errors if this handler ends up in a terminal state (by returning
+    /// [`ProtocolsHandlerEvent::Close`]).
     send_error_futs: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
@@ -392,14 +397,19 @@ impl ProtocolsHandler for Handler {
                     }
                 }
 
-                self.send_error_futs.push(
-                    async move {
-                        let _ = to_listener
-                            .send(transport::ToListenerMsg::Reservation(Err(())))
-                            .await;
-                    }
-                    .boxed(),
-                );
+                if self.pending_error.is_none() {
+                    self.send_error_futs.push(
+                        async move {
+                            let _ = to_listener
+                                .send(transport::ToListenerMsg::Reservation(Err(())))
+                                .await;
+                        }
+                        .boxed(),
+                    );
+                } else {
+                    // Fatal error occured, thus handler is closing as quickly as possible.
+                    // Transport is notified through dropping `to_listener`.
+                }
 
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::ReservationReqFailed { renewal },
