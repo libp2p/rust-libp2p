@@ -127,10 +127,18 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                             .map_err(|_| UpgradeError::InvalidReservationAddrs)?
                     };
 
-                    let renewal_timeout = if let Some(expires) = reservation.expire {
+                    let renewal_timeout = if let Some(timestamp) = reservation.expire {
                         Some(
-                            unix_timestamp_to_instant(expires)
-                                .and_then(|instant| instant.checked_duration_since(Instant::now()))
+                            timestamp
+                                .checked_sub(
+                                    SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs(),
+                                )
+                                // Renew the reservation after 3/4 of the reservation expiration timestamp.
+                                .and_then(|duration| duration.checked_sub(duration / 4))
+                                .map(Duration::from_secs)
                                 .map(Delay::new)
                                 .ok_or(UpgradeError::InvalidReservationExpiration)?,
                         )
@@ -200,17 +208,6 @@ pub enum UpgradeError {
     ParseStatusField,
     #[error("Unexpected message status '{0:?}'")]
     UnexpectedStatus(Status),
-}
-
-fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
-    Instant::now().checked_add(Duration::from_secs(
-        secs.checked_sub(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        )?,
-    ))
 }
 
 pub enum Output {

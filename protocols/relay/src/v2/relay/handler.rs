@@ -649,7 +649,7 @@ impl ProtocolsHandler for Handler {
                                 ))
                             }
                             // While useless for reaching this particular destination, the
-                            // connection to the relay might still proof helpful for other
+                            // connection to the relay might still prove helpful for other
                             // destinations. Thus do not terminate the connection.
                             Status::ResourceLimitExceeded | Status::PermissionDenied => {}
                         }
