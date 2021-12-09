@@ -55,8 +55,8 @@ type THandlerInEvent<THandler> =
 /// ## Combinators
 ///
 /// [`NetworkBehaviour`] combinators wrap one or more [`NetworkBehaviour`] implementations and
-/// implement [`NetworkBehaviour`] themselves. Example is the [`Toggle`](crate::toggle::Toggle)
-/// [`NetworkBehaviour`].
+/// implement [`NetworkBehaviour`] themselves. Example is the
+/// [`Toggle`](crate::behaviour::toggle::Toggle) [`NetworkBehaviour`].
 ///
 /// ``` rust
 /// # use libp2p_swarm::DummyBehaviour;
