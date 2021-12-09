@@ -323,7 +323,9 @@ impl NetworkBehaviour for Client {
                 }
                 Poll::Ready(None) => unreachable!(
                     "`Relay` `NetworkBehaviour` polled after channel from \
-                     `RelayTransport` has been closed.",
+                     `RelayTransport` has been closed. Unreachable under \
+                     the assumption that the `Client` is never polled after \
+                     `ClientTransport` is dropped.",
                 ),
                 Poll::Pending => break,
             }
