@@ -253,6 +253,12 @@ impl Floodsub {
 
         // Send to peers we know are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
+            // Peer must be in a communication list.
+            if !self.target_peers.contains(peer_id) {
+                continue;
+            }
+
+            // Peer must be subscribed for the topic.
             if !sub_topic
                 .iter()
                 .any(|t| message.topics.iter().any(|u| t == u))
@@ -402,6 +408,12 @@ impl NetworkBehaviour for Floodsub {
                     continue;
                 }
 
+                // Peer must be in a communication list.
+                if !self.target_peers.contains(peer_id) {
+                    continue;
+                }
+
+                // Peer must be subscribed for the topic.
                 if !subscr_topics
                     .iter()
                     .any(|t| message.topics.iter().any(|u| t == u))

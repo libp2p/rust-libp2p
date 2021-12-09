@@ -54,6 +54,7 @@ impl fmt::Debug for Stream {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum OutEvent {
     RegistrationRequested(NewRegistration),

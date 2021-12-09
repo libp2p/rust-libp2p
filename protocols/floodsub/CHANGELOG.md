@@ -4,7 +4,11 @@
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
+- Propagate messages only to the target peers and not all connected peers (see [PR2360]).
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
+[PR 2360]: https://github.com/libp2p/rust-libp2p/pull/2360/
 
 # 0.32.0 [2021-11-16]
 

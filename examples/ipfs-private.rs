@@ -31,8 +31,8 @@
 //!
 //! You can ping this node, or use pubsub (gossipsub) on the topic "chat". For this
 //! to work, the ipfs node needs to be configured to use gossipsub.
-use async_std::{io, task};
-use futures::{future, prelude::*};
+use async_std::io;
+use futures::{prelude::*, select};
 use libp2p::{
     core::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
@@ -48,15 +48,7 @@ use libp2p::{
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
-use std::{
-    env,
-    error::Error,
-    fs,
-    path::Path,
-    str::FromStr,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
 /// Builds the transport that serves as a common ground for all connections.
 pub fn build_transport(
@@ -138,7 +130,8 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
     Ok(res)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let ipfs_path: Box<Path> = get_ipfs_path();
@@ -270,36 +263,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines();
+    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
 
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
-    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
-        loop {
-            if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm
+    loop {
+        select! {
+            line = stdin.select_next_some() => {
+                if let Err(e) = swarm
                     .behaviour_mut()
                     .gossipsub
-                    .publish(gossipsub_topic.clone(), line.as_bytes()),
-                Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break,
-            } {
-                println!("Publish error: {:?}", e);
-            }
-        }
-        loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => {
-                    if let SwarmEvent::NewListenAddr { address, .. } = event {
-                        println!("Listening on {:?}", address);
-                    }
+                    .publish(gossipsub_topic.clone(), line.expect("Stdin not to close").as_bytes())
+                {
+                    println!("Publish error: {:?}", e);
                 }
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => break,
+            },
+            event = swarm.select_next_some() => {
+                if let SwarmEvent::NewListenAddr { address, .. } = event {
+                    println!("Listening on {:?}", address);
+                }
             }
         }
-        Poll::Pending
-    }))
+    }
 }
