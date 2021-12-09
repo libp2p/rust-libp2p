@@ -25,6 +25,7 @@ use futures::stream::StreamExt;
 use futures::task::Spawn;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::choice::OrTransport;
 use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p::core::PublicKey;
 use libp2p::core::{identity, upgrade, PeerId};
@@ -190,7 +191,7 @@ fn build_relay() -> Swarm<Relay> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.clone().to_peer_id();
 
-    let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
+    let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
 
     Swarm::new(
         transport,
@@ -213,9 +214,11 @@ fn build_client() -> Swarm<Client> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.clone().to_peer_id();
 
-    let (transport, behaviour) =
-        client::Client::new_transport_and_behaviour(local_peer_id, MemoryTransport::default());
-    let transport = build_transport(transport.boxed(), local_public_key);
+    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
+    let transport = upgrade_transport(
+        OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
+        local_public_key,
+    );
 
     Swarm::new(
         transport,
@@ -227,20 +230,18 @@ fn build_client() -> Swarm<Client> {
     )
 }
 
-fn build_transport<StreamSink>(
+fn upgrade_transport<StreamSink>(
     transport: Boxed<StreamSink>,
     local_public_key: PublicKey,
 ) -> Boxed<(PeerId, StreamMuxerBox)>
 where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    let transport = transport
+    transport
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed();
-
-    transport
+        .boxed()
 }
 
 #[derive(NetworkBehaviour)]

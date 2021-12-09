@@ -21,7 +21,7 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
 mod handler;
-mod transport;
+pub mod transport;
 
 use crate::v2::protocol::inbound_stop;
 use bytes::Bytes;
@@ -32,7 +32,7 @@ use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
-use libp2p_core::{Multiaddr, PeerId, Transport};
+use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     DialError, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
@@ -84,11 +84,10 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new_transport_and_behaviour<T: Transport + Clone>(
+    pub fn new_transport_and_behaviour(
         local_peer_id: PeerId,
-        transport: T,
-    ) -> (transport::ClientTransport<T>, Self) {
-        let (transport, from_transport) = transport::ClientTransport::new(transport);
+    ) -> (transport::ClientTransport, Self) {
+        let (transport, from_transport) = transport::ClientTransport::new();
         let behaviour = Client {
             local_peer_id,
             from_transport,
