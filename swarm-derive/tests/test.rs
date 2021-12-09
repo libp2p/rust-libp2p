@@ -333,7 +333,7 @@ fn with_toggle() {
     #[derive(NetworkBehaviour)]
     #[behaviour(event_process = true)]
     struct Foo {
-        indentify: libp2p::identify::Identify,
+        identify: libp2p::identify::Identify,
         ping: Toggle<libp2p::ping::Ping>,
     }
 
