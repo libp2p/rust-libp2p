@@ -131,6 +131,8 @@ impl ProbeId {
 pub struct Event {
     pub probe_id: ProbeId,
     pub nat_status: NatStatus,
+    pub confidence: usize,
+    pub has_flipped: bool,
 }
 
 /// Network Behaviour for AutoNAT.
@@ -159,8 +161,8 @@ pub struct Behaviour {
     ongoing_inbound: HashMap<PeerId, (Vec<Multiaddr>, ResponseChannel<DialResponse>)>,
 
     // Ongoing outbound requests, where no response has been received from the remote yet.
-    // Map the ID of the inner request to the probe's ID and specify whether the probe was manually triggered.
-    ongoing_outbound: HashMap<RequestId, (ProbeId, bool)>,
+    // Map the ID of the inner request to the probe's ID.
+    ongoing_outbound: HashMap<RequestId, ProbeId>,
 
     // Connected peers with their observed address.
     // These peers may be used as servers for dial-requests.
@@ -553,22 +555,19 @@ impl NetworkBehaviour for Behaviour {
                 addresses.extend(params.external_addresses().map(|r| r.addr));
                 addresses.extend(params.listened_addresses());
 
-                let is_manually_triggered = server.is_some();
-                let is_first = self.last_probe.is_none();
                 match self.do_probe(server, addresses) {
                     Some(request_id) => {
-                        self.ongoing_outbound
-                            .insert(request_id, (probe_id, is_manually_triggered));
+                        self.ongoing_outbound.insert(request_id, probe_id);
                     }
                     None => {
                         let nat_status = NatStatus::Unknown;
                         let has_flipped = self.handle_reported_status(&nat_status);
-                        if has_flipped || is_first || is_manually_triggered {
-                            self.pending_out_events.push_back(Event {
-                                nat_status,
-                                probe_id,
-                            });
-                        }
+                        self.pending_out_events.push_back(Event {
+                            nat_status,
+                            confidence: self.confidence,
+                            probe_id,
+                            has_flipped,
+                        });
                     }
                 }
             }
@@ -607,7 +606,7 @@ impl NetworkBehaviour for Behaviour {
                     } => {
                         log::debug!("Outbound dial-back request returned {:?}.", response);
 
-                        let (probe_id, is_manually_triggered) = self
+                        let probe_id = self
                             .ongoing_outbound
                             .remove(&request_id)
                             .expect("Request ID exists.");
@@ -625,14 +624,14 @@ impl NetworkBehaviour for Behaviour {
                                 });
                             }
                         }
-                        let new = response.result.into();
-                        let has_flipped = self.handle_reported_status(&new);
-                        if self.last_probe.is_none() || has_flipped || is_manually_triggered {
-                            self.pending_out_events.push_back(Event {
-                                probe_id,
-                                nat_status: new,
-                            });
-                        }
+                        let reported = response.result.into();
+                        let has_flipped = self.handle_reported_status(&reported);
+                        self.pending_out_events.push_back(Event {
+                            nat_status: reported,
+                            confidence: self.confidence,
+                            probe_id,
+                            has_flipped,
+                        });
                         if let Some(action) = report_addr {
                             return Poll::Ready(action);
                         }
