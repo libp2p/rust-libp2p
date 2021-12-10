@@ -17,7 +17,7 @@ libp2p-core = { version = "0.31.0", path = "../../core", default-features = fals
 log = "0.4"
 prost = "0.9"
 rand = "0.8.3"
-sha2 = "0.9.1"
+sha2 = "0.10.0"
 static_assertions = "1"
 x25519-dalek = "1.1.0"
 zeroize = "1"

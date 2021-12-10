@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.1"
 log = "0.4.8"
 salsa20 = "0.9"
-sha3 = "0.9"
+sha3 = "0.10"
 rand = "0.7"
 pin-project = "1.0.2"
 
