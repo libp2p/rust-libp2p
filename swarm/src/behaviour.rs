@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub mod toggle;
+
 use crate::dial_opts::DialOpts;
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
 use crate::{AddressRecord, AddressScore, DialError};
@@ -53,12 +55,12 @@ type THandlerInEvent<THandler> =
 /// ## Combinators
 ///
 /// [`NetworkBehaviour`] combinators wrap one or more [`NetworkBehaviour`] implementations and
-/// implement [`NetworkBehaviour`] themselves. Example is the [`Toggle`](crate::toggle::Toggle)
-/// [`NetworkBehaviour`].
+/// implement [`NetworkBehaviour`] themselves. Example is the
+/// [`Toggle`](crate::behaviour::toggle::Toggle) [`NetworkBehaviour`].
 ///
 /// ``` rust
 /// # use libp2p_swarm::DummyBehaviour;
-/// # use libp2p_swarm::toggle::Toggle;
+/// # use libp2p_swarm::behaviour::toggle::Toggle;
 /// let my_behaviour = DummyBehaviour::default();
 /// let my_toggled_behaviour = Toggle::from(Some(my_behaviour));
 /// ```
