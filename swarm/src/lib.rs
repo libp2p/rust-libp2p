@@ -60,7 +60,6 @@ mod upgrade;
 
 pub mod behaviour;
 pub mod dial_opts;
-pub mod either;
 pub mod protocols_handler;
 
 pub use behaviour::{
