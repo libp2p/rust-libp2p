@@ -374,10 +374,10 @@ impl Behaviour {
 
     // Adapt current confidence and NAT status to the status reported by the latest probe.
     // Return whether the currently assumed status was flipped.
-    fn handle_reported_status(&mut self, reported: &NatStatus) -> bool {
+    fn handle_reported_status(&mut self, reported: NatStatus) -> bool {
         self.schedule_probe.reset(self.config.retry_interval);
 
-        if reported == &self.nat_status {
+        if reported == self.nat_status {
             if !matches!(self.nat_status, NatStatus::Unknown) {
                 if self.confidence < self.config.confidence_max {
                     self.confidence += 1;
@@ -398,7 +398,7 @@ impl Behaviour {
                 self.nat_status,
                 reported
             );
-            self.nat_status = reported.clone();
+            self.nat_status = reported;
             true
         }
     }
@@ -563,9 +563,9 @@ impl NetworkBehaviour for Behaviour {
                     }
                     None => {
                         let nat_status = NatStatus::Unknown;
-                        let has_flipped = self.handle_reported_status(&nat_status);
+                        let has_flipped = self.handle_reported_status(nat_status);
                         self.pending_out_events.push_back(Event {
-                            nat_status,
+                            nat_status: self.nat_status.clone(),
                             confidence: self.confidence,
                             probe_id,
                             has_flipped,
@@ -627,9 +627,9 @@ impl NetworkBehaviour for Behaviour {
                             }
                         }
                         let reported = response.result.into();
-                        let has_flipped = self.handle_reported_status(&reported);
+                        let has_flipped = self.handle_reported_status(reported);
                         self.pending_out_events.push_back(Event {
-                            nat_status: reported,
+                            nat_status: self.nat_status.clone(),
                             confidence: self.confidence,
                             probe_id,
                             has_flipped,
