@@ -547,7 +547,6 @@ impl NetworkBehaviour for Behaviour {
         if self.pending_probes.is_empty() && self.schedule_probe.poll_unpin(cx).is_ready() {
             self.pending_probes.push_back((self.probe_id.next(), None));
             self.schedule_probe.reset(self.config.refresh_interval);
-            println!("Scheduled probe is ready");
         }
         loop {
             while let Some((probe_id, server)) = self.pending_probes.pop_front() {
@@ -558,14 +557,12 @@ impl NetworkBehaviour for Behaviour {
                 addresses.extend(params.external_addresses().map(|r| r.addr));
                 addresses.extend(params.listened_addresses());
 
-                println!("server: {:?}, addrs: {:?}", server, addresses);
                 match self.do_probe(server, addresses) {
                     Some(request_id) => {
                         self.ongoing_outbound.insert(request_id, probe_id);
                     }
                     None => {
                         let nat_status = NatStatus::Unknown;
-                        println!("naajhh");
                         let has_flipped = self.handle_reported_status(&nat_status);
                         self.pending_out_events.push_back(Event {
                             nat_status,

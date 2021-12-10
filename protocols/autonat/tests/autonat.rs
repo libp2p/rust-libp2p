@@ -213,7 +213,6 @@ async fn test_manual_probe() {
                 confidence,
                 has_flipped,
             }) => {
-                println!("status: {:?}", nat_status);
                 assert_eq!(expect_flipped, has_flipped);
                 expect_flipped = false;
                 assert!(matches!(nat_status, NatStatus::Public(_)));
