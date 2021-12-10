@@ -327,7 +327,7 @@ fn event_process_false() {
 
 #[test]
 fn with_toggle() {
-    use libp2p::swarm::toggle::Toggle;
+    use libp2p::swarm::behaviour::toggle::Toggle;
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
