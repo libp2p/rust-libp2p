@@ -248,6 +248,7 @@ impl Behaviour {
     pub fn trigger_probe(&mut self, server: Option<PeerId>) -> Option<ProbeId> {
         let server_id = server.or_else(|| self.random_server())?;
         let probe_id = self.probe_id.next();
+        self.recent_probes.push((server_id, Instant::now()));
         self.pending_probes.push_back((probe_id, Some(server_id)));
         Some(probe_id)
     }
@@ -268,6 +269,7 @@ impl Behaviour {
             return None;
         }
         let server = servers[rand::random::<usize>() % servers.len()];
+        self.recent_probes.push((*server, Instant::now()));
         Some(*server)
     }
 
@@ -292,7 +294,6 @@ impl Behaviour {
                 addresses,
             },
         );
-        self.recent_probes.push((server, Instant::now()));
         self.last_probe = Some(Instant::now());
         log::debug!("Send dial-back request to peer {}.", server);
         Some(request_id)
@@ -501,8 +502,9 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
-        if !self.nat_status.is_public() {
-            self.confidence = 0;
+
+        if self.confidence == self.config.confidence_max && !self.nat_status.is_public() {
+            self.confidence -= 1;
             self.schedule_probe.reset(Duration::ZERO);
         }
     }
@@ -520,8 +522,8 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_new_external_addr(addr);
-        if !self.nat_status.is_public() {
-            self.confidence = 0;
+        if self.confidence == self.config.confidence_max && !self.nat_status.is_public() {
+            self.confidence -= 1;
             self.schedule_probe.reset(Duration::ZERO);
         }
     }
@@ -545,6 +547,7 @@ impl NetworkBehaviour for Behaviour {
         if self.pending_probes.is_empty() && self.schedule_probe.poll_unpin(cx).is_ready() {
             self.pending_probes.push_back((self.probe_id.next(), None));
             self.schedule_probe.reset(self.config.refresh_interval);
+            println!("Scheduled probe is ready");
         }
         loop {
             while let Some((probe_id, server)) = self.pending_probes.pop_front() {
@@ -555,12 +558,14 @@ impl NetworkBehaviour for Behaviour {
                 addresses.extend(params.external_addresses().map(|r| r.addr));
                 addresses.extend(params.listened_addresses());
 
+                println!("server: {:?}, addrs: {:?}", server, addresses);
                 match self.do_probe(server, addresses) {
                     Some(request_id) => {
                         self.ongoing_outbound.insert(request_id, probe_id);
                     }
                     None => {
                         let nat_status = NatStatus::Unknown;
+                        println!("naajhh");
                         let has_flipped = self.handle_reported_status(&nat_status);
                         self.pending_out_events.push_back(Event {
                             nat_status,
@@ -641,8 +646,15 @@ impl NetworkBehaviour for Behaviour {
                     RequestResponseEvent::ResponseSent { .. },
                 )) => {}
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure { .. },
-                )) => self.pending_probes.push_back((self.probe_id.next(), None)),
+                    RequestResponseEvent::OutboundFailure { error, peer, .. },
+                )) => {
+                    log::debug!(
+                        "Outbound Failure {} when sending dial-back request to server {}.",
+                        error,
+                        peer
+                    );
+                    self.pending_probes.push_back((self.probe_id.next(), None));
+                }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::InboundFailure { peer, .. },
                 )) => {

@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::time::Duration;
-
 use futures::{channel::oneshot, FutureExt, StreamExt};
 use libp2p::{
     development_transport,
@@ -28,6 +26,7 @@ use libp2p::{
     Multiaddr, PeerId,
 };
 use libp2p_autonat::{Behaviour, Config, Event, NatStatus};
+use std::time::Duration;
 
 const SERVER_COUNT: usize = 5;
 
@@ -71,31 +70,34 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
 }
 
 #[async_std::test]
-async fn test_public() {
-    let mut handles = Vec::new();
-
+async fn test_auto_probe() {
     let mut client = init_swarm(Config {
         retry_interval: Duration::from_millis(100),
+        throttle_peer_period: Duration::from_millis(99),
         boot_delay: Duration::ZERO,
         ..Default::default()
     })
     .await;
 
-    for _ in 0..SERVER_COUNT {
-        let (tx, rx) = oneshot::channel();
-        let (id, addr) = spawn_server(rx).await;
-        client.behaviour_mut().add_server(id, Some(addr));
-        handles.push(tx);
-    }
+    let (_handle, rx) = oneshot::channel();
+    let (id, addr) = spawn_server(rx).await;
+    client.behaviour_mut().add_server(id, Some(addr));
 
-    // Auto-Probe should directly resolve to `Unknown` as the local peer has no listening addresses
+    // Probe should directly resolve to `Unknown` as the local peer has no listening addresses
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(Event { nat_status, .. }) => {
+            SwarmEvent::Behaviour(Event {
+                nat_status,
+                confidence,
+                has_flipped,
+                ..
+            }) => {
                 assert_eq!(nat_status, NatStatus::Unknown);
-                assert_eq!(client.behaviour().nat_status(), NatStatus::Unknown);
+                assert_eq!(client.behaviour().nat_status(), nat_status);
                 assert!(client.behaviour().public_address().is_none());
-                assert_eq!(client.behaviour().confidence(), 0);
+                assert_eq!(confidence, 0);
+                assert_eq!(client.behaviour().confidence(), confidence);
+                assert!(!has_flipped);
                 break;
             }
             _ => {}
@@ -110,14 +112,18 @@ async fn test_public() {
     // Confidence should increase with each iteration
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(Event { nat_status, .. }) => {
+            SwarmEvent::Behaviour(Event {
+                nat_status,
+                has_flipped,
+                confidence,
+                ..
+            }) => {
                 assert_eq!(nat_status, NatStatus::Private);
-                assert!(matches!(
-                    client.behaviour().nat_status(),
-                    NatStatus::Private
-                ));
+                assert_eq!(client.behaviour().nat_status(), nat_status);
                 assert!(client.behaviour().public_address().is_none());
-                assert_eq!(client.behaviour().confidence(), 0);
+                assert_eq!(confidence, 0);
+                assert_eq!(client.behaviour().confidence(), confidence);
+                assert!(has_flipped);
                 break;
             }
             _ => {}
@@ -135,20 +141,95 @@ async fn test_public() {
         }
     }
 
-    // Client should be reachable by the servers
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(Event { nat_status, .. }) => {
+            SwarmEvent::Behaviour(Event {
+                nat_status,
+                confidence,
+                has_flipped,
+                ..
+            }) => {
                 assert!(matches!(nat_status, NatStatus::Public(_)));
-                assert!(matches!(
-                    client.behaviour().nat_status(),
-                    NatStatus::Public(..)
-                ));
-                assert_eq!(client.behaviour().confidence(), 0);
+                assert_eq!(client.behaviour().nat_status(), nat_status);
+                assert_eq!(confidence, 0);
+                assert_eq!(client.behaviour().confidence(), confidence);
                 assert!(client.behaviour().public_address().is_some());
+                assert!(has_flipped);
                 break;
             }
             _ => {}
         }
     }
+
+    drop(_handle);
+}
+
+#[async_std::test]
+async fn test_manual_probe() {
+    let mut handles = Vec::new();
+
+    let mut client = init_swarm(Config {
+        retry_interval: Duration::from_secs(60),
+        throttle_peer_period: Duration::from_millis(100),
+        ..Default::default()
+    })
+    .await;
+
+    for _ in 0..SERVER_COUNT {
+        let (tx, rx) = oneshot::channel();
+        let (id, addr) = spawn_server(rx).await;
+        client.behaviour_mut().add_server(id, Some(addr));
+        handles.push(tx);
+    }
+
+    client
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+        .unwrap();
+    loop {
+        match client.select_next_some().await {
+            SwarmEvent::NewListenAddr { .. } => break,
+            _ => {}
+        }
+    }
+
+    let mut probes = Vec::new();
+
+    for _ in 0..SERVER_COUNT {
+        let probe_id = client.behaviour_mut().trigger_probe(None).unwrap();
+        probes.push(probe_id);
+    }
+
+    // Expect None because of peer throttling
+    assert!(client.behaviour_mut().trigger_probe(None).is_none());
+
+    let mut curr_confidence = 0;
+    let mut expect_flipped = true;
+    let mut i = 0;
+    while i < SERVER_COUNT {
+        match client.select_next_some().await {
+            SwarmEvent::Behaviour(Event {
+                nat_status,
+                probe_id,
+                confidence,
+                has_flipped,
+            }) => {
+                println!("status: {:?}", nat_status);
+                assert_eq!(expect_flipped, has_flipped);
+                expect_flipped = false;
+                assert!(matches!(nat_status, NatStatus::Public(_)));
+                assert_eq!(client.behaviour().nat_status(), nat_status);
+                assert_eq!(client.behaviour().confidence(), confidence);
+                assert_eq!(client.behaviour().confidence(), curr_confidence);
+                if curr_confidence < 3 {
+                    curr_confidence += 1;
+                }
+                assert!(client.behaviour().public_address().is_some());
+                let index = probes.binary_search(&probe_id).unwrap();
+                probes.remove(index);
+                i += 1;
+            }
+            _ => {}
+        }
+    }
+    drop(handles)
 }
