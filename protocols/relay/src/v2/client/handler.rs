@@ -21,8 +21,7 @@
 use crate::v2::client::transport;
 use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_stop, outbound_hop};
-use futures::channel::mpsc::Sender;
-use futures::channel::oneshot;
+use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -44,7 +43,7 @@ use std::time::Duration;
 
 pub enum In {
     Reserve {
-        to_listener: Sender<transport::ToListenerMsg>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
@@ -621,7 +620,7 @@ enum Reservation {
         /// [`None`] if reservation does not expire.
         renewal_timeout: Option<Delay>,
         pending_msgs: VecDeque<transport::ToListenerMsg>,
-        to_listener: Sender<transport::ToListenerMsg>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     Renewal {
         pending_msgs: VecDeque<transport::ToListenerMsg>,
@@ -630,7 +629,7 @@ enum Reservation {
 
 pub enum OutboundOpenInfo {
     Reserve {
-        to_listener: Sender<transport::ToListenerMsg>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     Connect {
         send_back: oneshot::Sender<Result<super::RelayedConnection, ()>>,
