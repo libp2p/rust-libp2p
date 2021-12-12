@@ -639,7 +639,7 @@ impl Add<u64> for CircuitId {
 }
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
-/// before being returned in [`<Relay as NetworkBehaviour>::poll`].
+/// before being returned in [`Relay::poll`].
 enum Action {
     Done(NetworkBehaviourAction<Event, handler::Prototype>),
     AcceptReservationPrototype {
