@@ -285,46 +285,48 @@ impl Stream for RelayListener {
         Result<ListenerEvent<Ready<Result<RelayedConnection, RelayError>>, RelayError>, RelayError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(msg) = &mut self.msg_to_behaviour {
-            match Future::poll(msg.as_mut(), cx) {
-                Poll::Ready(Ok(())) => self.msg_to_behaviour = None,
-                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
-                Poll::Pending => {}
-            }
-        }
-
-        if let Some(addr) = self.queued_new_addresses.pop_front() {
-            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
-        }
-
-        match self.from_behaviour.poll_next_unpin(cx) {
-            Poll::Ready(Some(ToListenerMsg::IncomingRelayedConnection {
-                stream,
-                src_peer_id,
-                relay_addr,
-                relay_peer_id: _,
-            })) => {
-                return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                    upgrade: ready(Ok(stream)),
-                    local_addr: relay_addr.with(Protocol::P2pCircuit),
-                    remote_addr: Protocol::P2p(src_peer_id.into()).into(),
-                })));
-            }
-            Poll::Ready(Some(ToListenerMsg::Reservation(Ok(Reservation { addrs })))) => {
-                let mut iter = addrs.into_iter();
-                let first = iter.next();
-                self.queued_new_addresses.extend(iter);
-                if let Some(addr) = first {
-                    return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
+        loop {
+            if let Some(msg) = &mut self.msg_to_behaviour {
+                match Future::poll(msg.as_mut(), cx) {
+                    Poll::Ready(Ok(())) => self.msg_to_behaviour = None,
+                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+                    Poll::Pending => {}
                 }
             }
-            Poll::Ready(Some(ToListenerMsg::Reservation(Err(())))) => {
-                return Poll::Ready(Some(Err(RelayError::Reservation)));
+
+            if let Some(addr) = self.queued_new_addresses.pop_front() {
+                return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
             }
-            Poll::Ready(None) => {
-                panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
+
+            match self.from_behaviour.poll_next_unpin(cx) {
+                Poll::Ready(Some(ToListenerMsg::IncomingRelayedConnection {
+                    stream,
+                    src_peer_id,
+                    relay_addr,
+                    relay_peer_id: _,
+                })) => {
+                    return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                        upgrade: ready(Ok(stream)),
+                        local_addr: relay_addr.with(Protocol::P2pCircuit),
+                        remote_addr: Protocol::P2p(src_peer_id.into()).into(),
+                    })));
+                }
+                Poll::Ready(Some(ToListenerMsg::Reservation(Ok(Reservation { addrs })))) => {
+                    debug_assert!(
+                        self.queued_new_addresses.is_empty(),
+                        "Assert empty due to previous `pop_front` attempt."
+                    );
+                    // Returned as [`ListenerEvent::NewAddress`] in next iteration of loop.
+                    self.queued_new_addresses = addrs.into();
+                }
+                Poll::Ready(Some(ToListenerMsg::Reservation(Err(())))) => {
+                    return Poll::Ready(Some(Err(RelayError::Reservation)));
+                }
+                Poll::Ready(None) => {
+                    panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
+                }
+                Poll::Pending => break,
             }
-            Poll::Pending => {}
         }
 
         Poll::Pending
