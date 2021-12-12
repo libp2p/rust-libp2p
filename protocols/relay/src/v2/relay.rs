@@ -640,6 +640,7 @@ impl Add<u64> for CircuitId {
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Relay::poll`].
+#[allow(clippy::large_enum_variant)]
 enum Action {
     Done(NetworkBehaviourAction<Event, handler::Prototype>),
     AcceptReservationPrototype {
