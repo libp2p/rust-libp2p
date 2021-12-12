@@ -359,7 +359,7 @@ impl ProtocolsHandler for Handler {
                             | outbound_hop::UpgradeError::ParseStatusField
                             | outbound_hop::UpgradeError::MissingStatusField
                             | outbound_hop::UpgradeError::MissingReservationField
-                            | outbound_hop::UpgradeError::NoAddressesinReservation
+                            | outbound_hop::UpgradeError::NoAddressesInReservation
                             | outbound_hop::UpgradeError::InvalidReservationExpiration
                             | outbound_hop::UpgradeError::InvalidReservationAddrs
                             | outbound_hop::UpgradeError::UnexpectedTypeConnect
@@ -438,7 +438,7 @@ impl ProtocolsHandler for Handler {
                             | outbound_hop::UpgradeError::ParseStatusField
                             | outbound_hop::UpgradeError::MissingStatusField
                             | outbound_hop::UpgradeError::MissingReservationField
-                            | outbound_hop::UpgradeError::NoAddressesinReservation
+                            | outbound_hop::UpgradeError::NoAddressesInReservation
                             | outbound_hop::UpgradeError::InvalidReservationExpiration
                             | outbound_hop::UpgradeError::InvalidReservationAddrs
                             | outbound_hop::UpgradeError::UnexpectedTypeConnect

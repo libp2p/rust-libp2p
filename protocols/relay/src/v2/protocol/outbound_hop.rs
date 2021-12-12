@@ -117,7 +117,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     let reservation = reservation.ok_or(UpgradeError::MissingReservationField)?;
 
                     let addrs = if reservation.addrs.is_empty() {
-                        return Err(UpgradeError::NoAddressesinReservation);
+                        return Err(UpgradeError::NoAddressesInReservation);
                     } else {
                         reservation
                             .addrs
@@ -193,7 +193,7 @@ pub enum UpgradeError {
     #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
     #[error("Expected at least one address in reservation.")]
-    NoAddressesinReservation,
+    NoAddressesInReservation,
     #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
     #[error("Invalid addresses in reservation.")]
