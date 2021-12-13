@@ -20,6 +20,7 @@
 
 use async_std::task::sleep;
 use futures::{channel::oneshot, select, FutureExt, StreamExt};
+use futures_timer::Delay;
 use libp2p::{
     development_transport,
     identity::Keypair,
@@ -47,6 +48,7 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
     async_std::task::spawn(async move {
         let mut swarm = init_swarm(Config {
             boot_delay: Duration::from_secs(60),
+            throttle_peer_period: Duration::ZERO,
             ..Default::default()
         })
         .await;
@@ -99,252 +101,246 @@ async fn poll_and_sleep(client: &mut Swarm<Behaviour>, duration: Duration) {
 
 #[async_std::test]
 async fn test_auto_probe() {
-    let mut client = init_swarm(Config {
-        retry_interval: TEST_RETRY_INTERVAL,
-        throttle_peer_period: Duration::ZERO,
-        boot_delay: Duration::ZERO,
-        ..Default::default()
-    })
-    .await;
+    let run_test = async {
+        let mut client = init_swarm(Config {
+            retry_interval: TEST_RETRY_INTERVAL,
+            refresh_interval: TEST_REFRESH_INTERVAL,
+            confidence_max: MAX_CONFIDENCE,
+            throttle_peer_period: Duration::ZERO,
+            boot_delay: Duration::ZERO,
+            ..Default::default()
+        })
+        .await;
 
-    let (_handle, rx) = oneshot::channel();
-    let (id, addr) = spawn_server(rx).await;
-    client.behaviour_mut().add_server(id, Some(addr));
+        let (_handle, rx) = oneshot::channel();
+        let (id, addr) = spawn_server(rx).await;
+        client.behaviour_mut().add_server(id, Some(addr));
 
-    // Initial status should be unknown.
-    assert_eq!(client.behaviour().nat_status(), NatStatus::Unknown);
-    assert!(client.behaviour().public_address().is_none());
-    assert_eq!(client.behaviour().confidence(), 0);
+        // Initial status should be unknown.
+        assert_eq!(client.behaviour().nat_status(), NatStatus::Unknown);
+        assert!(client.behaviour().public_address().is_none());
+        assert_eq!(client.behaviour().confidence(), 0);
 
-    // Artificially add a faulty address.
-    let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-    client.add_external_address(unreachable_addr.clone(), AddressScore::Infinite);
+        // Artificially add a faulty address.
+        let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
+        client.add_external_address(unreachable_addr.clone(), AddressScore::Infinite);
 
-    let status = next_status(&mut client).await;
-    assert_eq!(status, NatStatus::Private);
-    assert_eq!(client.behaviour().confidence(), 0);
-    assert_eq!(client.behaviour().nat_status(), NatStatus::Private);
+        let status = next_status(&mut client).await;
+        assert_eq!(status, NatStatus::Private);
+        assert_eq!(client.behaviour().confidence(), 0);
+        assert_eq!(client.behaviour().nat_status(), NatStatus::Private);
 
-    // Test empty addresses.
-    client.remove_external_address(&unreachable_addr);
+        // Test empty addresses.
+        client.remove_external_address(&unreachable_addr);
 
-    let status = next_status(&mut client).await;
-    assert_eq!(status, NatStatus::Unknown);
+        let status = next_status(&mut client).await;
+        assert_eq!(status, NatStatus::Unknown);
 
-    // Start listening.
-    client
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        .unwrap();
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::NewListenAddr { .. } => break,
-            _ => {}
+        client
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .unwrap();
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::NewListenAddr { .. } => break,
+                _ => {}
+            }
         }
-    }
 
-    // Expect inbound dial from server.
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::OutgoingConnectionError { .. } => {}
-            SwarmEvent::ConnectionEstablished { endpoint, .. } if endpoint.is_listener() => break,
-            _ => {}
+        // Expect inbound dial from server.
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::OutgoingConnectionError { .. } => {}
+                SwarmEvent::ConnectionEstablished { endpoint, .. } if endpoint.is_listener() => {
+                    break
+                }
+                _ => {}
+            }
         }
+
+        let status = next_status(&mut client).await;
+        assert!(status.is_public());
+        assert!(client.behaviour().public_address().is_some());
+
+        drop(_handle);
+    };
+
+    futures::select! {
+        _ = run_test.fuse() => {},
+        _ = Delay::new(Duration::from_secs(30)).fuse() => panic!("test timed out")
     }
-
-    let status = next_status(&mut client).await;
-    assert!(status.is_public());
-    assert!(client.behaviour().public_address().is_some());
-
-    drop(_handle);
 }
 
 // FIXME: flaky test
 #[async_std::test]
-#[ignore]
+// #[ignore]
 async fn test_throttle_peer_period() {
-    let mut handles = Vec::new();
+    let run_test = async {
+        let mut handles = Vec::new();
 
-    let mut client = init_swarm(Config {
-        retry_interval: TEST_RETRY_INTERVAL,
-        refresh_interval: TEST_REFRESH_INTERVAL,
-        // Throttle servers so they can not be re-used for dial request.
-        throttle_peer_period: Duration::from_secs(1000),
-        boot_delay: Duration::from_millis(100),
-        ..Default::default()
-    })
-    .await;
+        let mut client = init_swarm(Config {
+            retry_interval: TEST_RETRY_INTERVAL,
+            refresh_interval: TEST_REFRESH_INTERVAL,
+            confidence_max: MAX_CONFIDENCE,
+            // Throttle servers so they can not be re-used for dial request.
+            throttle_peer_period: Duration::from_secs(1000),
+            boot_delay: Duration::ZERO,
+            ..Default::default()
+        })
+        .await;
 
-    for _ in 0..SERVER_COUNT {
-        let (tx, rx) = oneshot::channel();
-        let (id, addr) = spawn_server(rx).await;
-        client.behaviour_mut().add_server(id, Some(addr));
-        handles.push(tx);
-    }
-
-    client
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        .unwrap();
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::NewListenAddr { .. } => break,
-            _ => {}
-        }
-    }
-
-    let nat_status = next_status(&mut client).await;
-    assert!(nat_status.is_public());
-    assert_eq!(client.behaviour().confidence(), 0);
-
-    poll_and_sleep(&mut client, TEST_REFRESH_INTERVAL / 2).await;
-
-    let mut expect_confidence = 0;
-
-    // Use each server once (minus 1 because one was already used above).
-    for _ in 0..SERVER_COUNT - 1 {
-        // Sleep until probe should be completed in background.
-        if expect_confidence == MAX_CONFIDENCE {
-            poll_and_sleep(&mut client, TEST_REFRESH_INTERVAL).await;
-        } else {
-            poll_and_sleep(&mut client, TEST_RETRY_INTERVAL).await;
+        for _ in 0..SERVER_COUNT {
+            let (tx, rx) = oneshot::channel();
+            let (id, addr) = spawn_server(rx).await;
+            client.behaviour_mut().add_server(id, Some(addr));
+            handles.push(tx);
         }
 
-        if expect_confidence < MAX_CONFIDENCE {
-            expect_confidence += 1;
-        }
-        assert!(client.behaviour().nat_status().is_public());
-        assert_eq!(client.behaviour().confidence(), expect_confidence);
-    }
-
-    // All servers are throttled.
-    while expect_confidence > 0 {
-        // Sleep until probe resolved in background.
-        if expect_confidence == MAX_CONFIDENCE {
-            poll_and_sleep(&mut client, TEST_REFRESH_INTERVAL).await;
-        } else {
-            poll_and_sleep(&mut client, TEST_RETRY_INTERVAL).await;
+        client
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .unwrap();
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::NewListenAddr { .. } => break,
+                _ => {}
+            }
         }
 
-        expect_confidence -= 1;
-        assert_eq!(client.behaviour().confidence(), expect_confidence);
-        assert!(client.behaviour().nat_status().is_public());
+        let nat_status = next_status(&mut client).await;
+        assert!(nat_status.is_public());
+        assert_eq!(client.behaviour().confidence(), 0);
+
+        // After are servers are used once, no qualified server is present and
+        // probes resolve to status unknown.
+        let nat_status = next_status(&mut client).await;
+        assert_eq!(nat_status, NatStatus::Unknown);
+        assert_eq!(client.behaviour().confidence(), 0);
+
+        drop(handles)
+    };
+
+    futures::select! {
+        _ = run_test.fuse() => {},
+        _ = Delay::new(Duration::from_secs(30)).fuse() => panic!("test timed out")
     }
-
-    let nat_status = next_status(&mut client).await;
-    assert_eq!(nat_status, NatStatus::Unknown);
-    assert_eq!(client.behaviour().confidence(), 0);
-
-    drop(handles)
 }
 
 #[async_std::test]
 async fn test_use_connected_as_server() {
-    let mut client = init_swarm(Config {
-        retry_interval: TEST_RETRY_INTERVAL,
-        throttle_peer_period: Duration::ZERO,
-        boot_delay: Duration::ZERO,
-        ..Default::default()
-    })
-    .await;
+    let run_test = async {
+        let mut client = init_swarm(Config {
+            retry_interval: TEST_RETRY_INTERVAL,
+            refresh_interval: TEST_REFRESH_INTERVAL,
+            confidence_max: MAX_CONFIDENCE,
+            throttle_peer_period: Duration::ZERO,
+            boot_delay: Duration::ZERO,
+            ..Default::default()
+        })
+        .await;
 
-    let (_handle, rx) = oneshot::channel();
-    let (id, addr) = spawn_server(rx).await;
+        let (_handle, rx) = oneshot::channel();
+        let (id, addr) = spawn_server(rx).await;
 
-    client
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        .unwrap();
+        client
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .unwrap();
 
-    client.dial(addr).unwrap();
+        client.dial(addr).unwrap();
 
-    let nat_status = loop {
-        match client.select_next_some().await {
-            SwarmEvent::Behaviour(status) => break status,
-            SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                // keep connection alive
-                client.dial(peer_id).unwrap();
+        let nat_status = loop {
+            match client.select_next_some().await {
+                SwarmEvent::Behaviour(status) => break status,
+                SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                    // keep connection alive
+                    client.dial(peer_id).unwrap();
+                }
+                _ => {}
             }
-            _ => {}
+        };
+
+        assert!(nat_status.is_public());
+        assert_eq!(client.behaviour().confidence(), 0);
+
+        let _ = client.disconnect_peer_id(id);
+
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == id => break,
+                _ => {}
+            }
         }
+
+        let nat_status = next_status(&mut client).await;
+        assert_eq!(nat_status, NatStatus::Unknown);
+        assert_eq!(client.behaviour().confidence(), 0);
+
+        drop(_handle);
     };
 
-    assert!(nat_status.is_public());
-    assert_eq!(client.behaviour().confidence(), 0);
-
-    let _ = client.disconnect_peer_id(id);
-
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == id => break,
-            _ => {}
-        }
+    futures::select! {
+        _ = run_test.fuse() => {},
+        _ = Delay::new(Duration::from_secs(30)).fuse() => panic!("test timed out")
     }
-
-    let nat_status = next_status(&mut client).await;
-    assert_eq!(nat_status, NatStatus::Unknown);
-    assert_eq!(client.behaviour().confidence(), 0);
-
-    drop(_handle);
 }
 
 #[async_std::test]
 async fn test_outbound_failure() {
-    let mut handles = Vec::new();
+    let run_test = async {
+        let mut handles = Vec::new();
 
-    let mut client = init_swarm(Config {
-        retry_interval: TEST_RETRY_INTERVAL,
-        refresh_interval: TEST_REFRESH_INTERVAL,
-        throttle_peer_period: Duration::ZERO,
-        boot_delay: Duration::from_millis(100),
-        ..Default::default()
-    })
-    .await;
+        let mut client = init_swarm(Config {
+            retry_interval: TEST_RETRY_INTERVAL,
+            refresh_interval: TEST_REFRESH_INTERVAL,
+            confidence_max: MAX_CONFIDENCE,
+            throttle_peer_period: Duration::ZERO,
+            boot_delay: Duration::from_millis(100),
+            ..Default::default()
+        })
+        .await;
 
-    for _ in 0..SERVER_COUNT {
-        let (tx, rx) = oneshot::channel();
-        let (id, addr) = spawn_server(rx).await;
-        client.behaviour_mut().add_server(id, Some(addr));
-        handles.push((id, tx));
-    }
-
-    client
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        .unwrap();
-
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::NewListenAddr { .. } => break,
-            _ => {}
+        for _ in 0..SERVER_COUNT {
+            let (tx, rx) = oneshot::channel();
+            let (id, addr) = spawn_server(rx).await;
+            client.behaviour_mut().add_server(id, Some(addr));
+            handles.push(tx);
         }
-    }
 
-    let nat_status = next_status(&mut client).await;
-    assert!(nat_status.is_public());
-    assert_eq!(client.behaviour().confidence(), 0);
+        client
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .unwrap();
 
-    // Kill all servers apart from one.
-    handles.drain(1..);
-    // Disconnect server in case that it was used for the first probe.
-    let _ = client.disconnect_peer_id(handles[0].0);
-
-    // Expect retry on outbound failure until one server can be reached.
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::OutgoingConnectionError { .. } => {}
-            SwarmEvent::ConnectionEstablished { endpoint, .. } if endpoint.is_dialer() => break,
-            _ => {}
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::NewListenAddr { .. } => break,
+                _ => {}
+            }
         }
-    }
 
-    // Expect inbound dial.
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::OutgoingConnectionError { .. } => {}
-            SwarmEvent::ConnectionEstablished { endpoint, .. } if endpoint.is_listener() => break,
-            _ => {}
+        let nat_status = next_status(&mut client).await;
+        assert!(nat_status.is_public());
+        assert_eq!(client.behaviour().confidence(), 0);
+
+        // Kill all servers apart from one.
+        handles.drain(1..);
+
+        // Expect inbound dial indicating that we sent a dial-request to the remote.
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::OutgoingConnectionError { .. } => {}
+                SwarmEvent::ConnectionEstablished { endpoint, .. } if endpoint.is_listener() => {
+                    break
+                }
+                _ => {}
+            }
         }
+
+        // Delay so that the server has time to send dial-response
+        poll_and_sleep(&mut client, Duration::from_millis(100)).await;
+
+        assert!(client.behaviour().confidence() > 0);
+    };
+
+    futures::select! {
+        _ = run_test.fuse() => {},
+        _ = Delay::new(Duration::from_secs(30)).fuse() => panic!("test timed out")
     }
-
-    // Delay so that the server has time to send dial-response
-    poll_and_sleep(&mut client, Duration::from_millis(100)).await;
-
-    assert!(client.behaviour().confidence() > 0);
 }

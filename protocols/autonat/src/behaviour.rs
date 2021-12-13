@@ -212,16 +212,20 @@ impl Behaviour {
 
     // Select a random server for the probe.
     fn random_server(&mut self) -> Option<PeerId> {
-        self.throttled_servers
-            .retain(|(_, time)| *time + self.config.throttle_peer_period > Instant::now());
-        let throttled: Vec<_> = self.throttled_servers.iter().map(|(id, _)| id).collect();
+        // Update list of throttled servers.
+        let i = self
+            .throttled_servers
+            .partition_point(|(_, time)| *time + self.config.throttle_peer_period < Instant::now());
+        self.throttled_servers.drain(..i);
+
         let mut servers: Vec<&PeerId> = self.servers.iter().collect();
 
         if self.config.may_use_connected {
             servers.extend(self.connected.iter().map(|(id, _)| id));
         }
 
-        servers.retain(|s| !throttled.contains(s));
+        servers.retain(|s| !self.throttled_servers.iter().any(|(id, _)| s == &id));
+
         if servers.is_empty() {
             return None;
         }
@@ -337,8 +341,8 @@ impl Behaviour {
             }
         };
         let schedule_next = last_probe_instant + delay;
-        let diff = schedule_next.checked_duration_since(Instant::now());
-        self.schedule_probe.reset(diff.unwrap_or(Duration::ZERO));
+        self.schedule_probe
+            .reset(schedule_next.saturating_duration_since(Instant::now()));
     }
 
     // Adapt current confidence and NAT status to the status reported by the latest probe.
@@ -466,11 +470,11 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_new_listen_addr(id, addr);
 
         // New address could be publicly reachable, trigger retry.
-        if !self.nat_status.is_public() && self.confidence == self.config.confidence_max {
+        if !self.nat_status.is_public() {
             if self.confidence > 0 {
                 self.confidence -= 1;
             }
-            self.schedule_next_probe(self.config.refresh_interval);
+            self.schedule_next_probe(self.config.retry_interval);
         }
     }
 
@@ -489,11 +493,11 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_new_external_addr(addr);
 
         // New address could be publicly reachable, trigger retry.
-        if !self.nat_status.is_public() && self.confidence == self.config.confidence_max {
+        if !self.nat_status.is_public() {
             if self.confidence > 0 {
                 self.confidence -= 1;
             }
-            self.schedule_next_probe(self.config.refresh_interval);
+            self.schedule_next_probe(self.config.retry_interval);
         }
     }
 
@@ -517,7 +521,7 @@ impl NetworkBehaviour for Behaviour {
         loop {
             if self.schedule_probe.poll_unpin(cx).is_ready() {
                 is_probe_ready = true;
-                self.schedule_probe.reset(self.config.refresh_interval);
+                self.schedule_probe.reset(self.config.retry_interval);
                 continue;
             }
             if is_probe_ready {
