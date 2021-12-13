@@ -27,5 +27,10 @@ prost = "0.8"
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
 env_logger = "0.9"
-libp2p = { path = "../../", default-features = false, features = ["autonat", "dns-async-std", "identify", "mplex", "noise", "tcp-async-io", "websocket", "yamux"]}
 structopt = "0.3"
+
+
+[dev-dependencies.libp2p]
+path = "../../"
+default-features = false
+features = ["autonat", "dns-async-std", "identify", "mplex", "noise", "tcp-async-io", "websocket", "yamux"]

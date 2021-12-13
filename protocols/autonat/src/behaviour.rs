@@ -514,11 +514,12 @@ impl NetworkBehaviour for Behaviour {
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         let mut is_probe_ready = false;
-        if self.schedule_probe.poll_unpin(cx).is_ready() {
-            is_probe_ready = true;
-            self.schedule_probe.reset(self.config.refresh_interval);
-        }
         loop {
+            if self.schedule_probe.poll_unpin(cx).is_ready() {
+                is_probe_ready = true;
+                self.schedule_probe.reset(self.config.refresh_interval);
+                continue;
+            }
             if is_probe_ready {
                 let mut addresses = match self.public_address() {
                     Some(a) => vec![a.clone()], // Remote should try our assumed public address first.
