@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub mod either;
 pub mod toggle;
 
 use crate::dial_opts::DialOpts;
@@ -703,6 +704,50 @@ where
                 peer_id,
                 handler,
                 event,
+            },
+            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+                NetworkBehaviourAction::ReportObservedAddr { address, score }
+            }
+            NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            } => NetworkBehaviourAction::CloseConnection {
+                peer_id,
+                connection,
+            },
+        }
+    }
+}
+
+impl<TInEventOld, TOutEvent, THandlerOld> NetworkBehaviourAction<TOutEvent, THandlerOld>
+where
+    THandlerOld: IntoProtocolsHandler,
+    <THandlerOld as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEventOld>,
+{
+    /// Map the handler and handler event.
+    pub fn map_handler_and_in<THandlerNew, TInEventNew>(
+        self,
+        f_handler: impl FnOnce(THandlerOld) -> THandlerNew,
+        f_in_event: impl FnOnce(TInEventOld) -> TInEventNew,
+    ) -> NetworkBehaviourAction<TOutEvent, THandlerNew>
+    where
+        THandlerNew: IntoProtocolsHandler,
+        <THandlerNew as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEventNew>,
+    {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
+            NetworkBehaviourAction::Dial { opts, handler } => NetworkBehaviourAction::Dial {
+                opts,
+                handler: f_handler(handler),
+            },
+            NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            } => NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler,
+                event: f_in_event(event),
             },
             NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                 NetworkBehaviourAction::ReportObservedAddr { address, score }
