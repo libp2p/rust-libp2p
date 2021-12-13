@@ -259,7 +259,7 @@ impl Metrics {
             "Number of connected peers by protocol type"
         );
 
-        let heartbeat_duration = Histogram::new(linear_buckets(0.0, 100.0, 10));
+        let heartbeat_duration = Histogram::new(linear_buckets(0.0, 50.0, 10));
         registry.register(
             "heartbeat_duration",
             "Histogram of observed heartbeat durations",
