@@ -53,12 +53,13 @@ use thiserror::Error;
 ///        PeerId::random(),
 ///    );
 ///    let transport = OrTransport::new(relay_transport, actual_transport);
+///    # let relay_id = PeerId::random();
+///    # let destination_id = PeerId::random();
 ///    let dst_addr_via_relay = Multiaddr::empty()
 ///        .with(Protocol::Memory(40)) // Relay address.
-///        .with(Protocol::P2p(PeerId::random().into())) // Relay peer id.
+///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit) // Signal to connect via relay and not directly.
-///        .with(Protocol::Memory(42)) // Destination address.
-///        .with(Protocol::P2p(PeerId::random().into())); // Destination peer id.
+///        .with(Protocol::P2p(destination_id.into())); // Destination peer id.
 ///    transport.dial(dst_addr_via_relay).unwrap();
 ///    ```
 ///
