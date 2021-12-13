@@ -18,16 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Basic example that combines the AutoNAT and identify protocols.
+//! Basic example for a AutoNAT server that supports the /libp2p/autonat/1.0.0 and "/ipfs/0.1.0" protocols.
 //!
-//! The identify protocol informs the local peer of its external addresses, that are then send in AutoNAT dial-back
-//! requests to the server.
-//!
-//! To run this example, follow the instructions in `examples/server` to start a server, then run in a new terminal:
+//! To start the server run:
 //! ```sh
-//! cargo run --example client -- --server-address <server-addr> --server-peer-id <server-peer-id> --listen_port <port>
+//! cargo run --example server -- --listen_port <port>
 //! ```
-//! The `listen_port` parameter is optional and allows to set a fixed port at which the local client should listen.
+//! The `listen_port` parameter is optional and allows to set a fixed port at which the local peer should listen.
 
 use futures::prelude::*;
 use libp2p::autonat;
@@ -37,7 +34,6 @@ use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
-use std::time::Duration;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -45,12 +41,6 @@ use structopt::StructOpt;
 struct Opt {
     #[structopt(long)]
     listen_port: Option<u16>,
-
-    #[structopt(long)]
-    server_address: Multiaddr,
-
-    #[structopt(long)]
-    server_peer_id: PeerId,
 }
 
 #[async_std::main]
@@ -73,11 +63,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .with(Protocol::Ip4(Ipv4Addr::UNSPECIFIED))
             .with(Protocol::Tcp(opt.listen_port.unwrap_or(0))),
     )?;
-
-    swarm
-        .behaviour_mut()
-        .auto_nat
-        .add_server(opt.server_peer_id, Some(opt.server_address));
 
     loop {
         match swarm.select_next_some().await {
@@ -104,13 +89,7 @@ impl Behaviour {
             )),
             auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
-                autonat::Config {
-                    retry_interval: Duration::from_secs(10),
-                    refresh_interval: Duration::from_secs(30),
-                    boot_delay: Duration::from_secs(5),
-                    throttle_peer_period: Duration::ZERO,
-                    ..Default::default()
-                },
+                autonat::Config::default(),
             ),
         }
     }

@@ -50,9 +50,9 @@ pub struct Config {
     pub timeout: Duration,
 
     // == Client Config
-    /// Delay on init before starting the fist probe
+    /// Delay on init before starting the fist probe.
     pub boot_delay: Duration,
-    /// Interval in which the NAT should be tested again if reached max confidence.
+    /// Interval in which the NAT should be tested again if max confidence was reached in a status.
     pub refresh_interval: Duration,
     /// Interval in which the NAT status should be re-tried if it is currently is unknown
     /// or max confidence was not reached yet.
@@ -63,9 +63,6 @@ pub struct Config {
     /// Wether connected peers may be used as server for a probe, in addition to the predefined ones.
     pub may_use_connected: bool,
     /// Max confidence that can be reached in a public / private NAT status.
-    /// The confidence is increased each time a probe confirms the assumed status, and
-    /// reduced each time a different status is reported. On confidence 0 the status
-    /// is flipped if a different one is reported.
     /// Note: for [`NatStatus::Unknown`] the confidence is always 0.
     pub confidence_max: usize,
 
@@ -117,6 +114,19 @@ impl From<Result<Multiaddr, ResponseError>> for NatStatus {
 }
 
 /// Network Behaviour for AutoNAT.
+///
+/// The behaviour frequently runs probes to determine whether the local peer is behind NAT and/ or a firewall, or
+/// publicly reachable.
+/// In a probe, a dial-back request is sent to a peer that is randomly selected from the list of fixed servers and
+/// connected peers. Upon receiving a dial-back request, the remote tries to dial the included addresses. When a
+/// first address was successfully dialed, a status Ok will be send back together with the dialed address. If no address
+/// can be reached a dial-error is send back.
+/// Based on the received response, the sender assumes themselves to be public or private.
+/// The status is retried in a frequency of [`Config::retry_interval`] or [`Config::retry_interval`], depending on whether
+/// enough confidence in the assumed NAT status was reached or not.
+/// The confidence increases each time a probe confirms the assumed status, and decreases if a different status is reported.
+/// If the confidence is 0, the status is flipped and the Behaviour will report the
+/// new status in an `OutEvent`.
 pub struct Behaviour {
     // Local peer id
     local_peer_id: PeerId,
@@ -175,7 +185,8 @@ impl Behaviour {
         }
     }
 
-    /// Address if we are public.
+    /// Assumed public address of the local peer.
+    /// Returns `None` in case of status [`NatStatus::Private`] or [`NatStatus::Unknown`].
     pub fn public_address(&self) -> Option<&Multiaddr> {
         match &self.nat_status {
             NatStatus::Public(address) => Some(address),
@@ -183,7 +194,7 @@ impl Behaviour {
         }
     }
 
-    /// Currently assumed NAT status.
+    /// Assumed NAT status.
     pub fn nat_status(&self) -> NatStatus {
         self.nat_status.clone()
     }
@@ -194,8 +205,7 @@ impl Behaviour {
     }
 
     /// Add a peer to the list over servers that may be used for probes.
-    /// While probes normally use one of the connected peers as server, this allows to add trusted
-    /// peers that can be used even if they are currently not connected, in which case a connection will be
+    /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
     /// establish before sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
         self.servers.push(peer);
@@ -233,7 +243,7 @@ impl Behaviour {
         Some(*server)
     }
 
-    // Send a dial request to the set server or a randomly selected one.
+    // Send a dial-request to a randomly selected server.
     // Return `None` if there are no qualified servers or no dial-back addresses.
     fn do_probe(&mut self, addresses: Vec<Multiaddr>) -> Option<RequestId> {
         self.last_probe = Some(Instant::now());
@@ -333,6 +343,8 @@ impl Behaviour {
         Ok(addrs)
     }
 
+    // Set the delay to the next probe based on the time of our last prove
+    // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
         let last_probe_instant = match self.last_probe {
             Some(instant) => instant,
@@ -525,11 +537,7 @@ impl NetworkBehaviour for Behaviour {
                 continue;
             }
             if is_probe_ready {
-                let mut addresses = match self.public_address() {
-                    Some(a) => vec![a.clone()], // Remote should try our assumed public address first.
-                    None => Vec::new(),
-                };
-                addresses.extend(params.external_addresses().map(|r| r.addr));
+                let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
                 addresses.extend(params.listened_addresses());
 
                 match self.do_probe(addresses) {

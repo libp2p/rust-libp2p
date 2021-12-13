@@ -48,7 +48,6 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
     async_std::task::spawn(async move {
         let mut swarm = init_swarm(Config {
             boot_delay: Duration::from_secs(60),
-            throttle_peer_period: Duration::ZERO,
             ..Default::default()
         })
         .await;
