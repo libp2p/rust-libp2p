@@ -155,7 +155,7 @@ pub struct Handler {
 
     reservation: Option<Reservation>,
 
-    /// Tracks substreams lend out to the transport.
+    /// Tracks substreams lent out to the transport.
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that
     /// resolves once the substream is dropped.
