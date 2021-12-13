@@ -525,7 +525,7 @@ mod network {
                             .add_address(&peer_id, peer_addr.clone());
                         match self
                             .swarm
-                            .dial_addr(peer_addr.with(Protocol::P2p(peer_id.into())))
+                            .dial(peer_addr.with(Protocol::P2p(peer_id.into())))
                         {
                             Ok(()) => {
                                 self.pending_dial.insert(peer_id, sender);

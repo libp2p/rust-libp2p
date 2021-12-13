@@ -1126,6 +1126,7 @@ mod tests {
                 max_buffer_len: g.gen_range(1, 1000),
                 max_buffer_behaviour: MaxBufferBehaviour::arbitrary(g),
                 split_send_size: g.gen_range(1, 10000),
+                protocol_name: crate::config::DEFAULT_MPLEX_PROTOCOL_NAME,
             }
         }
     }

@@ -28,8 +28,8 @@ use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_swarm::{
-    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
-    PollParameters,
+    dial_opts::{self, DialOpts},
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler, PollParameters,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -107,9 +107,10 @@ impl Floodsub {
 
         if self.target_peers.insert(peer_id) {
             let handler = self.new_handler();
-            self.events.push_back(NetworkBehaviourAction::DialPeer {
-                peer_id,
-                condition: DialPeerCondition::Disconnected,
+            self.events.push_back(NetworkBehaviourAction::Dial {
+                opts: DialOpts::peer_id(peer_id)
+                    .condition(dial_opts::PeerCondition::Disconnected)
+                    .build(),
                 handler,
             });
         }
@@ -252,6 +253,12 @@ impl Floodsub {
 
         // Send to peers we know are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
+            // Peer must be in a communication list.
+            if !self.target_peers.contains(peer_id) {
+                continue;
+            }
+
+            // Peer must be subscribed for the topic.
             if !sub_topic
                 .iter()
                 .any(|t| message.topics.iter().any(|u| t == u))
@@ -310,9 +317,10 @@ impl NetworkBehaviour for Floodsub {
         // try to reconnect.
         if self.target_peers.contains(id) {
             let handler = self.new_handler();
-            self.events.push_back(NetworkBehaviourAction::DialPeer {
-                peer_id: *id,
-                condition: DialPeerCondition::Disconnected,
+            self.events.push_back(NetworkBehaviourAction::Dial {
+                opts: DialOpts::peer_id(*id)
+                    .condition(dial_opts::PeerCondition::Disconnected)
+                    .build(),
                 handler,
             });
         }
@@ -400,6 +408,12 @@ impl NetworkBehaviour for Floodsub {
                     continue;
                 }
 
+                // Peer must be in a communication list.
+                if !self.target_peers.contains(peer_id) {
+                    continue;
+                }
+
+                // Peer must be subscribed for the topic.
                 if !subscr_topics
                     .iter()
                     .any(|t| message.topics.iter().any(|u| t == u))
