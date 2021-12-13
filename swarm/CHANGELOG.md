@@ -10,11 +10,14 @@
 
 - Move `swarm::Toggle` to `swarm::behaviour::Toggle` (see [PR 2375]).
 
-- New swarm api for retrieving connected peers (see [PR 2378]).
+- Add `Swarm::connected_peers` (see [PR 2378]).
+
+- Implement `swarm::NetworkBehaviour` on `either::Either` (see [PR 2370]).
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2362]: https://github.com/libp2p/rust-libp2p/pull/2362
+[PR 2370]: https://github.com/libp2p/rust-libp2p/pull/2370
 [PR 2375]: https://github.com/libp2p/rust-libp2p/pull/2375
 [PR 2378]: https://github.com/libp2p/rust-libp2p/pull/2378
 
