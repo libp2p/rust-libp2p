@@ -1,6 +1,7 @@
 [package]
 name = "peer-id-generator"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 version = "0.1.0"
 description = "Generate peer ids that are prefixed with a specific string"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -11,5 +12,5 @@ categories = ["network-programming", "asynchronous"]
 publish = false
 
 [dependencies]
-libp2p-core = { path = "../../core", default-features = false }
+libp2p-core = { path = "../../core", default-features = false, version = "0.31.0"}
 num_cpus = "1.8"

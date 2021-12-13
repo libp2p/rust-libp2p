@@ -66,8 +66,9 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::{self, DialOpts},
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -230,8 +231,6 @@ impl std::error::Error for InboundFailure {}
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
 pub struct ResponseChannel<TResponse> {
-    request_id: RequestId,
-    peer: PeerId,
     sender: oneshot::Sender<TResponse>,
 }
 
@@ -385,12 +384,12 @@ where
 
         if let Some(request) = self.try_send_request(peer, request) {
             let handler = self.new_handler();
-            self.pending_events
-                .push_back(NetworkBehaviourAction::DialPeer {
-                    peer_id: *peer,
-                    condition: DialPeerCondition::Disconnected,
-                    handler,
-                });
+            self.pending_events.push_back(NetworkBehaviourAction::Dial {
+                opts: DialOpts::peer_id(*peer)
+                    .condition(dial_opts::PeerCondition::Disconnected)
+                    .build(),
+                handler,
+            });
             self.pending_outbound_requests
                 .entry(*peer)
                 .or_default()
@@ -592,6 +591,29 @@ where
         addresses
     }
 
+    fn inject_address_change(
+        &mut self,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        _old: &ConnectedPoint,
+        new: &ConnectedPoint,
+    ) {
+        let new_address = match new {
+            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        let connections = self
+            .connected
+            .get_mut(peer)
+            .expect("Address change can only happen on an established connection.");
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| &c.id == conn)
+            .expect("Address change can only happen on an established connection.");
+        connection.address = new_address;
+    }
+
     fn inject_connected(&mut self, peer: &PeerId) {
         if let Some(pending) = self.pending_outbound_requests.remove(peer) {
             for request in pending {
@@ -726,11 +748,7 @@ where
                 request,
                 sender,
             } => {
-                let channel = ResponseChannel {
-                    request_id,
-                    peer,
-                    sender,
-                };
+                let channel = ResponseChannel { sender };
                 let message = RequestResponseMessage::Request {
                     request_id,
                     request,

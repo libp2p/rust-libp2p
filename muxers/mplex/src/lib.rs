@@ -40,7 +40,7 @@ impl UpgradeInfo for MplexConfig {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/mplex/6.7.0")
+        iter::once(self.protocol_name)
     }
 }
 

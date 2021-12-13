@@ -1,6 +1,19 @@
-# 0.13.1 [unreleased]
+# 0.15.0 [unreleased]
+
+- Update dependencies.
+
+- Remove unused `lru` crate (see [PR 2358]).
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2358]: https://github.com/libp2p/rust-libp2p/pull/2358
+
+# 0.14.0 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
+
+- Update dependencies.
 
 [PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
 
