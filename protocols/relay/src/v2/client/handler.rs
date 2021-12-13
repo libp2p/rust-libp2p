@@ -196,7 +196,7 @@ impl ProtocolsHandler for Handler {
     ) {
         match &mut self.reservation {
             Some(Reservation::Accepted { pending_msgs, .. })
-            | Some(Reservation::Renewal { pending_msgs, .. }) => {
+            | Some(Reservation::Renewing { pending_msgs, .. }) => {
                 let src_peer_id = inbound_circuit.src_peer_id();
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
@@ -235,7 +235,7 @@ impl ProtocolsHandler for Handler {
             ) => {
                 let (renewal, mut pending_msgs) = match self.reservation.take() {
                     Some(Reservation::Accepted { pending_msgs, .. })
-                    | Some(Reservation::Renewal { pending_msgs, .. }) => (true, pending_msgs),
+                    | Some(Reservation::Renewing { pending_msgs, .. }) => (true, pending_msgs),
                     None => (false, VecDeque::new()),
                 };
 
@@ -535,7 +535,7 @@ impl ProtocolsHandler for Handler {
                 to_listener,
             }) => match renewal_timeout.as_mut().map(|t| t.poll_unpin(cx)) {
                 Some(Poll::Ready(())) => {
-                    self.reservation = Some(Reservation::Renewal { pending_msgs });
+                    self.reservation = Some(Reservation::Renewing { pending_msgs });
                     return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             outbound_hop::Upgrade::Reserve,
@@ -604,7 +604,6 @@ impl ProtocolsHandler for Handler {
         loop {
             match self.alive_lend_out_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Err(oneshot::Canceled))) => {}
-                // TODO: Use void.
                 Poll::Ready(Some(Ok(v))) => void::unreachable(v),
                 Poll::Ready(None) | Poll::Pending => break,
             }
@@ -631,13 +630,17 @@ impl ProtocolsHandler for Handler {
 }
 
 enum Reservation {
+    /// The Rreservation is accepted by the relay.
     Accepted {
         /// [`None`] if reservation does not expire.
         renewal_timeout: Option<Delay>,
+        /// Buffer of messages to be send to the transport listener.
         pending_msgs: VecDeque<transport::ToListenerMsg>,
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
-    Renewal {
+    /// The reservation is being renewed with the relay.
+    Renewing {
+        /// Buffer of messages to be send to the transport listener.
         pending_msgs: VecDeque<transport::ToListenerMsg>,
     },
 }
