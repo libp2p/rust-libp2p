@@ -90,11 +90,16 @@ pub enum Event {
 
 pub struct Prototype {
     local_peer_id: PeerId,
+    /// Initial [`In`] event from [`NetworkBehaviour`] provided at creation time.
+    initial_in: Option<In>,
 }
 
 impl Prototype {
-    pub(crate) fn new(local_peer_id: PeerId) -> Self {
-        Self { local_peer_id }
+    pub(crate) fn new(local_peer_id: PeerId, initial_in: Option<In>) -> Self {
+        Self {
+            local_peer_id,
+            initial_in,
+        }
     }
 }
 
@@ -106,6 +111,7 @@ impl IntoProtocolsHandler for Prototype {
             remote_peer_id: *remote_peer_id,
             remote_addr: endpoint.get_remote_address().clone(),
             local_peer_id: self.local_peer_id,
+            initial_in: self.initial_in,
             queued_events: Default::default(),
             pending_error: Default::default(),
             reservation: None,
@@ -133,6 +139,9 @@ pub struct Handler {
     >,
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
+
+    /// Initial [`In`] event from [`NetworkBehaviour`] provided at creation time.
+    initial_in: Option<In>,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -510,6 +519,12 @@ impl ProtocolsHandler for Handler {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        // See whether the [`NetworkBehaviour`] provided a first [`In`] event at handler
+        // construction time.
+        if let Some(initial_in) = self.initial_in.take() {
+            self.inject_event(initial_in);
         }
 
         // Check if reservation needs renewal.

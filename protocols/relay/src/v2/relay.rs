@@ -28,7 +28,7 @@ use crate::v2::protocol::inbound_hop;
 use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::PeerId;
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;

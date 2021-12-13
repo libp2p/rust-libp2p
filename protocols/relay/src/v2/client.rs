@@ -25,7 +25,7 @@ pub mod transport;
 
 use crate::v2::protocol::inbound_stop;
 use bytes::Bytes;
-use futures::channel::mpsc::{Receiver, Sender};
+use futures::channel::mpsc::Receiver;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
@@ -35,8 +35,7 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    DialError, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
 use std::io::{Error, IoSlice};
@@ -77,7 +76,6 @@ pub struct Client {
 
     from_transport: Receiver<transport::TransportToBehaviourMsg>,
     connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
-    rqsts_pending_connection: HashMap<PeerId, Vec<RqstPendingConnection>>,
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
@@ -92,7 +90,6 @@ impl Client {
             local_peer_id,
             from_transport,
             connected_peers: Default::default(),
-            rqsts_pending_connection: Default::default(),
             queued_actions: Default::default(),
         };
         (transport, behaviour)
@@ -104,7 +101,7 @@ impl NetworkBehaviour for Client {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        handler::Prototype::new(self.local_peer_id)
+        handler::Prototype::new(self.local_peer_id, None)
     }
 
     fn inject_connection_established(
@@ -118,51 +115,6 @@ impl NetworkBehaviour for Client {
             .entry(*peer_id)
             .or_default()
             .push(*connection_id);
-
-        for rqst in self
-            .rqsts_pending_connection
-            .remove(peer_id)
-            .map(|rqsts| rqsts.into_iter())
-            .into_iter()
-            .flatten()
-        {
-            match rqst {
-                RqstPendingConnection::Reservation { to_listener, .. } => {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: *peer_id,
-                            handler: NotifyHandler::One(*connection_id),
-                            event: handler::In::Reserve { to_listener },
-                        });
-                }
-                RqstPendingConnection::Circuit {
-                    send_back,
-                    dst_peer_id,
-                    ..
-                } => {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: *peer_id,
-                            handler: NotifyHandler::One(*connection_id),
-                            event: handler::In::EstablishCircuit {
-                                send_back,
-                                dst_peer_id,
-                            },
-                        });
-                }
-            }
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        _handler: handler::Prototype,
-        _error: &DialError,
-    ) {
-        if let Some(peer_id) = peer_id {
-            self.rqsts_pending_connection.remove(&peer_id);
-        }
     }
 
     fn inject_connection_closed(
@@ -256,11 +208,10 @@ impl NetworkBehaviour for Client {
                             });
                         }
                         None => {
-                            self.rqsts_pending_connection
-                                .entry(relay_peer_id)
-                                .or_default()
-                                .push(RqstPendingConnection::Reservation { to_listener });
-                            let handler = self.new_handler();
+                            let handler = handler::Prototype::new(
+                                self.local_peer_id,
+                                Some(handler::In::Reserve { to_listener }),
+                            );
                             return Poll::Ready(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(relay_peer_id)
                                     .addresses(vec![relay_addr])
@@ -294,14 +245,13 @@ impl NetworkBehaviour for Client {
                             });
                         }
                         None => {
-                            self.rqsts_pending_connection
-                                .entry(relay_peer_id)
-                                .or_default()
-                                .push(RqstPendingConnection::Circuit {
-                                    dst_peer_id,
+                            let handler = handler::Prototype::new(
+                                self.local_peer_id,
+                                Some(handler::In::EstablishCircuit {
                                     send_back,
-                                });
-                            let handler = self.new_handler();
+                                    dst_peer_id,
+                                }),
+                            );
                             return Poll::Ready(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(relay_peer_id)
                                     .addresses(vec![relay_addr])
@@ -459,14 +409,4 @@ impl AsyncRead for RelayedConnection {
             }
         }
     }
-}
-
-enum RqstPendingConnection {
-    Reservation {
-        to_listener: Sender<transport::ToListenerMsg>,
-    },
-    Circuit {
-        dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
-    },
 }
