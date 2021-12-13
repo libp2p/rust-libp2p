@@ -324,3 +324,98 @@ fn event_process_false() {
         };
     }
 }
+
+#[test]
+fn with_toggle() {
+    use libp2p::swarm::behaviour::toggle::Toggle;
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
+    struct Foo {
+        identify: libp2p::identify::Identify,
+        ping: Toggle<libp2p::ping::Ping>,
+    }
+
+    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
+        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
+    }
+
+    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo>();
+    }
+}
+
+#[test]
+fn with_either() {
+    use either::Either;
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
+    struct Foo {
+        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
+        ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
+    }
+
+    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {}
+    }
+
+    impl
+        libp2p::swarm::NetworkBehaviourEventProcess<
+            Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>,
+        > for Foo
+    {
+        fn inject_event(
+            &mut self,
+            _: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>,
+        ) {
+        }
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo>();
+    }
+}
+
+#[test]
+fn no_event_with_either() {
+    use either::Either;
+
+    enum BehaviourOutEvent {
+        Kad(libp2p::kad::KademliaEvent),
+        PingOrIdentify(Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>),
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "BehaviourOutEvent", event_process = false)]
+    struct Foo {
+        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
+        ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
+    }
+
+    impl From<libp2p::kad::KademliaEvent> for BehaviourOutEvent {
+        fn from(event: libp2p::kad::KademliaEvent) -> Self {
+            BehaviourOutEvent::Kad(event)
+        }
+    }
+
+    impl From<Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>> for BehaviourOutEvent {
+        fn from(event: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>) -> Self {
+            BehaviourOutEvent::PingOrIdentify(event)
+        }
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo>();
+    }
+}

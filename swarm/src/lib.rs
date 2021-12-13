@@ -53,15 +53,14 @@
 //! are supported, when to open a new outbound substream, etc.
 //!
 
-mod behaviour;
 mod registry;
 #[cfg(test)]
 mod test;
 mod upgrade;
 
+pub mod behaviour;
 pub mod dial_opts;
 pub mod protocols_handler;
-pub mod toggle;
 
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
