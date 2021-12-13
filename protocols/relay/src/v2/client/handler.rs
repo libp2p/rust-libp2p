@@ -90,7 +90,7 @@ pub enum Event {
 
 pub struct Prototype {
     local_peer_id: PeerId,
-    /// Initial [`In`] event from [`NetworkBehaviour`] provided at creation time.
+    /// Initial [`In`] event from [`super::Client`] provided at creation time.
     initial_in: Option<In>,
 }
 
@@ -140,7 +140,7 @@ pub struct Handler {
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
 
-    /// Initial [`In`] event from [`NetworkBehaviour`] provided at creation time.
+    /// Initial [`In`] event from [`super::Client`] provided at creation time.
     initial_in: Option<In>,
 
     /// Queue of events to return when polled.
