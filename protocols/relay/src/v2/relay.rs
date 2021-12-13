@@ -186,14 +186,6 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn addresses_of_peer(&mut self, _remote_peer_id: &PeerId) -> Vec<Multiaddr> {
-        vec![]
-    }
-
-    fn inject_connected(&mut self, _peer_id: &PeerId) {}
-
-    fn inject_disconnected(&mut self, _peer: &PeerId) {}
-
     fn inject_connection_closed(
         &mut self,
         peer: &PeerId,

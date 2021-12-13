@@ -107,12 +107,6 @@ impl NetworkBehaviour for Client {
         handler::Prototype::new(self.local_peer_id)
     }
 
-    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-        vec![]
-    }
-
-    fn inject_connected(&mut self, _peer_id: &PeerId) {}
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
@@ -170,8 +164,6 @@ impl NetworkBehaviour for Client {
             self.rqsts_pending_connection.remove(&peer_id);
         }
     }
-
-    fn inject_disconnected(&mut self, _peer: &PeerId) {}
 
     fn inject_connection_closed(
         &mut self,
