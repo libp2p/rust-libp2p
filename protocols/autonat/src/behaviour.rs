@@ -59,9 +59,9 @@ pub struct Config {
     pub retry_interval: Duration,
 
     /// Throttle period for re-using a peer as server for a dial-request.
-    pub throttle_peer_period: Duration,
-    /// Wether connected peers may be used as server for a probe, in addition to the predefined ones.
-    pub may_use_connected: bool,
+    pub throttle_server_period: Duration,
+    /// Use connected peers as servers for probes.
+    pub use_connected: bool,
     /// Max confidence that can be reached in a public / private NAT status.
     /// Note: for [`NatStatus::Unknown`] the confidence is always 0.
     pub confidence_max: usize,
@@ -69,8 +69,12 @@ pub struct Config {
     //== Server Config
     /// Max addresses that are tried per peer.
     pub max_peer_addresses: usize,
-    /// Max total simultaneous dial-attempts.
-    pub throttle_global_max: usize,
+    /// Max total dial requests done in `[Config::throttle_clients_period`].
+    pub throttle_clients_global_max: usize,
+    /// Max dial requests done in `[Config::throttle_clients_period`] for a peer.
+    pub throttle_clients_peer_max: usize,
+    /// Period for throttling clients requests.
+    pub throttle_clients_period: Duration,
 }
 
 impl Default for Config {
@@ -80,11 +84,13 @@ impl Default for Config {
             boot_delay: Duration::from_secs(15),
             retry_interval: Duration::from_secs(90),
             refresh_interval: Duration::from_secs(15 * 60),
-            throttle_peer_period: Duration::from_secs(90),
-            may_use_connected: true,
+            throttle_server_period: Duration::from_secs(90),
+            use_connected: true,
             confidence_max: 3,
             max_peer_addresses: 16,
-            throttle_global_max: 30,
+            throttle_clients_global_max: 30,
+            throttle_clients_peer_max: 3,
+            throttle_clients_period: Duration::from_secs(1),
         }
     }
 }
@@ -155,8 +161,11 @@ pub struct Behaviour {
     // These peers may be used as servers for dial-requests.
     connected: HashMap<PeerId, Multiaddr>,
 
-    // Used servers in recent outbound probes that are throttled through Config::throttle_peer_period.
+    // Used servers in recent outbound probes that are throttled through Config::throttle_server_period.
     throttled_servers: Vec<(PeerId, Instant)>,
+
+    // Recent probes done for clients
+    throttled_clients: Vec<(PeerId, Instant)>,
 
     last_probe: Option<Instant>,
 
@@ -180,6 +189,7 @@ impl Behaviour {
             nat_status: NatStatus::Unknown,
             confidence: 0,
             throttled_servers: Vec::new(),
+            throttled_clients: Vec::new(),
             last_probe: None,
             pending_out_events: VecDeque::new(),
         }
@@ -223,14 +233,14 @@ impl Behaviour {
     // Select a random server for the probe.
     fn random_server(&mut self) -> Option<PeerId> {
         // Update list of throttled servers.
-        let i = self
-            .throttled_servers
-            .partition_point(|(_, time)| *time + self.config.throttle_peer_period < Instant::now());
+        let i = self.throttled_servers.partition_point(|(_, time)| {
+            *time + self.config.throttle_server_period < Instant::now()
+        });
         self.throttled_servers.drain(..i);
 
         let mut servers: Vec<&PeerId> = self.servers.iter().collect();
 
-        if self.config.may_use_connected {
+        if self.config.use_connected {
             servers.extend(self.connected.iter().map(|(id, _)| id));
         }
 
@@ -276,6 +286,12 @@ impl Behaviour {
         sender: PeerId,
         request: DialRequest,
     ) -> Result<Vec<Multiaddr>, DialResponse> {
+        // Update list of throttled clients.
+        let i = self.throttled_servers.partition_point(|(_, time)| {
+            *time + self.config.throttle_clients_period < Instant::now()
+        });
+        self.throttled_clients.drain(..i);
+
         if request.peer_id != sender {
             let status_text = "peer id mismatch".to_string();
             log::debug!(
@@ -291,7 +307,7 @@ impl Behaviour {
         }
 
         if self.ongoing_inbound.contains_key(&sender) {
-            let status_text = "too many dials".to_string();
+            let status_text = "dial-back already ongoing".to_string();
             log::debug!(
                 "Reject inbound dial request from peer {}: {}.",
                 sender,
@@ -304,8 +320,28 @@ impl Behaviour {
             return Err(response);
         }
 
-        if self.ongoing_inbound.len() >= self.config.throttle_global_max {
+        if self.throttled_clients.len() >= self.config.throttle_clients_global_max {
             let status_text = "too many total dials".to_string();
+            log::debug!(
+                "Reject inbound dial request from peer {}: {}.",
+                sender,
+                status_text
+            );
+            let response = DialResponse {
+                result: Err(ResponseError::DialRefused),
+                status_text: Some(status_text),
+            };
+            return Err(response);
+        }
+
+        let ongoing_for_client = self
+            .throttled_clients
+            .iter()
+            .filter(|(p, _)| p == &sender)
+            .count();
+
+        if ongoing_for_client >= self.config.throttle_clients_peer_max {
+            let status_text = "too many dials for peer".to_string();
             log::debug!(
                 "Reject inbound dial request from peer {}: {}.",
                 sender,

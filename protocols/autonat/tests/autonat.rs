@@ -105,7 +105,7 @@ async fn test_auto_probe() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
-            throttle_peer_period: Duration::ZERO,
+            throttle_server_period: Duration::ZERO,
             boot_delay: Duration::ZERO,
             ..Default::default()
         })
@@ -172,7 +172,7 @@ async fn test_auto_probe() {
 // FIXME: flaky test
 #[async_std::test]
 // #[ignore]
-async fn test_throttle_peer_period() {
+async fn test_throttle_server_period() {
     let run_test = async {
         let mut handles = Vec::new();
 
@@ -181,7 +181,7 @@ async fn test_throttle_peer_period() {
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
             // Throttle servers so they can not be re-used for dial request.
-            throttle_peer_period: Duration::from_secs(1000),
+            throttle_server_period: Duration::from_secs(1000),
             boot_delay: Duration::ZERO,
             ..Default::default()
         })
@@ -230,7 +230,7 @@ async fn test_use_connected_as_server() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
-            throttle_peer_period: Duration::ZERO,
+            throttle_server_period: Duration::ZERO,
             boot_delay: Duration::ZERO,
             ..Default::default()
         })
@@ -290,7 +290,7 @@ async fn test_outbound_failure() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
-            throttle_peer_period: Duration::ZERO,
+            throttle_server_period: Duration::ZERO,
             boot_delay: Duration::from_millis(100),
             ..Default::default()
         })
