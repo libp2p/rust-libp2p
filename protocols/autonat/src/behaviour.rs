@@ -409,6 +409,11 @@ impl Behaviour {
                 }
             }
             false
+        } else if reported.is_public() && self.nat_status.is_public() {
+            // Different address than the currently assumed public address was reported.
+            // Switch address, but don't report as flipped.
+            self.nat_status = reported;
+            false
         } else if self.confidence > 0 {
             // Reduce confidence but keep old status.
             self.confidence -= 1;
