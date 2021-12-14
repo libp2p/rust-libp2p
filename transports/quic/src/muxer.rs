@@ -101,9 +101,8 @@ impl QuicMuxer {
         let inner = self.inner.lock();
         let session = inner.connection.crypto_session();
         let certificate = session.get_peer_certificates()?.into_iter().next()?;
-        Some(crate::tls::extract_peerid_or_panic(
-            quinn_proto::Certificate::from(certificate).as_der(),
-        ))
+        let certificate = crate::tls::certificate::parse_certificate(&certificate.0).ok()?;
+        Some(PeerId::from_public_key(&certificate.extension.public_key))
     }
 
     pub fn local_addr(&self) -> Multiaddr {

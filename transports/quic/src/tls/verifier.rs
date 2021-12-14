@@ -1,4 +1,4 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
+// Copyright 2021 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,15 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::identity::PublicKey;
-use libp2p_core::PeerId;
-use ring::io::der;
+//! TLS 1.3 certificates and handshakes handling for libp2p
+//!
+//! This module handles a verification of a client/server certificate chain
+//! and signatures allegedly by the given certificates.
+
 use rustls::{
     internal::msgs::handshake::DigitallySignedStruct, Certificate, ClientCertVerified,
-    HandshakeSignatureValid, ServerCertVerified, TLSError,
+    DistinguishedNames, HandshakeSignatureValid, RootCertStore, ServerCertVerified,
+    SignatureScheme, TLSError,
 };
-use untrusted::{Input, Reader};
-use webpki::Error;
 
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
@@ -39,14 +40,38 @@ pub(crate) struct Libp2pCertificateVerifier;
 /// - The certificate must be self-signed.
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
+impl Libp2pCertificateVerifier {
+    /// Return the list of SignatureSchemes that this verifier will handle,
+    /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
+    ///
+    /// This should be in priority order, with the most preferred first.
+    pub fn verification_schemes() -> Vec<SignatureScheme> {
+        vec![
+            // TODO SignatureScheme::ECDSA_NISTP521_SHA512 is not supported by `ring` yet
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            // TODO SignatureScheme::ED448 is not supported by `ring` yet
+            SignatureScheme::ED25519,
+            // In particular, RSA SHOULD NOT be used unless
+            // no elliptic curve algorithms are supported.
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA256,
+        ]
+    }
+}
+
 impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     fn verify_server_cert(
         &self,
-        _roots: &rustls::RootCertStore,
-        presented_certs: &[rustls::Certificate],
+        _roots: &RootCertStore,
+        presented_certs: &[Certificate],
         _dns_name: webpki::DNSNameRef<'_>,
         _ocsp_response: &[u8],
-    ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+    ) -> Result<ServerCertVerified, TLSError> {
         verify_presented_certs(presented_certs).map(|_| ServerCertVerified::assertion())
     }
 
@@ -56,8 +81,10 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         _cert: &Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
+        // The libp2p handshake uses TLS 1.3 (and higher).
+        // Endpoints MUST NOT negotiate lower TLS versions.
         Err(TLSError::PeerIncompatibleError(
-            "Only TLS 1.3 is supported".to_string(),
+            "Only TLS 1.3 certificates are supported".to_string(),
         ))
     }
 
@@ -67,7 +94,11 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
-        verify_tls13_signature(message, cert, dss)
+        verify_tls13_signature(cert, dss.scheme, message, dss.sig.0.as_ref())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        Self::verification_schemes()
     }
 }
 
@@ -86,7 +117,7 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
     fn client_auth_root_subjects(
         &self,
         _dns_name: Option<&webpki::DNSName>,
-    ) -> Option<rustls::DistinguishedNames> {
+    ) -> Option<DistinguishedNames> {
         Some(vec![])
     }
 
@@ -94,7 +125,7 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         &self,
         presented_certs: &[Certificate],
         _dns_name: Option<&webpki::DNSName>,
-    ) -> Result<ClientCertVerified, rustls::TLSError> {
+    ) -> Result<ClientCertVerified, TLSError> {
         verify_presented_certs(presented_certs).map(|_| ClientCertVerified::assertion())
     }
 
@@ -104,8 +135,10 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         _cert: &Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
+        // The libp2p handshake uses TLS 1.3 (and higher).
+        // Endpoints MUST NOT negotiate lower TLS versions.
         Err(TLSError::PeerIncompatibleError(
-            "Only TLS 1.3 is supported".to_string(),
+            "Only TLS 1.3 certificates are supported".to_string(),
         ))
     }
 
@@ -115,119 +148,37 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
-        barebones_x509::parse_certificate(cert.as_ref())
-            .map_err(rustls::TLSError::WebPKIError)?
-            .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
-            .map_err(rustls::TLSError::WebPKIError)
-            .map(|()| rustls::HandshakeSignatureValid::assertion())
+        verify_tls13_signature(cert, dss.scheme, message, dss.sig.0.as_ref())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        Self::verification_schemes()
     }
 }
 
-fn verify_tls13_signature(
-    message: &[u8],
-    cert: &Certificate,
-    dss: &DigitallySignedStruct,
-) -> Result<HandshakeSignatureValid, TLSError> {
-    barebones_x509::parse_certificate(cert.as_ref())
-        .map_err(rustls::TLSError::WebPKIError)?
-        .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
-        .map_err(rustls::TLSError::WebPKIError)
-        .map(|()| rustls::HandshakeSignatureValid::assertion())
-}
-
-fn verify_libp2p_signature(
-    libp2p_extension: &Libp2pExtension<'_>,
-    x509_pkey_bytes: &[u8],
-) -> Result<(), Error> {
-    let mut v = Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + x509_pkey_bytes.len());
-    v.extend_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
-    v.extend_from_slice(x509_pkey_bytes);
-    if libp2p_extension
-        .peer_key
-        .verify(&v, libp2p_extension.signature)
-    {
-        Ok(())
-    } else {
-        Err(Error::UnknownIssuer)
-    }
-}
-
-fn parse_certificate(
-    certificate: &[u8],
-) -> Result<(barebones_x509::X509Certificate<'_>, Libp2pExtension<'_>), Error> {
-    let parsed = barebones_x509::parse_certificate(certificate)?;
-    let mut libp2p_extension = None;
-
-    parsed
-        .extensions()
-        .iterate(&mut |oid, critical, extension| {
-            match oid {
-                super::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
-                super::LIBP2P_OID_BYTES => {
-                    libp2p_extension = Some(parse_libp2p_extension(extension)?)
-                }
-                _ if critical => return Err(Error::UnsupportedCriticalExtension),
-                _ => {}
-            };
-            Ok(())
-        })?;
-    let libp2p_extension = libp2p_extension.ok_or(Error::UnknownIssuer)?;
-    Ok((parsed, libp2p_extension))
-}
-
+/// When receiving the certificate chain, an endpoint
+/// MUST check these conditions and abort the connection attempt if
+/// (a) the presented certificate is not yet valid, OR
+/// (b) if it is expired.
+/// Endpoints MUST abort the connection attempt if more than one certificate is received,
+/// or if the certificate’s self-signature is not valid.
 fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSError> {
     if presented_certs.len() != 1 {
         return Err(TLSError::NoCertificatesPresented);
     }
-    let (certificate, extension) =
-        parse_certificate(presented_certs[0].as_ref()).map_err(TLSError::WebPKIError)?;
-    certificate.valid().map_err(TLSError::WebPKIError)?;
-    certificate
-        .check_self_issued()
-        .map_err(TLSError::WebPKIError)?;
-    verify_libp2p_signature(&extension, certificate.subject_public_key_info().spki())
-        .map_err(TLSError::WebPKIError)?;
-    Ok(())
+    crate::tls::certificate::parse_certificate(presented_certs[0].as_ref())
+        .and_then(|cert| cert.verify())
+        .map_err(TLSError::WebPKIError)
 }
 
-struct Libp2pExtension<'a> {
-    peer_key: PublicKey,
-    signature: &'a [u8],
-}
-
-fn parse_libp2p_extension(extension: Input<'_>) -> Result<Libp2pExtension<'_>, Error> {
-    fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Error> {
-        // The specification states that this is a BIT STRING, but the Go implementation
-        // uses an OCTET STRING.  OCTET STRING is superior in this context, so use it.
-        der::expect_tag_and_get_value(input, der::Tag::OctetString).map_err(|_| e)
-    }
-
-    let e = Error::ExtensionValueInvalid;
-    Input::read_all(&extension, e, |input| {
-        der::nested(input, der::Tag::Sequence, e, |input| {
-            let public_key = read_bit_string(input, e)?.as_slice_less_safe();
-            let signature = read_bit_string(input, e)?.as_slice_less_safe();
-            // We deliberately discard the error information because this is
-            // either a broken peer or an attack.
-            let peer_key = PublicKey::from_protobuf_encoding(public_key).map_err(|_| e)?;
-            Ok(Libp2pExtension {
-                peer_key,
-                signature,
-            })
-        })
-    })
-}
-
-/// Extracts the `PeerId` from a certificate’s libp2p extension. It is erroneous
-/// to call this unless the certificate is known to be a well-formed X.509
-/// certificate with a valid libp2p extension. The certificate verifier in this
-/// module check this.
-///
-/// # Panics
-///
-/// Panics if called on an invalid certificate.
-pub fn extract_peerid_or_panic(certificate: &[u8]) -> PeerId {
-    let r = parse_certificate(certificate)
-        .expect("we already checked that the certificate was valid during the handshake; qed");
-    PeerId::from_public_key(&r.1.peer_key)
+fn verify_tls13_signature(
+    cert: &Certificate,
+    signature_scheme: SignatureScheme,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<HandshakeSignatureValid, TLSError> {
+    crate::tls::certificate::parse_certificate(cert.as_ref())
+        .and_then(|cert| cert.verify_signature(signature_scheme, message, signature))
+        .map(|()| HandshakeSignatureValid::assertion())
+        .map_err(TLSError::WebPKIError)
 }
