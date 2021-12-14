@@ -129,12 +129,6 @@ async fn test_auto_probe() {
         assert_eq!(client.behaviour().confidence(), 0);
         assert_eq!(client.behaviour().nat_status(), NatStatus::Private);
 
-        // Test empty addresses.
-        client.remove_external_address(&unreachable_addr);
-
-        let status = next_status(&mut client).await;
-        assert_eq!(status, NatStatus::Unknown);
-
         client
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
@@ -169,9 +163,7 @@ async fn test_auto_probe() {
     }
 }
 
-// FIXME: flaky test
 #[async_std::test]
-// #[ignore]
 async fn test_throttle_server_period() {
     let run_test = async {
         let mut handles = Vec::new();
@@ -187,7 +179,7 @@ async fn test_throttle_server_period() {
         })
         .await;
 
-        for _ in 0..SERVER_COUNT {
+        for _ in 1..=MAX_CONFIDENCE {
             let (tx, rx) = oneshot::channel();
             let (id, addr) = spawn_server(rx).await;
             client.behaviour_mut().add_server(id, Some(addr));
@@ -208,11 +200,12 @@ async fn test_throttle_server_period() {
         assert!(nat_status.is_public());
         assert_eq!(client.behaviour().confidence(), 0);
 
-        // After are servers are used once, no qualified server is present and
-        // probes resolve to status unknown.
-        let nat_status = next_status(&mut client).await;
-        assert_eq!(nat_status, NatStatus::Unknown);
-        assert_eq!(client.behaviour().confidence(), 0);
+        // Sleep double the time that would be needed to reach max confidence
+        poll_and_sleep(&mut client, TEST_RETRY_INTERVAL * MAX_CONFIDENCE as u32 * 2).await;
+
+        // Can only reach confidence n-1 with n available servers, as one probe
+        // is required to flip the status the first time.
+        assert_eq!(client.behaviour().confidence(), MAX_CONFIDENCE - 1);
 
         drop(handles)
     };
@@ -261,15 +254,10 @@ async fn test_use_connected_as_server() {
 
         let _ = client.disconnect_peer_id(id);
 
-        loop {
-            match client.select_next_some().await {
-                SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == id => break,
-                _ => {}
-            }
-        }
+        poll_and_sleep(&mut client, TEST_RETRY_INTERVAL * 2).await;
 
-        let nat_status = next_status(&mut client).await;
-        assert_eq!(nat_status, NatStatus::Unknown);
+        // No connected peers to send probes to; confidence can not increase.
+        assert!(nat_status.is_public());
         assert_eq!(client.behaviour().confidence(), 0);
 
         drop(_handle);

@@ -131,8 +131,7 @@ impl From<Result<Multiaddr, ResponseError>> for NatStatus {
 /// The status is retried in a frequency of [`Config::retry_interval`] or [`Config::retry_interval`], depending on whether
 /// enough confidence in the assumed NAT status was reached or not.
 /// The confidence increases each time a probe confirms the assumed status, and decreases if a different status is reported.
-/// If the confidence is 0, the status is flipped and the Behaviour will report the
-/// new status in an `OutEvent`.
+/// If the confidence is 0, the status is flipped and the Behaviour will report the new status in an `OutEvent`.
 pub struct Behaviour {
     // Local peer id
     local_peer_id: PeerId,
@@ -398,15 +397,15 @@ impl Behaviour {
     fn handle_reported_status(&mut self, reported: NatStatus) -> bool {
         self.schedule_next_probe(self.config.retry_interval);
 
-        if reported == self.nat_status {
-            if !matches!(self.nat_status, NatStatus::Unknown) {
-                if self.confidence < self.config.confidence_max {
-                    self.confidence += 1;
-                }
-                // Delay with (usually longer) refresh-interval.
-                if self.confidence >= self.config.confidence_max {
-                    self.schedule_next_probe(self.config.refresh_interval);
-                }
+        if matches!(reported, NatStatus::Unknown) {
+            false
+        } else if reported == self.nat_status {
+            if self.confidence < self.config.confidence_max {
+                self.confidence += 1;
+            }
+            // Delay with (usually longer) refresh-interval.
+            if self.confidence >= self.config.confidence_max {
+                self.schedule_next_probe(self.config.refresh_interval);
             }
             false
         } else if reported.is_public() && self.nat_status.is_public() {
