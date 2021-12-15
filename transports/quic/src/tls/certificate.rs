@@ -423,12 +423,10 @@ mod tests {
                 let cert: &[u8] = include_bytes!($path);
 
                 let cert = certificate::parse_certificate(cert).unwrap();
-                // We don't verify certificate because p2p extension was not signed
-                //  with the private key of the certificate.
-                assert_eq!(
-                    cert.signature_scheme(),
-                    Ok($scheme)
-                );
+                assert!(cert.verify().is_err()); // Because p2p extension
+                                                 // was not signed with the private key
+                                                 // of the certificate.
+                assert_eq!(cert.signature_scheme(), Ok($scheme));
             }
         };
     }
