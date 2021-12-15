@@ -23,9 +23,9 @@ use futures::{
     future::{self, Either},
     prelude::*,
 };
+use libp2p_core::identity;
 use libp2p_core::transport::{ListenerEvent, Transport};
 use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
-use libp2p_core::{identity};
 use libp2p_noise::{
     Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
 };

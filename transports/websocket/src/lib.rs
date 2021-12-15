@@ -28,7 +28,7 @@ use error::Error;
 use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
-    connection::{ConnectedPoint},
+    connection::ConnectedPoint,
     multiaddr::Multiaddr,
     transport::{
         map::{MapFuture, MapStream},

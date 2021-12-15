@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-
 use crate::transport::{ListenerEvent, Transport, TransportError};
 use crate::Multiaddr;
 use futures::{prelude::*, task::Context, task::Poll};

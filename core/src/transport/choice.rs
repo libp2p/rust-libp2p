@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-
 use crate::either::{EitherError, EitherFuture, EitherListenStream, EitherOutput};
 use crate::transport::{Transport, TransportError};
 use multiaddr::Multiaddr;
