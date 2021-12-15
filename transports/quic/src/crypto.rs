@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::identity::Keypair;
-use quinn_proto::crypto::Session;
 use quinn_proto::TransportConfig;
 use std::sync::Arc;
 
@@ -33,9 +32,7 @@ pub struct CryptoConfig {
 pub(crate) struct TlsCrypto;
 
 impl TlsCrypto {
-    pub fn new_server_config(
-        config: &CryptoConfig,
-    ) -> <quinn_proto::crypto::rustls::TlsSession as Session>::ServerConfig {
+    pub fn new_server_config(config: &CryptoConfig) -> Arc<rustls::ServerConfig> {
         let mut server = crate::tls::make_server_config(&config.keypair).expect("invalid config");
         if let Some(key_log) = config.keylogger.clone() {
             server.key_log = key_log;
@@ -43,22 +40,12 @@ impl TlsCrypto {
         Arc::new(server)
     }
 
-    pub fn new_client_config(
-        config: &CryptoConfig,
-    ) -> <quinn_proto::crypto::rustls::TlsSession as Session>::ClientConfig {
+    pub fn new_client_config(config: &CryptoConfig) -> Arc<rustls::ClientConfig> {
         let mut client = crate::tls::make_client_config(&config.keypair).expect("invalid config");
         if let Some(key_log) = config.keylogger.clone() {
             client.key_log = key_log;
         }
         Arc::new(client)
-    }
-
-    pub fn supported_quic_versions() -> Vec<u32> {
-        quinn_proto::DEFAULT_SUPPORTED_VERSIONS.to_vec()
-    }
-
-    pub fn default_quic_version() -> u32 {
-        quinn_proto::DEFAULT_SUPPORTED_VERSIONS[0]
     }
 
     pub fn keylogger() -> Arc<dyn rustls::KeyLog> {

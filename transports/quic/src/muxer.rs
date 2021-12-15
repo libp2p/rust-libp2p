@@ -100,9 +100,11 @@ impl QuicMuxer {
     pub fn peer_id(&self) -> Option<PeerId> {
         let inner = self.inner.lock();
         let session = inner.connection.crypto_session();
-        let certificate = session.get_peer_certificates()?.into_iter().next()?;
-        let certificate = crate::tls::certificate::parse_certificate(&certificate.0).ok()?;
-        Some(PeerId::from_public_key(&certificate.extension.public_key))
+        let identity = session.peer_identity()?;
+        let certs: Box<Vec<rustls::Certificate>> = identity.downcast().ok()?;
+        let cert = certs.get(0)?;
+        let p2p_cert = crate::tls::certificate::parse_certificate(&cert.0).ok()?;
+        Some(PeerId::from_public_key(&p2p_cert.extension.public_key))
     }
 
     pub fn local_addr(&self) -> Multiaddr {
@@ -143,9 +145,8 @@ impl StreamMuxer for QuicMuxer {
             inner.connection.handle_event(event);
         }
 
-        // TODO: `quinn` got plans to add max_datagrams as an arg to `poll_transmit`
-        // let _max_datagrams = inner.endpoint.max_datagrams();
-        while let Some(transmit) = inner.connection.poll_transmit(now) {
+        let max_datagrams = inner.endpoint.max_datagrams();
+        while let Some(transmit) = inner.connection.poll_transmit(now, max_datagrams) {
             inner.endpoint.send_transmit(transmit);
         }
 

@@ -23,10 +23,10 @@ use crate::muxer::QuicMuxer;
 use crate::{QuicConfig, QuicError};
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
-use quinn_proto::generic::ClientConfig as QuinnClientConfig;
-use quinn_proto::ServerConfig as QuinnServerConfig;
 use quinn_proto::{
-    ConnectionEvent, ConnectionHandle, DatagramEvent, EcnCodepoint, EndpointEvent, Transmit,
+    ClientConfig as QuinnClientConfig, ConnectionEvent, ConnectionHandle, DatagramEvent,
+    EcnCodepoint, Endpoint as QuinnEndpoint, EndpointEvent, ServerConfig as QuinnServerConfig,
+    Transmit,
 };
 use std::collections::{HashMap, VecDeque};
 use std::io::IoSliceMut;
@@ -160,9 +160,6 @@ impl EndpointChannel {
     }
 }
 
-type QuinnEndpointConfig = quinn_proto::EndpointConfig;
-type QuinnEndpoint = quinn_proto::Endpoint;
-
 pub struct EndpointConfig {
     socket: UdpSocket,
     endpoint: QuinnEndpoint,
@@ -173,7 +170,7 @@ pub struct EndpointConfig {
 
 impl EndpointConfig {
     pub fn new(mut config: QuicConfig, addr: SocketAddr) -> Result<Self, QuicError> {
-        config.transport.max_concurrent_uni_streams(0)?;
+        config.transport.max_concurrent_uni_streams(0u32.into());
         config.transport.datagram_receive_buffer_size(None);
         let transport = Arc::new(config.transport);
 
@@ -183,22 +180,14 @@ impl EndpointConfig {
             transport: transport.clone(),
         });
 
-        let mut server_config = QuinnServerConfig::default();
+        let crypto = TlsCrypto::new_server_config(&crypto_config);
+        let mut server_config = QuinnServerConfig::with_crypto(crypto);
         server_config.transport = transport;
-        server_config.crypto = TlsCrypto::new_server_config(&crypto_config);
 
-        let mut endpoint_config = QuinnEndpointConfig::default();
-        endpoint_config.supported_versions(
-            TlsCrypto::supported_quic_versions(),
-            TlsCrypto::default_quic_version(),
-        )?;
+        let endpoint = QuinnEndpoint::new(Default::default(), Some(Arc::new(server_config)));
 
         let socket = UdpSocket::bind(addr)?;
         let port = socket.local_addr()?.port();
-        let endpoint = quinn_proto::generic::Endpoint::new(
-            Arc::new(endpoint_config),
-            Some(Arc::new(server_config)),
-        );
         let capabilities = UdpSocket::capabilities()?;
         Ok(Self {
             socket,
@@ -342,10 +331,9 @@ impl Future for Endpoint {
                 match event {
                     Some(ToEndpoint::Dial { addr, tx }) => {
                         let crypto = TlsCrypto::new_client_config(&me.crypto_config);
-                        let client_config = QuinnClientConfig {
-                            transport: me.crypto_config.transport.clone(),
-                            crypto,
-                        };
+                        let mut client_config = QuinnClientConfig::new(crypto);
+                        client_config.transport = me.crypto_config.transport.clone();
+
                         let (id, connection) =
                             match me.endpoint.connect(client_config, addr, "server_name") {
                                 Ok(c) => c,

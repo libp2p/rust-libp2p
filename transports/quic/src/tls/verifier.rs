@@ -24,9 +24,10 @@
 //! and signatures allegedly by the given certificates.
 
 use rustls::{
-    internal::msgs::handshake::DigitallySignedStruct, Certificate, ClientCertVerified,
-    DistinguishedNames, HandshakeSignatureValid, RootCertStore, ServerCertVerified,
-    SignatureScheme, TLSError,
+    client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    internal::msgs::handshake::DigitallySignedStruct,
+    server::{ClientCertVerified, ClientCertVerifier},
+    Certificate, DistinguishedNames, Error as TlsError, SignatureScheme,
 };
 
 /// Implementation of the `rustls` certificate verification traits for libp2p.
@@ -64,15 +65,17 @@ impl Libp2pCertificateVerifier {
     }
 }
 
-impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
+impl ServerCertVerifier for Libp2pCertificateVerifier {
     fn verify_server_cert(
         &self,
-        _roots: &RootCertStore,
-        presented_certs: &[Certificate],
-        _dns_name: webpki::DNSNameRef<'_>,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
-    ) -> Result<ServerCertVerified, TLSError> {
-        verify_presented_certs(presented_certs).map(|_| ServerCertVerified::assertion())
+        _now: std::time::SystemTime,
+    ) -> Result<ServerCertVerified, TlsError> {
+        verify_presented_certs(end_entity, intermediates).map(|_| ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -80,10 +83,10 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         _message: &[u8],
         _cert: &Certificate,
         _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         // The libp2p handshake uses TLS 1.3 (and higher).
         // Endpoints MUST NOT negotiate lower TLS versions.
-        Err(TLSError::PeerIncompatibleError(
+        Err(TlsError::PeerIncompatibleError(
             "Only TLS 1.3 certificates are supported".to_string(),
         ))
     }
@@ -93,7 +96,7 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         verify_tls13_signature(cert, dss.scheme, message, dss.sig.0.as_ref())
     }
 
@@ -109,24 +112,22 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
 /// - The certificate must be self-signed.
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
-impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
+impl ClientCertVerifier for Libp2pCertificateVerifier {
     fn offer_client_auth(&self) -> bool {
         true
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _dns_name: Option<&webpki::DNSName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         Some(vec![])
     }
 
     fn verify_client_cert(
         &self,
-        presented_certs: &[Certificate],
-        _dns_name: Option<&webpki::DNSName>,
-    ) -> Result<ClientCertVerified, TLSError> {
-        verify_presented_certs(presented_certs).map(|_| ClientCertVerified::assertion())
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        _now: std::time::SystemTime,
+    ) -> Result<ClientCertVerified, TlsError> {
+        verify_presented_certs(end_entity, intermediates).map(|_| ClientCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -134,10 +135,10 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         _message: &[u8],
         _cert: &Certificate,
         _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         // The libp2p handshake uses TLS 1.3 (and higher).
         // Endpoints MUST NOT negotiate lower TLS versions.
-        Err(TLSError::PeerIncompatibleError(
+        Err(TlsError::PeerIncompatibleError(
             "Only TLS 1.3 certificates are supported".to_string(),
         ))
     }
@@ -147,7 +148,7 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         verify_tls13_signature(cert, dss.scheme, message, dss.sig.0.as_ref())
     }
 
@@ -162,13 +163,18 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
 /// (b) if it is expired.
 /// Endpoints MUST abort the connection attempt if more than one certificate is received,
 /// or if the certificate’s self-signature is not valid.
-fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSError> {
-    if presented_certs.len() != 1 {
-        return Err(TLSError::NoCertificatesPresented);
+fn verify_presented_certs(
+    end_entity: &Certificate,
+    intermediates: &[Certificate],
+) -> Result<(), TlsError> {
+    if !intermediates.is_empty() {
+        return Err(TlsError::General(
+            "libp2p-tls requires exactly one certificate".into(),
+        ));
     }
-    crate::tls::certificate::parse_certificate(presented_certs[0].as_ref())
+    crate::tls::certificate::parse_certificate(end_entity.as_ref())
         .and_then(|cert| cert.verify())
-        .map_err(TLSError::WebPKIError)
+        .map_err(pki_error)
 }
 
 fn verify_tls13_signature(
@@ -176,9 +182,21 @@ fn verify_tls13_signature(
     signature_scheme: SignatureScheme,
     message: &[u8],
     signature: &[u8],
-) -> Result<HandshakeSignatureValid, TLSError> {
+) -> Result<HandshakeSignatureValid, TlsError> {
     crate::tls::certificate::parse_certificate(cert.as_ref())
         .and_then(|cert| cert.verify_signature(signature_scheme, message, signature))
         .map(|()| HandshakeSignatureValid::assertion())
-        .map_err(TLSError::WebPKIError)
+        .map_err(pki_error)
+}
+
+fn pki_error(error: webpki::Error) -> TlsError {
+    use webpki::Error::*;
+    match error {
+        BadDer | BadDerTime => TlsError::InvalidCertificateEncoding,
+        InvalidSignatureForPublicKey => TlsError::InvalidCertificateSignature,
+        UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
+            TlsError::InvalidCertificateSignatureType
+        }
+        e => TlsError::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+    }
 }

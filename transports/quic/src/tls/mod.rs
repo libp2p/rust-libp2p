@@ -27,7 +27,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use rustls::{
-    ciphersuite::{
+    cipher_suite::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     },
     SupportedCipherSuite,
@@ -36,11 +36,11 @@ use rustls::{
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both
 // TLS 1.3 __and__ 1.2 cipher suites. But we don't need 1.2.
-static TLS13_CIPHERSUITES: [&SupportedCipherSuite; 3] = [
+static TLS13_CIPHERSUITES: &[SupportedCipherSuite] = &[
     // TLS1.3 suites
-    &TLS13_CHACHA20_POLY1305_SHA256,
-    &TLS13_AES_256_GCM_SHA384,
-    &TLS13_AES_128_GCM_SHA256,
+    TLS13_CHACHA20_POLY1305_SHA256,
+    TLS13_AES_256_GCM_SHA384,
+    TLS13_AES_128_GCM_SHA256,
 ];
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
@@ -50,7 +50,7 @@ const P2P_ALPN: [u8; 6] = *b"libp2p";
 pub enum ConfigError {
     /// TLS private key or certificate rejected
     #[error("TLS private or certificate key rejected: {0}")]
-    TLSError(#[from] rustls::TLSError),
+    TLSError(#[from] rustls::Error),
     /// Certificate generation error
     #[error("Certificate generation error: {0}")]
     RcgenError(#[from] rcgen::RcgenError),
@@ -62,11 +62,15 @@ pub fn make_client_config(
 ) -> Result<rustls::ClientConfig, ConfigError> {
     let (certificate, key) = make_cert_key(keypair)?;
     let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
-    let mut crypto = rustls::ClientConfig::with_ciphersuites(&TLS13_CIPHERSUITES);
-    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
-    crypto.set_protocols(&[P2P_ALPN.to_vec()]);
-    crypto.set_single_client_cert(vec![certificate], key)?;
-    crypto.dangerous().set_certificate_verifier(verifier);
+    let mut crypto = rustls::ClientConfig::builder()
+        .with_cipher_suites(TLS13_CIPHERSUITES)
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("Cipher suites and kx groups are configured; qed")
+        .with_custom_certificate_verifier(verifier)
+        .with_single_cert(vec![certificate], key)
+        .expect("Client cert key DER is valid; qed");
+    crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
     Ok(crypto)
 }
 
@@ -76,10 +80,15 @@ pub fn make_server_config(
 ) -> Result<rustls::ServerConfig, ConfigError> {
     let (certificate, key) = make_cert_key(keypair)?;
     let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
-    let mut crypto = rustls::ServerConfig::with_ciphersuites(verifier, &TLS13_CIPHERSUITES);
-    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
-    crypto.set_protocols(&[P2P_ALPN.to_vec()]);
-    crypto.set_single_cert(vec![certificate], key)?;
+    let mut crypto = rustls::ServerConfig::builder()
+        .with_cipher_suites(TLS13_CIPHERSUITES)
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("Cipher suites and kx groups are configured; qed")
+        .with_client_cert_verifier(verifier)
+        .with_single_cert(vec![certificate], key)
+        .expect("Server cert key DER is valid; qed");
+    crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
     Ok(crypto)
 }
 

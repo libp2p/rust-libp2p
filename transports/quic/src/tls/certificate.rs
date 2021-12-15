@@ -124,7 +124,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
     use webpki::Error;
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
-        .map_err(|_| Error::BadDER)?;
+        .map_err(|_| Error::BadDer)?;
 
     let p2p_ext_oid = der_parser::oid::Oid::from(&P2P_EXT_OID)
         .expect("This is a valid OID of p2p extension; qed");
@@ -135,7 +135,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
         let oid = &ext.oid;
         if oid == &p2p_ext_oid && libp2p_extension.is_some() {
             // The extension was already parsed
-            return Err(Error::BadDER);
+            return Err(Error::BadDer);
         }
 
         if oid == &p2p_ext_oid {
@@ -187,7 +187,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
     } else {
         // The certificate MUST contain the libp2p Public Key Extension.
         // If this extension is missing, endpoints MUST abort the connection attempt.
-        Err(Error::BadDER)
+        Err(Error::BadDer)
     }
 }
 
@@ -288,7 +288,7 @@ impl P2pCertificate<'_> {
                     Some(hash_oid)
                 }
 
-                let hash_oid = get_hash_oid(signature_algorithm).ok_or(Error::BadDER)?;
+                let hash_oid = get_hash_oid(signature_algorithm).ok_or(Error::BadDer)?;
 
                 if hash_oid == OID_NIST_HASH_SHA256 {
                     return Ok(RSA_PSS_SHA256);
@@ -310,9 +310,9 @@ impl P2pCertificate<'_> {
             let signature_param = pki_algorithm
                 .parameters
                 .as_ref()
-                .ok_or(Error::BadDER)?
+                .ok_or(Error::BadDer)?
                 .as_oid_val()
-                .map_err(|_| Error::BadDER)?;
+                .map_err(|_| Error::BadDer)?;
             if signature_param == OID_EC_P256
                 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA256
             {
