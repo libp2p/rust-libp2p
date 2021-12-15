@@ -21,6 +21,9 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let mut transport = QuicConfig::new(keypair);
+    transport
+        .transport
+        .max_idle_timeout(Some(quinn_proto::VarInt::from_u32(1_000u32).into()));
     if keylog {
         transport.enable_keylogger();
     }
