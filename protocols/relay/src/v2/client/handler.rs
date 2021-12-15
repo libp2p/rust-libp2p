@@ -107,11 +107,10 @@ impl IntoProtocolsHandler for Prototype {
     type Handler = Handler;
 
     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        Handler {
+        let mut handler = Handler {
             remote_peer_id: *remote_peer_id,
             remote_addr: endpoint.get_remote_address().clone(),
             local_peer_id: self.local_peer_id,
-            initial_in: self.initial_in,
             queued_events: Default::default(),
             pending_error: Default::default(),
             reservation: Reservation::None,
@@ -119,7 +118,13 @@ impl IntoProtocolsHandler for Prototype {
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
+        };
+
+        if let Some(event) = self.initial_in {
+            handler.inject_event(event)
         }
+
+        handler
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
@@ -139,9 +144,6 @@ pub struct Handler {
     >,
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
-
-    /// Initial [`In`] event from [`super::Client`] provided at creation time.
-    initial_in: Option<In>,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -501,12 +503,6 @@ impl ProtocolsHandler for Handler {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
-        }
-
-        // See whether the [`NetworkBehaviour`] provided a first [`In`] event at handler
-        // construction time.
-        if let Some(initial_in) = self.initial_in.take() {
-            self.inject_event(initial_in);
         }
 
         if let Poll::Ready(Some(protocol)) = self.reservation.poll(cx) {
