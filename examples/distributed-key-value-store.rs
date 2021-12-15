@@ -41,7 +41,7 @@
 //! 4. Close with Ctrl-c.
 
 use async_std::{io, task};
-use futures::prelude::*;
+use futures::{prelude::*, select};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     record::Key, AddProviderOk, Kademlia, KademliaEvent, PeerRecord, PutRecordOk, QueryResult,
@@ -53,10 +53,7 @@ use libp2p::{
     swarm::{NetworkBehaviourEventProcess, SwarmEvent},
     NetworkBehaviour, PeerId, Swarm,
 };
-use std::{
-    error::Error,
-    task::{Context, Poll},
-};
+use std::error::Error;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -157,35 +154,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines();
+    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
 
     // Listen on all interfaces and whatever port the OS assigns.
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off.
-    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
-        loop {
-            match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => {
-                    handle_input_line(&mut swarm.behaviour_mut().kademlia, line)
-                }
-                Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break,
+    loop {
+        select! {
+            line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
+            event = swarm.select_next_some() => match event {
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    println!("Listening in {:?}", address);
+                },
+                _ => {}
             }
         }
-        loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => {
-                    if let SwarmEvent::NewListenAddr { address, .. } = event {
-                        println!("Listening on {:?}", address);
-                    }
-                }
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => break,
-            }
-        }
-        Poll::Pending
-    }))
+    }
 }
 
 fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {

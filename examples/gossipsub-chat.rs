@@ -46,21 +46,18 @@
 //!
 //! The two nodes should then connect.
 
-use async_std::{io, task};
+use async_std::io;
 use env_logger::{Builder, Env};
-use futures::prelude::*;
+use futures::{prelude::*, select};
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
 use libp2p::{gossipsub, identity, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::hash_map::DefaultHasher;
+use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use std::{
-    error::Error,
-    task::{Context, Poll},
-};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -130,44 +127,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines();
+    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
 
     // Kick it off
-    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
-        loop {
-            if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm
+    loop {
+        select! {
+            line = stdin.select_next_some() => {
+                if let Err(e) = swarm
                     .behaviour_mut()
-                    .publish(topic.clone(), line.as_bytes()),
-                Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break,
-            } {
-                println!("Publish error: {:?}", e);
+                    .publish(topic.clone(), line.expect("Stdin not to close").as_bytes())
+                {
+                    println!("Publish error: {:?}", e);
+                }
+            },
+            event = swarm.select_next_some() => match event {
+                SwarmEvent::Behaviour(GossipsubEvent::Message {
+                    propagation_source: peer_id,
+                    message_id: id,
+                    message,
+                }) => println!(
+                    "Got message: {} with id: {} from peer: {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    id,
+                    peer_id
+                ),
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    println!("Listening on {:?}", address);
+                }
+                _ => {}
             }
         }
-
-        loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => match event {
-                    SwarmEvent::Behaviour(GossipsubEvent::Message {
-                        propagation_source: peer_id,
-                        message_id: id,
-                        message,
-                    }) => println!(
-                        "Got message: {} with id: {} from peer: {:?}",
-                        String::from_utf8_lossy(&message.data),
-                        id,
-                        peer_id
-                    ),
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        println!("Listening on {:?}", address);
-                    }
-                    _ => {}
-                },
-                Poll::Ready(None) | Poll::Pending => break,
-            }
-        }
-
-        Poll::Pending
-    }))
+    }
 }
