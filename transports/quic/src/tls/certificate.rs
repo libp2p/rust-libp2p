@@ -433,14 +433,14 @@ mod tests {
         };
     }
 
-    check_cert!{ed448, "./test_assets/ed448.der", rustls::SignatureScheme::ED448}
-    check_cert!{ed25519, "./test_assets/ed25519.der", rustls::SignatureScheme::ED25519}
-    check_cert!{rsa_pkcs1_sha256, "./test_assets/rsa_pkcs1_sha256.der", rustls::SignatureScheme::RSA_PKCS1_SHA256}
-    check_cert!{rsa_pkcs1_sha384, "./test_assets/rsa_pkcs1_sha384.der", rustls::SignatureScheme::RSA_PKCS1_SHA384}
-    check_cert!{rsa_pkcs1_sha512, "./test_assets/rsa_pkcs1_sha512.der", rustls::SignatureScheme::RSA_PKCS1_SHA512}
-    check_cert!{nistp256_sha256, "./test_assets/nistp256_sha256.der", rustls::SignatureScheme::ECDSA_NISTP256_SHA256}
-    check_cert!{nistp384_sha384, "./test_assets/nistp384_sha384.der", rustls::SignatureScheme::ECDSA_NISTP384_SHA384}
-    check_cert!{nistp521_sha512, "./test_assets/nistp521_sha512.der", rustls::SignatureScheme::ECDSA_NISTP521_SHA512}
+    check_cert! {ed448, "./test_assets/ed448.der", rustls::SignatureScheme::ED448}
+    check_cert! {ed25519, "./test_assets/ed25519.der", rustls::SignatureScheme::ED25519}
+    check_cert! {rsa_pkcs1_sha256, "./test_assets/rsa_pkcs1_sha256.der", rustls::SignatureScheme::RSA_PKCS1_SHA256}
+    check_cert! {rsa_pkcs1_sha384, "./test_assets/rsa_pkcs1_sha384.der", rustls::SignatureScheme::RSA_PKCS1_SHA384}
+    check_cert! {rsa_pkcs1_sha512, "./test_assets/rsa_pkcs1_sha512.der", rustls::SignatureScheme::RSA_PKCS1_SHA512}
+    check_cert! {nistp256_sha256, "./test_assets/nistp256_sha256.der", rustls::SignatureScheme::ECDSA_NISTP256_SHA256}
+    check_cert! {nistp384_sha384, "./test_assets/nistp384_sha384.der", rustls::SignatureScheme::ECDSA_NISTP384_SHA384}
+    check_cert! {nistp521_sha512, "./test_assets/nistp521_sha512.der", rustls::SignatureScheme::ECDSA_NISTP521_SHA512}
 
     #[test]
     fn rsa_pss_sha384() {
