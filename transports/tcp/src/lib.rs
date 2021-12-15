@@ -266,7 +266,7 @@ where
     /// match listener1.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
     ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut stream = tcp1.dial(listen_addr2.clone(), Endpoint::Dialer).unwrap().await?;
+    ///         let mut stream = tcp1.dial(listen_addr2.clone()).unwrap().await?;
     ///         // `stream` has `listen_addr1` as its local socket address.
     ///     }
     ///     _ => {}
@@ -277,7 +277,7 @@ where
     /// match listener2.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
     ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut socket = tcp2.dial(listen_addr1, Endpoint::Dialer).unwrap().await?;
+    ///         let mut socket = tcp2.dial(listen_addr1).unwrap().await?;
     ///         // `stream` has `listen_addr2` as its local socket address.
     ///     }
     ///     _ => {}
