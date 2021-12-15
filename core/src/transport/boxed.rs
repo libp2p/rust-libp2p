@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::DialAsListener;
+
 use crate::transport::{ListenerEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
@@ -52,10 +52,10 @@ type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 
 trait Abstract<O> {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O>, TransportError<io::Error>>;
-    fn dial(
+    fn dial(&self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
+    fn dial_with_role_override(
         &self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 }
@@ -83,12 +83,18 @@ where
         Ok(Box::pin(fut))
     }
 
-    fn dial(
+    fn dial(&self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>> {
+        let fut = Transport::dial(self.clone(), addr)
+            .map(|r| r.map_err(box_err))
+            .map_err(|e| e.map(box_err))?;
+        Ok(Box::pin(fut) as Dial<_>)
+    }
+
+    fn dial_with_role_override(
         &self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Dial<O>, TransportError<io::Error>> {
-        let fut = Transport::dial(self.clone(), addr, as_listener)
+        let fut = Transport::dial_with_role_override(self.clone(), addr)
             .map(|r| r.map_err(box_err))
             .map_err(|e| e.map(box_err))?;
         Ok(Box::pin(fut) as Dial<_>)
@@ -124,12 +130,15 @@ impl<O> Transport for Boxed<O> {
         self.inner.listen_on(addr)
     }
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.dial(addr)
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.dial(addr, as_listener)
+        self.inner.dial_with_role_override(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

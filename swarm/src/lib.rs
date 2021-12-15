@@ -368,12 +368,12 @@ where
             dial_opts::Opts::WithPeerId(dial_opts::WithPeerId {
                 peer_id,
                 condition,
-                as_listener,
+                role_override,
             })
             | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
                 peer_id,
                 condition,
-                as_listener,
+                role_override,
                 ..
             }) => {
                 // Check [`PeerCondition`] if provided.
@@ -448,7 +448,7 @@ where
                 match self
                     .network
                     .peer(peer_id)
-                    .dial(addresses, handler, as_listener)
+                    .dial(addresses, handler, role_override)
                 {
                     Ok(_connection_id) => Ok(()),
                     Err(error) => {
@@ -465,7 +465,7 @@ where
             // Dial an unknown peer.
             dial_opts::Opts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress {
                 address,
-                as_listener,
+                role_override,
             }) => {
                 let handler = handler
                     .into_node_handler_builder()
@@ -475,7 +475,7 @@ where
 
                 match self
                     .network
-                    .dial(&address, handler, as_listener)
+                    .dial(&address, handler, role_override)
                     .map(|_id| ())
                 {
                     Ok(_connection_id) => Ok(()),

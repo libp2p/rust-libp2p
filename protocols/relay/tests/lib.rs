@@ -36,7 +36,7 @@ use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::{Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::KeepAlive;
 use libp2p_swarm::{
-    dial_opts::DialOpts, DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
+    DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
     NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
 };
 use std::task::{Context, Poll};
@@ -1262,6 +1262,13 @@ impl<T: Transport> Transport for Firewall<T> {
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr)
+    }
+
+    fn dial_with_role_override(
+        self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial_with_role_override(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

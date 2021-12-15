@@ -25,7 +25,7 @@ use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
     connection::PendingConnectionError,
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
-    PeerId,
+    Endpoint, PeerId,
 };
 use quickcheck::*;
 use std::task::Poll;
@@ -47,14 +47,14 @@ fn max_outgoing() {
     for _ in 0..outgoing_limit {
         network
             .peer(target.clone())
-            .dial(vec![addr.clone()], TestHandler())
+            .dial(vec![addr.clone()], TestHandler(), Endpoint::Dialer)
             .ok()
             .expect("Unexpected connection limit.");
     }
 
     match network
         .peer(target.clone())
-        .dial(vec![addr.clone()], TestHandler())
+        .dial(vec![addr.clone()], TestHandler(), Endpoint::Dialer)
         .expect_err("Unexpected dialing success.")
     {
         DialError::ConnectionLimit { limit, handler: _ } => {
@@ -122,7 +122,9 @@ fn max_established_incoming() {
         // Spawn and block on the dialer.
         async_std::task::block_on({
             let mut n = 0;
-            let _ = network2.dial(&listen_addr, TestHandler()).unwrap();
+            let _ = network2
+                .dial(&listen_addr, TestHandler(), Endpoint::Dialer)
+                .unwrap();
 
             let mut expected_closed = false;
             let mut network_1_established = false;
@@ -188,7 +190,9 @@ fn max_established_incoming() {
                         if n <= limit {
                             // Dial again until the limit is exceeded.
                             n += 1;
-                            network2.dial(&listen_addr, TestHandler()).unwrap();
+                            network2
+                                .dial(&listen_addr, TestHandler(), Endpoint::Dialer)
+                                .unwrap();
 
                             if n == limit {
                                 // The the next dialing attempt exceeds the limit, this

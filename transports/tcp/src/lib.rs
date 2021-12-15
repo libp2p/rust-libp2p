@@ -50,7 +50,6 @@ use futures::{
 use futures_timer::Delay;
 use libp2p_core::{
     address_translation,
-    connection::DialAsListener,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, Transport, TransportError},
 };
@@ -267,7 +266,7 @@ where
     /// match listener1.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
     ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut stream = tcp1.dial(listen_addr2.clone()).unwrap().await?;
+    ///         let mut stream = tcp1.dial(listen_addr2.clone(), Endpoint::Dialer).unwrap().await?;
     ///         // `stream` has `listen_addr1` as its local socket address.
     ///     }
     ///     _ => {}
@@ -278,7 +277,7 @@ where
     /// match listener2.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
     ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut socket = tcp2.dial(listen_addr1).unwrap().await?;
+    ///         let mut socket = tcp2.dial(listen_addr1, Endpoint::Dialer).unwrap().await?;
     ///         // `stream` has `listen_addr2` as its local socket address.
     ///     }
     ///     _ => {}
@@ -389,11 +388,7 @@ where
         self.do_listen(socket_addr).map_err(TransportError::Other)
     }
 
-    fn dial(
-        self,
-        addr: Multiaddr,
-        _as_listener: DialAsListener,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 return Err(TransportError::MultiaddrNotSupported(addr));
@@ -404,6 +399,13 @@ where
         };
         log::debug!("dialing {}", socket_addr);
         Ok(Box::pin(self.do_dial(socket_addr)))
+    }
+
+    fn dial_with_role_override(
+        self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.dial(addr)
     }
 
     /// When port reuse is disabled and hence ephemeral local ports are

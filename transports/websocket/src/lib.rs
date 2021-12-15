@@ -28,7 +28,7 @@ use error::Error;
 use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
-    connection::{ConnectedPoint, DialAsListener},
+    connection::{ConnectedPoint},
     multiaddr::Multiaddr,
     transport::{
         map::{MapFuture, MapStream},
@@ -124,14 +124,19 @@ where
             .listen_on(addr)
     }
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport
+            .map(wrap_connection as WrapperFn<T::Output>)
+            .dial(addr)
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.transport
             .map(wrap_connection as WrapperFn<T::Output>)
-            .dial(addr, as_listener)
+            .dial_with_role_override(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

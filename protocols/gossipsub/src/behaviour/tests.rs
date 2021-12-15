@@ -38,6 +38,7 @@ mod tests {
     use crate::subscription_filter::WhitelistSubscriptionFilter;
     use crate::transform::{DataTransform, IdentityTransform};
     use crate::types::FastMessageId;
+    use libp2p_core::Endpoint;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -189,7 +190,10 @@ mod tests {
             &peer,
             &ConnectionId::new(0),
             &if outbound {
-                ConnectedPoint::Dialer { address }
+                ConnectedPoint::Dialer {
+                    address,
+                    role_override: Endpoint::Dialer,
+                }
             } else {
                 ConnectedPoint::Listener {
                     local_addr: Multiaddr::empty(),
@@ -534,6 +538,7 @@ mod tests {
                 &ConnectionId::new(1),
                 &ConnectedPoint::Dialer {
                     address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
+                    role_override: Endpoint::Dialer,
                 },
                 None,
             );
@@ -4075,6 +4080,7 @@ mod tests {
                 &ConnectionId::new(0),
                 &ConnectedPoint::Dialer {
                     address: addr.clone(),
+                    role_override: Endpoint::Dialer,
                 },
                 None,
             );
@@ -4094,6 +4100,7 @@ mod tests {
                 &ConnectionId::new(0),
                 &ConnectedPoint::Dialer {
                     address: addr2.clone(),
+                    role_override: Endpoint::Dialer,
                 },
                 None,
             );
@@ -4122,6 +4129,7 @@ mod tests {
             &ConnectionId::new(0),
             &ConnectedPoint::Dialer {
                 address: addr.clone(),
+                role_override: Endpoint::Dialer,
             },
             None,
         );

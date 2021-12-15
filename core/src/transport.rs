@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::connection::{ConnectedPoint, DialAsListener};
+use crate::connection::ConnectedPoint;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
@@ -126,11 +126,19 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized;
+
+    /// As [`Transport::dial`] but overrides the role of the local node on the connection . I.e. has
+    /// the local node act as a listener on the outgoing connection.
+    ///
+    /// This option is needed for NAT and firewall hole punching.
+    ///
+    /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        // TODO: In case the transport doesn't support as_listener, should we return an error at runtime?
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;

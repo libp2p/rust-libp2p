@@ -23,7 +23,7 @@
 pub use crate::upgrade::Version;
 
 use crate::{
-    connection::{ConnectedPoint, DialAsListener},
+    connection::{ConnectedPoint},
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
         and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerEvent, Transport,
@@ -337,12 +337,15 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr)
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial(addr, as_listener)
+        self.0.dial_with_role_override(addr)
     }
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
@@ -387,14 +390,24 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self
+            .inner
+            .dial(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
+        Ok(DialUpgradeFuture {
+            future: Box::pin(future),
+            upgrade: future::Either::Left(Some(self.upgrade)),
+        })
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
-            .dial(addr, as_listener)
+            .dial_with_role_override(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),

@@ -40,7 +40,7 @@ where
     U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
 {
     match cp {
-        ConnectedPoint::Dialer { as_listener, .. } if as_listener == false => {
+        ConnectedPoint::Dialer { role_override, .. } if role_override.is_dialer() => {
             Either::Right(apply_outbound(conn, up, v))
         }
         _ => Either::Left(apply_inbound(conn, up)),

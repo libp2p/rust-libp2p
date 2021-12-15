@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::DialAsListener;
+
 use crate::either::{EitherError, EitherFuture, EitherListenStream, EitherOutput};
 use crate::transport::{Transport, TransportError};
 use multiaddr::Multiaddr;
@@ -64,12 +64,8 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial(
-        self,
-        addr: Multiaddr,
-        as_listener: DialAsListener,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = match self.0.dial(addr, as_listener) {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let addr = match self.0.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
@@ -77,7 +73,30 @@ where
             }
         };
 
-        let addr = match self.1.dial(addr, as_listener) {
+        let addr = match self.1.dial(addr) {
+            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(EitherError::B(err)))
+            }
+        };
+
+        Err(TransportError::MultiaddrNotSupported(addr))
+    }
+
+    fn dial_with_role_override(
+        self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let addr = match self.0.dial_with_role_override(addr) {
+            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(EitherError::A(err)))
+            }
+        };
+
+        let addr = match self.1.dial_with_role_override(addr) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {

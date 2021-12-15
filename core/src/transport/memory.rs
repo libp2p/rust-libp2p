@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    connection::DialAsListener,
     transport::{ListenerEvent, TransportError},
     Transport,
 };
@@ -192,11 +191,7 @@ impl Transport for MemoryTransport {
         Ok(listener)
     }
 
-    fn dial(
-        self,
-        addr: Multiaddr,
-        _as_listener: DialAsListener,
-    ) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -208,6 +203,13 @@ impl Transport for MemoryTransport {
         };
 
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
+    }
+
+    fn dial_with_role_override(
+        self,
+        addr: Multiaddr,
+    ) -> Result<DialFuture, TransportError<Self::Error>> {
+        self.dial(addr)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {

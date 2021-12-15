@@ -34,7 +34,7 @@
 
 use futures::{future::Ready, prelude::*};
 use libp2p_core::{
-    connection::DialAsListener,
+    connection::Endpoint,
     transport::{ListenerEvent, TransportError},
     Multiaddr, Transport,
 };
@@ -68,7 +68,7 @@ pub mod ffi {
         pub fn dial(
             this: &Transport,
             multiaddr: &str,
-            _as_listener: bool,
+            _role_override: bool,
         ) -> Result<js_sys::Promise, JsValue>;
 
         /// Start listening on the given multiaddress.
@@ -156,6 +156,29 @@ impl ExtTransport {
             inner: SendWrapper::new(transport),
         }
     }
+    fn do_dial(
+        self,
+        addr: Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
+        let promise = self
+            .inner
+            .dial(
+                &addr.to_string(),
+                matches!(role_override, Endpoint::Listener),
+            )
+            .map_err(|err| {
+                if is_not_supported_error(&err) {
+                    TransportError::MultiaddrNotSupported(addr)
+                } else {
+                    TransportError::Other(JsErr::from(err))
+                }
+            })?;
+
+        Ok(Dial {
+            inner: SendWrapper::new(promise.into()),
+        })
+    }
 }
 
 impl fmt::Debug for ExtTransport {
@@ -195,25 +218,21 @@ impl Transport for ExtTransport {
         })
     }
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized,
+    {
+        self.do_dial(addr, Endpoint::Dialer)
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let promise = self
-            .inner
-            .dial(&addr.to_string(), as_listener.into())
-            .map_err(|err| {
-                if is_not_supported_error(&err) {
-                    TransportError::MultiaddrNotSupported(addr)
-                } else {
-                    TransportError::Other(JsErr::from(err))
-                }
-            })?;
-
-        Ok(Dial {
-            inner: SendWrapper::new(promise.into()),
-        })
+    ) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized,
+    {
+        self.do_dial(addr, Endpoint::Listener)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {

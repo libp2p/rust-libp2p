@@ -26,7 +26,7 @@ use libp2p_core::{
     connection::PendingConnectionError,
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
-    PeerId,
+    Endpoint, PeerId,
 };
 use rand::seq::SliceRandom;
 use std::{io, task::Poll};
@@ -51,7 +51,7 @@ fn deny_incoming_connec() {
 
     swarm2
         .peer(swarm1.local_peer_id().clone())
-        .dial(vec![address.clone()], TestHandler())
+        .dial(vec![address.clone()], TestHandler(), Endpoint::Dialer)
         .unwrap();
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
@@ -106,7 +106,9 @@ fn dial_self() {
         _ => panic!("Was expecting the listen address to be reported"),
     }));
 
-    swarm.dial(&local_address, TestHandler()).unwrap();
+    swarm
+        .dial(&local_address, TestHandler(), Endpoint::Dialer)
+        .unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
@@ -175,7 +177,7 @@ fn multiple_addresses_err() {
 
     swarm
         .peer(target.clone())
-        .dial(addresses.clone(), TestHandler())
+        .dial(addresses.clone(), TestHandler(), Endpoint::Dialer)
         .unwrap();
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {

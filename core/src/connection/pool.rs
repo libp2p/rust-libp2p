@@ -22,9 +22,9 @@
 use crate::{
     connection::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit,
-        DialAsListener, IncomingInfo, IntoConnectionHandler, PendingConnectionError,
-        PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint, Substream,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint,
+        IncomingInfo, IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
+        PendingOutboundConnectionError, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
     network::DialError,
@@ -535,7 +535,7 @@ where
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
         handler: THandler,
-        as_listener: DialAsListener,
+        role_override: Endpoint,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Clone + Send,
@@ -550,7 +550,7 @@ where
             peer,
             addresses,
             self.dial_concurrency_factor,
-            as_listener,
+            role_override,
         );
 
         let connection_id = self.next_connection_id();
@@ -567,7 +567,7 @@ where
             .boxed(),
         );
 
-        let endpoint = PendingPoint::Dialer { as_listener };
+        let endpoint = PendingPoint::Dialer { role_override };
 
         self.counters.inc_pending(&endpoint);
         self.pending.insert(
@@ -748,10 +748,10 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer { as_listener }, Some((address, errors))) => (
+                        (PendingPoint::Dialer { role_override }, Some((address, errors))) => (
                             ConnectedPoint::Dialer {
                                 address,
-                                as_listener,
+                                role_override,
                             },
                             Some(errors),
                         ),

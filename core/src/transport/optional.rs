@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::DialAsListener;
+
 use crate::transport::{Transport, TransportError};
 use multiaddr::Multiaddr;
 
@@ -68,13 +68,20 @@ where
         }
     }
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0 {
+            inner.dial(addr)
+        } else {
+            Err(TransportError::MultiaddrNotSupported(addr))
+        }
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0 {
-            inner.dial(addr, as_listener)
+            inner.dial_with_role_override(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }

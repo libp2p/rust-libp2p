@@ -21,7 +21,7 @@
 mod event;
 pub mod peer;
 
-pub use crate::connection::{ConnectionCounters, ConnectionLimits, DialAsListener};
+pub use crate::connection::{ConnectionCounters, ConnectionLimits, Endpoint};
 pub use event::{IncomingConnection, NetworkEvent};
 pub use peer::Peer;
 
@@ -195,7 +195,7 @@ where
         &mut self,
         address: &Multiaddr,
         handler: THandler,
-        as_listener: DialAsListener,
+        role_override: Endpoint,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Transport + Send,
@@ -214,7 +214,7 @@ where
                     peer,
                     addresses: std::iter::once(address.clone()),
                     handler,
-                    as_listener,
+                    role_override: Endpoint::Dialer,
                 });
             }
         }
@@ -224,7 +224,7 @@ where
             std::iter::once(address.clone()),
             None,
             handler,
-            as_listener,
+            role_override,
         )
     }
 
@@ -245,7 +245,7 @@ where
             opts.addresses,
             Some(opts.peer),
             opts.handler,
-            opts.as_listener,
+            opts.role_override,
         )?;
 
         Ok(id)
@@ -473,7 +473,7 @@ struct DialingOpts<THandler, I> {
     peer: PeerId,
     handler: THandler,
     addresses: I,
-    as_listener: DialAsListener,
+    role_override: Endpoint,
 }
 
 /// Information about the network obtained by [`Network::info()`].

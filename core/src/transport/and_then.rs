@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    connection::{ConnectedPoint, DialAsListener},
+    connection::{ConnectedPoint, Endpoint},
     either::EitherError,
     transport::{ListenerEvent, Transport, TransportError},
 };
@@ -69,14 +69,10 @@ where
         Ok(stream)
     }
 
-    fn dial(
-        self,
-        addr: Multiaddr,
-        as_listener: DialAsListener,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
-            .dial(addr.clone(), as_listener)
+            .dial(addr.clone())
             .map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
@@ -84,7 +80,29 @@ where
                 self.fun,
                 ConnectedPoint::Dialer {
                     address: addr,
-                    as_listener,
+                    role_override: Endpoint::Dialer,
+                },
+            )),
+            marker: PhantomPinned,
+        };
+        Ok(future)
+    }
+
+    fn dial_with_role_override(
+        self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dialed_fut = self
+            .transport
+            .dial_with_role_override(addr.clone())
+            .map_err(|err| err.map(EitherError::A))?;
+        let future = AndThenFuture {
+            inner: Either::Left(Box::pin(dialed_fut)),
+            args: Some((
+                self.fun,
+                ConnectedPoint::Dialer {
+                    address: addr,
+                    role_override: Endpoint::Listener,
                 },
             )),
             marker: PhantomPinned,

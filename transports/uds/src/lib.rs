@@ -40,7 +40,6 @@ use futures::{
     prelude::*,
 };
 use libp2p_core::{
-    connection::DialAsListener,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     Transport,
@@ -105,7 +104,7 @@ impl Transport for $uds_config {
         }
     }
 
-    fn dial(self, addr: Multiaddr, _as_listener: DialAsListener) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // TODO: Should we dial at all?
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
@@ -113,6 +112,10 @@ impl Transport for $uds_config {
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
+    }
+
+    fn dial_with_role_override(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.dial(addr)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {

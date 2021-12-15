@@ -26,7 +26,7 @@ use futures::ready;
 use libp2p_core::{
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
-    ConnectedPoint,
+    ConnectedPoint, Endpoint,
 };
 use quickcheck::*;
 use rand07::Rng;
@@ -74,7 +74,11 @@ fn concurrent_dialing() {
             // connections.
             network_2
                 .peer(*network_1.local_peer_id())
-                .dial(network_1_listen_addresses.clone(), TestHandler())
+                .dial(
+                    network_1_listen_addresses.clone(),
+                    TestHandler(),
+                    Endpoint::Dialer,
+                )
                 .unwrap();
             let mut network_1_incoming_connections = Vec::new();
             for i in 0..concurrency_factor.0.get() {
@@ -116,7 +120,7 @@ fn concurrent_dialing() {
                         ..
                     }) => {
                         match connection.endpoint() {
-                            ConnectedPoint::Dialer { address } => {
+                            ConnectedPoint::Dialer { address, .. } => {
                                 assert_eq!(
                                     *address,
                                     accepted_addr

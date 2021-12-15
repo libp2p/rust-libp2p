@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::connection::DialAsListener;
+use libp2p_core::connection::Endpoint;
 use libp2p_core::{Multiaddr, PeerId};
 
 /// Options to configure a dial to a known or unknown peer.
@@ -51,7 +51,7 @@ impl DialOpts {
         WithPeerId {
             peer_id,
             condition: Default::default(),
-            as_listener: Default::default(),
+            role_override: Endpoint::Dialer,
         }
     }
 
@@ -108,7 +108,7 @@ pub(super) enum Opts {
 pub struct WithPeerId {
     pub(crate) peer_id: PeerId,
     pub(crate) condition: PeerCondition,
-    pub(crate) as_listener: DialAsListener,
+    pub(crate) role_override: Endpoint,
 }
 
 impl WithPeerId {
@@ -125,15 +125,18 @@ impl WithPeerId {
             condition: self.condition,
             addresses,
             extend_addresses_through_behaviour: false,
-            as_listener: self.as_listener,
+            role_override: self.role_override,
         }
     }
 
-    /// Execute the dial _as a listener_.
+    /// Override role of local node on connection. I.e. execute the dial _as a
+    /// listener_.
     ///
-    /// See [`DialAsListener`] for details.
-    pub fn as_listener(mut self) -> Self {
-        self.as_listener = true.into();
+    /// See
+    /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
+    /// for details.
+    pub fn role_override(mut self) -> Self {
+        self.role_override = Endpoint::Listener;
         self
     }
 
@@ -152,7 +155,7 @@ pub struct WithPeerIdWithAddresses {
     pub(crate) condition: PeerCondition,
     pub(crate) addresses: Vec<Multiaddr>,
     pub(crate) extend_addresses_through_behaviour: bool,
-    pub(crate) as_listener: DialAsListener,
+    pub(crate) role_override: Endpoint,
 }
 
 impl WithPeerIdWithAddresses {
@@ -169,11 +172,14 @@ impl WithPeerIdWithAddresses {
         self
     }
 
-    /// Execute the dial _as a listener_.
+    /// Override role of local node on connection. I.e. execute the dial _as a
+    /// listener_.
     ///
-    /// See [`DialAsListener`] for details.
-    pub fn as_listener(mut self) -> Self {
-        self.as_listener = true.into();
+    /// See
+    /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
+    /// for details.
+    pub fn role_override(mut self) -> Self {
+        self.role_override = Endpoint::Listener;
         self
     }
     /// Build the final [`DialOpts`].
@@ -190,7 +196,7 @@ impl WithoutPeerId {
     pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
         WithoutPeerIdWithAddress {
             address,
-            as_listener: Default::default(),
+            role_override: Endpoint::Dialer,
         }
     }
 }
@@ -198,15 +204,18 @@ impl WithoutPeerId {
 #[derive(Debug)]
 pub struct WithoutPeerIdWithAddress {
     pub(crate) address: Multiaddr,
-    pub(crate) as_listener: DialAsListener,
+    pub(crate) role_override: Endpoint,
 }
 
 impl WithoutPeerIdWithAddress {
-    /// Execute the dial _as a listener_.
+    /// Override role of local node on connection. I.e. execute the dial _as a
+    /// listener_.
     ///
-    /// See [`DialAsListener`] for details.
-    pub fn as_listener(mut self) -> Self {
-        self.as_listener = true.into();
+    /// See
+    /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
+    /// for details.
+    pub fn role_override(mut self) -> Self {
+        self.role_override = Endpoint::Listener;
         self
     }
     /// Build the final [`DialOpts`].

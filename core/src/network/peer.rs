@@ -21,7 +21,7 @@
 use super::{DialError, DialingOpts, Network};
 use crate::{
     connection::{
-        handler::THandlerInEvent, pool::Pool, ConnectionHandler, ConnectionId, DialAsListener,
+        handler::THandlerInEvent, pool::Pool, ConnectionHandler, ConnectionId, Endpoint,
         EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler, PendingConnection,
     },
     Multiaddr, PeerId, Transport,
@@ -157,7 +157,7 @@ where
         self,
         addresses: I,
         handler: THandler,
-        as_listener: DialAsListener,
+        role_override: Endpoint,
     ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
     where
         I: IntoIterator<Item = Multiaddr>,
@@ -174,7 +174,7 @@ where
             peer: peer_id,
             handler,
             addresses: addresses.into_iter(),
-            as_listener,
+            role_override,
         })?;
 
         Ok((id, DialingPeer { network, peer_id }))

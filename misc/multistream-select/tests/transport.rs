@@ -26,7 +26,7 @@ use libp2p_core::{
     muxing::StreamMuxerBox,
     network::{NetworkConfig, NetworkEvent},
     transport::{self, MemoryTransport},
-    upgrade, Multiaddr, Network, PeerId, Transport,
+    upgrade, Endpoint, Multiaddr, Network, PeerId, Transport,
 };
 use libp2p_mplex::MplexConfig;
 use libp2p_plaintext::PlainText2Config;
@@ -75,7 +75,7 @@ fn transport_upgrade() {
 
         let client = async move {
             let addr = addr_receiver.await.unwrap();
-            dialer.dial(&addr, TestHandler()).unwrap();
+            dialer.dial(&addr, TestHandler(), Endpoint::Dialer).unwrap();
             futures::future::poll_fn(move |cx| loop {
                 match ready!(dialer.poll(cx)) {
                     NetworkEvent::ConnectionEstablished { .. } => return Poll::Ready(()),

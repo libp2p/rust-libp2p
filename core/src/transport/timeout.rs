@@ -25,7 +25,6 @@
 // TODO: add example
 
 use crate::{
-    connection::DialAsListener,
     transport::{ListenerEvent, TransportError},
     Multiaddr, Transport,
 };
@@ -99,14 +98,24 @@ where
         Ok(listener)
     }
 
-    fn dial(
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dial = self
+            .inner
+            .dial(addr)
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
+        Ok(Timeout {
+            inner: dial,
+            timer: Delay::new(self.outgoing_timeout),
+        })
+    }
+
+    fn dial_with_role_override(
         self,
         addr: Multiaddr,
-        as_listener: DialAsListener,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
-            .dial(addr, as_listener)
+            .dial_with_role_override(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,

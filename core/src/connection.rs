@@ -97,8 +97,8 @@ pub enum PendingPoint {
     /// connection. Addresses are dialed in parallel. Only once the first dial
     /// is successful is the address of the connection known.
     Dialer {
-        /// Whether the connection is dialed _as a listener_.
-        as_listener: DialAsListener,
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
     },
     /// The socket comes from a listener.
     Listener {
@@ -112,7 +112,7 @@ pub enum PendingPoint {
 impl From<ConnectedPoint> for PendingPoint {
     fn from(endpoint: ConnectedPoint) -> Self {
         match endpoint {
-            ConnectedPoint::Dialer { as_listener, .. } => PendingPoint::Dialer { as_listener },
+            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr,
@@ -131,8 +131,27 @@ pub enum ConnectedPoint {
     Dialer {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
-        /// Whether the connection is dialed _as a listener_.
-        as_listener: DialAsListener,
+        /// Whether the role of the local node on the connection should be
+        /// overriden. I.e. whether the local node should act as a listener on
+        /// the outgoing connection.
+        ///
+        /// This option is needed for NAT and firewall hole punching.
+        ///
+        /// - [`Endpoint::Dialer`] represents the default non-overriding option.
+        ///
+        /// - [`Endpoint::Listener`] represents the overriding option.
+        ///   Realization depends on the transport protocol. E.g. in the case of
+        ///   TCP, both endpoints dial each other, resulting in a _simultaneous
+        ///   open_ TCP connection. On this new connection both endpoints assume
+        ///   to be the dialer of the connection. This is problematic during the
+        ///   connection upgrade process where an upgrade assumes one side to be
+        ///   the listener. With the help of this option, both peers can
+        ///   negotiate the roles (dialer and listener) for the new connection
+        ///   ahead of time, through some external channel, e.g. the DCUtR
+        ///   protocol, and thus have one peer dial the other and upgrade the
+        ///   connection as a dialer and one peer dial the other and upgrade the
+        ///   connection _as a listener_ overriding its role.
+        role_override: Endpoint,
     },
     /// We received the node.
     Listener {
@@ -201,41 +220,6 @@ impl ConnectedPoint {
             ConnectedPoint::Dialer { address, .. } => *address = new_address,
             ConnectedPoint::Listener { send_back_addr, .. } => *send_back_addr = new_address,
         }
-    }
-}
-
-/// Whether a connection is dialed _as a listener_.
-///
-/// This option is needed for NAT and firewall hole punching.
-///
-/// The concrete realization of this option depends on the transport
-/// protocol. E.g. in the case of TCP, both endpoints dial each other,
-/// resulting in a _simultaneous open_ TCP connection. On this new
-/// connection both endpoints assume to be the dialer of the connection.
-/// This is problematic during the connection upgrade process where an
-/// upgrade assumes one side to be the listener. With the help of this
-/// option, both peers can negotiate the roles (dialer and listener) for
-/// the new connection ahead of time, through some external channel, and
-/// thus have one peer dial the other as a dialer and one peer dial the
-/// other _as a listener_.
-#[derive(Debug, Default, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct DialAsListener(bool);
-
-impl From<bool> for DialAsListener {
-    fn from(b: bool) -> Self {
-        Self(b)
-    }
-}
-
-impl From<DialAsListener> for bool {
-    fn from(b: DialAsListener) -> Self {
-        b.0
-    }
-}
-
-impl PartialEq<bool> for DialAsListener {
-    fn eq(&self, other: &bool) -> bool {
-        self.0 == *other
     }
 }
 
