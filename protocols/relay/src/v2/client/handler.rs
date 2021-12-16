@@ -559,7 +559,7 @@ impl ProtocolsHandler for Handler {
 }
 
 enum Reservation {
-    /// The Rreservation is accepted by the relay.
+    /// The Reservation is accepted by the relay.
     Accepted {
         /// [`None`] if reservation does not expire.
         renewal_timeout: Option<Delay>,
