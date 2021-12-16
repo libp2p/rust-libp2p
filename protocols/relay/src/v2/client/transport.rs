@@ -70,14 +70,16 @@ use thiserror::Error;
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay::v2::client;
+///    # let relay_id = PeerId::random();
+///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
 ///    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
-///        PeerId::random(),
+///       local_peer_id,
 ///    );
 ///    let transport = OrTransport::new(relay_transport, actual_transport);
 ///    let relay_addr = Multiaddr::empty()
 ///        .with(Protocol::Memory(40)) // Relay address.
-///        .with(Protocol::P2p(PeerId::random().into())) // Relay peer id.
+///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
 ///    transport.listen_on(relay_addr).unwrap();
 ///    ```
