@@ -36,7 +36,8 @@ use thiserror::Error;
 
 /// A [`Transport`] enabling client relay capabilities.
 ///
-/// Needs to be combined with another protocol, e.g. via
+/// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
+/// an other transport to do the actual transmission of data. They should be combined through the
 /// [`OrTransport`](libp2p_core::transport::choice::OrTransport).
 ///
 /// Allows the local node to:
@@ -89,8 +90,11 @@ pub struct ClientTransport {
 }
 
 impl ClientTransport {
-    /// Create a new [`ClientTransport`] by wrapping an existing [`Transport`] in a
-    /// [`ClientTransport`].
+    /// Create a new [`ClientTransport`].
+    ///
+    /// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
+    /// an other transport to do the actual transmission of data. They should be combined through the
+    /// [`OrTransport`](libp2p_core::transport::choice::OrTransport).
     ///
     /// ```
     /// # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
