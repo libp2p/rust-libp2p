@@ -110,7 +110,7 @@ pub struct Circuit {
 }
 
 impl Circuit {
-    pub(crate) fn src_peer_id(&self) -> PeerId {
+    pub fn src_peer_id(&self) -> PeerId {
         self.src_peer_id
     }
 
