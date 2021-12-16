@@ -431,7 +431,7 @@ impl ProtocolsHandler for Handler {
     fn inject_fully_negotiated_inbound(
         &mut self,
         request: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
-        _request_id: Self::InboundOpenInfo,
+        _: Self::InboundOpenInfo,
     ) {
         match request {
             inbound_hop::Req::Reserve(inbound_reservation_req) => {
