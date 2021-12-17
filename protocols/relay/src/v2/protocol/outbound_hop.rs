@@ -97,35 +97,42 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 status,
             } = HopMessage::decode(Cursor::new(msg))?;
 
-            let r#type = hop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+            let r#type =
+                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
-                hop_message::Type::Connect => return Err(UpgradeError::UnexpectedTypeConnect),
-                hop_message::Type::Reserve => return Err(UpgradeError::UnexpectedTypeReserve),
+                hop_message::Type::Connect => Err(FatalUpgradeError::UnexpectedTypeConnect)?,
+                hop_message::Type::Reserve => Err(FatalUpgradeError::UnexpectedTypeReserve)?,
                 hop_message::Type::Status => {}
             }
 
-            let status = Status::from_i32(status.ok_or(UpgradeError::MissingStatusField)?)
-                .ok_or(UpgradeError::ParseStatusField)?;
-            match status {
-                Status::Ok => {}
-                s => return Err(UpgradeError::UnexpectedStatus(s)),
-            }
+            let status = Status::from_i32(status.ok_or(FatalUpgradeError::MissingStatusField)?)
+                .ok_or(FatalUpgradeError::ParseStatusField)?;
 
             let limit = limit.map(Into::into);
 
             let output = match self {
                 Upgrade::Reserve => {
-                    let reservation = reservation.ok_or(UpgradeError::MissingReservationField)?;
+                    match status {
+                        Status::Ok => {}
+                        Status::ReservationRefused => Err(ReservationFailedReason::Refused)?,
+                        Status::ResourceLimitExceeded => {
+                            Err(ReservationFailedReason::ResourceLimitExceeded)?
+                        }
+                        s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                    }
+
+                    let reservation =
+                        reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
 
                     let addrs = if reservation.addrs.is_empty() {
-                        return Err(UpgradeError::NoAddressesInReservation);
+                        Err(FatalUpgradeError::NoAddressesInReservation)?
                     } else {
                         reservation
                             .addrs
                             .into_iter()
                             .map(TryFrom::try_from)
                             .collect::<Result<Vec<Multiaddr>, _>>()
-                            .map_err(|_| UpgradeError::InvalidReservationAddrs)?
+                            .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?
                     };
 
                     let renewal_timeout = reservation
@@ -142,7 +149,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                                 .and_then(|duration| duration.checked_sub(duration / 4))
                                 .map(Duration::from_secs)
                                 .map(Delay::new)
-                                .ok_or(UpgradeError::InvalidReservationExpiration)
+                                .ok_or(FatalUpgradeError::InvalidReservationExpiration)
                         })
                         .transpose()?;
 
@@ -155,6 +162,17 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     }
                 }
                 Upgrade::Connect { .. } => {
+                    match status {
+                        Status::Ok => {}
+                        Status::ResourceLimitExceeded => {
+                            Err(CircuitFailedReason::ResourceLimitExceeded)?
+                        }
+                        Status::ConnectionFailed => Err(CircuitFailedReason::ConnectionFailed)?,
+                        Status::NoReservation => Err(CircuitFailedReason::NoReservation)?,
+                        Status::PermissionDenied => Err(CircuitFailedReason::PermissionDenied)?,
+                        s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                    }
+
                     let FramedParts {
                         io,
                         read_buffer,
@@ -182,6 +200,48 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
+    #[error("Reservation failed")]
+    ReservationFailed(#[from] ReservationFailedReason),
+    #[error("Circuit failed")]
+    CircuitFailed(#[from] CircuitFailedReason),
+    #[error("Fatal")]
+    Fatal(#[from] FatalUpgradeError),
+}
+
+impl From<std::io::Error> for UpgradeError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Fatal(error.into())
+    }
+}
+
+impl From<prost::DecodeError> for UpgradeError {
+    fn from(error: prost::DecodeError) -> Self {
+        Self::Fatal(error.into())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum CircuitFailedReason {
+    #[error("Remote reported resource limit exceeded.")]
+    ResourceLimitExceeded,
+    #[error("Relay failed to connect to destination.")]
+    ConnectionFailed,
+    #[error("Relay has no reservation for destination.")]
+    NoReservation,
+    #[error("Remote denied permission.")]
+    PermissionDenied,
+}
+
+#[derive(Debug, Error)]
+pub enum ReservationFailedReason {
+    #[error("Reservation refused.")]
+    Refused,
+    #[error("Remote reported resource limit exceeded.")]
+    ResourceLimitExceeded,
+}
+
+#[derive(Debug, Error)]
+pub enum FatalUpgradeError {
     #[error("Failed to decode message: {0}.")]
     Decode(
         #[from]

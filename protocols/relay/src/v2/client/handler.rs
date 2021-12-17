@@ -373,45 +373,16 @@ impl ProtocolsHandler for Handler {
                     }
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
                         match error {
-                            outbound_hop::UpgradeError::Decode(_)
-                            | outbound_hop::UpgradeError::Io(_)
-                            | outbound_hop::UpgradeError::ParseTypeField
-                            | outbound_hop::UpgradeError::ParseStatusField
-                            | outbound_hop::UpgradeError::MissingStatusField
-                            | outbound_hop::UpgradeError::MissingReservationField
-                            | outbound_hop::UpgradeError::NoAddressesInReservation
-                            | outbound_hop::UpgradeError::InvalidReservationExpiration
-                            | outbound_hop::UpgradeError::InvalidReservationAddrs
-                            | outbound_hop::UpgradeError::UnexpectedTypeConnect
-                            | outbound_hop::UpgradeError::UnexpectedTypeReserve => {
+                            error @ outbound_hop::UpgradeError::Fatal(_) => {
                                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(error)),
                                 ));
                             }
-                            outbound_hop::UpgradeError::UnexpectedStatus(status) => {
-                                match status {
-                                    Status::Ok => {
-                                        unreachable!(
-                                            "Status success was explicitly expected earlier."
-                                        )
-                                    }
-                                    // With either status below there is either no reason to stay
-                                    // connected or it is a protocol violation.
-                                    // Thus terminate the connection.
-                                    Status::ConnectionFailed
-                                    | Status::NoReservation
-                                    | Status::PermissionDenied
-                                    | Status::UnexpectedMessage
-                                    | Status::MalformedMessage => {
-                                        self.pending_error =
-                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
-                                            ));
-                                    }
-                                    // The connection to the relay might still proof helpful CONNECT
-                                    // requests. Thus do not terminate the connection.
-                                    Status::ReservationRefused | Status::ResourceLimitExceeded => {}
-                                }
+                            outbound_hop::UpgradeError::ReservationFailed(_) => {}
+                            outbound_hop::UpgradeError::CircuitFailed(_) => {
+                                unreachable!(
+                                    "Do not emitt `CircuitFailed` for outgoing reservation."
+                                )
                             }
                         }
                     }
@@ -451,47 +422,16 @@ impl ProtocolsHandler for Handler {
                     }
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
                         match error {
-                            outbound_hop::UpgradeError::Decode(_)
-                            | outbound_hop::UpgradeError::Io(_)
-                            | outbound_hop::UpgradeError::ParseTypeField
-                            | outbound_hop::UpgradeError::ParseStatusField
-                            | outbound_hop::UpgradeError::MissingStatusField
-                            | outbound_hop::UpgradeError::MissingReservationField
-                            | outbound_hop::UpgradeError::NoAddressesInReservation
-                            | outbound_hop::UpgradeError::InvalidReservationExpiration
-                            | outbound_hop::UpgradeError::InvalidReservationAddrs
-                            | outbound_hop::UpgradeError::UnexpectedTypeConnect
-                            | outbound_hop::UpgradeError::UnexpectedTypeReserve => {
+                            error @ outbound_hop::UpgradeError::Fatal(_) => {
                                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(error)),
                                 ));
                             }
-                            outbound_hop::UpgradeError::UnexpectedStatus(status) => {
-                                match status {
-                                    Status::Ok => {
-                                        unreachable!(
-                                            "Status success was explicitly expected earlier."
-                                        )
-                                    }
-                                    // With either status below there is either no reason to stay
-                                    // connected or it is a protocol violation.
-                                    // Thus terminate the connection.
-                                    Status::ReservationRefused
-                                    | Status::UnexpectedMessage
-                                    | Status::MalformedMessage => {
-                                        self.pending_error =
-                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                                upgrade::UpgradeError::Apply(EitherError::B(error)),
-                                            ));
-                                    }
-                                    // While useless for reaching this particular destination, the
-                                    // connection to the relay might still proof helpful for other
-                                    // destinations. Thus do not terminate the connection.
-                                    Status::ResourceLimitExceeded
-                                    | Status::ConnectionFailed
-                                    | Status::NoReservation
-                                    | Status::PermissionDenied => {}
-                                }
+                            outbound_hop::UpgradeError::CircuitFailed(_) => {}
+                            outbound_hop::UpgradeError::ReservationFailed(_) => {
+                                unreachable!(
+                                    "Do not emitt `ReservationFailed` for outgoing circuit."
+                                )
                             }
                         }
                     }
