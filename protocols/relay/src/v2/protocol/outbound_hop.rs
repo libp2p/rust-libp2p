@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::v2::message_proto::{hop_message, HopMessage, Peer, Status};
-use crate::v2::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
+use crate::v2::protocol::{Limit, HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
@@ -93,7 +93,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 r#type,
                 peer: _,
                 reservation,
-                limit: _,
+                limit,
                 status,
             } = HopMessage::decode(Cursor::new(msg))?;
 
@@ -111,6 +111,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 s => return Err(UpgradeError::UnexpectedStatus(s)),
             }
 
+            let limit = limit.map(Into::into);
+
             let output = match self {
                 Upgrade::Reserve => {
                     let reservation = reservation.ok_or(UpgradeError::MissingReservationField)?;
@@ -126,6 +128,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                             .map_err(|_| UpgradeError::InvalidReservationAddrs)?
                     };
 
+                    // TODO: Use Option::transport.
                     let renewal_timeout = if let Some(timestamp) = reservation.expire {
                         Some(
                             timestamp
@@ -150,6 +153,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     Output::Reservation {
                         renewal_timeout,
                         addrs,
+                        limit,
                     }
                 }
                 Upgrade::Connect { .. } => {
@@ -167,6 +171,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     Output::Circuit {
                         substream: io,
                         read_buffer: read_buffer.freeze(),
+                        limit,
                     }
                 }
             };
@@ -213,9 +218,11 @@ pub enum Output {
     Reservation {
         renewal_timeout: Option<Delay>,
         addrs: Vec<Multiaddr>,
+        limit: Option<Limit>,
     },
     Circuit {
         substream: NegotiatedSubstream,
         read_buffer: Bytes,
+        limit: Option<Limit>,
     },
 }

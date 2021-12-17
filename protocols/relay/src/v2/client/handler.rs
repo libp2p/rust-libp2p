@@ -20,7 +20,7 @@
 
 use crate::v2::client::transport;
 use crate::v2::message_proto::Status;
-use crate::v2::protocol::{inbound_stop, outbound_hop};
+use crate::v2::protocol::{self, inbound_stop, outbound_hop};
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
@@ -71,12 +71,22 @@ pub enum Event {
     ReservationReqAccepted {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
+        limit: Option<protocol::Limit>,
     },
     ReservationReqFailed {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
     },
+    /// An outbound circuit has been established.
+    OutboundCircuitEstablished {
+        limit: Option<protocol::Limit>,
+    },
     OutboundCircuitReqFailed {},
+    /// An inbound circuit has been established.
+    InboundCircuitEstablished {
+        src_peer_id: PeerId,
+        limit: Option<protocol::Limit>,
+    },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied {
         src_peer_id: PeerId,
@@ -200,15 +210,25 @@ impl ProtocolsHandler for Handler {
             Reservation::Accepted { pending_msgs, .. }
             | Reservation::Renewing { pending_msgs, .. } => {
                 let src_peer_id = inbound_circuit.src_peer_id();
+                let limit = inbound_circuit.limit();
+
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
                 let connection = super::RelayedConnection::new_inbound(inbound_circuit, tx);
+
                 pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
                     stream: connection,
                     src_peer_id,
                     relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_addr.clone(),
                 });
+
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::InboundCircuitEstablished {
+                        src_peer_id: self.remote_peer_id,
+                        limit,
+                    },
+                ));
             }
             Reservation::None => {
                 let src_peer_id = inbound_circuit.src_peer_id();
@@ -232,6 +252,7 @@ impl ProtocolsHandler for Handler {
                 outbound_hop::Output::Reservation {
                     renewal_timeout,
                     addrs,
+                    limit,
                 },
                 OutboundOpenInfo::Reserve { to_listener },
             ) => {
@@ -240,6 +261,7 @@ impl ProtocolsHandler for Handler {
                     addrs,
                     to_listener,
                     self.local_peer_id,
+                    limit,
                 );
 
                 self.queued_events
@@ -249,6 +271,7 @@ impl ProtocolsHandler for Handler {
                 outbound_hop::Output::Circuit {
                     substream,
                     read_buffer,
+                    limit,
                 },
                 OutboundOpenInfo::Connect { send_back },
             ) => {
@@ -265,6 +288,10 @@ impl ProtocolsHandler for Handler {
                         self.remote_peer_id,
                     ),
                 }
+
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::OutboundCircuitEstablished { limit },
+                ));
             }
             _ => unreachable!(),
         }
@@ -582,6 +609,7 @@ impl Reservation {
         addrs: Vec<Multiaddr>,
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
         local_peer_id: PeerId,
+        limit: Option<protocol::Limit>,
     ) -> Event {
         let (renewal, mut pending_msgs) = match std::mem::replace(self, Self::None) {
             Reservation::Accepted { pending_msgs, .. }
@@ -607,7 +635,7 @@ impl Reservation {
             to_listener,
         };
 
-        Event::ReservationReqAccepted { renewal }
+        Event::ReservationReqAccepted { renewal, limit }
     }
 
     fn failed(&mut self) -> Event {

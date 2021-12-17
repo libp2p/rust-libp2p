@@ -214,6 +214,9 @@ fn connect() {
                 {
                     break
                 }
+                SwarmEvent::Behaviour(ClientEvent::Relay(
+                    client::Event::OutboundCircuitEstablished { .. },
+                )) => {}
                 SwarmEvent::Behaviour(ClientEvent::Ping(PingEvent { peer, .. }))
                     if peer == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
@@ -405,6 +408,7 @@ async fn wait_for_reservation(
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
                 renewal,
+                ..
             })) if relay_peer_id == peer_id && renewal == is_renewal => {
                 reservation_req_accepted = true;
                 if new_listen_addr {

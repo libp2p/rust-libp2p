@@ -23,7 +23,7 @@
 mod handler;
 pub mod transport;
 
-use crate::v2::protocol::inbound_stop;
+use crate::v2::protocol::{self, inbound_stop};
 use bytes::Bytes;
 use futures::channel::mpsc::Receiver;
 use futures::channel::oneshot;
@@ -51,14 +51,24 @@ pub enum Event {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
+        limit: Option<protocol::Limit>,
     },
     ReservationReqFailed {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
     },
+    OutboundCircuitEstablished {
+        relay_peer_id: PeerId,
+        limit: Option<protocol::Limit>,
+    },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
+    },
+    /// An inbound circuit has been established.
+    InboundCircuitEstablished {
+        src_peer_id: PeerId,
+        limit: Option<protocol::Limit>,
     },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied {
@@ -150,21 +160,30 @@ impl NetworkBehaviour for Client {
         handler_event: handler::Event,
     ) {
         match handler_event {
-            handler::Event::ReservationReqAccepted { renewal } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqAccepted {
-                            relay_peer_id: event_source,
-                            renewal,
-                        },
-                    ))
-            }
+            handler::Event::ReservationReqAccepted { renewal, limit } => self
+                .queued_actions
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::ReservationReqAccepted {
+                        relay_peer_id: event_source,
+                        renewal,
+                        limit,
+                    },
+                )),
             handler::Event::ReservationReqFailed { renewal } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         Event::ReservationReqFailed {
                             relay_peer_id: event_source,
                             renewal,
+                        },
+                    ))
+            }
+            handler::Event::OutboundCircuitEstablished { limit } => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::OutboundCircuitEstablished {
+                            relay_peer_id: event_source,
+                            limit,
                         },
                     ))
             }
@@ -176,6 +195,11 @@ impl NetworkBehaviour for Client {
                         },
                     ))
             }
+            handler::Event::InboundCircuitEstablished { src_peer_id, limit } => self
+                .queued_actions
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::InboundCircuitEstablished { src_peer_id, limit },
+                )),
             handler::Event::InboundCircuitReqDenied { src_peer_id } => self
                 .queued_actions
                 .push_back(NetworkBehaviourAction::GenerateEvent(
