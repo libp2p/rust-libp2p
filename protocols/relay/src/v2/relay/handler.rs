@@ -140,7 +140,7 @@ pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
         inbound_reservation_req: inbound_hop::ReservationReq,
-        remote_addr: Multiaddr,
+        endpoint: ConnectedPoint,
     },
     /// An inbound reservation request has been accepted.
     ReservationReqAccepted {
@@ -158,7 +158,7 @@ pub enum Event {
     /// An inbound circuit request has been received.
     CircuitReqReceived {
         inbound_circuit_req: inbound_hop::CircuitReq,
-        remote_addr: Multiaddr,
+        endpoint: ConnectedPoint,
     },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
@@ -214,10 +214,10 @@ impl fmt::Debug for Event {
         match self {
             Event::ReservationReqReceived {
                 inbound_reservation_req: _,
-                remote_addr,
+                endpoint,
             } => f
                 .debug_struct("Event::ReservationReqReceived")
-                .field("remote_addr", remote_addr)
+                .field("endpoint", endpoint)
                 .finish(),
             Event::ReservationReqAccepted { renewed } => f
                 .debug_struct("Event::ReservationReqAccepted")
@@ -236,11 +236,11 @@ impl fmt::Debug for Event {
                 .finish(),
             Event::ReservationTimedOut {} => f.debug_struct("Event::ReservationTimedOut").finish(),
             Event::CircuitReqReceived {
-                remote_addr,
+                endpoint,
                 inbound_circuit_req: _,
             } => f
                 .debug_struct("Event::CircuitReqReceived")
-                .field("remote_addr", remote_addr)
+                .field("endpoint", endpoint)
                 .finish(),
             Event::CircuitReqDenied {
                 circuit_id,
@@ -328,7 +328,7 @@ impl IntoProtocolsHandler for Prototype {
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         Handler {
-            remote_addr: endpoint.get_remote_address().clone(),
+            endpoint: endpoint.clone(),
             config: self.config,
             queued_events: Default::default(),
             pending_error: Default::default(),
@@ -355,7 +355,7 @@ impl IntoProtocolsHandler for Prototype {
 /// [`ProtocolsHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
 pub struct Handler {
-    remote_addr: Multiaddr,
+    endpoint: ConnectedPoint,
 
     /// Static [`Handler`] [`Config`].
     config: Config,
@@ -438,7 +438,7 @@ impl ProtocolsHandler for Handler {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::ReservationReqReceived {
                         inbound_reservation_req,
-                        remote_addr: self.remote_addr.clone(),
+                        endpoint: self.endpoint.clone(),
                     },
                 ));
             }
@@ -446,7 +446,7 @@ impl ProtocolsHandler for Handler {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::CircuitReqReceived {
                         inbound_circuit_req,
-                        remote_addr: self.remote_addr.clone(),
+                        endpoint: self.endpoint.clone(),
                     },
                 ));
             }
