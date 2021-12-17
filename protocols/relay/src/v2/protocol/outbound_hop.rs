@@ -128,9 +128,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                             .map_err(|_| UpgradeError::InvalidReservationAddrs)?
                     };
 
-                    // TODO: Use Option::transport.
-                    let renewal_timeout = if let Some(timestamp) = reservation.expire {
-                        Some(
+                    let renewal_timeout = reservation
+                        .expire
+                        .map(|timestamp| {
                             timestamp
                                 .checked_sub(
                                     SystemTime::now()
@@ -142,11 +142,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                                 .and_then(|duration| duration.checked_sub(duration / 4))
                                 .map(Duration::from_secs)
                                 .map(Delay::new)
-                                .ok_or(UpgradeError::InvalidReservationExpiration)?,
-                        )
-                    } else {
-                        None
-                    };
+                                .ok_or(UpgradeError::InvalidReservationExpiration)
+                        })
+                        .transpose()?;
 
                     substream.close().await?;
 
