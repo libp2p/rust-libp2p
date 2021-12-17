@@ -37,7 +37,7 @@ use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, IoSlice};
 use std::ops::DerefMut;
 use std::pin::Pin;
@@ -124,13 +124,23 @@ impl NetworkBehaviour for Client {
         _: &ConnectedPoint,
         _handler: handler::Handler,
     ) {
-        self.connected_peers.get_mut(peer_id).map(|cs| {
-            cs.remove(
-                cs.iter()
+        match self.connected_peers.entry(*peer_id) {
+            hash_map::Entry::Occupied(mut connections) => {
+                let position = connections
+                    .get()
+                    .iter()
                     .position(|c| c == connection_id)
-                    .expect("Connection to be known."),
-            )
-        });
+                    .expect("Connection to be known.");
+                connections.get_mut().remove(position);
+
+                if connections.get().is_empty() {
+                    connections.remove();
+                }
+            }
+            hash_map::Entry::Vacant(_) => {
+                unreachable!("`inject_connection_closed` for unconnected peer.")
+            }
+        };
     }
 
     fn inject_event(
