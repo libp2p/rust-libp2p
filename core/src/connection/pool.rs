@@ -51,8 +51,6 @@ use std::{
     task::Poll,
 };
 
-use self::task::PendingConnectionCommand;
-
 mod concurrent_dial;
 mod task;
 
@@ -142,7 +140,7 @@ struct PendingConnectionInfo<THandler> {
     handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    abort_notifier: Option<oneshot::Sender<PendingConnectionCommand>>,
+    abort_notifier: Option<oneshot::Sender<task::PendingConnectionCommand>>,
 }
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
@@ -971,7 +969,7 @@ impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(mut self) {
         if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
-            notifier.send(PendingConnectionCommand::Abort);
+            notifier.send(task::PendingConnectionCommand::Abort);
         }
     }
 }
