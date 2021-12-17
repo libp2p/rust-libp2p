@@ -330,7 +330,8 @@ impl Stream for RelayListener {
                     return Poll::Ready(Some(Err(RelayError::Reservation)));
                 }
                 Poll::Ready(None) => {
-                    panic!("Expect sender of `from_behaviour` not to be dropped before listener.");
+                    // Sender of `from_behaviour` has been dropped, signaling listener to close.
+                    return Poll::Ready(None);
                 }
                 Poll::Pending => break,
             }
