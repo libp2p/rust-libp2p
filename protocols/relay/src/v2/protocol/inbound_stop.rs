@@ -21,7 +21,7 @@
 use crate::v2::message_proto::{stop_message, Status, StopMessage};
 use crate::v2::protocol::{self, MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{upgrade, PeerId};
 use libp2p_swarm::NegotiatedSubstream;

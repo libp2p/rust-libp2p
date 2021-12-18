@@ -73,20 +73,22 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             } = HopMessage::decode(Cursor::new(msg))?;
 
             let r#type = hop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
-            match r#type {
-                hop_message::Type::Reserve => Ok(Req::Reserve(ReservationReq {
+            let req = match r#type {
+                hop_message::Type::Reserve => Req::Reserve(ReservationReq {
                     substream,
                     reservation_duration: self.reservation_duration,
                     max_circuit_duration: self.max_circuit_duration,
                     max_circuit_bytes: self.max_circuit_bytes,
-                })),
+                }),
                 hop_message::Type::Connect => {
                     let dst = PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
                         .map_err(|_| UpgradeError::ParsePeerId)?;
-                    Ok(Req::Connect(CircuitReq { dst, substream }))
+                    Req::Connect(CircuitReq { dst, substream })
                 }
-                hop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
-            }
+                hop_message::Type::Status => return Err(UpgradeError::UnexpectedTypeStatus),
+            };
+
+            Ok(req)
         }
         .boxed()
     }
