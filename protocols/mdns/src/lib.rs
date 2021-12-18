@@ -35,7 +35,7 @@ use std::time::Duration;
 
 mod behaviour;
 mod dns;
-mod instance;
+mod iface;
 mod query;
 
 pub use crate::behaviour::{Mdns, MdnsEvent};

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::instance::Instance;
+use crate::iface::InterfaceState;
 use crate::MdnsConfig;
 use async_io::Timer;
 use fnv::FnvHashMap;
@@ -38,14 +38,14 @@ use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::
 /// them to the topology.
 #[derive(Debug)]
 pub struct Mdns {
-    /// Instance config.
+    /// InterfaceState config.
     config: MdnsConfig,
 
     /// Iface watcher.
     if_watch: IfWatcher,
 
-    /// Mdns instances.
-    instances: FnvHashMap<IpAddr, Instance>,
+    /// Mdns interface states.
+    iface_states: FnvHashMap<IpAddr, InterfaceState>,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -66,7 +66,7 @@ impl Mdns {
         Ok(Self {
             config,
             if_watch,
-            instances: Default::default(),
+            iface_states: Default::default(),
             discovered_nodes: Default::default(),
             closest_expiration: Default::default(),
         })
@@ -120,9 +120,9 @@ impl NetworkBehaviour for Mdns {
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        log::trace!("waking instances because listening address changed");
-        for (_, instance) in &mut self.instances {
-            instance.fire_timer();
+        log::trace!("waking interface state because listening address changed");
+        for (_, iface) in &mut self.iface_states {
+            iface.fire_timer();
         }
     }
 
@@ -148,19 +148,19 @@ impl NetworkBehaviour for Mdns {
                     {
                         continue;
                     }
-                    if let Entry::Vacant(e) = self.instances.entry(addr) {
-                        match Instance::new(addr, self.config.clone()) {
-                            Ok(instance) => {
-                                e.insert(instance);
+                    if let Entry::Vacant(e) = self.iface_states.entry(addr) {
+                        match InterfaceState::new(addr, self.config.clone()) {
+                            Ok(iface_state) => {
+                                e.insert(iface_state);
                             }
                             Err(err) => log::error!("failed to create instance: {}", err),
                         }
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if self.instances.contains_key(&inet.addr()) {
+                    if self.iface_states.contains_key(&inet.addr()) {
                         log::info!("dropping instance {}", inet.addr());
-                        self.instances.remove(&inet.addr());
+                        self.iface_states.remove(&inet.addr());
                     }
                 }
                 Err(err) => log::error!("if watch returned an error: {}", err),
@@ -168,8 +168,8 @@ impl NetworkBehaviour for Mdns {
         }
         // Emit discovered event.
         let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
-        for (_, instance) in &mut self.instances {
-            while let Some((peer, addr, expiration)) = instance.poll(cx, params) {
+        for (_, iface_state) in &mut self.iface_states {
+            while let Some((peer, addr, expiration)) = iface_state.poll(cx, params) {
                 if let Some((_, _, cur_expires)) = self
                     .discovered_nodes
                     .iter_mut()
