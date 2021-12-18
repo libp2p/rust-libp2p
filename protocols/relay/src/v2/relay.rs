@@ -193,10 +193,9 @@ impl NetworkBehaviour for Relay {
         _: &ConnectedPoint,
         _handler: handler::Handler,
     ) {
-        self.reservations
-            .get_mut(peer)
-            .map(|cs| cs.remove(&connection))
-            .unwrap_or(false);
+        if let Some(connections) = self.reservations.get_mut(peer) {
+            connections.remove(&connection);
+        }
 
         for circuit in self
             .circuits
