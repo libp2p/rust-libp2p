@@ -48,7 +48,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut codec = UviBytes::<bytes::Bytes>::default();
+        let mut codec = UviBytes::default();
         codec.set_max_len(MAX_MESSAGE_SIZE);
         let mut substream = Framed::new(substream, codec);
 
@@ -106,7 +106,7 @@ pub enum UpgradeError {
 }
 
 pub struct Circuit {
-    substream: Framed<NegotiatedSubstream, UviBytes>,
+    substream: Framed<NegotiatedSubstream, UviBytes<Cursor<Vec<u8>>>>,
     src_peer_id: PeerId,
     limit: Option<protocol::Limit>,
 }
@@ -156,10 +156,10 @@ impl Circuit {
     }
 
     async fn send(&mut self, msg: StopMessage) -> Result<(), std::io::Error> {
-        let mut msg_bytes = BytesMut::new();
-        msg.encode(&mut msg_bytes)
-            .expect("BytesMut to have sufficient capacity.");
-        self.substream.send(msg_bytes.freeze()).await?;
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
+        msg.encode(&mut encoded_msg)
+            .expect("Vec to have sufficient capacity.");
+        self.substream.send(Cursor::new(encoded_msg)).await?;
         self.substream.flush().await?;
 
         Ok(())

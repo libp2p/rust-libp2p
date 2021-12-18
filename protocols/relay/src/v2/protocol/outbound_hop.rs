@@ -74,7 +74,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             },
         };
 
-        let mut encoded_msg = Vec::new();
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
         msg.encode(&mut encoded_msg)
             .expect("Vec to have sufficient capacity.");
 
@@ -83,7 +83,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(encoded_msg)).await?;
+            substream.send(Cursor::new(encoded_msg)).await?;
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
