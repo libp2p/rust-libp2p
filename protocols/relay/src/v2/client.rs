@@ -88,7 +88,7 @@ pub struct Client {
     connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
+    queued_actions: VecDeque<Event>,
 }
 
 impl Client {
@@ -162,54 +162,39 @@ impl NetworkBehaviour for Client {
         match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => self
                 .queued_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::ReservationReqAccepted {
-                        relay_peer_id: event_source,
-                        renewal,
-                        limit,
-                    },
-                )),
+                .push_back(Event::ReservationReqAccepted {
+                    relay_peer_id: event_source,
+                    renewal,
+                    limit,
+                }),
             handler::Event::ReservationReqFailed { renewal } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqFailed {
-                            relay_peer_id: event_source,
-                            renewal,
-                        },
-                    ))
+                self.queued_actions.push_back(Event::ReservationReqFailed {
+                    relay_peer_id: event_source,
+                    renewal,
+                })
             }
             handler::Event::OutboundCircuitEstablished { limit } => {
                 self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::OutboundCircuitEstablished {
-                            relay_peer_id: event_source,
-                            limit,
-                        },
-                    ))
+                    .push_back(Event::OutboundCircuitEstablished {
+                        relay_peer_id: event_source,
+                        limit,
+                    })
             }
             handler::Event::OutboundCircuitReqFailed {} => {
                 self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::OutboundCircuitReqFailed {
-                            relay_peer_id: event_source,
-                        },
-                    ))
+                    .push_back(Event::OutboundCircuitReqFailed {
+                        relay_peer_id: event_source,
+                    })
             }
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => self
                 .queued_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::InboundCircuitEstablished { src_peer_id, limit },
-                )),
+                .push_back(Event::InboundCircuitEstablished { src_peer_id, limit }),
             handler::Event::InboundCircuitReqDenied { src_peer_id } => self
                 .queued_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::InboundCircuitReqDenied { src_peer_id },
-                )),
+                .push_back(Event::InboundCircuitReqDenied { src_peer_id }),
             handler::Event::InboundCircuitReqDenyFailed { src_peer_id, error } => self
                 .queued_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::InboundCircuitReqDenyFailed { src_peer_id, error },
-                )),
+                .push_back(Event::InboundCircuitReqDenyFailed { src_peer_id, error }),
         }
     }
 
@@ -219,7 +204,7 @@ impl NetworkBehaviour for Client {
         _poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         if let Some(event) = self.queued_actions.pop_front() {
-            return Poll::Ready(event);
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
 
         loop {
