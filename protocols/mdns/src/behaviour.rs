@@ -81,6 +81,17 @@ impl Mdns {
     pub fn discovered_nodes(&self) -> impl ExactSizeIterator<Item = &PeerId> {
         self.discovered_nodes.iter().map(|(p, _, _)| p)
     }
+
+    /// Expires a node before the ttl.
+    pub fn expire_node(&mut self, peer_id: &PeerId) {
+        let now = Instant::now();
+        for (peer, _addr, expires) in &mut self.discovered_nodes {
+            if peer == peer_id {
+                *expires = now;
+            }
+        }
+        self.closest_expiration = Some(Timer::at(now));
+    }
 }
 
 impl NetworkBehaviour for Mdns {
@@ -113,6 +124,10 @@ impl NetworkBehaviour for Mdns {
         for (_, instance) in &mut self.instances {
             instance.fire_timer();
         }
+    }
+
+    fn inject_disconnected(&mut self, peer: &PeerId) {
+        self.expire_node(peer);
     }
 
     fn poll(
