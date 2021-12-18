@@ -117,16 +117,16 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 Upgrade::Reserve => {
                     let reservation = reservation.ok_or(UpgradeError::MissingReservationField)?;
 
-                    let addrs = if reservation.addrs.is_empty() {
+                    if reservation.addrs.is_empty() {
                         return Err(UpgradeError::NoAddressesInReservation);
-                    } else {
-                        reservation
-                            .addrs
-                            .into_iter()
-                            .map(TryFrom::try_from)
-                            .collect::<Result<Vec<Multiaddr>, _>>()
-                            .map_err(|_| UpgradeError::InvalidReservationAddrs)?
-                    };
+                    }
+
+                    let addrs = reservation
+                        .addrs
+                        .into_iter()
+                        .map(TryFrom::try_from)
+                        .collect::<Result<Vec<Multiaddr>, _>>()
+                        .map_err(|_| UpgradeError::InvalidReservationAddrs)?;
 
                     let renewal_timeout = reservation
                         .expire
