@@ -162,6 +162,7 @@ impl NetworkBehaviour for Mdns {
                 {
                     *cur_expires = cmp::max(*cur_expires, expiration);
                 } else {
+                    log::info!("discovered: {} {}", peer, addr);
                     self.discovered_nodes.push((peer, addr.clone(), expiration));
                     discovered.push((peer, addr));
                 }
@@ -179,6 +180,7 @@ impl NetworkBehaviour for Mdns {
         let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         self.discovered_nodes.retain(|(peer, addr, expiration)| {
             if *expiration <= now {
+                log::info!("expired: {} {}", peer, addr);
                 expired.push((*peer, addr.clone()));
                 return false;
             }
