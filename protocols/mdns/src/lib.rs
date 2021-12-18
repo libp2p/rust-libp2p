@@ -62,6 +62,8 @@ pub struct MdnsConfig {
     /// peer joins the network. Receiving an mdns packet resets the timer
     /// preventing unnecessary traffic.
     pub query_interval: Duration,
+    /// Use IPv6 instead of IPv4.
+    pub enable_ipv6: bool,
 }
 
 impl Default for MdnsConfig {
@@ -69,6 +71,7 @@ impl Default for MdnsConfig {
         Self {
             ttl: Duration::from_secs(6 * 60),
             query_interval: Duration::from_secs(5 * 60),
+            enable_ipv6: false,
         }
     }
 }

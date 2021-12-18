@@ -128,7 +128,9 @@ impl NetworkBehaviour for Mdns {
                     if addr.is_loopback() {
                         continue;
                     }
-                    if inet.addr().is_ipv6() {
+                    if addr.is_ipv4() && self.config.enable_ipv6
+                        || addr.is_ipv6() && !self.config.enable_ipv6
+                    {
                         continue;
                     }
                     if let Entry::Vacant(e) = self.instances.entry(addr) {

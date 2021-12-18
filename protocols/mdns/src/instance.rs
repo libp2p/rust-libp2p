@@ -35,8 +35,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
-/// them to the topology.
+/// An mDNS instance for a networking interface. To discover all peers when having multiple
+/// interfaces an instance is required for each interface.
 #[derive(Debug)]
 pub struct Instance {
     /// Address this instance is bound to.
@@ -94,7 +94,17 @@ impl Instance {
                 Async::new(UdpSocket::from(socket))?
             }
         };
-        let send_socket = Async::new(UdpSocket::bind(SocketAddr::new(addr, 0))?)?;
+        let bind_addr = match addr {
+            IpAddr::V4(_) => SocketAddr::new(addr, 0),
+            IpAddr::V6(_addr) => {
+                // TODO: if-watch should return the scope_id of an address
+                // as a workaround we bind to unspecified, which means that
+                // this probably won't work when using multiple interfaces.
+                // SocketAddr::V6(SocketAddrV6::new(addr, 0, 0, scope_id))
+                SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)
+            }
+        };
+        let send_socket = Async::new(UdpSocket::bind(bind_addr)?)?;
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
             use rand::Rng;
@@ -198,7 +208,7 @@ impl Instance {
                     }
                 }
                 Some(Err(err)) => log::error!("Failed reading datagram: {}", err),
-                None => unreachable!(),
+                None => {}
             }
         }
         // Send responses.
