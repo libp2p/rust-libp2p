@@ -207,91 +207,84 @@ impl NetworkBehaviour for Client {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
 
-        loop {
-            match self.from_transport.poll_next_unpin(cx) {
-                Poll::Ready(Some(transport::TransportToBehaviourMsg::ListenReq {
-                    relay_peer_id,
-                    relay_addr,
-                    to_listener,
-                })) => {
-                    match self
-                        .connected_peers
-                        .get(&relay_peer_id)
-                        .and_then(|cs| cs.get(0))
-                    {
-                        Some(connection_id) => {
-                            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                                peer_id: relay_peer_id,
-                                handler: NotifyHandler::One(*connection_id),
-                                event: handler::In::Reserve { to_listener },
-                            });
-                        }
-                        None => {
-                            let handler = handler::Prototype::new(
-                                self.local_peer_id,
-                                Some(handler::In::Reserve { to_listener }),
-                            );
-                            return Poll::Ready(NetworkBehaviourAction::Dial {
-                                opts: DialOpts::peer_id(relay_peer_id)
-                                    .addresses(vec![relay_addr])
-                                    .extend_addresses_through_behaviour()
-                                    .build(),
-                                handler,
-                            });
+        let action = match ready!(self.from_transport.poll_next_unpin(cx)) {
+            Some(transport::TransportToBehaviourMsg::ListenReq {
+                relay_peer_id,
+                relay_addr,
+                to_listener,
+            }) => {
+                match self
+                    .connected_peers
+                    .get(&relay_peer_id)
+                    .and_then(|cs| cs.get(0))
+                {
+                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                        peer_id: relay_peer_id,
+                        handler: NotifyHandler::One(*connection_id),
+                        event: handler::In::Reserve { to_listener },
+                    },
+                    None => {
+                        let handler = handler::Prototype::new(
+                            self.local_peer_id,
+                            Some(handler::In::Reserve { to_listener }),
+                        );
+                        NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(relay_peer_id)
+                                .addresses(vec![relay_addr])
+                                .extend_addresses_through_behaviour()
+                                .build(),
+                            handler,
                         }
                     }
                 }
-                Poll::Ready(Some(transport::TransportToBehaviourMsg::DialReq {
-                    relay_addr,
-                    relay_peer_id,
-                    dst_peer_id,
-                    send_back,
-                    ..
-                })) => {
-                    match self
-                        .connected_peers
-                        .get(&relay_peer_id)
-                        .and_then(|cs| cs.get(0))
-                    {
-                        Some(connection_id) => {
-                            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                                peer_id: relay_peer_id,
-                                handler: NotifyHandler::One(*connection_id),
-                                event: handler::In::EstablishCircuit {
-                                    send_back,
-                                    dst_peer_id,
-                                },
-                            });
-                        }
-                        None => {
-                            let handler = handler::Prototype::new(
-                                self.local_peer_id,
-                                Some(handler::In::EstablishCircuit {
-                                    send_back,
-                                    dst_peer_id,
-                                }),
-                            );
-                            return Poll::Ready(NetworkBehaviourAction::Dial {
-                                opts: DialOpts::peer_id(relay_peer_id)
-                                    .addresses(vec![relay_addr])
-                                    .extend_addresses_through_behaviour()
-                                    .build(),
-                                handler,
-                            });
+            }
+            Some(transport::TransportToBehaviourMsg::DialReq {
+                relay_addr,
+                relay_peer_id,
+                dst_peer_id,
+                send_back,
+                ..
+            }) => {
+                match self
+                    .connected_peers
+                    .get(&relay_peer_id)
+                    .and_then(|cs| cs.get(0))
+                {
+                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                        peer_id: relay_peer_id,
+                        handler: NotifyHandler::One(*connection_id),
+                        event: handler::In::EstablishCircuit {
+                            send_back,
+                            dst_peer_id,
+                        },
+                    },
+                    None => {
+                        let handler = handler::Prototype::new(
+                            self.local_peer_id,
+                            Some(handler::In::EstablishCircuit {
+                                send_back,
+                                dst_peer_id,
+                            }),
+                        );
+                        NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(relay_peer_id)
+                                .addresses(vec![relay_addr])
+                                .extend_addresses_through_behaviour()
+                                .build(),
+                            handler,
                         }
                     }
                 }
-                Poll::Ready(None) => unreachable!(
-                    "`Relay` `NetworkBehaviour` polled after channel from \
+            }
+            None => unreachable!(
+                "`Relay` `NetworkBehaviour` polled after channel from \
                      `RelayTransport` has been closed. Unreachable under \
                      the assumption that the `Client` is never polled after \
                      `ClientTransport` is dropped.",
-                ),
-                Poll::Pending => break,
-            }
-        }
+            ),
+        };
 
-        Poll::Pending
+        return Poll::Ready(action);
     }
 }
 
