@@ -24,6 +24,7 @@ use crate::v2::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{ready, BoxFuture, Future, FutureExt, Ready};
+use futures::ready;
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
@@ -289,20 +290,20 @@ impl Stream for RelayListener {
                 return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
             }
 
-            match self.from_behaviour.poll_next_unpin(cx) {
-                Poll::Ready(Some(ToListenerMsg::IncomingRelayedConnection {
+            match ready!(self.from_behaviour.poll_next_unpin(cx)) {
+                Some(ToListenerMsg::IncomingRelayedConnection {
                     stream,
                     src_peer_id,
                     relay_addr,
                     relay_peer_id: _,
-                })) => {
+                }) => {
                     return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                         upgrade: ready(Ok(stream)),
                         local_addr: relay_addr.with(Protocol::P2pCircuit),
                         remote_addr: Protocol::P2p(src_peer_id.into()).into(),
                     })));
                 }
-                Poll::Ready(Some(ToListenerMsg::Reservation(Ok(Reservation { addrs })))) => {
+                Some(ToListenerMsg::Reservation(Ok(Reservation { addrs }))) => {
                     debug_assert!(
                         self.queued_new_addresses.is_empty(),
                         "Assert empty due to previous `pop_front` attempt."
@@ -310,18 +311,15 @@ impl Stream for RelayListener {
                     // Returned as [`ListenerEvent::NewAddress`] in next iteration of loop.
                     self.queued_new_addresses = addrs.into();
                 }
-                Poll::Ready(Some(ToListenerMsg::Reservation(Err(())))) => {
+                Some(ToListenerMsg::Reservation(Err(()))) => {
                     return Poll::Ready(Some(Err(RelayError::Reservation)));
                 }
-                Poll::Ready(None) => {
+                None => {
                     // Sender of `from_behaviour` has been dropped, signaling listener to close.
                     return Poll::Ready(None);
                 }
-                Poll::Pending => break,
             }
         }
-
-        Poll::Pending
     }
 }
 
