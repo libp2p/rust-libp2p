@@ -124,88 +124,76 @@ impl Transport for ClientTransport {
     type Dial = RelayedDial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        match parse_relayed_multiaddr(addr)? {
-            // Address does not contain circuit relay protocol.
-            Err(addr) => return Err(TransportError::MultiaddrNotSupported(addr)),
-            // Address does contain circuit relay protocol.
-            Ok(relayed_addr) => {
-                let (relay_peer_id, relay_addr) = match relayed_addr {
-                    RelayedMultiaddr {
-                        relay_peer_id: None,
-                        relay_addr: _,
-                        ..
-                    } => return Err(RelayError::MissingDstPeerId.into()),
-                    RelayedMultiaddr {
-                        relay_peer_id: _,
-                        relay_addr: None,
-                        ..
-                    } => return Err(RelayError::MissingRelayAddr.into()),
-                    RelayedMultiaddr {
-                        relay_peer_id: Some(peer_id),
-                        relay_addr: Some(addr),
-                        ..
-                    } => (peer_id, addr),
-                };
+        let (relay_peer_id, relay_addr) = match parse_relayed_multiaddr(addr)? {
+            RelayedMultiaddr {
+                relay_peer_id: None,
+                relay_addr: _,
+                ..
+            } => return Err(RelayError::MissingDstPeerId.into()),
+            RelayedMultiaddr {
+                relay_peer_id: _,
+                relay_addr: None,
+                ..
+            } => return Err(RelayError::MissingRelayAddr.into()),
+            RelayedMultiaddr {
+                relay_peer_id: Some(peer_id),
+                relay_addr: Some(addr),
+                ..
+            } => (peer_id, addr),
+        };
 
-                let (to_listener, from_behaviour) = mpsc::channel(0);
-                let mut to_behaviour = self.to_behaviour;
-                let msg_to_behaviour = Some(
-                    async move {
-                        to_behaviour
-                            .send(TransportToBehaviourMsg::ListenReq {
-                                relay_peer_id,
-                                relay_addr,
-                                to_listener,
-                            })
-                            .await
-                    }
-                    .boxed(),
-                );
-
-                Ok(RelayListener {
-                    queued_new_addresses: Default::default(),
-                    from_behaviour,
-                    msg_to_behaviour,
-                })
+        let (to_listener, from_behaviour) = mpsc::channel(0);
+        let mut to_behaviour = self.to_behaviour;
+        let msg_to_behaviour = Some(
+            async move {
+                to_behaviour
+                    .send(TransportToBehaviourMsg::ListenReq {
+                        relay_peer_id,
+                        relay_addr,
+                        to_listener,
+                    })
+                    .await
             }
-        }
+            .boxed(),
+        );
+
+        Ok(RelayListener {
+            queued_new_addresses: Default::default(),
+            from_behaviour,
+            msg_to_behaviour,
+        })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        match parse_relayed_multiaddr(addr)? {
-            // Address does not contain circuit relay protocol.
-            Err(addr) => return Err(TransportError::MultiaddrNotSupported(addr)),
-            // Address does contain circuit relay protocol. Dial destination via relay.
-            Ok(RelayedMultiaddr {
-                relay_peer_id,
-                relay_addr,
-                dst_peer_id,
-                dst_addr,
-            }) => {
-                // TODO: In the future we might want to support dialing a relay by its address only.
-                let relay_peer_id = relay_peer_id.ok_or(RelayError::MissingRelayPeerId)?;
-                let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
-                let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
+        let RelayedMultiaddr {
+            relay_peer_id,
+            relay_addr,
+            dst_peer_id,
+            dst_addr,
+        } = parse_relayed_multiaddr(addr)?;
 
-                let mut to_behaviour = self.to_behaviour;
-                Ok(async move {
-                    let (tx, rx) = oneshot::channel();
-                    to_behaviour
-                        .send(TransportToBehaviourMsg::DialReq {
-                            request_id: RequestId::new(),
-                            relay_addr,
-                            relay_peer_id,
-                            dst_addr,
-                            dst_peer_id,
-                            send_back: tx,
-                        })
-                        .await?;
-                    let stream = rx.await?.map_err(|()| RelayError::Connect)?;
-                    Ok(stream)
-                }
-                .boxed())
-            }
+        // TODO: In the future we might want to support dialing a relay by its address only.
+        let relay_peer_id = relay_peer_id.ok_or(RelayError::MissingRelayPeerId)?;
+        let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
+        let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
+
+        let mut to_behaviour = self.to_behaviour;
+        Ok(async move {
+            let (tx, rx) = oneshot::channel();
+            to_behaviour
+                .send(TransportToBehaviourMsg::DialReq {
+                    request_id: RequestId::new(),
+                    relay_addr,
+                    relay_peer_id,
+                    dst_addr,
+                    dst_peer_id,
+                    send_back: tx,
+                })
+                .await?;
+            let stream = rx.await?.map_err(|()| RelayError::Connect)?;
+            Ok(stream)
         }
+        .boxed())
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
@@ -222,15 +210,11 @@ struct RelayedMultiaddr {
 }
 
 /// Parse a [`Multiaddr`] containing a [`Protocol::P2pCircuit`].
-///
-/// Returns `Ok(Err(provided_addr))` when passed address contains no [`Protocol::P2pCircuit`].
-///
-/// Returns `Err(_)` when address is malformed.
 fn parse_relayed_multiaddr(
     addr: Multiaddr,
-) -> Result<Result<RelayedMultiaddr, Multiaddr>, RelayError> {
+) -> Result<RelayedMultiaddr, TransportError<RelayError>> {
     if !addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
-        return Ok(Err(addr));
+        return Err(TransportError::MultiaddrNotSupported(addr));
     }
 
     let mut relayed_multiaddr = RelayedMultiaddr::default();
@@ -242,7 +226,7 @@ fn parse_relayed_multiaddr(
                 if before_circuit {
                     before_circuit = false;
                 } else {
-                    return Err(RelayError::MultipleCircuitRelayProtocolsUnsupported);
+                    Err(RelayError::MultipleCircuitRelayProtocolsUnsupported)?;
                 }
             }
             Protocol::P2p(hash) => {
@@ -250,12 +234,12 @@ fn parse_relayed_multiaddr(
 
                 if before_circuit {
                     if relayed_multiaddr.relay_peer_id.is_some() {
-                        return Err(RelayError::MalformedMultiaddr);
+                        Err(RelayError::MalformedMultiaddr)?;
                     }
                     relayed_multiaddr.relay_peer_id = Some(peer_id)
                 } else {
                     if relayed_multiaddr.dst_peer_id.is_some() {
-                        return Err(RelayError::MalformedMultiaddr);
+                        Err(RelayError::MalformedMultiaddr)?;
                     }
                     relayed_multiaddr.dst_peer_id = Some(peer_id)
                 }
@@ -276,7 +260,7 @@ fn parse_relayed_multiaddr(
         }
     }
 
-    Ok(Ok(relayed_multiaddr))
+    Ok(relayed_multiaddr)
 }
 
 pub struct RelayListener {
