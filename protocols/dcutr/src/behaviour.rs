@@ -190,7 +190,7 @@ impl NetworkBehaviour for Behaviour {
         connected_point: &ConnectedPoint,
         _handler: <<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler,
     ) {
-        if !crate::is_relayed_connection(connected_point) {
+        if !connected_point.is_relayed() {
             let connections = self
                 .direct_connections
                 .get_mut(peer_id)

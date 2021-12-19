@@ -21,9 +21,6 @@
 //! Implementation of the [libp2p direct connection upgrade through relay
 //! specification](https://github.com/libp2p/specs/pull/173).
 
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::ConnectedPoint;
-
 pub mod behaviour;
 pub mod handler;
 mod protocol;

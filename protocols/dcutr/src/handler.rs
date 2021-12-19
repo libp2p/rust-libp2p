@@ -47,11 +47,9 @@ impl IntoProtocolsHandler for Prototype {
     type Handler = Either<relayed::Handler, Either<direct::Handler, DummyProtocolsHandler>>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        let is_relayed_connection = crate::is_relayed_connection(endpoint);
-
         match self {
             Self::UnknownConnection => {
-                if is_relayed_connection {
+                if endpoint.is_relayed() {
                     Either::Left(relayed::Handler::new(endpoint.clone()))
                 } else {
                     Either::Right(Either::Right(DummyProtocolsHandler::default()))
@@ -62,7 +60,7 @@ impl IntoProtocolsHandler for Prototype {
                 ..
             } => {
                 assert!(
-                    !is_relayed_connection,
+                    !endpoint.is_relayed(),
                     "`Prototype::DirectConnection` is never created for relayed connection."
                 );
                 Either::Right(Either::Left(direct::Handler::new(relayed_connection_id)))
