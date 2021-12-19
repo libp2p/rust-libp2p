@@ -290,35 +290,39 @@ impl Stream for RelayListener {
                 return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
             }
 
-            match ready!(self.from_behaviour.poll_next_unpin(cx)) {
-                Some(ToListenerMsg::IncomingRelayedConnection {
-                    stream,
-                    src_peer_id,
-                    relay_addr,
-                    relay_peer_id: _,
-                }) => {
-                    return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                        upgrade: ready(Ok(stream)),
-                        local_addr: relay_addr.with(Protocol::P2pCircuit),
-                        remote_addr: Protocol::P2p(src_peer_id.into()).into(),
-                    })));
+            let msg = match ready!(self.from_behaviour.poll_next_unpin(cx)) {
+                Some(msg) => msg,
+                None => {
+                    // Sender of `from_behaviour` has been dropped, signaling listener to close.
+                    return Poll::Ready(None);
                 }
-                Some(ToListenerMsg::Reservation(Ok(Reservation { addrs }))) => {
+            };
+
+            let result = match msg {
+                ToListenerMsg::Reservation(Ok(Reservation { addrs })) => {
                     debug_assert!(
                         self.queued_new_addresses.is_empty(),
                         "Assert empty due to previous `pop_front` attempt."
                     );
                     // Returned as [`ListenerEvent::NewAddress`] in next iteration of loop.
                     self.queued_new_addresses = addrs.into();
+
+                    continue;
                 }
-                Some(ToListenerMsg::Reservation(Err(()))) => {
-                    return Poll::Ready(Some(Err(RelayError::Reservation)));
-                }
-                None => {
-                    // Sender of `from_behaviour` has been dropped, signaling listener to close.
-                    return Poll::Ready(None);
-                }
-            }
+                ToListenerMsg::IncomingRelayedConnection {
+                    stream,
+                    src_peer_id,
+                    relay_addr,
+                    relay_peer_id: _,
+                } => Ok(ListenerEvent::Upgrade {
+                    upgrade: ready(Ok(stream)),
+                    local_addr: relay_addr.with(Protocol::P2pCircuit),
+                    remote_addr: Protocol::P2p(src_peer_id.into()).into(),
+                }),
+                ToListenerMsg::Reservation(Err(())) => Err(RelayError::Reservation),
+            };
+
+            return Poll::Ready(Some(result));
         }
     }
 }
