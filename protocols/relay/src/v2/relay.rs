@@ -227,14 +227,8 @@ impl NetworkBehaviour for Relay {
                 endpoint,
             } => {
                 let now = Instant::now();
-                let is_from_relayed_connection = match &endpoint {
-                    ConnectedPoint::Dialer { address } => address,
-                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
-                }
-                .iter()
-                .any(|p| p == Protocol::P2pCircuit);
 
-                let action = if is_from_relayed_connection {
+                let action = if endpoint.is_relayed() {
                     // Deny reservation requests over relayed circuits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
@@ -344,14 +338,8 @@ impl NetworkBehaviour for Relay {
                 endpoint,
             } => {
                 let now = Instant::now();
-                let is_from_relayed_connection = match &endpoint {
-                    ConnectedPoint::Dialer { address } => address,
-                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
-                }
-                .iter()
-                .any(|p| p == Protocol::P2pCircuit);
 
-                let action = if is_from_relayed_connection {
+                let action = if endpoint.is_relayed() {
                     // Deny circuit requests over relayed circuit.
                     //
                     // An attacker could otherwise build recursive or cyclic circuits.
