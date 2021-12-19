@@ -130,21 +130,17 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
                     let renewal_timeout = reservation
                         .expire
-                        .map(|timestamp| {
-                            timestamp
-                                .checked_sub(
-                                    SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs(),
-                                )
-                                // Renew the reservation after 3/4 of the reservation expiration timestamp.
-                                .and_then(|duration| duration.checked_sub(duration / 4))
-                                .map(Duration::from_secs)
-                                .map(Delay::new)
-                                .ok_or(UpgradeError::InvalidReservationExpiration)
-                        })
-                        .transpose()?;
+                        .checked_sub(
+                            SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
+                        )
+                        // Renew the reservation after 3/4 of the reservation expiration timestamp.
+                        .and_then(|duration| duration.checked_sub(duration / 4))
+                        .map(Duration::from_secs)
+                        .map(Delay::new)
+                        .ok_or(UpgradeError::InvalidReservationExpiration)?;
 
                     substream.close().await?;
 
@@ -214,7 +210,7 @@ pub enum UpgradeError {
 
 pub enum Output {
     Reservation {
-        renewal_timeout: Option<Delay>,
+        renewal_timeout: Delay,
         addrs: Vec<Multiaddr>,
         limit: Option<Limit>,
     },

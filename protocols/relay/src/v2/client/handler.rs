@@ -588,8 +588,7 @@ impl ProtocolsHandler for Handler {
 enum Reservation {
     /// The Reservation is accepted by the relay.
     Accepted {
-        /// [`None`] if reservation does not expire.
-        renewal_timeout: Option<Delay>,
+        renewal_timeout: Delay,
         /// Buffer of messages to be send to the transport listener.
         pending_msgs: VecDeque<transport::ToListenerMsg>,
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
@@ -605,7 +604,7 @@ enum Reservation {
 impl Reservation {
     fn accepted(
         &mut self,
-        renewal_timeout: Option<Delay>,
+        renewal_timeout: Delay,
         addrs: Vec<Multiaddr>,
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
         local_peer_id: PeerId,
@@ -685,7 +684,7 @@ impl Reservation {
         // Check renewal timeout if any.
         let (next_reservation, poll_val) = match std::mem::replace(self, Reservation::None) {
             Reservation::Accepted {
-                renewal_timeout: Some(mut renewal_timeout),
+                mut renewal_timeout,
                 pending_msgs,
                 to_listener,
             } => match renewal_timeout.poll_unpin(cx) {
@@ -698,7 +697,7 @@ impl Reservation {
                 ),
                 Poll::Pending => (
                     Reservation::Accepted {
-                        renewal_timeout: Some(renewal_timeout),
+                        renewal_timeout,
                         pending_msgs,
                         to_listener,
                     },

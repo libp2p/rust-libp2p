@@ -133,12 +133,10 @@ impl ReservationReq {
             peer: None,
             reservation: Some(Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: Some(
-                    (SystemTime::now() + self.reservation_duration)
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                ),
+                expire: (SystemTime::now() + self.reservation_duration)
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
                 voucher: None,
             }),
             limit: Some(Limit {
