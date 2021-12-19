@@ -31,12 +31,3 @@ mod protocol;
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }
-
-fn is_relayed_connection(connected_point: &ConnectedPoint) -> bool {
-    match connected_point {
-        ConnectedPoint::Dialer { address } => address,
-        ConnectedPoint::Listener { local_addr, .. } => local_addr,
-    }
-    .iter()
-    .any(|p| p == Protocol::P2pCircuit)
-}

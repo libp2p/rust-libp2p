@@ -95,7 +95,7 @@ impl NetworkBehaviour for Behaviour {
         connected_point: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
-        if crate::is_relayed_connection(connected_point) {
+        if connected_point.is_relayed() {
             if connected_point.is_listener() && !self.direct_connections.contains_key(peer_id) {
                 // TODO: Try dialing the remote peer directly. Specification:
                 //
