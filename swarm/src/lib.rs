@@ -584,6 +584,11 @@ where
         self.network.is_connected(peer_id)
     }
 
+    /// Returns the currently connected peers.
+    pub fn connected_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.network.connected_peers()
+    }
+
     /// Returns a reference to the provided [`NetworkBehaviour`].
     pub fn behaviour(&self) -> &TBehaviour {
         &self.behaviour
