@@ -248,7 +248,7 @@ impl GossipsubConfig {
     }
 
     /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is true.
+    /// connected/trusted nodes. The default is false.
     pub fn do_px(&self) -> bool {
         self.do_px
     }
