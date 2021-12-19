@@ -147,3 +147,145 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
 
     Poll::Ready(Ok(i.try_into().expect("usize to fit into u64.")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CopyFuture;
+    use futures::executor::block_on;
+    use futures::io::{AsyncRead, AsyncWrite};
+    use quickcheck::QuickCheck;
+    use std::io::ErrorKind;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use std::time::Duration;
+
+    struct Connection {
+        read: Vec<u8>,
+        write: Vec<u8>,
+    }
+
+    impl AsyncWrite for Connection {
+        fn poll_write(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Pin::new(&mut self.write).poll_write(cx, buf)
+        }
+
+        fn poll_flush(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.write).poll_flush(cx)
+        }
+
+        fn poll_close(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.write).poll_close(cx)
+        }
+    }
+
+    impl AsyncRead for Connection {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
+            let n = std::cmp::min(self.read.len(), buf.len());
+            buf[0..n].copy_from_slice(&self.read[0..n]);
+            self.read = self.read.split_off(n);
+            return Poll::Ready(Ok(n));
+        }
+    }
+
+    struct PendingConnection {}
+
+    impl AsyncWrite for PendingConnection {
+        fn poll_write(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+
+        fn poll_close(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncRead for PendingConnection {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+    }
+
+    #[test]
+    fn quickcheck() {
+        fn prop(a: Vec<u8>, b: Vec<u8>, max_circuit_bytes: u64) {
+            let connection_a = Connection {
+                read: a.clone(),
+                write: Vec::new(),
+            };
+
+            let connection_b = Connection {
+                read: b.clone(),
+                write: Vec::new(),
+            };
+
+            let mut copy_future = CopyFuture::new(
+                connection_a,
+                connection_b,
+                Duration::from_secs(60),
+                max_circuit_bytes,
+            );
+
+            match block_on(&mut copy_future) {
+                Ok(()) => {
+                    assert_eq!(copy_future.src.into_inner().write, b);
+                    assert_eq!(copy_future.dst.into_inner().write, a);
+                }
+                Err(error) => {
+                    assert_eq!(error.kind(), ErrorKind::Other);
+                    assert_eq!(error.to_string(), "Max circuit bytes reached.");
+                    assert!(a.len() + b.len() > max_circuit_bytes as usize);
+                }
+            }
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_, _, _))
+    }
+
+    #[test]
+    fn max_circuit_duration() {
+        let copy_future = CopyFuture::new(
+            PendingConnection {},
+            PendingConnection {},
+            Duration::from_millis(1),
+            u64::MAX,
+        );
+
+        std::thread::sleep(Duration::from_millis(2));
+
+        let error =
+            block_on(copy_future).expect_err("Expect maximum circuit duration to be reached.");
+        assert_eq!(error.kind(), ErrorKind::TimedOut);
+    }
+}

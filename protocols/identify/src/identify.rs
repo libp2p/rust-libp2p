@@ -459,6 +459,7 @@ impl NetworkBehaviour for Identify {
 }
 
 /// Event emitted  by the `Identify` behaviour.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum IdentifyEvent {
     /// Identification information has been received from a peer.

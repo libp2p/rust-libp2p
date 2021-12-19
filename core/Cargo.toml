@@ -1,8 +1,9 @@
 [package]
 name = "libp2p-core"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "Core traits and structs of libp2p"
-version = "0.30.1"
+version = "0.31.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -24,12 +25,13 @@ log = "0.4"
 multiaddr = { version = "0.13.0" }
 multihash = { version = "0.14", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
 multistream-select = { version = "0.11", path = "../misc/multistream-select" }
+p256 = { version = "0.10.0", default-features = false, features = ["ecdsa"], optional = true }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
 prost = "0.9"
 rand = "0.8"
 rw-stream-sink = "0.2.0"
-sha2 = "0.9.1"
+sha2 = "0.10.0"
 smallvec = "1.6.1"
 thiserror = "1.0"
 unsigned-varint = "0.7"
@@ -54,8 +56,9 @@ rand07 = { package = "rand", version = "0.7" }
 prost-build = "0.9"
 
 [features]
-default = ["secp256k1"]
-secp256k1 = ["libsecp256k1"]
+default = [ "secp256k1", "ecdsa" ]
+secp256k1 = [ "libsecp256k1" ]
+ecdsa = [ "p256" ]
 
 [[bench]]
 name = "peer_id"

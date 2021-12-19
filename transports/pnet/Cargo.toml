@@ -1,6 +1,7 @@
 [package]
 name = "libp2p-pnet"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 description = "Private swarm support for libp2p"
 version = "0.22.0"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -13,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.1"
 log = "0.4.8"
 salsa20 = "0.9"
-sha3 = "0.9"
+sha3 = "0.10"
 rand = "0.7"
 pin-project = "1.0.2"
 

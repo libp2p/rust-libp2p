@@ -25,6 +25,7 @@ use futures::stream::StreamExt;
 use futures::task::Spawn;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::choice::OrTransport;
 use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p::core::PublicKey;
 use libp2p::core::{identity, PeerId};
@@ -78,6 +79,97 @@ fn reservation() {
 }
 
 #[test]
+fn new_reservation_to_same_relay_replaces_old() {
+    let _ = env_logger::try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    spawn_swarm_on_pool(&pool, relay);
+
+    let mut client = build_client();
+    let client_peer_id = *client.local_peer_id();
+    let client_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2pCircuit);
+    let client_addr_with_peer_id = client_addr
+        .clone()
+        .with(Protocol::P2p(client_peer_id.into()));
+
+    let old_listener = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for first (old) reservation.
+    pool.run_until(wait_for_reservation(
+        &mut client,
+        client_addr_with_peer_id.clone(),
+        relay_peer_id,
+        false, // No renewal.
+    ));
+
+    // Trigger new reservation.
+    let new_listener = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for
+    // - listener of old reservation to close
+    // - new reservation to be accepted
+    // - new listener address to be reported
+    pool.run_until(async {
+        let mut old_listener_closed = false;
+        let mut new_reservation_accepted = false;
+        let mut new_listener_address_reported = false;
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::ListenerClosed {
+                    addresses,
+                    listener_id,
+                    ..
+                } => {
+                    assert_eq!(addresses, vec![client_addr_with_peer_id.clone()]);
+                    assert_eq!(listener_id, old_listener);
+
+                    old_listener_closed = true;
+                    if new_reservation_accepted && new_listener_address_reported {
+                        break;
+                    }
+                }
+                SwarmEvent::Behaviour(ClientEvent::Relay(
+                    client::Event::ReservationReqAccepted {
+                        relay_peer_id: peer_id,
+                        ..
+                    },
+                )) => {
+                    assert_eq!(relay_peer_id, peer_id);
+
+                    new_reservation_accepted = true;
+                    if old_listener_closed && new_listener_address_reported {
+                        break;
+                    }
+                }
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } => {
+                    assert_eq!(address, client_addr_with_peer_id);
+                    assert_eq!(listener_id, new_listener);
+
+                    new_listener_address_reported = true;
+                    if old_listener_closed && new_reservation_accepted {
+                        break;
+                    }
+                }
+                SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+                e => panic!("{:?}", e),
+            }
+        }
+    });
+}
+
+#[test]
 fn connect() {
     let _ = env_logger::try_init();
     let mut pool = LocalPool::new();
@@ -122,6 +214,9 @@ fn connect() {
                 {
                     break
                 }
+                SwarmEvent::Behaviour(ClientEvent::Relay(
+                    client::Event::OutboundCircuitEstablished { .. },
+                )) => {}
                 SwarmEvent::Behaviour(ClientEvent::Ping(PingEvent { peer, .. }))
                     if peer == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
@@ -190,7 +285,7 @@ fn build_relay() -> Swarm<Relay> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.clone().to_peer_id();
 
-    let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
+    let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
 
     Swarm::new(
         transport,
@@ -213,9 +308,11 @@ fn build_client() -> Swarm<Client> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.clone().to_peer_id();
 
-    let (transport, behaviour) =
-        client::Client::new_transport_and_behaviour(local_peer_id, MemoryTransport::default());
-    let transport = build_transport(transport.boxed(), local_public_key);
+    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
+    let transport = upgrade_transport(
+        OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
+        local_public_key,
+    );
 
     Swarm::new(
         transport,
@@ -227,20 +324,18 @@ fn build_client() -> Swarm<Client> {
     )
 }
 
-fn build_transport<StreamSink>(
+fn upgrade_transport<StreamSink>(
     transport: Boxed<StreamSink>,
     local_public_key: PublicKey,
 ) -> Boxed<(PeerId, StreamMuxerBox)>
 where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    let transport = transport
+    transport
         .upgrade()
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed();
-
-    transport
+        .boxed()
 }
 
 #[derive(NetworkBehaviour)]
@@ -313,6 +408,7 @@ async fn wait_for_reservation(
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
                 renewal,
+                ..
             })) if relay_peer_id == peer_id && renewal == is_renewal => {
                 reservation_req_accepted = true;
                 if new_listen_addr {

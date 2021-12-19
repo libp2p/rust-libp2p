@@ -28,6 +28,7 @@ use unsigned_varint::codec::UviBytes;
 
 pub type Ttl = u64;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum Message {
     Register(NewRegistration),

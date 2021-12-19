@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::v2::message_proto::{hop_message, HopMessage, Peer, Status};
-use crate::v2::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
+use crate::v2::protocol::{Limit, HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
@@ -75,7 +74,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             },
         };
 
-        let mut encoded_msg = Vec::new();
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
         msg.encode(&mut encoded_msg)
             .expect("Vec to have sufficient capacity.");
 
@@ -84,7 +83,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(encoded_msg)).await?;
+            substream.send(Cursor::new(encoded_msg)).await?;
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
@@ -94,7 +93,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 r#type,
                 peer: _,
                 reservation,
-                limit: _,
+                limit,
                 status,
             } = HopMessage::decode(Cursor::new(msg))?;
 
@@ -112,37 +111,47 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 s => return Err(UpgradeError::UnexpectedStatus(s)),
             }
 
+            let limit = limit.map(Into::into);
+
             let output = match self {
                 Upgrade::Reserve => {
                     let reservation = reservation.ok_or(UpgradeError::MissingReservationField)?;
 
-                    let addrs = if reservation.addrs.is_empty() {
-                        return Err(UpgradeError::NoAddressesinReservation);
-                    } else {
-                        reservation
-                            .addrs
-                            .into_iter()
-                            .map(TryFrom::try_from)
-                            .collect::<Result<Vec<Multiaddr>, _>>()
-                            .map_err(|_| UpgradeError::InvalidReservationAddrs)?
-                    };
+                    if reservation.addrs.is_empty() {
+                        return Err(UpgradeError::NoAddressesInReservation);
+                    }
 
-                    let renewal_timeout = if let Some(expires) = reservation.expire {
-                        Some(
-                            unix_timestamp_to_instant(expires)
-                                .and_then(|instant| instant.checked_duration_since(Instant::now()))
+                    let addrs = reservation
+                        .addrs
+                        .into_iter()
+                        .map(TryFrom::try_from)
+                        .collect::<Result<Vec<Multiaddr>, _>>()
+                        .map_err(|_| UpgradeError::InvalidReservationAddrs)?;
+
+                    let renewal_timeout = reservation
+                        .expire
+                        .map(|timestamp| {
+                            timestamp
+                                .checked_sub(
+                                    SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs(),
+                                )
+                                // Renew the reservation after 3/4 of the reservation expiration timestamp.
+                                .and_then(|duration| duration.checked_sub(duration / 4))
+                                .map(Duration::from_secs)
                                 .map(Delay::new)
-                                .ok_or(UpgradeError::InvalidReservationExpiration)?,
-                        )
-                    } else {
-                        None
-                    };
+                                .ok_or(UpgradeError::InvalidReservationExpiration)
+                        })
+                        .transpose()?;
 
                     substream.close().await?;
 
                     Output::Reservation {
                         renewal_timeout,
                         addrs,
+                        limit,
                     }
                 }
                 Upgrade::Connect { .. } => {
@@ -160,6 +169,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     Output::Circuit {
                         substream: io,
                         read_buffer: read_buffer.freeze(),
+                        limit,
                     }
                 }
             };
@@ -185,7 +195,7 @@ pub enum UpgradeError {
     #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
     #[error("Expected at least one address in reservation.")]
-    NoAddressesinReservation,
+    NoAddressesInReservation,
     #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
     #[error("Invalid addresses in reservation.")]
@@ -202,24 +212,15 @@ pub enum UpgradeError {
     UnexpectedStatus(Status),
 }
 
-fn unix_timestamp_to_instant(secs: u64) -> Option<Instant> {
-    Instant::now().checked_add(Duration::from_secs(
-        secs.checked_sub(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        )?,
-    ))
-}
-
 pub enum Output {
     Reservation {
         renewal_timeout: Option<Delay>,
         addrs: Vec<Multiaddr>,
+        limit: Option<Limit>,
     },
     Circuit {
         substream: NegotiatedSubstream,
         read_buffer: Bytes,
+        limit: Option<Limit>,
     },
 }

@@ -42,12 +42,12 @@ impl Metrics {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
 struct EventLabels {
     event: EventType,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
 enum EventType {
     ReservationReqAccepted,
     ReservationReqAcceptFailed,

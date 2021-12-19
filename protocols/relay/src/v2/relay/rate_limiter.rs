@@ -30,7 +30,7 @@ use std::net::IpAddr;
 /// [`Multiaddr`] of a remote peer.
 ///
 /// See [`new_per_peer`] and [`new_per_ip`] for precast implementations. Use
-/// [`GenericRateLimiter`] to build your own, e.g. based on the atonomous system
+/// [`GenericRateLimiter`] to build your own, e.g. based on the autonomous system
 /// number of a peers IP address.
 pub trait RateLimiter: Send {
     fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool;

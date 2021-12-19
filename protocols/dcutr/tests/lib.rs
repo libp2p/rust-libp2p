@@ -25,7 +25,7 @@ use futures::stream::StreamExt;
 use futures::task::Spawn;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
+use libp2p::core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
 use libp2p::core::PublicKey;
 use libp2p::core::{identity, PeerId};
 use libp2p::dcutr;
@@ -121,9 +121,11 @@ fn build_client() -> Swarm<Client> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.clone().to_peer_id();
 
-    let (transport, behaviour) =
-        client::Client::new_transport_and_behaviour(local_peer_id, MemoryTransport::default());
-    let transport = build_transport(transport.boxed(), local_public_key);
+    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
+    let transport = build_transport(
+        OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
+        local_public_key,
+    );
 
     Swarm::new(
         transport,
@@ -228,6 +230,7 @@ async fn wait_for_reservation(
             SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
                 relay_peer_id: peer_id,
                 renewal,
+                ..
             })) if relay_peer_id == peer_id && renewal == is_renewal => break,
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
@@ -254,6 +257,9 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
             }
             SwarmEvent::Dialing(_) => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+            SwarmEvent::Behaviour(ClientEvent::Relay(
+                client::Event::OutboundCircuitEstablished { .. },
+            )) => {}
             SwarmEvent::ConnectionEstablished { .. } => {}
             e => panic!("{:?}", e),
         }

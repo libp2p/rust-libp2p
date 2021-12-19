@@ -24,10 +24,11 @@ mod handler;
 pub mod rate_limiter;
 
 use crate::v2::message_proto;
+use crate::v2::protocol::inbound_hop;
 use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::PeerId;
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -156,7 +157,7 @@ pub struct Relay {
     circuits: CircuitsTracker,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
+    queued_actions: VecDeque<Action>,
 }
 
 impl Relay {
@@ -185,14 +186,6 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn addresses_of_peer(&mut self, _remote_peer_id: &PeerId) -> Vec<Multiaddr> {
-        vec![]
-    }
-
-    fn inject_connected(&mut self, _peer_id: &PeerId) {}
-
-    fn inject_disconnected(&mut self, _peer: &PeerId) {}
-
     fn inject_connection_closed(
         &mut self,
         peer: &PeerId,
@@ -200,10 +193,9 @@ impl NetworkBehaviour for Relay {
         _: &ConnectedPoint,
         _handler: handler::Handler,
     ) {
-        self.reservations
-            .get_mut(peer)
-            .map(|cs| cs.remove(&connection))
-            .unwrap_or(false);
+        if let Some(connections) = self.reservations.get_mut(peer) {
+            connections.remove(&connection);
+        }
 
         for circuit in self
             .circuits
@@ -212,14 +204,14 @@ impl NetworkBehaviour for Relay {
             // Only emit [`CircuitClosed`] for accepted requests.
             .filter(|c| matches!(c.status, CircuitStatus::Accepted))
         {
-            self.queued_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    Event::CircuitClosed {
-                        src_peer_id: circuit.src_peer_id,
-                        dst_peer_id: circuit.dst_peer_id,
-                        error: Some(std::io::ErrorKind::ConnectionAborted.into()),
-                    },
-                ));
+            self.queued_actions.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
+                    src_peer_id: circuit.src_peer_id,
+                    dst_peer_id: circuit.dst_peer_id,
+                    error: Some(std::io::ErrorKind::ConnectionAborted.into()),
+                })
+                .into(),
+            );
         }
     }
 
@@ -232,16 +224,21 @@ impl NetworkBehaviour for Relay {
         match event {
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
-                remote_addr,
+                endpoint,
             } => {
                 let now = Instant::now();
 
-                let handler_event = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
+                let action = if endpoint.is_relayed() {
                     // Deny reservation requests over relayed circuits.
-                    handler::In::DenyReservationReq {
-                        inbound_reservation_req,
-                        status: message_proto::Status::PermissionDenied,
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
+                        event: handler::In::DenyReservationReq {
+                            inbound_reservation_req,
+                            status: message_proto::Status::PermissionDenied,
+                        },
                     }
+                    .into()
                 } else if self
                     .reservations
                     .iter()
@@ -252,31 +249,35 @@ impl NetworkBehaviour for Relay {
                         .config
                         .reservation_rate_limiters
                         .iter_mut()
-                        .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
+                        .all(|limiter| {
+                            limiter.try_next(event_source, endpoint.get_remote_address(), now)
+                        })
                 {
                     // Deny reservation exceeding limits.
-                    handler::In::DenyReservationReq {
-                        inbound_reservation_req,
-                        status: message_proto::Status::ResourceLimitExceeded,
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
+                        event: handler::In::DenyReservationReq {
+                            inbound_reservation_req,
+                            status: message_proto::Status::ResourceLimitExceeded,
+                        },
                     }
+                    .into()
                 } else {
                     // Accept reservation.
                     self.reservations
                         .entry(event_source)
                         .or_default()
                         .insert(connection);
-                    handler::In::AcceptReservationReq {
+
+                    Action::AcceptReservationPrototype {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
                         inbound_reservation_req,
-                        addrs: vec![],
                     }
                 };
 
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        handler: NotifyHandler::One(connection),
-                        peer_id: event_source,
-                        event: handler_event,
-                    });
+                self.queued_actions.push_back(action);
             }
             handler::Event::ReservationReqAccepted { renewed } => {
                 // Ensure local eventual consistent reservation state matches handler (source of
@@ -286,59 +287,59 @@ impl NetworkBehaviour for Relay {
                     .or_default()
                     .insert(connection);
 
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqAccepted {
-                            src_peer_id: event_source,
-                            renewed,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqAccepted {
+                        src_peer_id: event_source,
+                        renewed,
+                    })
+                    .into(),
+                );
             }
             handler::Event::ReservationReqAcceptFailed { error } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqAcceptFailed {
-                            src_peer_id: event_source,
-                            error,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqAcceptFailed {
+                        src_peer_id: event_source,
+                        error,
+                    })
+                    .into(),
+                );
             }
             handler::Event::ReservationReqDenied {} => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqDenied {
-                            src_peer_id: event_source,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqDenied {
+                        src_peer_id: event_source,
+                    })
+                    .into(),
+                );
             }
             handler::Event::ReservationReqDenyFailed { error } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqDenyFailed {
-                            src_peer_id: event_source,
-                            error,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqDenyFailed {
+                        src_peer_id: event_source,
+                        error,
+                    })
+                    .into(),
+                );
             }
             handler::Event::ReservationTimedOut {} => {
                 self.reservations
                     .get_mut(&event_source)
                     .map(|cs| cs.remove(&connection));
 
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationTimedOut {
-                            src_peer_id: event_source,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::ReservationTimedOut {
+                        src_peer_id: event_source,
+                    })
+                    .into(),
+                );
             }
             handler::Event::CircuitReqReceived {
                 inbound_circuit_req,
-                remote_addr,
+                endpoint,
             } => {
                 let now = Instant::now();
 
-                let action = if remote_addr.iter().any(|p| p == Protocol::P2pCircuit) {
+                let action = if endpoint.is_relayed() {
                     // Deny circuit requests over relayed circuit.
                     //
                     // An attacker could otherwise build recursive or cyclic circuits.
@@ -356,7 +357,9 @@ impl NetworkBehaviour for Relay {
                         .config
                         .circuit_src_rate_limiters
                         .iter_mut()
-                        .all(|limiter| limiter.try_next(event_source, &remote_addr, now))
+                        .all(|limiter| {
+                            limiter.try_next(event_source, endpoint.get_remote_address(), now)
+                        })
                 {
                     // Deny circuit exceeding limits.
                     NetworkBehaviourAction::NotifyHandler {
@@ -406,7 +409,7 @@ impl NetworkBehaviour for Relay {
                         },
                     }
                 };
-                self.queued_actions.push_back(action);
+                self.queued_actions.push_back(action.into());
             }
             handler::Event::CircuitReqDenied {
                 circuit_id,
@@ -416,13 +419,13 @@ impl NetworkBehaviour for Relay {
                     self.circuits.remove(circuit_id);
                 }
 
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitReqDenied {
-                            src_peer_id: event_source,
-                            dst_peer_id,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqDenied {
+                        src_peer_id: event_source,
+                        dst_peer_id,
+                    })
+                    .into(),
+                );
             }
             handler::Event::CircuitReqDenyFailed {
                 circuit_id,
@@ -433,14 +436,14 @@ impl NetworkBehaviour for Relay {
                     self.circuits.remove(circuit_id);
                 }
 
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitReqDenyFailed {
-                            src_peer_id: event_source,
-                            dst_peer_id,
-                            error,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqDenyFailed {
+                        src_peer_id: event_source,
+                        dst_peer_id,
+                        error,
+                    })
+                    .into(),
+                );
             }
             handler::Event::OutboundConnectNegotiated {
                 circuit_id,
@@ -451,8 +454,8 @@ impl NetworkBehaviour for Relay {
                 dst_stream,
                 dst_pending_data,
             } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(src_connection_id),
                         peer_id: src_peer_id,
                         event: handler::In::AcceptAndDriveCircuit {
@@ -463,7 +466,9 @@ impl NetworkBehaviour for Relay {
                             dst_stream,
                             dst_pending_data,
                         },
-                    });
+                    }
+                    .into(),
+                );
             }
             handler::Event::OutboundConnectNegotiationFailed {
                 circuit_id,
@@ -472,8 +477,8 @@ impl NetworkBehaviour for Relay {
                 inbound_circuit_req,
                 status,
             } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(src_connection_id),
                         peer_id: src_peer_id,
                         event: handler::In::DenyCircuitReq {
@@ -481,20 +486,22 @@ impl NetworkBehaviour for Relay {
                             inbound_circuit_req,
                             status,
                         },
-                    });
+                    }
+                    .into(),
+                );
             }
             handler::Event::CircuitReqAccepted {
                 dst_peer_id,
                 circuit_id,
             } => {
                 self.circuits.accepted(circuit_id);
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitReqAccepted {
-                            src_peer_id: event_source,
-                            dst_peer_id,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqAccepted {
+                        src_peer_id: event_source,
+                        dst_peer_id,
+                    })
+                    .into(),
+                );
             }
             handler::Event::CircuitReqAcceptFailed {
                 dst_peer_id,
@@ -502,14 +509,14 @@ impl NetworkBehaviour for Relay {
                 error,
             } => {
                 self.circuits.remove(circuit_id);
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitReqAcceptFailed {
-                            src_peer_id: event_source,
-                            dst_peer_id,
-                            error,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqAcceptFailed {
+                        src_peer_id: event_source,
+                        dst_peer_id,
+                        error,
+                    })
+                    .into(),
+                );
             }
             handler::Event::CircuitClosed {
                 dst_peer_id,
@@ -518,14 +525,14 @@ impl NetworkBehaviour for Relay {
             } => {
                 self.circuits.remove(circuit_id);
 
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitClosed {
-                            src_peer_id: event_source,
-                            dst_peer_id,
-                            error,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
+                        src_peer_id: event_source,
+                        dst_peer_id,
+                        error,
+                    })
+                    .into(),
+                );
             }
         }
     }
@@ -535,23 +542,8 @@ impl NetworkBehaviour for Relay {
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
-        if let Some(mut event) = self.queued_actions.pop_front() {
-            // Set external addresses in [`AcceptReservationReq`].
-            if let NetworkBehaviourAction::NotifyHandler {
-                event: handler::In::AcceptReservationReq { ref mut addrs, .. },
-                ..
-            } = &mut event
-            {
-                *addrs = poll_parameters
-                    .external_addresses()
-                    .map(|a| {
-                        a.addr
-                            .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                    })
-                    .collect();
-            }
-
-            return Poll::Ready(event);
+        if let Some(action) = self.queued_actions.pop_front() {
+            return Poll::Ready(action.build(poll_parameters));
         }
 
         Poll::Pending
@@ -638,5 +630,52 @@ impl Add<u64> for CircuitId {
 
     fn add(self, rhs: u64) -> Self {
         CircuitId(self.0 + rhs)
+    }
+}
+
+/// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
+/// before being returned in [`Relay::poll`].
+#[allow(clippy::large_enum_variant)]
+enum Action {
+    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    AcceptReservationPrototype {
+        inbound_reservation_req: inbound_hop::ReservationReq,
+        handler: NotifyHandler,
+        peer_id: PeerId,
+    },
+}
+
+impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+        Self::Done(action)
+    }
+}
+
+impl Action {
+    fn build(
+        self,
+        poll_parameters: &mut impl PollParameters,
+    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+        match self {
+            Action::Done(action) => action,
+            Action::AcceptReservationPrototype {
+                inbound_reservation_req,
+                handler,
+                peer_id,
+            } => NetworkBehaviourAction::NotifyHandler {
+                handler,
+                peer_id,
+                event: handler::In::AcceptReservationReq {
+                    inbound_reservation_req,
+                    addrs: poll_parameters
+                        .external_addresses()
+                        .map(|a| {
+                            a.addr
+                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                        })
+                        .collect(),
+                },
+            },
+        }
     }
 }

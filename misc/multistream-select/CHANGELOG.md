@@ -9,13 +9,16 @@
 
   See [PR 2066].
 
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[simultaneous open extension]: https://github.com/libp2p/specs/blob/master/connections/simopen.md
+[PR 2066]: https://github.com/libp2p/rust-libp2p/pull/2066
+
 # 0.10.4 [2021-11-01]
 
 - Implement `From<io::Error> for ProtocolError` instead of `Into`.
   [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)
-
-[simultaneous open extension]: https://github.com/libp2p/specs/blob/master/connections/simopen.md
-[PR 2066]: https://github.com/libp2p/rust-libp2p/pull/2066
 
 # 0.10.3 [2021-03-17]
 

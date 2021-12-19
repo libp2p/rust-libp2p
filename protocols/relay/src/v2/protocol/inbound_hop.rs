@@ -21,7 +21,7 @@
 use crate::v2::message_proto::{hop_message, HopMessage, Limit, Reservation, Status};
 use crate::v2::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
@@ -54,7 +54,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut codec = UviBytes::<bytes::Bytes>::default();
+        let mut codec = UviBytes::default();
         codec.set_max_len(MAX_MESSAGE_SIZE);
         let mut substream = Framed::new(substream, codec);
 
@@ -73,20 +73,22 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             } = HopMessage::decode(Cursor::new(msg))?;
 
             let r#type = hop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
-            match r#type {
-                hop_message::Type::Reserve => Ok(Req::Reserve(ReservationReq {
+            let req = match r#type {
+                hop_message::Type::Reserve => Req::Reserve(ReservationReq {
                     substream,
                     reservation_duration: self.reservation_duration,
                     max_circuit_duration: self.max_circuit_duration,
                     max_circuit_bytes: self.max_circuit_bytes,
-                })),
+                }),
                 hop_message::Type::Connect => {
                     let dst = PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
                         .map_err(|_| UpgradeError::ParsePeerId)?;
-                    Ok(Req::Connect(CircuitReq { dst, substream }))
+                    Req::Connect(CircuitReq { dst, substream })
                 }
-                hop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
-            }
+                hop_message::Type::Status => return Err(UpgradeError::UnexpectedTypeStatus),
+            };
+
+            Ok(req)
         }
         .boxed()
     }
@@ -118,7 +120,7 @@ pub enum Req {
 }
 
 pub struct ReservationReq {
-    substream: Framed<NegotiatedSubstream, UviBytes>,
+    substream: Framed<NegotiatedSubstream, UviBytes<Cursor<Vec<u8>>>>,
     reservation_duration: Duration,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
@@ -167,10 +169,10 @@ impl ReservationReq {
     }
 
     async fn send(mut self, msg: HopMessage) -> Result<(), std::io::Error> {
-        let mut msg_bytes = BytesMut::new();
-        msg.encode(&mut msg_bytes)
-            .expect("BytesMut to have sufficient capacity.");
-        self.substream.send(msg_bytes.freeze()).await?;
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
+        msg.encode(&mut encoded_msg)
+            .expect("Vec to have sufficient capacity.");
+        self.substream.send(Cursor::new(encoded_msg)).await?;
         self.substream.flush().await?;
         self.substream.close().await?;
 
@@ -180,7 +182,7 @@ impl ReservationReq {
 
 pub struct CircuitReq {
     dst: PeerId,
-    substream: Framed<NegotiatedSubstream, UviBytes>,
+    substream: Framed<NegotiatedSubstream, UviBytes<Cursor<Vec<u8>>>>,
 }
 
 impl CircuitReq {
@@ -226,10 +228,10 @@ impl CircuitReq {
     }
 
     async fn send(&mut self, msg: HopMessage) -> Result<(), std::io::Error> {
-        let mut msg_bytes = BytesMut::new();
-        msg.encode(&mut msg_bytes)
-            .expect("BytesMut to have sufficient capacity.");
-        self.substream.send(msg_bytes.freeze()).await?;
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
+        msg.encode(&mut encoded_msg)
+            .expect("Vec to have sufficient capacity.");
+        self.substream.send(Cursor::new(encoded_msg)).await?;
         self.substream.flush().await?;
 
         Ok(())

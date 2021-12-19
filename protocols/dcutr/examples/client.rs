@@ -22,6 +22,7 @@ use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
+use libp2p::core::transport::OrTransport;
 use libp2p::core::upgrade;
 use libp2p::dcutr;
 use libp2p::dns::DnsConfig;
@@ -87,23 +88,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {:?}", local_peer_id);
 
-    let (transport, client) = Client::new_transport_and_behaviour(
-        local_peer_id,
-        block_on(DnsConfig::system(TcpConfig::new().port_reuse(true))).unwrap(),
-    );
+    let (relay_transport, client) = Client::new_transport_and_behaviour(local_peer_id);
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&local_key)
         .expect("Signing libp2p-noise static DH keypair failed.");
 
-    let transport = transport
-        .upgrade()
-        .authenticate_with_version(
-            noise::NoiseConfig::xx(noise_keys).into_authenticated(),
-            upgrade::AuthenticationVersion::V1SimultaneousOpen,
-        )
-        .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed();
+    let transport = OrTransport::new(
+        relay_transport,
+        block_on(DnsConfig::system(TcpConfig::new().port_reuse(true))).unwrap(),
+    )
+    .upgrade()
+    .authenticate_with_version(
+        noise::NoiseConfig::xx(noise_keys).into_authenticated(),
+        upgrade::AuthenticationVersion::V1SimultaneousOpen,
+    )
+    .multiplex(libp2p_yamux::YamuxConfig::default())
+    .boxed();
 
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "Event", event_process = false)]

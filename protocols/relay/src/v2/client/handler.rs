@@ -20,9 +20,8 @@
 
 use crate::v2::client::transport;
 use crate::v2::message_proto::Status;
-use crate::v2::protocol::{inbound_stop, outbound_hop};
-use futures::channel::mpsc::Sender;
-use futures::channel::oneshot;
+use crate::v2::protocol::{self, inbound_stop, outbound_hop};
+use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -44,7 +43,7 @@ use std::time::Duration;
 
 pub enum In {
     Reserve {
-        to_listener: Sender<transport::ToListenerMsg>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
@@ -72,12 +71,22 @@ pub enum Event {
     ReservationReqAccepted {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
+        limit: Option<protocol::Limit>,
     },
     ReservationReqFailed {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
     },
+    /// An outbound circuit has been established.
+    OutboundCircuitEstablished {
+        limit: Option<protocol::Limit>,
+    },
     OutboundCircuitReqFailed {},
+    /// An inbound circuit has been established.
+    InboundCircuitEstablished {
+        src_peer_id: PeerId,
+        limit: Option<protocol::Limit>,
+    },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied {
         src_peer_id: PeerId,
@@ -91,11 +100,16 @@ pub enum Event {
 
 pub struct Prototype {
     local_peer_id: PeerId,
+    /// Initial [`In`] event from [`super::Client`] provided at creation time.
+    initial_in: Option<In>,
 }
 
 impl Prototype {
-    pub(crate) fn new(local_peer_id: PeerId) -> Self {
-        Self { local_peer_id }
+    pub(crate) fn new(local_peer_id: PeerId, initial_in: Option<In>) -> Self {
+        Self {
+            local_peer_id,
+            initial_in,
+        }
     }
 }
 
@@ -103,18 +117,24 @@ impl IntoProtocolsHandler for Prototype {
     type Handler = Handler;
 
     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        Handler {
+        let mut handler = Handler {
             remote_peer_id: *remote_peer_id,
             remote_addr: endpoint.get_remote_address().clone(),
             local_peer_id: self.local_peer_id,
             queued_events: Default::default(),
             pending_error: Default::default(),
-            reservation: None,
+            reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
+        };
+
+        if let Some(event) = self.initial_in {
+            handler.inject_event(event)
         }
+
+        handler
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
@@ -126,6 +146,7 @@ pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
     remote_addr: Multiaddr,
+    /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ProtocolsHandlerUpgrErr<
             EitherError<inbound_stop::UpgradeError, outbound_hop::UpgradeError>,
@@ -144,9 +165,9 @@ pub struct Handler {
         >,
     >,
 
-    reservation: Option<Reservation>,
+    reservation: Reservation,
 
-    /// Tracks substreams lend out to the transport.
+    /// Tracks substreams lent out to the transport.
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that
     /// resolves once the substream is dropped.
@@ -154,10 +175,14 @@ pub struct Handler {
     /// Once all substreams are dropped and this handler has no other work,
     /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
     /// eventually.
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
+    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
     circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
 
+    /// Futures that try to send errors to the transport.
+    ///
+    /// We may drop errors if this handler ends up in a terminal state (by returning
+    /// [`ProtocolsHandlerEvent::Close`]).
     send_error_futs: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
@@ -182,20 +207,30 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
     ) {
         match &mut self.reservation {
-            Some(Reservation::Accepted { pending_msgs, .. })
-            | Some(Reservation::Renewal { pending_msgs, .. }) => {
+            Reservation::Accepted { pending_msgs, .. }
+            | Reservation::Renewing { pending_msgs, .. } => {
                 let src_peer_id = inbound_circuit.src_peer_id();
+                let limit = inbound_circuit.limit();
+
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
                 let connection = super::RelayedConnection::new_inbound(inbound_circuit, tx);
+
                 pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
                     stream: connection,
                     src_peer_id,
                     relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_addr.clone(),
                 });
+
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::InboundCircuitEstablished {
+                        src_peer_id: self.remote_peer_id,
+                        limit,
+                    },
+                ));
             }
-            _ => {
+            Reservation::None => {
                 let src_peer_id = inbound_circuit.src_peer_id();
                 self.circuit_deny_futs.push(
                     inbound_circuit
@@ -217,50 +252,46 @@ impl ProtocolsHandler for Handler {
                 outbound_hop::Output::Reservation {
                     renewal_timeout,
                     addrs,
+                    limit,
                 },
                 OutboundOpenInfo::Reserve { to_listener },
             ) => {
-                let (renewal, mut pending_msgs) = match self.reservation.take() {
-                    Some(Reservation::Accepted { pending_msgs, .. })
-                    | Some(Reservation::Renewal { pending_msgs, .. }) => (true, pending_msgs),
-                    None => (false, VecDeque::new()),
-                };
-
-                pending_msgs.push_back(transport::ToListenerMsg::Reservation(Ok(
-                    transport::Reservation {
-                        addrs: addrs
-                            .into_iter()
-                            .map(|a| {
-                                a.with(Protocol::P2pCircuit)
-                                    .with(Protocol::P2p(self.local_peer_id.into()))
-                            })
-                            .collect(),
-                    },
-                )));
-                self.reservation = Some(Reservation::Accepted {
+                let event = self.reservation.accepted(
                     renewal_timeout,
-                    pending_msgs,
+                    addrs,
                     to_listener,
-                });
+                    self.local_peer_id,
+                    limit,
+                );
 
-                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::ReservationReqAccepted { renewal },
-                ));
+                self.queued_events
+                    .push_back(ProtocolsHandlerEvent::Custom(event));
             }
             (
                 outbound_hop::Output::Circuit {
                     substream,
                     read_buffer,
+                    limit,
                 },
                 OutboundOpenInfo::Connect { send_back },
             ) => {
                 let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
-                let _ = send_back.send(Ok(super::RelayedConnection::new_outbound(
+                match send_back.send(Ok(super::RelayedConnection::new_outbound(
                     substream,
                     read_buffer,
                     tx,
-                )));
+                ))) {
+                    Ok(()) => self.alive_lend_out_substreams.push(rx),
+                    Err(_) => debug!(
+                        "Oneshot to `RelayedDial` future dropped. \
+                         Dropping established relayed connection to {:?}.",
+                        self.remote_peer_id,
+                    ),
+                }
+
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::OutboundCircuitEstablished { limit },
+                ));
             }
             _ => unreachable!(),
         }
@@ -324,7 +355,7 @@ impl ProtocolsHandler for Handler {
     ) {
         match open_info {
             OutboundOpenInfo::Reserve { mut to_listener } => {
-                let renewal = self.reservation.take().is_some();
+                let event = self.reservation.failed();
 
                 match error {
                     ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
@@ -348,7 +379,7 @@ impl ProtocolsHandler for Handler {
                             | outbound_hop::UpgradeError::ParseStatusField
                             | outbound_hop::UpgradeError::MissingStatusField
                             | outbound_hop::UpgradeError::MissingReservationField
-                            | outbound_hop::UpgradeError::NoAddressesinReservation
+                            | outbound_hop::UpgradeError::NoAddressesInReservation
                             | outbound_hop::UpgradeError::InvalidReservationExpiration
                             | outbound_hop::UpgradeError::InvalidReservationAddrs
                             | outbound_hop::UpgradeError::UnexpectedTypeConnect
@@ -386,16 +417,22 @@ impl ProtocolsHandler for Handler {
                     }
                 }
 
-                self.send_error_futs.push(
-                    async move {
-                        let _ = to_listener.send(transport::ToListenerMsg::Reservation(Err(())));
-                    }
-                    .boxed(),
-                );
+                if self.pending_error.is_none() {
+                    self.send_error_futs.push(
+                        async move {
+                            let _ = to_listener
+                                .send(transport::ToListenerMsg::Reservation(Err(())))
+                                .await;
+                        }
+                        .boxed(),
+                    );
+                } else {
+                    // Fatal error occured, thus handler is closing as quickly as possible.
+                    // Transport is notified through dropping `to_listener`.
+                }
 
-                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::ReservationReqFailed { renewal },
-                ));
+                self.queued_events
+                    .push_back(ProtocolsHandlerEvent::Custom(event));
             }
             OutboundOpenInfo::Connect { send_back } => {
                 match error {
@@ -420,7 +457,7 @@ impl ProtocolsHandler for Handler {
                             | outbound_hop::UpgradeError::ParseStatusField
                             | outbound_hop::UpgradeError::MissingStatusField
                             | outbound_hop::UpgradeError::MissingReservationField
-                            | outbound_hop::UpgradeError::NoAddressesinReservation
+                            | outbound_hop::UpgradeError::NoAddressesInReservation
                             | outbound_hop::UpgradeError::InvalidReservationExpiration
                             | outbound_hop::UpgradeError::InvalidReservationAddrs
                             | outbound_hop::UpgradeError::UnexpectedTypeConnect
@@ -495,57 +532,8 @@ impl ProtocolsHandler for Handler {
             return Poll::Ready(event);
         }
 
-        // Check if reservation needs renewal.
-        match self.reservation.take() {
-            Some(Reservation::Accepted {
-                mut renewal_timeout,
-                pending_msgs,
-                to_listener,
-            }) => match renewal_timeout.as_mut().map(|t| t.poll_unpin(cx)) {
-                Some(Poll::Ready(())) => {
-                    self.reservation = Some(Reservation::Renewal { pending_msgs });
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            outbound_hop::Upgrade::Reserve,
-                            OutboundOpenInfo::Reserve { to_listener },
-                        ),
-                    });
-                }
-                Some(Poll::Pending) | None => {
-                    self.reservation = Some(Reservation::Accepted {
-                        renewal_timeout,
-                        pending_msgs,
-                        to_listener,
-                    });
-                }
-            },
-            r => self.reservation = r,
-        }
-
-        // Forward messages to transport listener.
-        if let Some(Reservation::Accepted {
-            pending_msgs,
-            to_listener,
-            ..
-        }) = &mut self.reservation
-        {
-            if !pending_msgs.is_empty() {
-                match to_listener.poll_ready(cx) {
-                    Poll::Ready(Ok(())) => {
-                        if let Err(e) = to_listener
-                            .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
-                        {
-                            debug!("Failed to sent pending message to listener: {:?}", e);
-                            self.reservation.take();
-                        }
-                    }
-                    Poll::Ready(Err(e)) => {
-                        debug!("Channel to listener failed: {:?}", e);
-                        self.reservation.take();
-                    }
-                    Poll::Pending => {}
-                }
-            }
+        if let Poll::Ready(Some(protocol)) = self.reservation.poll(cx) {
+            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol });
         }
 
         // Deny incoming circuit requests.
@@ -568,8 +556,17 @@ impl ProtocolsHandler for Handler {
         // Send errors to transport.
         while let Poll::Ready(Some(())) = self.send_error_futs.poll_next_unpin(cx) {}
 
+        // Check status of lend out substreams.
+        loop {
+            match self.alive_lend_out_substreams.poll_next_unpin(cx) {
+                Poll::Ready(Some(Err(oneshot::Canceled))) => {}
+                Poll::Ready(Some(Ok(v))) => void::unreachable(v),
+                Poll::Ready(None) | Poll::Pending => break,
+            }
+        }
+
         // Update keep-alive handling.
-        if self.reservation.is_none()
+        if matches!(self.reservation, Reservation::None)
             && self.alive_lend_out_substreams.is_empty()
             && self.circuit_deny_futs.is_empty()
         {
@@ -589,20 +586,136 @@ impl ProtocolsHandler for Handler {
 }
 
 enum Reservation {
+    /// The Reservation is accepted by the relay.
     Accepted {
         /// [`None`] if reservation does not expire.
         renewal_timeout: Option<Delay>,
+        /// Buffer of messages to be send to the transport listener.
         pending_msgs: VecDeque<transport::ToListenerMsg>,
-        to_listener: Sender<transport::ToListenerMsg>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
-    Renewal {
+    /// The reservation is being renewed with the relay.
+    Renewing {
+        /// Buffer of messages to be send to the transport listener.
         pending_msgs: VecDeque<transport::ToListenerMsg>,
     },
+    None,
+}
+
+impl Reservation {
+    fn accepted(
+        &mut self,
+        renewal_timeout: Option<Delay>,
+        addrs: Vec<Multiaddr>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
+        local_peer_id: PeerId,
+        limit: Option<protocol::Limit>,
+    ) -> Event {
+        let (renewal, mut pending_msgs) = match std::mem::replace(self, Self::None) {
+            Reservation::Accepted { pending_msgs, .. }
+            | Reservation::Renewing { pending_msgs, .. } => (true, pending_msgs),
+            Reservation::None => (false, VecDeque::new()),
+        };
+
+        pending_msgs.push_back(transport::ToListenerMsg::Reservation(Ok(
+            transport::Reservation {
+                addrs: addrs
+                    .into_iter()
+                    .map(|a| {
+                        a.with(Protocol::P2pCircuit)
+                            .with(Protocol::P2p(local_peer_id.into()))
+                    })
+                    .collect(),
+            },
+        )));
+
+        *self = Reservation::Accepted {
+            renewal_timeout,
+            pending_msgs,
+            to_listener,
+        };
+
+        Event::ReservationReqAccepted { renewal, limit }
+    }
+
+    fn failed(&mut self) -> Event {
+        let renewal = matches!(
+            self,
+            Reservation::Accepted { .. } | Reservation::Renewing { .. }
+        );
+
+        *self = Reservation::None;
+
+        Event::ReservationReqFailed { renewal }
+    }
+
+    fn forward_messages_to_transport_listener(&mut self, cx: &mut Context<'_>) {
+        if let Reservation::Accepted {
+            pending_msgs,
+            to_listener,
+            ..
+        } = self
+        {
+            if !pending_msgs.is_empty() {
+                match to_listener.poll_ready(cx) {
+                    Poll::Ready(Ok(())) => {
+                        if let Err(e) = to_listener
+                            .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
+                        {
+                            debug!("Failed to sent pending message to listener: {:?}", e);
+                            *self = Reservation::None;
+                        }
+                    }
+                    Poll::Ready(Err(e)) => {
+                        debug!("Channel to listener failed: {:?}", e);
+                        *self = Reservation::None;
+                    }
+                    Poll::Pending => {}
+                }
+            }
+        }
+    }
+
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<SubstreamProtocol<outbound_hop::Upgrade, OutboundOpenInfo>>> {
+        self.forward_messages_to_transport_listener(cx);
+
+        // Check renewal timeout if any.
+        let (next_reservation, poll_val) = match std::mem::replace(self, Reservation::None) {
+            Reservation::Accepted {
+                renewal_timeout: Some(mut renewal_timeout),
+                pending_msgs,
+                to_listener,
+            } => match renewal_timeout.poll_unpin(cx) {
+                Poll::Ready(()) => (
+                    Reservation::Renewing { pending_msgs },
+                    Poll::Ready(Some(SubstreamProtocol::new(
+                        outbound_hop::Upgrade::Reserve,
+                        OutboundOpenInfo::Reserve { to_listener },
+                    ))),
+                ),
+                Poll::Pending => (
+                    Reservation::Accepted {
+                        renewal_timeout: Some(renewal_timeout),
+                        pending_msgs,
+                        to_listener,
+                    },
+                    Poll::Pending,
+                ),
+            },
+            r => (r, Poll::Pending),
+        };
+        *self = next_reservation;
+
+        poll_val
+    }
 }
 
 pub enum OutboundOpenInfo {
     Reserve {
-        to_listener: Sender<transport::ToListenerMsg>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     Connect {
         send_back: oneshot::Sender<Result<super::RelayedConnection, ()>>,
