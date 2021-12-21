@@ -76,21 +76,24 @@ pub enum Event {
     ReservationReqFailed {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
+        error: ProtocolsHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
     },
     /// An outbound circuit has been established.
-    OutboundCircuitEstablished {
-        limit: Option<protocol::Limit>,
+    OutboundCircuitEstablished { limit: Option<protocol::Limit> },
+    OutboundCircuitReqFailed {
+        error: ProtocolsHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
     },
-    OutboundCircuitReqFailed {},
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
-    /// An inbound circuit request has been denied.
-    InboundCircuitReqDenied {
-        src_peer_id: PeerId,
+    /// An inbound circuit request has failed.
+    InboundCircuitReqFailed {
+        error: ProtocolsHandlerUpgrErr<void::Void>,
     },
+    /// An inbound circuit request has been denied.
+    InboundCircuitReqDenied { src_peer_id: PeerId },
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
@@ -149,7 +152,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ProtocolsHandlerUpgrErr<
-            EitherError<inbound_stop::UpgradeError, outbound_hop::UpgradeError>,
+            EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
         >,
     >,
     /// Until when to keep the connection alive.
@@ -190,7 +193,7 @@ impl ProtocolsHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
     type Error = ProtocolsHandlerUpgrErr<
-        EitherError<inbound_stop::UpgradeError, outbound_hop::UpgradeError>,
+        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_stop::Upgrade;
     type OutboundProtocol = outbound_hop::Upgrade;
@@ -328,24 +331,37 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        match error {
-            ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+        let non_fatal_error = match error {
+            ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
+            ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
-            )) => {}
+            )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::Failed,
+            )),
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
             )) => {
                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
                 ));
+                return;
             }
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                inbound_stop::UpgradeError::Fatal(error),
+            )) => {
                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Apply(EitherError::A(error)),
-                ))
+                ));
+                return;
             }
-        }
+        };
+
+        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+            Event::InboundCircuitReqFailed {
+                error: non_fatal_error,
+            },
+        ));
     }
 
     fn inject_dial_upgrade_error(
@@ -355,13 +371,14 @@ impl ProtocolsHandler for Handler {
     ) {
         match open_info {
             OutboundOpenInfo::Reserve { mut to_listener } => {
-                let event = self.reservation.failed();
-
-                match error {
-                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+                let non_fatal_error = match error {
+                    ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
+                    ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
-                    )) => {}
+                    )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )),
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::ProtocolError(e),
                     )) => {
@@ -370,15 +387,21 @@ impl ProtocolsHandler for Handler {
                                 upgrade::NegotiationError::ProtocolError(e),
                             ),
                         ));
+                        return;
                     }
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
                         match error {
-                            error @ outbound_hop::UpgradeError::Fatal(_) => {
+                            outbound_hop::UpgradeError::Fatal(error) => {
                                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(error)),
                                 ));
+                                return;
                             }
-                            outbound_hop::UpgradeError::ReservationFailed(_) => {}
+                            outbound_hop::UpgradeError::ReservationFailed(error) => {
+                                ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                                    error,
+                                ))
+                            }
                             outbound_hop::UpgradeError::CircuitFailed(_) => {
                                 unreachable!(
                                     "Do not emitt `CircuitFailed` for outgoing reservation."
@@ -386,7 +409,7 @@ impl ProtocolsHandler for Handler {
                             }
                         }
                     }
-                }
+                };
 
                 if self.pending_error.is_none() {
                     self.send_error_futs.push(
@@ -402,15 +425,23 @@ impl ProtocolsHandler for Handler {
                     // Transport is notified through dropping `to_listener`.
                 }
 
-                self.queued_events
-                    .push_back(ProtocolsHandlerEvent::Custom(event));
+                let renewal = self.reservation.failed();
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::ReservationReqFailed {
+                        renewal,
+                        error: non_fatal_error,
+                    },
+                ));
             }
             OutboundOpenInfo::Connect { send_back } => {
-                match error {
-                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+                let non_fatal_error = match error {
+                    ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
+                    ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
-                    )) => {}
+                    )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                        upgrade::NegotiationError::Failed,
+                    )),
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::ProtocolError(e),
                     )) => {
@@ -419,15 +450,21 @@ impl ProtocolsHandler for Handler {
                                 upgrade::NegotiationError::ProtocolError(e),
                             ),
                         ));
+                        return;
                     }
                     ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
                         match error {
-                            error @ outbound_hop::UpgradeError::Fatal(_) => {
+                            outbound_hop::UpgradeError::Fatal(error) => {
                                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(error)),
                                 ));
+                                return;
                             }
-                            outbound_hop::UpgradeError::CircuitFailed(_) => {}
+                            outbound_hop::UpgradeError::CircuitFailed(error) => {
+                                ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                                    error,
+                                ))
+                            }
                             outbound_hop::UpgradeError::ReservationFailed(_) => {
                                 unreachable!(
                                     "Do not emitt `ReservationFailed` for outgoing circuit."
@@ -440,7 +477,9 @@ impl ProtocolsHandler for Handler {
                 let _ = send_back.send(Err(()));
 
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::OutboundCircuitReqFailed {},
+                    Event::OutboundCircuitReqFailed {
+                        error: non_fatal_error,
+                    },
                 ));
             }
         }
@@ -578,7 +617,10 @@ impl Reservation {
         Event::ReservationReqAccepted { renewal, limit }
     }
 
-    fn failed(&mut self) -> Event {
+    /// Marks the current reservation as failed.
+    ///
+    /// Returns whether the reservation request was a renewal.
+    fn failed(&mut self) -> bool {
         let renewal = matches!(
             self,
             Reservation::Accepted { .. } | Reservation::Renewing { .. }
@@ -586,7 +628,7 @@ impl Reservation {
 
         *self = Reservation::None;
 
-        Event::ReservationReqFailed { renewal }
+        renewal
     }
 
     fn forward_messages_to_transport_listener(&mut self, cx: &mut Context<'_>) {

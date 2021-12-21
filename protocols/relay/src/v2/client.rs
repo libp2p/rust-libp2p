@@ -23,7 +23,7 @@
 mod handler;
 pub mod transport;
 
-use crate::v2::protocol::{self, inbound_stop};
+use crate::v2::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use futures::channel::mpsc::Receiver;
 use futures::channel::oneshot;
@@ -36,6 +36,7 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ProtocolsHandlerUpgrErr,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, IoSlice};
@@ -57,6 +58,7 @@ pub enum Event {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
+        error: ProtocolsHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
     },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
@@ -64,16 +66,19 @@ pub enum Event {
     },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
+        error: ProtocolsHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
-    /// An inbound circuit request has been denied.
-    InboundCircuitReqDenied {
-        src_peer_id: PeerId,
+    InboundCircuitReqFailed {
+        relay_peer_id: PeerId,
+        error: ProtocolsHandlerUpgrErr<void::Void>,
     },
+    /// An inbound circuit request has been denied.
+    InboundCircuitReqDenied { src_peer_id: PeerId },
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
@@ -169,15 +174,15 @@ impl NetworkBehaviour for Client {
                         limit,
                     },
                 )),
-            handler::Event::ReservationReqFailed { renewal } => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::ReservationReqFailed {
-                            relay_peer_id: event_source,
-                            renewal,
-                        },
-                    ))
-            }
+            handler::Event::ReservationReqFailed { renewal, error } => self
+                .queued_actions
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    Event::ReservationReqFailed {
+                        relay_peer_id: event_source,
+                        renewal,
+                        error,
+                    },
+                )),
             handler::Event::OutboundCircuitEstablished { limit } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
@@ -187,11 +192,12 @@ impl NetworkBehaviour for Client {
                         },
                     ))
             }
-            handler::Event::OutboundCircuitReqFailed {} => {
+            handler::Event::OutboundCircuitReqFailed { error } => {
                 self.queued_actions
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         Event::OutboundCircuitReqFailed {
                             relay_peer_id: event_source,
+                            error,
                         },
                     ))
             }
@@ -200,6 +206,15 @@ impl NetworkBehaviour for Client {
                 .push_back(NetworkBehaviourAction::GenerateEvent(
                     Event::InboundCircuitEstablished { src_peer_id, limit },
                 )),
+            handler::Event::InboundCircuitReqFailed { error } => {
+                self.queued_actions
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::InboundCircuitReqFailed {
+                            relay_peer_id: event_source,
+                            error,
+                        },
+                    ))
+            }
             handler::Event::InboundCircuitReqDenied { src_peer_id } => self
                 .queued_actions
                 .push_back(NetworkBehaviourAction::GenerateEvent(
