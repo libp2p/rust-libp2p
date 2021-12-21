@@ -121,6 +121,10 @@ pub enum Event {
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
+    CircuitReqReceiveFailed {
+        src_peer_id: PeerId,
+        error: ProtocolsHandlerUpgrErr<void::Void>,
+    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         src_peer_id: PeerId,
@@ -434,6 +438,15 @@ impl NetworkBehaviour for Relay {
                     }
                 };
                 self.queued_actions.push_back(action.into());
+            }
+            handler::Event::CircuitReqReceiveFailed { error } => {
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqReceiveFailed {
+                        src_peer_id: event_source,
+                        error,
+                    })
+                    .into(),
+                );
             }
             handler::Event::CircuitReqDenied {
                 circuit_id,

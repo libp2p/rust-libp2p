@@ -72,7 +72,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 status: _,
             } = HopMessage::decode(Cursor::new(msg))?;
 
-            let r#type = hop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+            let r#type =
+                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
                 hop_message::Type::Reserve => Ok(Req::Reserve(ReservationReq {
                     substream,
@@ -81,11 +82,11 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                     max_circuit_bytes: self.max_circuit_bytes,
                 })),
                 hop_message::Type::Connect => {
-                    let dst = PeerId::from_bytes(&peer.ok_or(UpgradeError::MissingPeer)?.id)
-                        .map_err(|_| UpgradeError::ParsePeerId)?;
+                    let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
+                        .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Ok(Req::Connect(CircuitReq { dst, substream }))
                 }
-                hop_message::Type::Status => Err(UpgradeError::UnexpectedTypeStatus),
+                hop_message::Type::Status => Err(FatalUpgradeError::UnexpectedTypeStatus)?,
             }
         }
         .boxed()
@@ -94,6 +95,24 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
+    #[error("Fatal")]
+    Fatal(#[from] FatalUpgradeError),
+}
+
+impl From<prost::DecodeError> for UpgradeError {
+    fn from(error: prost::DecodeError) -> Self {
+        Self::Fatal(error.into())
+    }
+}
+
+impl From<std::io::Error> for UpgradeError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Fatal(error.into())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum FatalUpgradeError {
     #[error("Failed to decode message: {0}.")]
     Decode(
         #[from]

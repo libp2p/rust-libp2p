@@ -160,6 +160,10 @@ pub enum Event {
         inbound_circuit_req: inbound_hop::CircuitReq,
         endpoint: ConnectedPoint,
     },
+    /// Receiving an inbound circuit request failed.
+    CircuitReqReceiveFailed {
+        error: ProtocolsHandlerUpgrErr<void::Void>,
+    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
@@ -242,6 +246,10 @@ impl fmt::Debug for Event {
             } => f
                 .debug_struct("Event::CircuitReqReceived")
                 .field("endpoint", endpoint)
+                .finish(),
+            Event::CircuitReqReceiveFailed { error } => f
+                .debug_struct("Event::CircuitReqReceiveFailed")
+                .field("error", error)
                 .finish(),
             Event::CircuitReqDenied {
                 circuit_id,
@@ -376,7 +384,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ProtocolsHandlerUpgrErr<
-            EitherError<inbound_hop::UpgradeError, outbound_stop::FatalUpgradeError>,
+            EitherError<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
         >,
     >,
 
@@ -413,7 +421,7 @@ impl ProtocolsHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
     type Error = ProtocolsHandlerUpgrErr<
-        EitherError<inbound_hop::UpgradeError, outbound_stop::FatalUpgradeError>,
+        EitherError<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_hop::Upgrade;
     type OutboundProtocol = outbound_stop::Upgrade;
@@ -570,24 +578,37 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        match error {
-            ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
+        let non_fatal_error = match error {
+            ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
+            ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
-            )) => {}
+            )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                upgrade::NegotiationError::Failed,
+            )),
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
             )) => {
                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
                 ));
+                return;
             }
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                inbound_hop::UpgradeError::Fatal(error),
+            )) => {
                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Apply(EitherError::A(error)),
-                ))
+                ));
+                return;
             }
-        }
+        };
+
+        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+            Event::CircuitReqReceiveFailed {
+                error: non_fatal_error,
+            },
+        ));
     }
 
     fn inject_dial_upgrade_error(
