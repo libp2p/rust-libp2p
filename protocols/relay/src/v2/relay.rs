@@ -43,6 +43,7 @@ use std::time::Duration;
 /// [`Config::max_circuit_duration`] may not exceed [`u32::MAX`].
 pub struct Config {
     pub max_reservations: usize,
+    pub max_reservations_per_peer: usize,
     pub reservation_duration: Duration,
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
@@ -82,6 +83,7 @@ impl Default for Config {
 
         Config {
             max_reservations: 128,
+            max_reservations_per_peer: 4,
             reservation_duration: Duration::from_secs(60 * 60),
             reservation_rate_limiters,
 
@@ -225,6 +227,7 @@ impl NetworkBehaviour for Relay {
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
                 endpoint,
+                renewed,
             } => {
                 let now = Instant::now();
 
@@ -253,7 +256,25 @@ impl NetworkBehaviour for Relay {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
                         })
                 {
-                    // Deny reservation exceeding limits.
+                    // Deny reservation exceeding general limits.
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(connection),
+                        peer_id: event_source,
+                        event: handler::In::DenyReservationReq {
+                            inbound_reservation_req,
+                            status: message_proto::Status::ResourceLimitExceeded,
+                        },
+                    }
+                    .into()
+                } else if !renewed
+                    && self
+                        .reservations
+                        .get(&event_source)
+                        .map(|cs| cs.len())
+                        .unwrap_or(0)
+                        > self.config.max_reservations_per_peer
+                {
+                    // Deny reservation exceeding per-peer limits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
