@@ -54,8 +54,10 @@ enum EventType {
     ReservationReqDenied,
     ReservationReqDenyFailed,
     ReservationTimedOut,
+    CircuitReqReceiveFailed,
     CircuitReqDenied,
     CircuitReqDenyFailed,
+    CircuitReqOutboundConnectFailed,
     CircuitReqAccepted,
     CircuitReqAcceptFailed,
     CircuitClosed,
@@ -79,7 +81,13 @@ impl From<&libp2p_relay::v2::relay::Event> for EventType {
             libp2p_relay::v2::relay::Event::ReservationTimedOut { .. } => {
                 EventType::ReservationTimedOut
             }
+            libp2p_relay::v2::relay::Event::CircuitReqReceiveFailed { .. } => {
+                EventType::CircuitReqReceiveFailed
+            }
             libp2p_relay::v2::relay::Event::CircuitReqDenied { .. } => EventType::CircuitReqDenied,
+            libp2p_relay::v2::relay::Event::CircuitReqOutboundConnectFailed { .. } => {
+                EventType::CircuitReqOutboundConnectFailed
+            }
             libp2p_relay::v2::relay::Event::CircuitReqDenyFailed { .. } => {
                 EventType::CircuitReqDenyFailed
             }
