@@ -6,8 +6,12 @@
 
 - Add metrics for network and configuration performance analysis (see [PR 2346]).
 
+- Improve bandwidth performance by tracking IWANTs and reducing duplicate sends
+  (see [PR 2327]).
+
 [PR 2346]: https://github.com/libp2p/rust-libp2p/pull/2346
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2327]: https://github.com/libp2p/rust-libp2p/pull/2327
 
 # 0.34.0 [2021-11-16]
 

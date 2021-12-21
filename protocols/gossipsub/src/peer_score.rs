@@ -610,7 +610,7 @@ impl PeerScore {
     /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
     pub fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
         debug!(
-            "Message from {} rejected because of ValidationError or SelfOrigin",
+            "[Penalty] Message from {} rejected because of ValidationError or SelfOrigin",
             from
         );
 

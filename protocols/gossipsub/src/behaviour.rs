@@ -231,7 +231,7 @@ pub struct Gossipsub<
     /// duplicates from being propagated to the application and on the network.
     duplicate_cache: DuplicateCache<MessageId>,
 
-    /// A set of connected peers, indexed by their [`PeerId`]. tracking both the [`PeerKind`] and
+    /// A set of connected peers, indexed by their [`PeerId`] tracking both the [`PeerKind`] and
     /// the set of [`ConnectionId`]s.
     connected_peers: HashMap<PeerId, PeerConnections>,
 
@@ -291,12 +291,16 @@ pub struct Gossipsub<
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
     count_sent_iwant: HashMap<PeerId, usize>,
 
-    /// Short term cache for published messsage ids. This is used for penalizing peers sending
+    /// Keeps track of IWANT messages that we are awaiting to send.
+    /// This is used to prevent sending duplicate IWANT messages for the same message.
+    pending_iwant_msgs: HashSet<MessageId>,
+
+    /// Short term cache for published message ids. This is used for penalizing peers sending
     /// our own messages back if the messages are anonymous or use a random author.
     published_message_ids: DuplicateCache<MessageId>,
 
     /// Short term cache for fast message ids mapping them to the real message ids
-    fast_messsage_id_cache: TimeCache<FastMessageId, MessageId>,
+    fast_message_id_cache: TimeCache<FastMessageId, MessageId>,
 
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
@@ -421,7 +425,7 @@ where
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
-            fast_messsage_id_cache: TimeCache::new(config.duplicate_cache_time()),
+            fast_message_id_cache: TimeCache::new(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
@@ -445,6 +449,7 @@ where
             peer_score: None,
             count_received_ihave: HashMap::new(),
             count_sent_iwant: HashMap::new(),
+            pending_iwant_msgs: HashSet::new(),
             connected_peers: HashMap::new(),
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
@@ -635,8 +640,8 @@ where
         let topic_hash = raw_message.topic.clone();
 
         // If we are not flood publishing forward the message to mesh peers.
-        let mesh_peers_sent =
-            !self.config.flood_publish() && self.forward_msg(&msg_id, raw_message.clone(), None)?;
+        let mesh_peers_sent = !self.config.flood_publish()
+            && self.forward_msg(&msg_id, raw_message.clone(), None, HashSet::new())?;
 
         let mut recipient_peers = HashSet::new();
         if let Some(set) = self.topic_peers.get(&topic_hash) {
@@ -772,8 +777,10 @@ where
     ) -> Result<bool, PublishError> {
         let reject_reason = match acceptance {
             MessageAcceptance::Accept => {
-                let raw_message = match self.mcache.validate(msg_id) {
-                    Some(raw_message) => raw_message.clone(),
+                let (raw_message, originating_peers) = match self.mcache.validate(msg_id) {
+                    Some((raw_message, originating_peers)) => {
+                        (raw_message.clone(), originating_peers)
+                    }
                     None => {
                         warn!(
                             "Message not in cache. Ignoring forwarding. Message Id: {}",
@@ -787,19 +794,25 @@ where
                     metrics.register_msg_validation(&raw_message.topic, &acceptance);
                 }
 
-                self.forward_msg(msg_id, raw_message, Some(propagation_source))?;
+                self.forward_msg(
+                    msg_id,
+                    raw_message,
+                    Some(propagation_source),
+                    originating_peers,
+                )?;
                 return Ok(true);
             }
             MessageAcceptance::Reject => RejectReason::ValidationFailed,
             MessageAcceptance::Ignore => RejectReason::ValidationIgnored,
         };
 
-        if let Some(raw_message) = self.mcache.remove(msg_id) {
+        if let Some((raw_message, originating_peers)) = self.mcache.remove(msg_id) {
             if let Some(metrics) = self.metrics.as_mut() {
                 metrics.register_msg_validation(&raw_message.topic, &acceptance);
             }
 
             // Tell peer_score about reject
+            // Reject the original source, and any duplicates we've seen from other peers.
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.reject_message(
                     propagation_source,
@@ -807,6 +820,9 @@ where
                     &raw_message.topic,
                     reject_reason,
                 );
+                for peer in originating_peers.iter() {
+                    peer_score.reject_message(peer, msg_id, &raw_message.topic, reject_reason);
+                }
             }
             Ok(true)
         } else {
@@ -1187,7 +1203,7 @@ where
             }
         }
 
-        debug!("Handling IHAVE for peer: {:?}", peer_id);
+        trace!("Handling IHAVE for peer: {:?}", peer_id);
 
         // use a hashmap to avoid duplicates efficiently
         let mut iwant_ids = HashMap::new();
@@ -1203,9 +1219,16 @@ where
             }
 
             for id in ids {
-                if !self.duplicate_cache.contains(&id) {
-                    // have not seen this message, request it
-                    iwant_ids.insert(id, topic.clone());
+                if !self.duplicate_cache.contains(&id) && !self.pending_iwant_msgs.contains(&id) {
+                    if self
+                        .peer_score
+                        .as_ref()
+                        .map(|(_, _, _, promises)| !promises.contains(&id))
+                        .unwrap_or(true)
+                    {
+                        // have not seen this message and are not currently requesting it
+                        iwant_ids.insert(id, topic.clone());
+                    }
                 }
             }
         }
@@ -1226,19 +1249,18 @@ where
             );
 
             // Ask in random order
-            let mut iwant_ids_vec: Vec<_> = iwant_ids.iter().collect();
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.keys().collect();
             let mut rng = thread_rng();
             iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
 
             iwant_ids_vec.truncate(iask as usize);
             *iasked += iask;
 
-            let mut message_ids = Vec::with_capacity(iwant_ids_vec.len());
-            for (id, topic) in iwant_ids_vec {
-                message_ids.push(id.clone());
-                if let Some(m) = self.metrics.as_mut() {
-                    m.register_iwant(topic)
-                }
+            let mut message_ids = Vec::new();
+            for message_id in iwant_ids_vec {
+                // Add all messages to the pending list
+                self.pending_iwant_msgs.insert(message_id.clone());
+                message_ids.push(message_id.clone());
             }
 
             if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
@@ -1248,9 +1270,10 @@ where
                     Instant::now() + self.config.iwant_followup_time(),
                 );
             }
-            debug!(
+            trace!(
                 "IHAVE: Asking for the following messages from {}: {:?}",
-                peer_id, message_ids
+                peer_id,
+                message_ids
             );
 
             Self::control_pool_add(
@@ -1259,7 +1282,7 @@ where
                 GossipsubControlAction::IWant { message_ids },
             );
         }
-        debug!("Completed IHAVE handling for peer: {:?}", peer_id);
+        trace!("Completed IHAVE handling for peer: {:?}", peer_id);
     }
 
     /// Handles an IWANT control message. Checks our cache of messages. If the message exists it is
@@ -1704,13 +1727,26 @@ where
         }
 
         let fast_message_id = self.config.fast_message_id(&raw_message);
+
         if let Some(fast_message_id) = fast_message_id.as_ref() {
-            if let Some(msg_id) = self.fast_messsage_id_cache.get(fast_message_id) {
+            if let Some(msg_id) = self.fast_message_id_cache.get(fast_message_id) {
                 let msg_id = msg_id.clone();
-                self.message_is_valid(&msg_id, &mut raw_message, propagation_source);
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.duplicated_message(propagation_source, &msg_id, &raw_message.topic);
+                // Report the duplicate
+                if self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
+                    if let Some((peer_score, ..)) = &mut self.peer_score {
+                        peer_score.duplicated_message(
+                            propagation_source,
+                            &msg_id,
+                            &raw_message.topic,
+                        );
+                    }
+                    // Update the cache, informing that we have received a duplicate from another peer.
+                    // The peers in this cache are used to prevent us forwarding redundant messages onto
+                    // these peers.
+                    self.mcache.observe_duplicate(&msg_id, propagation_source);
                 }
+
+                // This message has been seen previously. Ignore it
                 return;
             }
         }
@@ -1743,15 +1779,17 @@ where
         // Add the message to the duplicate caches
         if let Some(fast_message_id) = fast_message_id {
             // add id to cache
-            self.fast_messsage_id_cache
+            self.fast_message_id_cache
                 .entry(fast_message_id)
                 .or_insert_with(|| msg_id.clone());
         }
+
         if !self.duplicate_cache.insert(msg_id.clone()) {
             debug!("Message already received, ignoring. Message: {}", msg_id);
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.duplicated_message(propagation_source, &msg_id, &message.topic);
             }
+            self.mcache.observe_duplicate(&msg_id, propagation_source);
             return;
         }
         debug!(
@@ -1795,7 +1833,12 @@ where
         // forward the message to mesh peers, if no validation is required
         if !self.config.validate_messages() {
             if self
-                .forward_msg(&msg_id, raw_message, Some(propagation_source))
+                .forward_msg(
+                    &msg_id,
+                    raw_message,
+                    Some(propagation_source),
+                    HashSet::new(),
+                )
                 .is_err()
             {
                 error!("Failed to forward message. Too large");
@@ -1816,7 +1859,8 @@ where
                 metrics.register_invalid_message(&raw_message.topic);
             }
 
-            let fast_message_id_cache = &self.fast_messsage_id_cache;
+            let fast_message_id_cache = &self.fast_message_id_cache;
+
             if let Some(msg_id) = self
                 .config
                 .fast_message_id(raw_message)
@@ -2631,6 +2675,7 @@ where
         msg_id: &MessageId,
         message: RawGossipsubMessage,
         propagation_source: Option<&PeerId>,
+        originating_peers: HashSet<PeerId>,
     ) -> Result<bool, PublishError> {
         // message is fully validated inform peer_score
         if let Some((peer_score, ..)) = &mut self.peer_score {
@@ -2642,25 +2687,33 @@ where
         debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
 
-        // add mesh peers
-        let topic = &message.topic;
-        // mesh
-        if let Some(mesh_peers) = self.mesh.get(topic) {
-            for peer_id in mesh_peers {
-                if Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref() {
-                    recipient_peers.insert(*peer_id);
+        {
+            // Populate the recipient peers mapping
+
+            // Add explicit peers
+            for peer_id in &self.explicit_peers {
+                if let Some(topics) = self.peer_topics.get(peer_id) {
+                    if Some(peer_id) != propagation_source
+                        && !originating_peers.contains(peer_id)
+                        && Some(peer_id) != message.source.as_ref()
+                        && topics.contains(&message.topic)
+                    {
+                        recipient_peers.insert(*peer_id);
+                    }
                 }
             }
-        }
 
-        // Add explicit peers
-        for p in &self.explicit_peers {
-            if let Some(topics) = self.peer_topics.get(p) {
-                if Some(p) != propagation_source
-                    && Some(p) != message.source.as_ref()
-                    && topics.contains(&message.topic)
-                {
-                    recipient_peers.insert(*p);
+            // add mesh peers
+            let topic = &message.topic;
+            // mesh
+            if let Some(mesh_peers) = self.mesh.get(topic) {
+                for peer_id in mesh_peers {
+                    if Some(peer_id) != propagation_source
+                        && !originating_peers.contains(peer_id)
+                        && Some(peer_id) != message.source.as_ref()
+                    {
+                        recipient_peers.insert(*peer_id);
+                    }
                 }
             }
         }
@@ -2809,6 +2862,9 @@ where
                 error!("Failed to flush control pool. Message too large");
             }
         }
+
+        // This clears all pending IWANT messages
+        self.pending_iwant_msgs.clear();
     }
 
     /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it
