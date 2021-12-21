@@ -179,6 +179,10 @@ where
     pub fn get(&self, key: &Key) -> Option<&Value> {
         self.map.get(key).map(|e| &e.element)
     }
+
+    pub fn get_mut(&mut self, key: &Key) -> Option<&mut Value> {
+        self.map.get_mut(key).map(|e| &mut e.element)
+    }
 }
 
 pub struct DuplicateCache<Key>(TimeCache<Key, ()>);
