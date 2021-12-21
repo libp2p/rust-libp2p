@@ -200,6 +200,7 @@ pub enum Event {
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         status: Status,
+        error: ProtocolsHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -298,12 +299,14 @@ impl fmt::Debug for Event {
                 src_connection_id,
                 inbound_circuit_req: _,
                 status,
+                error,
             } => f
                 .debug_struct("Event::OutboundConnectNegotiationFailed")
                 .field("circuit_id", circuit_id)
                 .field("src_peer_id", src_peer_id)
                 .field("src_connection_id", src_connection_id)
                 .field("status", status)
+                .field("error", error)
                 .finish(),
             Event::CircuitClosed {
                 circuit_id,
@@ -373,7 +376,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ProtocolsHandlerUpgrErr<
-            EitherError<inbound_hop::UpgradeError, outbound_stop::UpgradeError>,
+            EitherError<inbound_hop::UpgradeError, outbound_stop::FatalUpgradeError>,
         >,
     >,
 
@@ -410,7 +413,7 @@ impl ProtocolsHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
     type Error = ProtocolsHandlerUpgrErr<
-        EitherError<inbound_hop::UpgradeError, outbound_stop::UpgradeError>,
+        EitherError<inbound_hop::UpgradeError, outbound_stop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_hop::Upgrade;
     type OutboundProtocol = outbound_stop::Upgrade;
@@ -592,9 +595,12 @@ impl ProtocolsHandler for Handler {
         open_info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
-        let status = match error {
-            ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
-                Status::ConnectionFailed
+        let (non_fatal_error, status) = match error {
+            ProtocolsHandlerUpgrErr::Timeout => {
+                (ProtocolsHandlerUpgrErr::Timeout, Status::ConnectionFailed)
+            }
+            ProtocolsHandlerUpgrErr::Timer => {
+                (ProtocolsHandlerUpgrErr::Timer, Status::ConnectionFailed)
             }
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
@@ -604,7 +610,7 @@ impl ProtocolsHandler for Handler {
                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Select(upgrade::NegotiationError::Failed),
                 ));
-                Status::ConnectionFailed
+                return;
             }
             ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
@@ -612,51 +618,30 @@ impl ProtocolsHandler for Handler {
                 self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
                 ));
-                Status::ConnectionFailed
+                return;
             }
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
-                match error {
-                    outbound_stop::UpgradeError::Decode(_)
-                    | outbound_stop::UpgradeError::Io(_)
-                    | outbound_stop::UpgradeError::ParseTypeField
-                    | outbound_stop::UpgradeError::MissingStatusField
-                    | outbound_stop::UpgradeError::ParseStatusField
-                    | outbound_stop::UpgradeError::UnexpectedTypeConnect => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                            upgrade::UpgradeError::Apply(EitherError::B(error)),
-                        ));
-                        Status::ConnectionFailed
-                    }
-                    outbound_stop::UpgradeError::UnexpectedStatus(status) => {
-                        match status {
-                            Status::Ok => {
-                                unreachable!("Status success is explicitly exempt.")
-                            }
-                            // A destination node returning nonsensical status is a protocol
-                            // violation. Thus terminate the connection.
-                            Status::ReservationRefused
-                            | Status::NoReservation
-                            | Status::ConnectionFailed => {
-                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
-                                ));
-                            }
-                            // With either status below there is no reason to stay connected.
-                            // Thus terminate the connection.
-                            Status::MalformedMessage | Status::UnexpectedMessage => {
-                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
-                                ))
-                            }
-                            // While useless for reaching this particular destination, the
-                            // connection to the relay might still prove helpful for other
-                            // destinations. Thus do not terminate the connection.
-                            Status::ResourceLimitExceeded | Status::PermissionDenied => {}
-                        }
-                        status
-                    }
+            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => match error {
+                outbound_stop::UpgradeError::Fatal(error) => {
+                    self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                        upgrade::UpgradeError::Apply(EitherError::B(error)),
+                    ));
+                    return;
                 }
-            }
+                outbound_stop::UpgradeError::CircuitFailed(error) => {
+                    let status = match error {
+                        outbound_stop::CircuitFailedReason::ResourceLimitExceeded => {
+                            Status::ResourceLimitExceeded
+                        }
+                        outbound_stop::CircuitFailedReason::PermissionDenied => {
+                            Status::PermissionDenied
+                        }
+                    };
+                    (
+                        ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)),
+                        status,
+                    )
+                }
+            },
         };
 
         let OutboundOpenInfo {
@@ -673,6 +658,7 @@ impl ProtocolsHandler for Handler {
                 src_connection_id,
                 inbound_circuit_req,
                 status,
+                error: non_fatal_error,
             },
         ));
     }

@@ -29,12 +29,17 @@ use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
+use libp2p_swarm::{
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ProtocolsHandlerUpgrErr,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+
+use super::protocol::outbound_stop;
 
 /// Configuration for the [`Relay`] [`NetworkBehaviour`].
 ///
@@ -131,6 +136,12 @@ pub enum Event {
     CircuitReqAccepted {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
+    },
+    /// An outbound connect for an inbound cirucit request failed.
+    CircuitReqOutboundConnectFailed {
+        src_peer_id: PeerId,
+        dst_peer_id: PeerId,
+        error: ProtocolsHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
@@ -489,6 +500,7 @@ impl NetworkBehaviour for Relay {
                 src_connection_id,
                 inbound_circuit_req,
                 status,
+                error,
             } => {
                 self.queued_actions.push_back(
                     NetworkBehaviourAction::NotifyHandler {
@@ -500,6 +512,14 @@ impl NetworkBehaviour for Relay {
                             status,
                         },
                     }
+                    .into(),
+                );
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqOutboundConnectFailed {
+                        src_peer_id,
+                        dst_peer_id: event_source,
+                        error,
+                    })
                     .into(),
                 );
             }

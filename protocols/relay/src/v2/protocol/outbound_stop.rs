@@ -95,17 +95,19 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             } = StopMessage::decode(Cursor::new(msg))?;
 
             let r#type =
-                stop_message::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+                stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
-                stop_message::Type::Connect => return Err(UpgradeError::UnexpectedTypeConnect),
+                stop_message::Type::Connect => Err(FatalUpgradeError::UnexpectedTypeConnect)?,
                 stop_message::Type::Status => {}
             }
 
-            let status = Status::from_i32(status.ok_or(UpgradeError::MissingStatusField)?)
-                .ok_or(UpgradeError::ParseStatusField)?;
+            let status = Status::from_i32(status.ok_or(FatalUpgradeError::MissingStatusField)?)
+                .ok_or(FatalUpgradeError::ParseStatusField)?;
             match status {
                 Status::Ok => {}
-                s => return Err(UpgradeError::UnexpectedStatus(s)),
+                Status::ResourceLimitExceeded => Err(CircuitFailedReason::ResourceLimitExceeded)?,
+                Status::PermissionDenied => Err(CircuitFailedReason::PermissionDenied)?,
+                s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
             }
 
             let FramedParts {
@@ -127,6 +129,34 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
+    #[error("Circuit failed")]
+    CircuitFailed(#[from] CircuitFailedReason),
+    #[error("Fatal")]
+    Fatal(#[from] FatalUpgradeError),
+}
+
+impl From<std::io::Error> for UpgradeError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Fatal(error.into())
+    }
+}
+
+impl From<prost::DecodeError> for UpgradeError {
+    fn from(error: prost::DecodeError) -> Self {
+        Self::Fatal(error.into())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum CircuitFailedReason {
+    #[error("Remote reported resource limit exceeded.")]
+    ResourceLimitExceeded,
+    #[error("Remote reported permission denied.")]
+    PermissionDenied,
+}
+
+#[derive(Debug, Error)]
+pub enum FatalUpgradeError {
     #[error("Failed to decode message: {0}.")]
     Decode(
         #[from]
