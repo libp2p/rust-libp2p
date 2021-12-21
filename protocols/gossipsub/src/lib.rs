@@ -122,10 +122,6 @@
 //! println!("Listening on {:?}", addr);
 //! ```
 
-// Re-export open_metrics_client so external applications can inject the correct Registry when
-// using metrics
-pub use open_metrics_client;
-
 pub mod error;
 pub mod protocol;
 
