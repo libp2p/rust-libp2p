@@ -244,12 +244,23 @@ impl NetworkBehaviour for Relay {
                         },
                     }
                     .into()
-                } else if self
-                    .reservations
-                    .iter()
-                    .map(|(_, cs)| cs.len())
-                    .sum::<usize>()
-                    >= self.config.max_reservations
+                } else if
+                // Deny if it is a new reservation and exceeds `max_reservations_per_peer`.
+                (!renewed
+                    && self
+                        .reservations
+                        .get(&event_source)
+                        .map(|cs| cs.len())
+                        .unwrap_or(0)
+                        > self.config.max_reservations_per_peer)
+                    // Deny if it exceeds `max_reservations`.
+                    || self
+                        .reservations
+                        .iter()
+                        .map(|(_, cs)| cs.len())
+                        .sum::<usize>()
+                        >= self.config.max_reservations
+                    // Deny if it exceeds the allowed rate of reservations.
                     || !self
                         .config
                         .reservation_rate_limiters
@@ -258,25 +269,6 @@ impl NetworkBehaviour for Relay {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
                         })
                 {
-                    // Deny reservation exceeding general limits.
-                    NetworkBehaviourAction::NotifyHandler {
-                        handler: NotifyHandler::One(connection),
-                        peer_id: event_source,
-                        event: handler::In::DenyReservationReq {
-                            inbound_reservation_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
-                        },
-                    }
-                    .into()
-                } else if !renewed
-                    && self
-                        .reservations
-                        .get(&event_source)
-                        .map(|cs| cs.len())
-                        .unwrap_or(0)
-                        > self.config.max_reservations_per_peer
-                {
-                    // Deny reservation exceeding per-peer limits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
