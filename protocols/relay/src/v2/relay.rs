@@ -48,6 +48,7 @@ pub struct Config {
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
     pub max_circuits: usize,
+    pub max_circuits_per_peer: usize,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
     pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
@@ -88,6 +89,7 @@ impl Default for Config {
             reservation_rate_limiters,
 
             max_circuits: 16,
+            max_circuits_per_peer: 4,
             max_circuit_duration: Duration::from_secs(2 * 60),
             max_circuit_bytes: 1 << 17, // 128 kibibyte
             circuit_src_rate_limiters,
@@ -373,7 +375,9 @@ impl NetworkBehaviour for Relay {
                             status: message_proto::Status::PermissionDenied,
                         },
                     }
-                } else if self.circuits.len() >= self.config.max_circuits
+                } else if self.circuits.num_circuits_of_peer(event_source)
+                    > self.config.max_circuits_per_peer
+                    || self.circuits.len() >= self.config.max_circuits
                     || !self
                         .config
                         .circuit_src_rate_limiters
@@ -625,6 +629,13 @@ impl CircuitsTracker {
         });
 
         removed
+    }
+
+    fn num_circuits_of_peer(&self, peer: PeerId) -> usize {
+        self.circuits
+            .iter()
+            .filter(|(_, c)| c.src_peer_id == peer || c.dst_peer_id == peer)
+            .count()
     }
 }
 
