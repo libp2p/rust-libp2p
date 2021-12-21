@@ -54,7 +54,7 @@ pub struct Config {
     pub boot_delay: Duration,
     /// Interval in which the NAT should be tested again if max confidence was reached in a status.
     pub refresh_interval: Duration,
-    /// Interval in which the NAT status should be re-tried if it is currently is unknown
+    /// Interval in which the NAT status should be re-tried if it is currently unknown
     /// or max confidence was not reached yet.
     pub retry_interval: Duration,
 
@@ -119,7 +119,7 @@ impl From<Result<Multiaddr, ResponseError>> for NatStatus {
     }
 }
 
-/// Network Behaviour for AutoNAT.
+/// [`NetworkBehaviour`] for AutoNAT.
 ///
 /// The behaviour frequently runs probes to determine whether the local peer is behind NAT and/ or a firewall, or
 /// publicly reachable.
@@ -286,7 +286,7 @@ impl Behaviour {
         request: DialRequest,
     ) -> Result<Vec<Multiaddr>, DialResponse> {
         // Update list of throttled clients.
-        let i = self.throttled_servers.partition_point(|(_, time)| {
+        let i = self.throttled_clients.partition_point(|(_, time)| {
             *time + self.config.throttle_clients_period < Instant::now()
         });
         self.throttled_clients.drain(..i);
@@ -378,7 +378,7 @@ impl Behaviour {
         Ok(addrs)
     }
 
-    // Set the delay to the next probe based on the time of our last prove
+    // Set the delay to the next probe based on the time of our last probe
     // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
         let last_probe_instant = match self.last_probe {
