@@ -1242,14 +1242,13 @@ where
             iwant_ids_vec.truncate(iask as usize);
             *iasked += iask;
 
-            let message_ids = iwant_ids_vec
-                .into_iter()
-                .map(|id| {
-                    // Add all messages to the pending list
-                    self.pending_iwant_msgs.insert(id.clone());
-                    id.clone()
-                })
-                .collect::<Vec<_>>();
+            let mut message_ids = Vec::new();
+            for message_id in iwant_ids_vec {
+                // Add all messages to the pending list
+                self.pending_iwant_msgs.insert(message_id.clone());
+                message_ids.push(message_id.clone());
+            }
+
             if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
                 gossip_promises.add_promise(
                     *peer_id,
