@@ -53,15 +53,14 @@
 //! are supported, when to open a new outbound substream, etc.
 //!
 
-mod behaviour;
 mod registry;
 #[cfg(test)]
 mod test;
 mod upgrade;
 
+pub mod behaviour;
 pub mod dial_opts;
 pub mod protocols_handler;
-pub mod toggle;
 
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
@@ -583,6 +582,11 @@ where
     /// Checks whether the [`Network`] has an established connection to a peer.
     pub fn is_connected(&self, peer_id: &PeerId) -> bool {
         self.network.is_connected(peer_id)
+    }
+
+    /// Returns the currently connected peers.
+    pub fn connected_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.network.connected_peers()
     }
 
     /// Returns a reference to the provided [`NetworkBehaviour`].

@@ -147,6 +147,7 @@ pub enum GossipsubEvent {
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
+#[allow(clippy::large_enum_variant)]
 enum PublishConfig {
     Signing {
         keypair: Keypair,
