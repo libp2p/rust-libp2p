@@ -35,8 +35,9 @@ pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
 pub use substream::{Close, Substream, SubstreamEndpoint};
 
+use crate::multiaddr::{Multiaddr, Protocol};
 use crate::muxing::StreamMuxer;
-use crate::{Multiaddr, PeerId};
+use crate::PeerId;
 use std::hash::Hash;
 use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
@@ -173,6 +174,16 @@ impl ConnectedPoint {
             ConnectedPoint::Dialer { .. } => false,
             ConnectedPoint::Listener { .. } => true,
         }
+    }
+
+    /// Returns true if the connection is relayed.
+    pub fn is_relayed(&self) -> bool {
+        match self {
+            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Listener { local_addr, .. } => local_addr,
+        }
+        .iter()
+        .any(|p| p == Protocol::P2pCircuit)
     }
 
     /// Returns the address of the remote stored in this struct.
