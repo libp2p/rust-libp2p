@@ -248,7 +248,10 @@ impl GossipsubConfig {
     }
 
     /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is true.
+    /// connected/trusted nodes. The default is false.
+    ///
+    /// Note: Peer exchange is not implemented today, see
+    /// https://github.com/libp2p/rust-libp2p/issues/2398.
     pub fn do_px(&self) -> bool {
         self.do_px
     }
@@ -602,7 +605,10 @@ impl GossipsubConfigBuilder {
     }
 
     /// Enables Peer eXchange. This should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is true.
+    /// connected/trusted nodes. The default is false.
+    ///
+    /// Note: Peer exchange is not implemented today, see
+    /// https://github.com/libp2p/rust-libp2p/issues/2398.
     pub fn do_px(&mut self) -> &mut Self {
         self.config.do_px = true;
         self
