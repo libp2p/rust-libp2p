@@ -29,13 +29,14 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, ProtocolsHandler,
+    PollParameters, ProtocolsHandler, ProtocolsHandlerUpgrErr,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
+use thiserror::Error;
 
 /// The events produced by the [`Behaviour`].
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Event {
     InitiateDirectConnectionUpgrade {
         remote_peer_id: PeerId,
@@ -50,7 +51,16 @@ pub enum Event {
     },
     DirectConnectionUpgradeFailed {
         remote_peer_id: PeerId,
+        error: UpgradeError,
     },
+}
+
+#[derive(Debug, Error)]
+pub enum UpgradeError {
+    #[error("Failed to dial peer.")]
+    Dial,
+    #[error("Failed to establish substream: {0}.")]
+    Handler(ProtocolsHandlerUpgrErr<void::Void>),
 }
 
 pub struct Behaviour {
@@ -161,6 +171,7 @@ impl NetworkBehaviour for Behaviour {
                         NetworkBehaviourAction::GenerateEvent(
                             Event::DirectConnectionUpgradeFailed {
                                 remote_peer_id: peer_id,
+                                error: UpgradeError::Dial,
                             },
                         )
                         .into(),
@@ -223,10 +234,11 @@ impl NetworkBehaviour for Behaviour {
                     .into(),
                 );
             }
-            Either::Left(handler::relayed::Event::InboundNegotiationFailed) => {
+            Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
                 self.queued_actions.push_back(
                     NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        error: UpgradeError::Handler(error),
                     })
                     .into(),
                 );
@@ -246,10 +258,11 @@ impl NetworkBehaviour for Behaviour {
                     .into(),
                 );
             }
-            Either::Left(handler::relayed::Event::OutboundNegotiationFailed) => {
+            Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
                 self.queued_actions.push_back(
                     NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        error: UpgradeError::Handler(error),
                     })
                     .into(),
                 );

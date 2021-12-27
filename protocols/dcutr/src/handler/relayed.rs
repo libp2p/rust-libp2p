@@ -24,17 +24,15 @@ use crate::protocol;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use instant::Instant;
-use libp2p_core::either::EitherOutput;
+use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::UpgradeError;
-use libp2p_core::upgrade::{self, DeniedUpgrade};
+use libp2p_core::upgrade::{self, DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use log::debug;
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
@@ -82,9 +80,13 @@ pub enum Event {
         inbound_connect: protocol::inbound::PendingConnect,
         remote_addr: Multiaddr,
     },
-    InboundNegotiationFailed,
+    InboundNegotiationFailed {
+        error: ProtocolsHandlerUpgrErr<void::Void>,
+    },
     InboundConnectNegotiated(Vec<Multiaddr>),
-    OutboundNegotiationFailed,
+    OutboundNegotiationFailed {
+        error: ProtocolsHandlerUpgrErr<void::Void>,
+    },
     OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
         attempt: u8,
@@ -101,16 +103,18 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::InboundConnectRequest")
                 .field("remote_addrs", remote_addr)
                 .finish(),
-            Event::InboundNegotiationFailed => {
-                f.debug_tuple("Event::InboundNegotiationFailed").finish()
-            }
+            Event::InboundNegotiationFailed { error } => f
+                .debug_struct("Event::InboundNegotiationFailed")
+                .field("error", error)
+                .finish(),
             Event::InboundConnectNegotiated(addrs) => f
                 .debug_tuple("Event::InboundConnectNegotiated")
                 .field(addrs)
                 .finish(),
-            Event::OutboundNegotiationFailed => {
-                f.debug_tuple("Event::OutboundNegotiationFailed").finish()
-            }
+            Event::OutboundNegotiationFailed { error } => f
+                .debug_struct("Event::OutboundNegotiationFailed")
+                .field("error", error)
+                .finish(),
             Event::OutboundConnectNegotiated {
                 remote_addrs,
                 attempt,
@@ -125,6 +129,12 @@ impl fmt::Debug for Event {
 
 pub struct Handler {
     endpoint: ConnectedPoint,
+    /// A pending fatal error that results in the connection being closed.
+    pending_error: Option<
+        ProtocolsHandlerUpgrErr<
+            EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
+        >,
+    >,
     /// Queue of events to return when polled.
     queued_events: VecDeque<
         ProtocolsHandlerEvent<
@@ -145,6 +155,7 @@ impl Handler {
     pub fn new(endpoint: ConnectedPoint) -> Self {
         Self {
             endpoint,
+            pending_error: Default::default(),
             queued_events: Default::default(),
             inbound_connects: Default::default(),
             keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(30)),
@@ -155,7 +166,9 @@ impl Handler {
 impl ProtocolsHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
-    type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
+    type Error = ProtocolsHandlerUpgrErr<
+        EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
+    >;
     type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;
     type OutboundOpenInfo = u8; // Number of upgrade attempts.
@@ -186,7 +199,7 @@ impl ProtocolsHandler for Handler {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::InboundConnectRequest {
                         inbound_connect,
-                        remote_addr: remote_addr,
+                        remote_addr,
                     },
                 ));
             }
@@ -243,12 +256,45 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        if let ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) = error {
-            debug!("Inbound negotiation failed: {:?}", e);
-            self.keep_alive = KeepAlive::No;
-            self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                Event::InboundNegotiationFailed,
-            ));
+        self.keep_alive = KeepAlive::No;
+
+        match error {
+            ProtocolsHandlerUpgrErr::Timeout => {
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::InboundNegotiationFailed {
+                        error: ProtocolsHandlerUpgrErr::Timeout,
+                    },
+                ));
+            }
+            ProtocolsHandlerUpgrErr::Timer => {
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::InboundNegotiationFailed {
+                        error: ProtocolsHandlerUpgrErr::Timer,
+                    },
+                ));
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                // The remote merely doesn't support the DCUtR protocol.
+                // This is no reason to close the connection, which may
+                // successfully communicate with other protocols already.
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::InboundNegotiationFailed {
+                        error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                            NegotiationError::Failed,
+                        )),
+                    },
+                ));
+            }
+            _ => {
+                // Anything else is considered a fatal error or misbehaviour of
+                // the remote peer and results in closing the connection.
+                self.pending_error = Some(error.map_upgrade_err(|e| {
+                    e.map_err(|e| match e {
+                        EitherError::A(e) => EitherError::A(e),
+                        EitherError::B(v) => void::unreachable(v),
+                    })
+                }));
+            }
         }
     }
 
@@ -257,12 +303,34 @@ impl ProtocolsHandler for Handler {
         _open_info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
-        if let ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) = error {
-            debug!("Outbound negotiation failed: {:?}", e);
-            self.keep_alive = KeepAlive::No;
-            self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                Event::OutboundNegotiationFailed,
-            ));
+        self.keep_alive = KeepAlive::No;
+
+        match error {
+            ProtocolsHandlerUpgrErr::Timeout => {
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::OutboundNegotiationFailed {
+                        error: ProtocolsHandlerUpgrErr::Timeout,
+                    },
+                ));
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                // The remote merely doesn't support the DCUtR protocol.
+                // This is no reason to close the connection, which may
+                // successfully communicate with other protocols already.
+                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                    Event::OutboundNegotiationFailed {
+                        error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                            NegotiationError::Failed,
+                        )),
+                    },
+                ));
+            }
+            _ => {
+                // Anything else is considered a fatal error or misbehaviour of
+                // the remote peer and results in closing the connection.
+                self.pending_error =
+                    Some(error.map_upgrade_err(|e| e.map_err(|e| EitherError::B(e))));
+            }
         }
     }
 
@@ -281,6 +349,12 @@ impl ProtocolsHandler for Handler {
             Self::Error,
         >,
     > {
+        // Check for a pending (fatal) error.
+        if let Some(err) = self.pending_error.take() {
+            // The handler will not be polled again by the `Swarm`.
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
+        }
+
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -294,11 +368,9 @@ impl ProtocolsHandler for Handler {
                     ));
                 }
                 Err(e) => {
-                    debug!("Inbound negotiation failed: {:?}", e);
-                    self.keep_alive = KeepAlive::No;
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::InboundNegotiationFailed,
-                    ));
+                    return Poll::Ready(ProtocolsHandlerEvent::Close(
+                        ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))),
+                    ))
                 }
             }
         }
