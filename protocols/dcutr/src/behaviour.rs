@@ -21,6 +21,7 @@
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
 use crate::handler;
+use crate::protocol;
 use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
@@ -54,12 +55,7 @@ pub enum Event {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<
-        NetworkBehaviourAction<
-            <Self as NetworkBehaviour>::OutEvent,
-            <Self as NetworkBehaviour>::ProtocolsHandler,
-        >,
-    >,
+    queued_actions: VecDeque<Action>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -106,26 +102,22 @@ impl NetworkBehaviour for Behaviour {
                 // connection upgrade by initiating a direct connection to A.
                 //
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: *peer_id,
-                        handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::relayed::Command::Connect {
-                            obs_addrs: vec![],
-                            attempt: 1,
-                        }),
-                    });
+                self.queued_actions.push_back(Action::Connect {
+                    peer_id: *peer_id,
+                    attempt: 1,
+                    handler: NotifyHandler::One(*connection_id),
+                });
                 let local_addr = match connected_point {
                     ConnectedPoint::Listener { local_addr, .. } => local_addr,
                     ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
                 };
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::InitiateDirectConnectionUpgrade {
-                            remote_peer_id: *peer_id,
-                            local_relayed_addr: local_addr.clone(),
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::InitiateDirectConnectionUpgrade {
+                        remote_peer_id: *peer_id,
+                        local_relayed_addr: local_addr.clone(),
+                    })
+                    .into(),
+                );
             }
         } else {
             self.direct_connections
@@ -149,30 +141,30 @@ impl NetworkBehaviour for Behaviour {
                 let peer_id =
                     peer_id.expect("Prototype::DirectConnection is always for known peer.");
                 if attempt < 3 {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: peer_id,
-                            handler: NotifyHandler::One(relayed_connection_id),
-                            event: Either::Left(handler::relayed::Command::Connect {
-                                obs_addrs: vec![],
-                                attempt: attempt + 1,
-                            }),
-                        });
+                    self.queued_actions.push_back(Action::Connect {
+                        peer_id,
+                        handler: NotifyHandler::One(relayed_connection_id),
+                        attempt: attempt + 1,
+                    });
                 } else {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id: peer_id,
+                    self.queued_actions.push_back(
+                        NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
                             handler: NotifyHandler::One(relayed_connection_id),
                             event: Either::Left(
                                 handler::relayed::Command::UpgradeFinishedDontKeepAlive,
                             ),
-                        });
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                        }
+                        .into(),
+                    );
+                    self.queued_actions.push_back(
+                        NetworkBehaviourAction::GenerateEvent(
                             Event::DirectConnectionUpgradeFailed {
                                 remote_peer_id: peer_id,
                             },
-                        ));
+                        )
+                        .into(),
+                    );
                 }
             }
             _ => {}
@@ -216,85 +208,93 @@ impl NetworkBehaviour for Behaviour {
                 inbound_connect,
                 remote_addr,
             }) => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: event_source,
-                        handler: NotifyHandler::One(connection),
-                        event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
-                            inbound_connect,
-                            obs_addrs: vec![],
-                        }),
-                    });
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                self.queued_actions.push_back(Action::AcceptInboundConnect {
+                    peer_id: event_source,
+                    handler: NotifyHandler::One(connection),
+                    inbound_connect,
+                });
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
                         Event::RemoteInitiatedDirectConnectionUpgrade {
                             remote_peer_id: event_source,
                             remote_relayed_addr: remote_addr,
                         },
-                    ));
+                    )
+                    .into(),
+                );
             }
             Either::Left(handler::relayed::Event::InboundNegotiationFailed) => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::DirectConnectionUpgradeFailed {
-                            remote_peer_id: event_source,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                        remote_peer_id: event_source,
+                    })
+                    .into(),
+                );
             }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
-                self.queued_actions.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(event_source)
-                        .addresses(remote_addrs)
-                        .condition(dial_opts::PeerCondition::Always)
-                        .build(),
-                    handler: handler::Prototype::DirectConnection {
-                        relayed_connection_id: connection,
-                        role: handler::Role::Listener,
-                    },
-                });
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::Dial {
+                        opts: DialOpts::peer_id(event_source)
+                            .addresses(remote_addrs)
+                            .condition(dial_opts::PeerCondition::Always)
+                            .build(),
+                        handler: handler::Prototype::DirectConnection {
+                            relayed_connection_id: connection,
+                            role: handler::Role::Listener,
+                        },
+                    }
+                    .into(),
+                );
             }
             Either::Left(handler::relayed::Event::OutboundNegotiationFailed) => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::DirectConnectionUpgradeFailed {
-                            remote_peer_id: event_source,
-                        },
-                    ));
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                        remote_peer_id: event_source,
+                    })
+                    .into(),
+                );
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated {
                 remote_addrs,
                 attempt,
             }) => {
-                self.queued_actions.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(event_source)
-                        .condition(dial_opts::PeerCondition::Always)
-                        .addresses(remote_addrs)
-                        .build(),
-                    handler: handler::Prototype::DirectConnection {
-                        relayed_connection_id: connection,
-                        role: handler::Role::Initiator { attempt: attempt },
-                    },
-                });
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::Dial {
+                        opts: DialOpts::peer_id(event_source)
+                            .condition(dial_opts::PeerCondition::Always)
+                            .addresses(remote_addrs)
+                            .build(),
+                        handler: handler::Prototype::DirectConnection {
+                            relayed_connection_id: connection,
+                            role: handler::Role::Initiator { attempt },
+                        },
+                    }
+                    .into(),
+                );
             }
             Either::Right(Either::Left(
                 handler::direct::Event::DirectConnectionUpgradeSucceeded {
                     relayed_connection_id,
                 },
             )) => {
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
                         handler: NotifyHandler::One(relayed_connection_id),
                         event: Either::Left(
                             handler::relayed::Command::UpgradeFinishedDontKeepAlive,
                         ),
-                    });
-                self.queued_actions
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                    }
+                    .into(),
+                );
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
                         Event::DirectConnectionUpgradeSucceeded {
                             remote_peer_id: event_source,
                         },
-                    ));
+                    )
+                    .into(),
+                );
                 return;
             }
             Either::Right(Either::Right(event)) => void::unreachable(event),
@@ -306,37 +306,82 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
-        if let Some(mut event) = self.queued_actions.pop_front() {
-            // Set obs addresses.
-            if let NetworkBehaviourAction::NotifyHandler {
-                event:
-                    Either::Left(handler::relayed::Command::Connect {
-                        ref mut obs_addrs, ..
-                    }),
-                ..
-            }
-            | NetworkBehaviourAction::NotifyHandler {
-                event:
-                    Either::Left(handler::relayed::Command::AcceptInboundConnect {
-                        ref mut obs_addrs,
-                        ..
-                    }),
-                ..
-            } = &mut event
-            {
-                *obs_addrs = poll_parameters
-                    .external_addresses()
-                    .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
-                    .map(|a| {
-                        a.addr
-                            .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                    })
-                    .collect();
-            }
-
-            return Poll::Ready(event);
+        if let Some(action) = self.queued_actions.pop_front() {
+            return Poll::Ready(action.build(poll_parameters));
         }
 
         Poll::Pending
+    }
+}
+
+/// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
+/// before being returned in [`Relay::poll`].
+#[allow(clippy::large_enum_variant)]
+enum Action {
+    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Connect {
+        attempt: u8,
+        handler: NotifyHandler,
+        peer_id: PeerId,
+    },
+    AcceptInboundConnect {
+        inbound_connect: protocol::inbound::PendingConnect,
+        handler: NotifyHandler,
+        peer_id: PeerId,
+    },
+}
+
+impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+        Self::Done(action)
+    }
+}
+
+impl Action {
+    fn build(
+        self,
+        poll_parameters: &mut impl PollParameters,
+    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+        match self {
+            Action::Done(action) => action,
+            Action::AcceptInboundConnect {
+                inbound_connect,
+                handler,
+                peer_id,
+            } => NetworkBehaviourAction::NotifyHandler {
+                handler,
+                peer_id,
+                event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
+                    inbound_connect,
+                    obs_addrs: poll_parameters
+                        .external_addresses()
+                        .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
+                        .map(|a| {
+                            a.addr
+                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                        })
+                        .collect(),
+                }),
+            },
+            Action::Connect {
+                attempt,
+                handler,
+                peer_id,
+            } => NetworkBehaviourAction::NotifyHandler {
+                handler,
+                peer_id,
+                event: Either::Left(handler::relayed::Command::Connect {
+                    attempt,
+                    obs_addrs: poll_parameters
+                        .external_addresses()
+                        .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
+                        .map(|a| {
+                            a.addr
+                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                        })
+                        .collect(),
+                }),
+            },
+        }
     }
 }
