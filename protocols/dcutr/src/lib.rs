@@ -22,7 +22,7 @@
 //! specification](https://github.com/libp2p/specs/pull/173).
 
 pub mod behaviour;
-pub mod handler;
+mod handler;
 mod protocol;
 
 mod message_proto {
