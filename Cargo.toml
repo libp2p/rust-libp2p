@@ -34,7 +34,7 @@ default = [
     "websocket",
     "yamux",
 ]
-dcutr = ["libp2p-dcutr"]
+dcutr = ["libp2p-dcutr", "libp2p-metrics/dcutr"]
 deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
