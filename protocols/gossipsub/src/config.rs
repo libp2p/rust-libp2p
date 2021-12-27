@@ -647,6 +647,16 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Controls the backoff time when unsubscribing from a topic.
+    ///
+    /// This is how long to wait before resubscribing to the topic. A short backoff period in case
+    /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
+    /// is 10 seconds.
+    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: Duration) -> &mut Self {
+        self.config.unsubscribe_backoff = unsubscribe_backoff;
+        self
+    }
+
     /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
     /// solves problems occuring through high latencies. In particular if
@@ -788,6 +798,11 @@ impl GossipsubConfigBuilder {
                 "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
             );
         }
+
+        if self.config.unsubscribe_backoff.as_secs() < 1 {
+            return Err("The unsubscribe_backoff parameter should be at least one second.");
+        }
+
         Ok(self.config.clone())
     }
 }
