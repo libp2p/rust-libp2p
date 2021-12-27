@@ -141,6 +141,8 @@ pub enum Event {
     ReservationReqReceived {
         inbound_reservation_req: inbound_hop::ReservationReq,
         endpoint: ConnectedPoint,
+        /// Indicates whether the request replaces an existing reservation.
+        renewed: bool,
     },
     /// An inbound reservation request has been accepted.
     ReservationReqAccepted {
@@ -220,9 +222,11 @@ impl fmt::Debug for Event {
             Event::ReservationReqReceived {
                 inbound_reservation_req: _,
                 endpoint,
+                renewed,
             } => f
                 .debug_struct("Event::ReservationReqReceived")
                 .field("endpoint", endpoint)
+                .field("renewed", renewed)
                 .finish(),
             Event::ReservationReqAccepted { renewed } => f
                 .debug_struct("Event::ReservationReqAccepted")
@@ -450,6 +454,7 @@ impl ProtocolsHandler for Handler {
                     Event::ReservationReqReceived {
                         inbound_reservation_req,
                         endpoint: self.endpoint.clone(),
+                        renewed: self.active_reservation.is_some(),
                     },
                 ));
             }

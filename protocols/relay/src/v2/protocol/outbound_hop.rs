@@ -74,7 +74,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             },
         };
 
-        let mut encoded_msg = Vec::new();
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
         msg.encode(&mut encoded_msg)
             .expect("Vec to have sufficient capacity.");
 
@@ -83,7 +83,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
         let mut substream = Framed::new(substream, codec);
 
         async move {
-            substream.send(std::io::Cursor::new(encoded_msg)).await?;
+            substream.send(Cursor::new(encoded_msg)).await?;
             let msg: bytes::BytesMut = substream
                 .next()
                 .await
@@ -124,34 +124,30 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     let reservation =
                         reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
 
-                    let addrs = if reservation.addrs.is_empty() {
-                        Err(FatalUpgradeError::NoAddressesInReservation)?
-                    } else {
-                        reservation
-                            .addrs
-                            .into_iter()
-                            .map(TryFrom::try_from)
-                            .collect::<Result<Vec<Multiaddr>, _>>()
-                            .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?
-                    };
+                    if reservation.addrs.is_empty() {
+                        Err(FatalUpgradeError::NoAddressesInReservation)?;
+                    }
+
+                    let addrs = reservation
+                        .addrs
+                        .into_iter()
+                        .map(TryFrom::try_from)
+                        .collect::<Result<Vec<Multiaddr>, _>>()
+                        .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
 
                     let renewal_timeout = reservation
                         .expire
-                        .map(|timestamp| {
-                            timestamp
-                                .checked_sub(
-                                    SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs(),
-                                )
-                                // Renew the reservation after 3/4 of the reservation expiration timestamp.
-                                .and_then(|duration| duration.checked_sub(duration / 4))
-                                .map(Duration::from_secs)
-                                .map(Delay::new)
-                                .ok_or(FatalUpgradeError::InvalidReservationExpiration)
-                        })
-                        .transpose()?;
+                        .checked_sub(
+                            SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
+                        )
+                        // Renew the reservation after 3/4 of the reservation expiration timestamp.
+                        .and_then(|duration| duration.checked_sub(duration / 4))
+                        .map(Duration::from_secs)
+                        .map(Delay::new)
+                        .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
 
                     substream.close().await?;
 
@@ -274,7 +270,7 @@ pub enum FatalUpgradeError {
 
 pub enum Output {
     Reservation {
-        renewal_timeout: Option<Delay>,
+        renewal_timeout: Delay,
         addrs: Vec<Multiaddr>,
         limit: Option<Limit>,
     },

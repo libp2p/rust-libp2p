@@ -758,12 +758,12 @@ impl GossipsubConfigBuilder {
             );
         }
 
-        if !(self.config.mesh_outbound_min < self.config.mesh_n_low
+        if !(self.config.mesh_outbound_min <= self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
             return Err("The following inequality doesn't hold \
-                mesh_outbound_min < mesh_n_low <= mesh_n <= mesh_n_high");
+                mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high");
         }
 
         if self.config.mesh_outbound_min * 2 > self.config.mesh_n {

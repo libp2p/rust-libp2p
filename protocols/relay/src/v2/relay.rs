@@ -48,10 +48,12 @@ use super::protocol::outbound_stop;
 /// [`Config::max_circuit_duration`] may not exceed [`u32::MAX`].
 pub struct Config {
     pub max_reservations: usize,
+    pub max_reservations_per_peer: usize,
     pub reservation_duration: Duration,
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
     pub max_circuits: usize,
+    pub max_circuits_per_peer: usize,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
     pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
@@ -87,10 +89,12 @@ impl Default for Config {
 
         Config {
             max_reservations: 128,
+            max_reservations_per_peer: 4,
             reservation_duration: Duration::from_secs(60 * 60),
             reservation_rate_limiters,
 
             max_circuits: 16,
+            max_circuits_per_peer: 4,
             max_circuit_duration: Duration::from_secs(2 * 60),
             max_circuit_bytes: 1 << 17, // 128 kibibyte
             circuit_src_rate_limiters,
@@ -208,10 +212,9 @@ impl NetworkBehaviour for Relay {
         _: &ConnectedPoint,
         _handler: handler::Handler,
     ) {
-        self.reservations
-            .get_mut(peer)
-            .map(|cs| cs.remove(&connection))
-            .unwrap_or(false);
+        if let Some(connections) = self.reservations.get_mut(peer) {
+            connections.remove(&connection);
+        }
 
         for circuit in self
             .circuits
@@ -241,16 +244,11 @@ impl NetworkBehaviour for Relay {
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
                 endpoint,
+                renewed,
             } => {
                 let now = Instant::now();
-                let is_from_relayed_connection = match &endpoint {
-                    ConnectedPoint::Dialer { address } => address,
-                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
-                }
-                .iter()
-                .any(|p| p == Protocol::P2pCircuit);
 
-                let action = if is_from_relayed_connection {
+                let action = if endpoint.is_relayed() {
                     // Deny reservation requests over relayed circuits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
@@ -261,12 +259,23 @@ impl NetworkBehaviour for Relay {
                         },
                     }
                     .into()
-                } else if self
-                    .reservations
-                    .iter()
-                    .map(|(_, cs)| cs.len())
-                    .sum::<usize>()
-                    >= self.config.max_reservations
+                } else if
+                // Deny if it is a new reservation and exceeds `max_reservations_per_peer`.
+                (!renewed
+                    && self
+                        .reservations
+                        .get(&event_source)
+                        .map(|cs| cs.len())
+                        .unwrap_or(0)
+                        > self.config.max_reservations_per_peer)
+                    // Deny if it exceeds `max_reservations`.
+                    || self
+                        .reservations
+                        .iter()
+                        .map(|(_, cs)| cs.len())
+                        .sum::<usize>()
+                        >= self.config.max_reservations
+                    // Deny if it exceeds the allowed rate of reservations.
                     || !self
                         .config
                         .reservation_rate_limiters
@@ -275,7 +284,6 @@ impl NetworkBehaviour for Relay {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
                         })
                 {
-                    // Deny reservation exceeding limits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
@@ -360,14 +368,8 @@ impl NetworkBehaviour for Relay {
                 endpoint,
             } => {
                 let now = Instant::now();
-                let is_from_relayed_connection = match &endpoint {
-                    ConnectedPoint::Dialer { address } => address,
-                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
-                }
-                .iter()
-                .any(|p| p == Protocol::P2pCircuit);
 
-                let action = if is_from_relayed_connection {
+                let action = if endpoint.is_relayed() {
                     // Deny circuit requests over relayed circuit.
                     //
                     // An attacker could otherwise build recursive or cyclic circuits.
@@ -380,7 +382,9 @@ impl NetworkBehaviour for Relay {
                             status: message_proto::Status::PermissionDenied,
                         },
                     }
-                } else if self.circuits.len() >= self.config.max_circuits
+                } else if self.circuits.num_circuits_of_peer(event_source)
+                    > self.config.max_circuits_per_peer
+                    || self.circuits.len() >= self.config.max_circuits
                     || !self
                         .config
                         .circuit_src_rate_limiters
@@ -650,6 +654,13 @@ impl CircuitsTracker {
         });
 
         removed
+    }
+
+    fn num_circuits_of_peer(&self, peer: PeerId) -> usize {
+        self.circuits
+            .iter()
+            .filter(|(_, c)| c.src_peer_id == peer || c.dst_peer_id == peer)
+            .count()
     }
 }
 

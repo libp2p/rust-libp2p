@@ -72,7 +72,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             status: None,
         };
 
-        let mut encoded_msg = Vec::new();
+        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
         msg.encode(&mut encoded_msg)
             .expect("Vec to have sufficient capacity.");
 
