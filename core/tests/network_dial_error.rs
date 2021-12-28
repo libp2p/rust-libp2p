@@ -22,6 +22,7 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::multiaddr::multiaddr;
+use libp2p_core::DialOpts;
 use libp2p_core::{
     connection::PendingConnectionError,
     multiaddr::Protocol,
@@ -50,8 +51,12 @@ fn deny_incoming_connec() {
     }));
 
     swarm2
-        .peer(swarm1.local_peer_id().clone())
-        .dial(vec![address.clone()], TestHandler())
+        .dial(
+            TestHandler(),
+            DialOpts::peer_id(*swarm1.local_peer_id())
+                .addresses(vec![address.clone()])
+                .build(),
+        )
         .unwrap();
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
@@ -106,7 +111,7 @@ fn dial_self() {
         _ => panic!("Was expecting the listen address to be reported"),
     }));
 
-    swarm.dial(&local_address, TestHandler()).unwrap();
+    swarm.dial(TestHandler(), local_address.clone()).unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
@@ -174,8 +179,12 @@ fn multiple_addresses_err() {
     addresses.shuffle(&mut rand::thread_rng());
 
     swarm
-        .peer(target.clone())
-        .dial(addresses.clone(), TestHandler())
+        .dial(
+            TestHandler(),
+            DialOpts::peer_id(target.clone())
+                .addresses(addresses.clone())
+                .build(),
+        )
         .unwrap();
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
