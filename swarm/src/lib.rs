@@ -359,7 +359,6 @@ where
 
     fn dial_with_handler(
         &mut self,
-        // TODO: Rename to swarm_dial_opts
         swarm_dial_opts: DialOpts,
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {

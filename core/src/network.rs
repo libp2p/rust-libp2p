@@ -228,7 +228,6 @@ where
                     .last()
                     .and_then(|p| {
                         if let multiaddr::Protocol::P2p(ma) = p {
-                            // TODO: Don't ignore error
                             Some(PeerId::try_from(ma))
                         } else {
                             None
@@ -569,7 +568,6 @@ pub enum DialError<THandler> {
     LocalPeerId {
         handler: THandler,
     },
-    // TODO: Include Multihash.
     InvalidPeerId {
         handler: THandler,
     },
