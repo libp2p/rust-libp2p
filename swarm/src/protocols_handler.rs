@@ -48,7 +48,7 @@ mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
-use instant::Instant;
+use instant::SystemTime;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
@@ -513,7 +513,7 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeepAlive {
     /// If nothing new happens, the connection should be closed at the given `Instant`.
-    Until(Instant),
+    Until(SystemTime),
     /// Keep the connection alive.
     Yes,
     /// Close the connection as soon as possible.

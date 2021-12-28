@@ -38,7 +38,6 @@ use crate::record::{
 };
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
-use instant::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Multiaddr, PeerId,
@@ -50,6 +49,7 @@ use libp2p_swarm::{
 use log::{debug, info, warn};
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::time::SystemTime;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -675,7 +675,7 @@ where
         let mut records = Vec::with_capacity(quorum.get());
 
         if let Some(record) = self.store.get(key) {
-            if record.is_expired(Instant::now()) {
+            if record.is_expired(SystemTime::now()) {
                 self.store.remove(key)
             } else {
                 records.push(PeerRecord {
@@ -697,7 +697,7 @@ where
         let inner = QueryInner::new(info);
         let id = self.queries.add_iter_closest(target.clone(), peers, inner); // (*)
 
-        // Instantly finish the query if we already have enough records.
+        // SystemTimely finish the query if we already have enough records.
         if done {
             self.queries.get_mut(&id).expect("by (*)").finish();
         }
@@ -721,7 +721,7 @@ where
     /// After the initial publication of the record, it is subject to (re-)replication
     /// and (re-)publication as per the configured intervals. Periodic (re-)publication
     /// does not update the record's expiration in local storage, thus a given record
-    /// with an explicit expiration will always expire at that instant and until then
+    /// with an explicit expiration will always expire at that SystemTime and until then
     /// is subject to regular (re-)replication and (re-)publication.
     pub fn put_record(
         &mut self,
@@ -732,7 +732,7 @@ where
         self.store.put(record.clone())?;
         record.expires = record
             .expires
-            .or_else(|| self.record_ttl.map(|ttl| Instant::now() + ttl));
+            .or_else(|| self.record_ttl.map(|ttl| SystemTime::now() + ttl));
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
         let peers = self.kbuckets.closest_keys(&target);
@@ -781,7 +781,7 @@ where
         };
         record.expires = record
             .expires
-            .or_else(|| self.record_ttl.map(|ttl| Instant::now() + ttl));
+            .or_else(|| self.record_ttl.map(|ttl| SystemTime::now() + ttl));
         let context = PutRecordContext::Custom;
         let info = QueryInfo::PutRecord {
             context,
@@ -916,7 +916,7 @@ where
             .store
             .providers(&key)
             .into_iter()
-            .filter(|p| !p.is_expired(Instant::now()))
+            .filter(|p| !p.is_expired(SystemTime::now()))
             .map(|p| p.provider)
             .collect();
         let info = QueryInfo::GetProviders {
@@ -1584,7 +1584,7 @@ where
             return;
         }
 
-        let now = Instant::now();
+        let now = SystemTime::now();
 
         // Calculate the expiration exponentially inversely proportional to the
         // number of nodes between the local node and the closest node to the key
@@ -1694,7 +1694,7 @@ where
             let record = ProviderRecord {
                 key,
                 provider: provider.node_id,
-                expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
+                expires: self.provider_record_ttl.map(|ttl| SystemTime::now() + ttl),
                 addresses: provider.multiaddrs,
             };
             match self.record_filtering {
@@ -2072,7 +2072,7 @@ where
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
                     Some(record) => {
-                        if record.is_expired(Instant::now()) {
+                        if record.is_expired(SystemTime::now()) {
                             self.store.remove(&key);
                             None
                         } else {
@@ -2223,7 +2223,7 @@ where
         cx: &mut Context<'_>,
         parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
-        let now = Instant::now();
+        let now = SystemTime::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
         let mut jobs_query_capacity = JOBS_MAX_QUERIES.saturating_sub(self.queries.size());

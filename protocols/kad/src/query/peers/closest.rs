@@ -22,7 +22,7 @@ use super::*;
 
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
-use instant::Instant;
+use std::time::SystemTime;
 use libp2p_core::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
@@ -275,7 +275,7 @@ impl ClosestPeersIter {
     }
 
     /// Advances the state of the iterator, potentially getting a new peer to contact.
-    pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    pub fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
         if let State::Finished = self.state {
             return PeersIterState::Finished;
         }
@@ -453,7 +453,7 @@ enum PeerState {
     NotContacted,
 
     /// The iterator is waiting for a result from the peer.
-    Waiting(Instant),
+    Waiting(SystemTime),
 
     /// A result was not delivered for the peer within the configured timeout.
     ///
@@ -563,7 +563,7 @@ mod tests {
     #[test]
     fn termination_and_parallelism() {
         fn prop(mut iter: ClosestPeersIter, seed: Seed) {
-            let now = Instant::now();
+            let now = SystemTime::now();
             let mut rng = StdRng::from_seed(seed.0);
 
             let mut expected = iter
@@ -669,7 +669,7 @@ mod tests {
     #[test]
     fn no_duplicates() {
         fn prop(mut iter: ClosestPeersIter, seed: Seed) -> bool {
-            let now = Instant::now();
+            let now = SystemTime::now();
             let mut rng = StdRng::from_seed(seed.0);
 
             let closer = random_peers(1, &mut rng);
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn timeout() {
         fn prop(mut iter: ClosestPeersIter) -> bool {
-            let mut now = Instant::now();
+            let mut now = SystemTime::now();
             let peer = iter
                 .closest_peers
                 .values()
@@ -765,7 +765,7 @@ mod tests {
     #[test]
     fn without_success_try_up_to_k_peers() {
         fn prop(mut iter: ClosestPeersIter) {
-            let now = Instant::now();
+            let now = SystemTime::now();
 
             for _ in 0..(usize::min(iter.closest_peers.len(), K_VALUE.get())) {
                 match iter.next(now) {

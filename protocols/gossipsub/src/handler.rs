@@ -25,7 +25,7 @@ use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
-use instant::Instant;
+use instant::SystemTime;
 use libp2p_core::upgrade::{InboundUpgrade, NegotiationError, OutboundUpgrade, UpgradeError};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -190,7 +190,7 @@ impl GossipsubHandler {
             protocol_unsupported: false,
             idle_timeout,
             upgrade_errors: VecDeque::new(),
-            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
+            keep_alive: KeepAlive::Until(SystemTime::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
             in_mesh: false,
         }
     }
@@ -272,7 +272,7 @@ impl ProtocolsHandler for GossipsubHandler {
                 // If we have left the mesh, start the idle timer.
                 GossipsubHandlerIn::LeftMesh => {
                     self.in_mesh = false;
-                    self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
+                    self.keep_alive = KeepAlive::Until(SystemTime::now() + self.idle_timeout);
                 }
             }
         }
@@ -390,7 +390,7 @@ impl ProtocolsHandler for GossipsubHandler {
                         Poll::Ready(Some(Ok(message))) => {
                             if !self.in_mesh {
                                 self.keep_alive =
-                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
+                                    KeepAlive::Until(SystemTime::now() + self.idle_timeout);
                             }
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
@@ -514,7 +514,7 @@ impl ProtocolsHandler for GossipsubHandler {
                             if !self.in_mesh {
                                 // if not in the mesh, reset the idle timeout
                                 self.keep_alive =
-                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
+                                    KeepAlive::Until(SystemTime::now() + self.idle_timeout);
                             }
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))

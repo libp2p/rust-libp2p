@@ -20,7 +20,7 @@
 
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
-use instant::Instant;
+use std::time::SystemTime;
 use libp2p_core::PeerId;
 use std::{
     collections::HashMap,
@@ -194,7 +194,7 @@ impl ClosestDisjointPeersIter {
         self.iters.iter().any(|i| i.is_waiting(peer))
     }
 
-    pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    pub fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
         let mut state = None;
 
         // Ensure querying each iterator at most once.
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     fn s_kademlia_disjoint_paths() {
-        let now = Instant::now();
+        let now = SystemTime::now();
         let target: KeyBytes = Key::from(PeerId::random()).into();
 
         let mut pool = [0; 12]
@@ -842,7 +842,7 @@ mod tests {
     }
 
     impl PeerIterator {
-        fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+        fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
             match self {
                 PeerIterator::Disjoint(iter) => iter.next(now),
                 PeerIterator::Closest(iter) => iter.next(now),
@@ -953,7 +953,7 @@ mod tests {
             mut graph: Graph,
             target: &KeyBytes,
         ) -> HashSet<PeerId> {
-            let now = Instant::now();
+            let now = SystemTime::now();
             loop {
                 match iter.next(now) {
                     PeersIterState::Waiting(Some(peer_id)) => {
@@ -988,7 +988,7 @@ mod tests {
 
     #[test]
     fn failure_can_not_overwrite_previous_success() {
-        let now = Instant::now();
+        let now = SystemTime::now();
         let peer = PeerId::random();
         let mut iter = ClosestDisjointPeersIter::new(
             Key::from(PeerId::random()).into(),

@@ -38,7 +38,7 @@ pub struct PendingNode<TKey, TVal> {
     status: NodeStatus,
 
     /// The instant at which the pending node is eligible for insertion into a bucket.
-    replace: Instant,
+    replace: SystemTime,
 }
 
 /// The status of a node in a bucket.
@@ -68,10 +68,10 @@ impl<TKey, TVal> PendingNode<TKey, TVal> {
     }
 
     pub fn is_ready(&self) -> bool {
-        Instant::now() >= self.replace
+        SystemTime::now() >= self.replace
     }
 
-    pub fn set_ready_at(&mut self, t: Instant) {
+    pub fn set_ready_at(&mut self, t: SystemTime) {
         self.replace = t;
     }
 
@@ -214,7 +214,7 @@ where
     /// bucket remained unchanged.
     pub fn apply_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
         if let Some(pending) = self.pending.take() {
-            if pending.replace <= Instant::now() {
+            if pending.replace <= SystemTime::now() {
                 if self.nodes.is_full() {
                     if self.status(Position(0)) == NodeStatus::Connected {
                         // The bucket is full with connected nodes. Drop the pending node.
@@ -329,7 +329,7 @@ where
                         self.pending = Some(PendingNode {
                             node,
                             status: NodeStatus::Connected,
-                            replace: Instant::now() + self.pending_timeout,
+                            replace: SystemTime::now() + self.pending_timeout,
                         });
                         return InsertResult::Pending {
                             disconnected: self.nodes[0].key.clone(),
@@ -585,7 +585,7 @@ mod tests {
 
             // Apply the pending node.
             let pending = bucket.pending_mut().expect("No pending node.");
-            pending.set_ready_at(Instant::now() - Duration::from_secs(1));
+            pending.set_ready_at(SystemTime::now() - Duration::from_secs(1));
             let result = bucket.apply_pending();
             assert_eq!(
                 result,

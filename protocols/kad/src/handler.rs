@@ -24,7 +24,7 @@ use crate::protocol::{
 };
 use crate::record::{self, Record};
 use futures::prelude::*;
-use instant::Instant;
+use std::time::SystemTime;
 use libp2p_core::{
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade},
@@ -453,7 +453,7 @@ struct UniqueConnecId(u64);
 impl<TUserData> KademliaHandler<TUserData> {
     /// Create a [`KademliaHandler`] using the given configuration.
     pub fn new(config: KademliaHandlerConfig, endpoint: ConnectedPoint) -> Self {
-        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
+        let keep_alive = KeepAlive::Until(SystemTime::now() + config.idle_timeout);
 
         KademliaHandler {
             config,
@@ -727,7 +727,7 @@ where
                     (None, Some(event), _) => {
                         if self.substreams.is_empty() {
                             self.keep_alive =
-                                KeepAlive::Until(Instant::now() + self.config.idle_timeout);
+                                KeepAlive::Until(SystemTime::now() + self.config.idle_timeout);
                         }
                         return Poll::Ready(event);
                     }
@@ -748,7 +748,7 @@ where
 
         if self.substreams.is_empty() {
             // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
+            self.keep_alive = KeepAlive::Until(SystemTime::now() + self.config.idle_timeout);
         } else {
             self.keep_alive = KeepAlive::Yes;
         }

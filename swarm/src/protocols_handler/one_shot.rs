@@ -22,7 +22,7 @@ use crate::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use instant::Instant;
+use instant::SystemTime;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
@@ -138,7 +138,7 @@ where
     ) {
         // If we're shutting down the connection for inactivity, reset the timeout.
         if !self.keep_alive.is_yes() {
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+            self.keep_alive = KeepAlive::Until(SystemTime::now() + self.config.keep_alive_timeout);
         }
 
         self.events_out.push(out.into());
@@ -205,7 +205,7 @@ where
             self.dial_queue.shrink_to_fit();
 
             if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+                self.keep_alive = KeepAlive::Until(SystemTime::now() + self.config.keep_alive_timeout);
             }
         }
 

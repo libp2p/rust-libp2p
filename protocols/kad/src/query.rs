@@ -30,9 +30,11 @@ use crate::kbucket::{Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
-use instant::Instant;
 use libp2p_core::PeerId;
-use std::{num::NonZeroUsize, time::Duration};
+use std::{
+    num::NonZeroUsize,
+    time::{Duration, SystemTime},
+};
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///
@@ -164,7 +166,7 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Polls the pool to advance the queries.
-    pub fn poll(&mut self, now: Instant) -> QueryPoolState<'_, TInner> {
+    pub fn poll(&mut self, now: SystemTime) -> QueryPoolState<'_, TInner> {
         let mut finished = None;
         let mut timeout = None;
         let mut waiting = None;
@@ -182,10 +184,12 @@ impl<TInner> QueryPool<TInner> {
                     break;
                 }
                 PeersIterState::Waiting(None) | PeersIterState::WaitingAtCapacity => {
-                    let elapsed = now - query.stats.start.unwrap_or(now);
-                    if elapsed >= self.config.timeout {
-                        timeout = Some(query_id);
-                        break;
+                    let elapsed = now.duration_since(query.stats.start.unwrap_or(now));
+                    if let Ok(elapsed) = elapsed {
+                        if elapsed >= self.config.timeout {
+                            timeout = Some(query_id);
+                            break;
+                        }
                     }
                 }
             }
@@ -334,7 +338,7 @@ impl<TInner> Query<TInner> {
     }
 
     /// Advances the state of the underlying peer iterator.
-    fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
         let state = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
             QueryPeerIter::ClosestDisjoint(iter) => iter.next(now),
@@ -437,8 +441,8 @@ pub struct QueryStats {
     requests: u32,
     success: u32,
     failure: u32,
-    start: Option<Instant>,
-    end: Option<Instant>,
+    start: Option<SystemTime>,
+    end: Option<SystemTime>,
 }
 
 impl QueryStats {
@@ -478,16 +482,16 @@ impl QueryStats {
     /// Gets the duration of the query.
     ///
     /// If the query has not yet finished, the duration is measured from the
-    /// start of the query to the current instant.
+    /// start of the query to the current SystemTime.
     ///
     /// If the query did not yet start (i.e. yield the first peer to contact),
     /// `None` is returned.
     pub fn duration(&self) -> Option<Duration> {
         if let Some(s) = self.start {
             if let Some(e) = self.end {
-                Some(e - s)
+                e.duration_since(s).ok()
             } else {
-                Some(Instant::now() - s)
+                s.elapsed().ok()
             }
         } else {
             None
@@ -497,7 +501,7 @@ impl QueryStats {
     /// Merges these stats with the given stats of another query,
     /// e.g. to accumulate statistics from a multi-phase query.
     ///
-    /// Counters are merged cumulatively while the instants for
+    /// Counters are merged cumulatively while the SystemTimes for
     /// start and end of the queries are taken as the minimum and
     /// maximum, respectively.
     pub fn merge(self, other: QueryStats) -> Self {

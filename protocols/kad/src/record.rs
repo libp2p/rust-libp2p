@@ -23,10 +23,10 @@
 pub mod store;
 
 use bytes::Bytes;
-use instant::Instant;
 use libp2p_core::{multihash::Multihash, Multiaddr, PeerId};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
+use std::time::SystemTime;
 
 /// The (opaque) key of a record.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -78,7 +78,7 @@ pub struct Record {
     /// The (original) publisher of the record.
     pub publisher: Option<PeerId>,
     /// The expiration time as measured by a local, monotonic clock.
-    pub expires: Option<Instant>,
+    pub expires: Option<SystemTime>,
 }
 
 impl Record {
@@ -95,8 +95,8 @@ impl Record {
         }
     }
 
-    /// Checks whether the record is expired w.r.t. the given `Instant`.
-    pub fn is_expired(&self, now: Instant) -> bool {
+    /// Checks whether the record is expired w.r.t. the given `SystemTime`.
+    pub fn is_expired(&self, now: SystemTime) -> bool {
         self.expires.map_or(false, |t| now >= t)
     }
 }
@@ -114,7 +114,7 @@ pub struct ProviderRecord {
     /// The provider of the value for the key.
     pub provider: PeerId,
     /// The expiration time as measured by a local, monotonic clock.
-    pub expires: Option<Instant>,
+    pub expires: Option<SystemTime>,
     /// The known addresses that the provider may be listening on.
     pub addresses: Vec<Multiaddr>,
 }
@@ -148,8 +148,8 @@ impl ProviderRecord {
         }
     }
 
-    /// Checks whether the provider record is expired w.r.t. the given `Instant`.
-    pub fn is_expired(&self, now: Instant) -> bool {
+    /// Checks whether the provider record is expired w.r.t. the given `SystemTime`.
+    pub fn is_expired(&self, now: SystemTime) -> bool {
         self.expires.map_or(false, |t| now >= t)
     }
 }
@@ -180,7 +180,7 @@ mod tests {
                     None
                 },
                 expires: if g.gen() {
-                    Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
+                    Some(SystemTime::now() + Duration::from_secs(g.gen_range(0, 60)))
                 } else {
                     None
                 },
@@ -194,7 +194,7 @@ mod tests {
                 key: Key::arbitrary(g),
                 provider: PeerId::random(),
                 expires: if g.gen() {
-                    Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
+                    Some(SystemTime::now() + Duration::from_secs(g.gen_range(0, 60)))
                 } else {
                     None
                 },

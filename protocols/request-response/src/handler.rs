@@ -26,7 +26,7 @@ use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
-use instant::Instant;
+use instant::SystemTime;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::{
     protocols_handler::{
@@ -383,7 +383,7 @@ where
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.
-            let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
+            let until = SystemTime::now() + self.substream_timeout + self.keep_alive_timeout;
             self.keep_alive = KeepAlive::Until(until);
         }
 

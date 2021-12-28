@@ -25,7 +25,7 @@ use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
-use instant::Instant;
+use instant::SystemTime;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
@@ -817,7 +817,7 @@ impl ProtocolsHandler for RelayHandler {
             // Protocol handler is idle.
             if matches!(self.keep_alive, KeepAlive::Yes) {
                 self.keep_alive =
-                    KeepAlive::Until(Instant::now() + self.config.connection_idle_timeout);
+                    KeepAlive::Until(SystemTime::now() + self.config.connection_idle_timeout);
             }
         }
 

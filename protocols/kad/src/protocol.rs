@@ -32,10 +32,10 @@ use asynchronous_codec::Framed;
 use bytes::BytesMut;
 use codec::UviBytes;
 use futures::prelude::*;
-use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
+use std::time::SystemTime;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
@@ -558,7 +558,7 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     };
 
     let expires = if record.ttl > 0 {
-        Some(Instant::now() + Duration::from_secs(record.ttl as u64))
+        Some(SystemTime::now() + Duration::from_secs(record.ttl as u64))
     } else {
         None
     };
@@ -579,12 +579,9 @@ fn record_to_proto(record: Record) -> proto::Record {
         ttl: record
             .expires
             .map(|t| {
-                let now = Instant::now();
-                if t > now {
-                    (t - now).as_secs() as u32
-                } else {
-                    1 // because 0 means "does not expire"
-                }
+                t.elapsed().map(|d| d.as_secs() as u32).unwrap_or(
+                    1, // because 0 means "does not expire"
+                )
             })
             .unwrap_or(0),
         time_received: String::new(),
