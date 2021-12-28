@@ -27,6 +27,9 @@ use prost::Message;
 use std::fmt;
 use std::fmt::Debug;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {
