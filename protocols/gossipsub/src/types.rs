@@ -42,6 +42,7 @@ pub enum MessageAcceptance {
 /// Macro for declaring message id types
 macro_rules! declare_message_id_type {
     ($name: ident, $name_string: expr) => {
+        #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub struct $name(pub Vec<u8>);
 

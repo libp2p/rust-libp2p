@@ -31,6 +31,7 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeerId {
     multihash: Multihash,
