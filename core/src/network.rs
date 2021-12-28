@@ -641,6 +641,7 @@ pub struct WithPeerIdWithAddresses {
 }
 
 impl WithPeerIdWithAddresses {
+    /// Override [`NetworkConfig::with_dial_concurrency_factor`].
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
