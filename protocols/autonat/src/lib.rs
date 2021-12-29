@@ -23,9 +23,13 @@ mod behaviour;
 mod protocol;
 
 pub use self::{
-    behaviour::{Behaviour, Config, NatStatus},
+    behaviour::{
+        Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, NatStatus,
+        OutboundProbeError, OutboundProbeEvent, ProbeId,
+    },
     protocol::ResponseError,
 };
+pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));

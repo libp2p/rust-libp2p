@@ -28,8 +28,9 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    handler::RequestResponseHandlerEvent, ProtocolSupport, RequestId, RequestResponse,
-    RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
+    handler::RequestResponseHandlerEvent, InboundFailure, OutboundFailure, ProtocolSupport,
+    RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
+    RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
@@ -109,14 +110,110 @@ impl NatStatus {
     }
 }
 
-impl From<Result<Multiaddr, ResponseError>> for NatStatus {
-    fn from(result: Result<Multiaddr, ResponseError>) -> Self {
-        match result {
-            Ok(addr) => NatStatus::Public(addr),
-            Err(ResponseError::DialError) => NatStatus::Private,
-            _ => NatStatus::Unknown,
-        }
+/// Unique identifier for a probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ProbeId(usize);
+
+impl ProbeId {
+    fn next(&mut self) -> ProbeId {
+        let current = *self;
+        self.0 += 1;
+        current
     }
+}
+
+/// Outbound probe failed or was aborted.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OutboundProbeError {
+    /// Probe was aborted because no server is known, or all servers
+    /// are throttled through [`Config::throttle_server_period`].
+    NoServer,
+    ///  Probe was aborted because the local peer has no listening or
+    /// external addresses.
+    NoAddresses,
+    /// Sending the dial-back request or receiving a response failed.
+    OutboundRequest(OutboundFailure),
+    /// The server refused or failed to dial us.
+    Response(ResponseError),
+}
+
+/// Inbound probe failed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InboundProbeError {
+    /// Receiving the dial-back request or sending a response failed.
+    InboundRequest(InboundFailure),
+    /// We refused or failed to dial the client.
+    Response(ResponseError),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InboundProbeEvent {
+    /// A dial-back request was received from a remote peer.
+    Request {
+        probe_id: ProbeId,
+        /// Peer that sent the request.
+        peer: PeerId,
+        /// The addresses that will be attempted to dial.
+        addresses: Vec<Multiaddr>,
+    },
+    /// A dial request to the remote was successful.
+    Response {
+        probe_id: ProbeId,
+        /// Peer to which the response is sent.
+        peer: PeerId,
+        address: Multiaddr,
+    },
+    /// The inbound request failed, was rejected, or none of the remote's
+    /// addresses could be dialed.
+    Error {
+        probe_id: ProbeId,
+        /// Peer that sent the dial-back request.
+        peer: PeerId,
+        error: InboundProbeError,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OutboundProbeEvent {
+    /// A dial-back request was sent to a remote peer.
+    Request {
+        probe_id: ProbeId,
+        /// Peer to which the request is sent.
+        peer: PeerId,
+    },
+    /// The remote successfully dialed one of our addresses.
+    Response {
+        probe_id: ProbeId,
+        /// Id of the peer that sent the response.
+        peer: PeerId,
+        /// The address at which the remote succeeded to dial us.
+        address: Multiaddr,
+    },
+    /// The outbound request failed, was rejected, or the remote could dial
+    /// none of our addresses.
+    Error {
+        probe_id: ProbeId,
+        /// Id of the peer used for the probe.
+        /// `None` if the probe was aborted due to no addresses or no qualified server.
+        peer: Option<PeerId>,
+        error: OutboundProbeError,
+    },
+}
+
+/// Event produced by [`Behaviour`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum Event {
+    /// Event on an inbound probe.
+    InboundProbe(InboundProbeEvent),
+    /// Event on an outbound probe.
+    OutboundProbe(OutboundProbeEvent),
+    /// The assumed NAT changed.
+    StatusChanged {
+        /// Former status.
+        old: NatStatus,
+        /// New status.
+        new: NatStatus,
+    },
 }
 
 /// [`NetworkBehaviour`] for AutoNAT.
@@ -154,7 +251,10 @@ pub struct Behaviour {
     schedule_probe: Delay,
 
     // Ongoing inbound requests, where no response has been sent back to the remote yet.
-    ongoing_inbound: HashMap<PeerId, (Vec<Multiaddr>, ResponseChannel<DialResponse>)>,
+    ongoing_inbound: HashMap<PeerId, (ProbeId, Vec<Multiaddr>, ResponseChannel<DialResponse>)>,
+
+    // Ongoing outbound probes and mapped to the inner request id.
+    ongoing_outbound: HashMap<RequestId, ProbeId>,
 
     // Connected peers with their observed address.
     // These peers may be used as servers for dial-requests.
@@ -169,6 +269,8 @@ pub struct Behaviour {
     last_probe: Option<Instant>,
 
     pending_out_events: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
+
+    probe_id: ProbeId,
 }
 
 impl Behaviour {
@@ -184,6 +286,7 @@ impl Behaviour {
             config,
             servers: Vec::new(),
             ongoing_inbound: HashMap::default(),
+            ongoing_outbound: HashMap::default(),
             connected: HashMap::default(),
             nat_status: NatStatus::Unknown,
             confidence: 0,
@@ -191,6 +294,7 @@ impl Behaviour {
             throttled_clients: Vec::new(),
             last_probe: None,
             pending_out_events: VecDeque::new(),
+            probe_id: ProbeId(0),
         }
     }
 
@@ -253,18 +357,23 @@ impl Behaviour {
     }
 
     // Send a dial-request to a randomly selected server.
-    // Return `None` if there are no qualified servers or no dial-back addresses.
-    fn do_probe(&mut self, addresses: Vec<Multiaddr>) -> Option<RequestId> {
+    // Returns the server that is used in this probe.
+    // `Err` if there are no qualified servers or no dial-back addresses.
+    fn do_probe(
+        &mut self,
+        probe_id: ProbeId,
+        addresses: Vec<Multiaddr>,
+    ) -> Result<PeerId, OutboundProbeError> {
         self.last_probe = Some(Instant::now());
         if addresses.is_empty() {
             log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
-            return None;
+            return Err(OutboundProbeError::NoAddresses);
         }
         let server = match self.random_server() {
             Some(s) => s,
             None => {
                 log::debug!("Outbound dial-back request aborted: No qualified server.");
-                return None;
+                return Err(OutboundProbeError::NoServer);
             }
         };
         let request_id = self.inner.send_request(
@@ -276,7 +385,8 @@ impl Behaviour {
         );
         self.throttled_servers.push((server, Instant::now()));
         log::debug!("Send dial-back request to peer {}.", server);
-        Some(request_id)
+        self.ongoing_outbound.insert(request_id, probe_id);
+        Ok(server)
     }
 
     // Validate the inbound request and collect the addresses to be dialed.
@@ -284,7 +394,7 @@ impl Behaviour {
         &mut self,
         sender: PeerId,
         request: DialRequest,
-    ) -> Result<Vec<Multiaddr>, DialResponse> {
+    ) -> Result<Vec<Multiaddr>, (String, ResponseError)> {
         // Update list of throttled clients.
         let i = self.throttled_clients.partition_point(|(_, time)| {
             *time + self.config.throttle_clients_period < Instant::now()
@@ -293,44 +403,17 @@ impl Behaviour {
 
         if request.peer_id != sender {
             let status_text = "peer id mismatch".to_string();
-            log::debug!(
-                "Reject inbound dial request from peer {}: {}.",
-                sender,
-                status_text
-            );
-            let response = DialResponse {
-                result: Err(ResponseError::BadRequest),
-                status_text: Some(status_text),
-            };
-            return Err(response);
+            return Err((status_text, ResponseError::BadRequest));
         }
 
         if self.ongoing_inbound.contains_key(&sender) {
             let status_text = "dial-back already ongoing".to_string();
-            log::debug!(
-                "Reject inbound dial request from peer {}: {}.",
-                sender,
-                status_text
-            );
-            let response = DialResponse {
-                result: Err(ResponseError::DialRefused),
-                status_text: Some(status_text),
-            };
-            return Err(response);
+            return Err((status_text, ResponseError::DialRefused));
         }
 
         if self.throttled_clients.len() >= self.config.throttle_clients_global_max {
             let status_text = "too many total dials".to_string();
-            log::debug!(
-                "Reject inbound dial request from peer {}: {}.",
-                sender,
-                status_text
-            );
-            let response = DialResponse {
-                result: Err(ResponseError::DialRefused),
-                status_text: Some(status_text),
-            };
-            return Err(response);
+            return Err((status_text, ResponseError::DialRefused));
         }
 
         let ongoing_for_client = self
@@ -341,16 +424,7 @@ impl Behaviour {
 
         if ongoing_for_client >= self.config.throttle_clients_peer_max {
             let status_text = "too many dials for peer".to_string();
-            log::debug!(
-                "Reject inbound dial request from peer {}: {}.",
-                sender,
-                status_text
-            );
-            let response = DialResponse {
-                result: Err(ResponseError::DialRefused),
-                status_text: Some(status_text),
-            };
-            return Err(response);
+            return Err((status_text, ResponseError::DialRefused));
         }
 
         let observed_addr = self
@@ -363,16 +437,7 @@ impl Behaviour {
 
         if addrs.is_empty() {
             let status_text = "no dialable addresses".to_string();
-            log::debug!(
-                "Reject inbound dial request from peer {}: {}.",
-                sender,
-                status_text
-            );
-            let response = DialResponse {
-                result: Err(ResponseError::DialError),
-                status_text: Some(status_text),
-            };
-            return Err(response);
+            return Err((status_text, ResponseError::DialError));
         }
 
         Ok(addrs)
@@ -393,13 +458,36 @@ impl Behaviour {
     }
 
     // Adapt current confidence and NAT status to the status reported by the latest probe.
-    // Return whether the currently assumed status was flipped.
-    fn handle_reported_status(&mut self, reported: NatStatus) -> bool {
+    fn handle_reported_status(
+        &mut self,
+        probe_id: ProbeId,
+        peer: Option<PeerId>,
+        result: Result<Multiaddr, OutboundProbeError>,
+    ) {
         self.schedule_next_probe(self.config.retry_interval);
 
-        if matches!(reported, NatStatus::Unknown) {
-            false
-        } else if reported == self.nat_status {
+        let reported_status = match result {
+            Ok(ref addr) => NatStatus::Public(addr.clone()),
+            Err(OutboundProbeError::Response(ResponseError::DialError)) => NatStatus::Private,
+            _ => NatStatus::Unknown,
+        };
+        let event = match result {
+            Ok(address) => OutboundProbeEvent::Response {
+                probe_id,
+                peer: peer.unwrap(),
+                address,
+            },
+            Err(error) => OutboundProbeEvent::Error {
+                probe_id,
+                peer,
+                error,
+            },
+        };
+        self.pending_out_events
+            .push_back(Event::OutboundProbe(event));
+
+        if matches!(reported_status, NatStatus::Unknown) {
+        } else if reported_status == self.nat_status {
             if self.confidence < self.config.confidence_max {
                 self.confidence += 1;
             }
@@ -407,31 +495,33 @@ impl Behaviour {
             if self.confidence >= self.config.confidence_max {
                 self.schedule_next_probe(self.config.refresh_interval);
             }
-            false
-        } else if reported.is_public() && self.nat_status.is_public() {
+        } else if reported_status.is_public() && self.nat_status.is_public() {
             // Different address than the currently assumed public address was reported.
             // Switch address, but don't report as flipped.
-            self.nat_status = reported;
-            false
+            self.nat_status = reported_status;
         } else if self.confidence > 0 {
             // Reduce confidence but keep old status.
             self.confidence -= 1;
-            false
         } else {
             log::debug!(
                 "Flipped assumed NAT status from {:?} to {:?}",
                 self.nat_status,
-                reported
+                reported_status
             );
-            self.nat_status = reported;
-            true
+            let old_status = self.nat_status.clone();
+            self.nat_status = reported_status;
+            let event = Event::StatusChanged {
+                old: old_status,
+                new: self.nat_status.clone(),
+            };
+            self.pending_out_events.push_back(event);
         }
     }
 }
 
 impl NetworkBehaviour for Behaviour {
     type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
-    type OutEvent = NatStatus;
+    type OutEvent = Event;
 
     fn inject_connection_established(
         &mut self,
@@ -447,7 +537,7 @@ impl NetworkBehaviour for Behaviour {
 
         match endpoint {
             ConnectedPoint::Dialer { address } => {
-                if let Some((addrs, _)) = self.ongoing_inbound.get(peer) {
+                if let Some((_, addrs, _)) = self.ongoing_inbound.get(peer) {
                     // Check if the dialed address was among the requested addresses.
                     if addrs.contains(address) {
                         log::debug!(
@@ -456,12 +546,19 @@ impl NetworkBehaviour for Behaviour {
                             address
                         );
 
-                        let channel = self.ongoing_inbound.remove(peer).unwrap().1;
+                        let (probe_id, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
                         let response = DialResponse {
                             result: Ok(address.clone()),
                             status_text: None,
                         };
                         let _ = self.inner.send_response(channel, response);
+                        let event = InboundProbeEvent::Response {
+                            probe_id,
+                            peer: *peer,
+                            address: address.clone(),
+                        };
+                        self.pending_out_events
+                            .push_back(Event::InboundProbe(event));
                     }
                 }
             }
@@ -480,23 +577,31 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_dial_failure(
         &mut self,
-        peer_id: Option<PeerId>,
+        peer: Option<PeerId>,
         handler: Self::ProtocolsHandler,
         error: &DialError,
     ) {
-        self.inner.inject_dial_failure(peer_id, handler, error);
-        if let Some((_, channel)) = peer_id.and_then(|p| self.ongoing_inbound.remove(&p)) {
+        self.inner.inject_dial_failure(peer, handler, error);
+        if let Some((probe_id, _, channel)) = peer.and_then(|p| self.ongoing_inbound.remove(&p)) {
             log::debug!(
                 "Dial-back to peer {} failed with error {:?}.",
-                peer_id.unwrap(),
+                peer.unwrap(),
                 error
             );
-
+            let response_error = ResponseError::DialError;
             let response = DialResponse {
-                result: Err(ResponseError::DialError),
+                result: Err(response_error.clone()),
                 status_text: Some("dial failed".to_string()),
             };
             let _ = self.inner.send_response(channel, response);
+
+            let event = InboundProbeEvent::Error {
+                probe_id,
+                peer: peer.expect("PeerId is present."),
+                error: InboundProbeError::Response(response_error),
+            };
+            self.pending_out_events
+                .push_back(Event::InboundProbe(event));
         }
     }
 
@@ -580,14 +685,15 @@ impl NetworkBehaviour for Behaviour {
                 let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
                 addresses.extend(params.listened_addresses());
 
-                match self.do_probe(addresses) {
-                    Some(_) => {}
-                    None => {
-                        let nat_status = NatStatus::Unknown;
-                        let has_flipped = self.handle_reported_status(nat_status);
-                        if has_flipped {
-                            self.pending_out_events.push_back(self.nat_status.clone());
-                        }
+                let probe_id = self.probe_id.next();
+                match self.do_probe(probe_id, addresses) {
+                    Ok(peer) => {
+                        let event = OutboundProbeEvent::Request { probe_id, peer };
+                        self.pending_out_events
+                            .push_back(Event::OutboundProbe(event));
+                    }
+                    Err(e) => {
+                        self.handle_reported_status(probe_id, None, Err(e));
                     }
                 }
             }
@@ -603,10 +709,21 @@ impl NetworkBehaviour for Behaviour {
                         request,
                         channel,
                     } => {
+                        let probe_id = self.probe_id.next();
                         match self.resolve_inbound_request(peer, request) {
                             Ok(addrs) => {
                                 log::debug!("Inbound dial request from Peer {} with dial-back addresses {:?}.", peer, addrs);
-                                self.ongoing_inbound.insert(peer, (addrs.clone(), channel));
+                                self.ongoing_inbound
+                                    .insert(peer, (probe_id, addrs.clone(), channel));
+
+                                let event = InboundProbeEvent::Request {
+                                    probe_id,
+                                    peer,
+                                    addresses: addrs.clone(),
+                                };
+                                self.pending_out_events
+                                    .push_back(Event::InboundProbe(event));
+
                                 return Poll::Ready(NetworkBehaviourAction::Dial {
                                     opts: DialOpts::peer_id(peer)
                                         .condition(PeerCondition::Always)
@@ -615,12 +732,33 @@ impl NetworkBehaviour for Behaviour {
                                     handler: self.inner.new_handler(),
                                 });
                             }
-                            Err(response) => {
-                                let _ = self.inner.send_response(channel, response);
+                            Err((status_text, error)) => {
+                                log::debug!(
+                                    "Reject inbound dial request from peer {}: {}.",
+                                    peer,
+                                    status_text
+                                );
+
+                                let response = DialResponse {
+                                    result: Err(error.clone()),
+                                    status_text: Some(status_text),
+                                };
+                                let _ = self.inner.send_response(channel, response.clone());
+
+                                let event = InboundProbeEvent::Error {
+                                    probe_id,
+                                    peer,
+                                    error: InboundProbeError::Response(error),
+                                };
+                                self.pending_out_events
+                                    .push_back(Event::InboundProbe(event));
                             }
                         }
                     }
-                    RequestResponseMessage::Response { response, .. } => {
+                    RequestResponseMessage::Response {
+                        response,
+                        request_id,
+                    } => {
                         log::debug!("Outbound dial-back request returned {:?}.", response);
                         let mut report_addr = None;
                         if let Ok(ref addr) = response.result {
@@ -636,11 +774,12 @@ impl NetworkBehaviour for Behaviour {
                                 });
                             }
                         }
-                        let reported = response.result.into();
-                        let has_flipped = self.handle_reported_status(reported);
-                        if has_flipped {
-                            self.pending_out_events.push_back(self.nat_status.clone());
-                        }
+                        let probe_id = self
+                            .ongoing_outbound
+                            .remove(&request_id)
+                            .expect("RequestId exists.");
+                        let result = response.result.map_err(OutboundProbeError::Response);
+                        self.handle_reported_status(probe_id, Some(peer), result);
                         if let Some(action) = report_addr {
                             return Poll::Ready(action);
                         }

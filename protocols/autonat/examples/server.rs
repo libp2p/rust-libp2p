@@ -97,7 +97,7 @@ impl Behaviour {
 
 #[derive(Debug)]
 enum Event {
-    AutoNat(autonat::NatStatus),
+    AutoNat(autonat::Event),
     Identify(IdentifyEvent),
 }
 
@@ -107,8 +107,8 @@ impl From<IdentifyEvent> for Event {
     }
 }
 
-impl From<autonat::NatStatus> for Event {
-    fn from(v: autonat::NatStatus) -> Self {
+impl From<autonat::Event> for Event {
+    fn from(v: autonat::Event) -> Self {
         Self::AutoNat(v)
     }
 }
