@@ -37,6 +37,7 @@ use libp2p_swarm::{
     AddressScore, DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters,
 };
+use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter,
@@ -50,7 +51,7 @@ pub struct Config {
     /// Timeout for requests.
     pub timeout: Duration,
 
-    // == Client Config
+    // Client Config
     /// Delay on init before starting the fist probe.
     pub boot_delay: Duration,
     /// Interval in which the NAT should be tested again if max confidence was reached in a status.
@@ -67,7 +68,7 @@ pub struct Config {
     /// Note: for [`NatStatus::Unknown`] the confidence is always 0.
     pub confidence_max: usize,
 
-    //== Server Config
+    // Server Config
     /// Max addresses that are tried per peer.
     pub max_peer_addresses: usize,
     /// Max total dial requests done in `[Config::throttle_clients_period`].
@@ -349,11 +350,7 @@ impl Behaviour {
 
         servers.retain(|s| !self.throttled_servers.iter().any(|(id, _)| s == &id));
 
-        if servers.is_empty() {
-            return None;
-        }
-        let server = servers[rand::random::<usize>() % servers.len()];
-        Some(*server)
+        servers.choose(&mut thread_rng()).map(|&&p| p)
     }
 
     // Send a dial-request to a randomly selected server.
@@ -416,13 +413,13 @@ impl Behaviour {
             return Err((status_text, ResponseError::DialRefused));
         }
 
-        let ongoing_for_client = self
+        let throttled_for_client = self
             .throttled_clients
             .iter()
             .filter(|(p, _)| p == &sender)
             .count();
 
-        if ongoing_for_client >= self.config.throttle_clients_peer_max {
+        if throttled_for_client >= self.config.throttle_clients_peer_max {
             let status_text = "too many dials for peer".to_string();
             return Err((status_text, ResponseError::DialRefused));
         }
