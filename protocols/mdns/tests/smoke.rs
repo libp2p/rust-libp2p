@@ -21,7 +21,7 @@
 use futures::StreamExt;
 use libp2p::{
     identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent, IPV6_MDNS_MULTICAST_ADDRESS},
+    mdns::{Mdns, MdnsConfig, MdnsEvent},
     swarm::{Swarm, SwarmEvent},
     PeerId,
 };
@@ -39,6 +39,7 @@ async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>>
 }
 
 async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
+    env_logger::try_init().ok();
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
     let mut discovered_a = false;
@@ -82,22 +83,26 @@ async fn test_discovery_async_std_ipv4() -> Result<(), Box<dyn Error>> {
     run_discovery_test(MdnsConfig::default()).await
 }
 
-#[async_std::test]
-async fn test_discovery_async_std_ipv6() -> Result<(), Box<dyn Error>> {
-    let mut config = MdnsConfig::default();
-    config.multicast_addr = *IPV6_MDNS_MULTICAST_ADDRESS;
-    run_discovery_test(config).await
-}
-
 #[tokio::test]
 async fn test_discovery_tokio_ipv4() -> Result<(), Box<dyn Error>> {
     run_discovery_test(MdnsConfig::default()).await
 }
 
+#[async_std::test]
+async fn test_discovery_async_std_ipv6() -> Result<(), Box<dyn Error>> {
+    let config = MdnsConfig {
+        enable_ipv6: true,
+        ..Default::default()
+    };
+    run_discovery_test(config).await
+}
+
 #[tokio::test]
 async fn test_discovery_tokio_ipv6() -> Result<(), Box<dyn Error>> {
-    let mut config = MdnsConfig::default();
-    config.multicast_addr = *IPV6_MDNS_MULTICAST_ADDRESS;
+    let config = MdnsConfig {
+        enable_ipv6: true,
+        ..Default::default()
+    };
     run_discovery_test(config).await
 }
 
@@ -133,10 +138,11 @@ async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Erro
 }
 
 #[async_std::test]
-async fn test_expired_async_std_ipv4() -> Result<(), Box<dyn Error>> {
+async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
+    env_logger::try_init().ok();
     let config = MdnsConfig {
-        ttl: Duration::from_millis(500),
-        query_interval: Duration::from_secs(1),
+        ttl: Duration::from_secs(1),
+        query_interval: Duration::from_secs(10),
         ..Default::default()
     };
 
@@ -146,39 +152,13 @@ async fn test_expired_async_std_ipv4() -> Result<(), Box<dyn Error>> {
         .map_err(|e| Box::new(e) as Box<dyn Error>)
 }
 
-#[async_std::test]
-async fn test_expired_async_std_ipv6() -> Result<(), Box<dyn Error>> {
-    let config = MdnsConfig {
-        ttl: Duration::from_millis(500),
-        query_interval: Duration::from_secs(1),
-        multicast_addr: *IPV6_MDNS_MULTICAST_ADDRESS,
-    };
-
-    async_std::future::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
-        .await
-        .map(|_| ())
-        .map_err(|e| Box::new(e) as Box<dyn Error>)
-}
-
 #[tokio::test]
-async fn test_expired_tokio_ipv4() -> Result<(), Box<dyn Error>> {
+async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
+    env_logger::try_init().ok();
     let config = MdnsConfig {
-        ttl: Duration::from_millis(500),
-        query_interval: Duration::from_secs(1),
+        ttl: Duration::from_secs(1),
+        query_interval: Duration::from_secs(10),
         ..Default::default()
-    };
-
-    tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
-        .await
-        .unwrap()
-}
-
-#[tokio::test]
-async fn test_expired_tokio_ipv6() -> Result<(), Box<dyn Error>> {
-    let config = MdnsConfig {
-        ttl: Duration::from_millis(500),
-        query_interval: Duration::from_secs(1),
-        multicast_addr: *IPV6_MDNS_MULTICAST_ADDRESS,
     };
 
     tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
