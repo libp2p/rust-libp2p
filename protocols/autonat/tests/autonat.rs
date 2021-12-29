@@ -117,6 +117,10 @@ async fn test_auto_probe() {
             other => panic!("Unexpected Event: {:?}", other),
         }
 
+        assert_eq!(client.behaviour().nat_status(), NatStatus::Unknown);
+        assert!(client.behaviour().public_address().is_none());
+        assert_eq!(client.behaviour().confidence(), 0);
+
         // Test Private NAT Status
 
         // Artificially add a faulty address.

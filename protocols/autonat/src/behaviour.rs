@@ -111,6 +111,16 @@ impl NatStatus {
     }
 }
 
+impl From<Result<Multiaddr, ResponseError>> for NatStatus {
+    fn from(result: Result<Multiaddr, ResponseError>) -> Self {
+        match result {
+            Ok(addr) => NatStatus::Public(addr),
+            Err(ResponseError::DialError) => NatStatus::Private,
+            _ => NatStatus::Unknown,
+        }
+    }
+}
+
 /// Unique identifier for a probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProbeId(usize);
@@ -355,7 +365,7 @@ impl Behaviour {
 
     // Send a dial-request to a randomly selected server.
     // Returns the server that is used in this probe.
-    // `Err` if there are no qualified servers or no dial-back addresses.
+    // `Err` if there are no qualified servers or no addresses.
     fn do_probe(
         &mut self,
         probe_id: ProbeId,
@@ -455,36 +465,15 @@ impl Behaviour {
     }
 
     // Adapt current confidence and NAT status to the status reported by the latest probe.
-    fn handle_reported_status(
-        &mut self,
-        probe_id: ProbeId,
-        peer: Option<PeerId>,
-        result: Result<Multiaddr, OutboundProbeError>,
-    ) {
+    // Return the old status if it flipped.
+    fn handle_reported_status(&mut self, reported_status: NatStatus) -> Option<NatStatus> {
         self.schedule_next_probe(self.config.retry_interval);
 
-        let reported_status = match result {
-            Ok(ref addr) => NatStatus::Public(addr.clone()),
-            Err(OutboundProbeError::Response(ResponseError::DialError)) => NatStatus::Private,
-            _ => NatStatus::Unknown,
-        };
-        let event = match result {
-            Ok(address) => OutboundProbeEvent::Response {
-                probe_id,
-                peer: peer.unwrap(),
-                address,
-            },
-            Err(error) => OutboundProbeEvent::Error {
-                probe_id,
-                peer,
-                error,
-            },
-        };
-        self.pending_out_events
-            .push_back(Event::OutboundProbe(event));
-
         if matches!(reported_status, NatStatus::Unknown) {
-        } else if reported_status == self.nat_status {
+            return None;
+        }
+
+        if reported_status == self.nat_status {
             if self.confidence < self.config.confidence_max {
                 self.confidence += 1;
             }
@@ -492,27 +481,31 @@ impl Behaviour {
             if self.confidence >= self.config.confidence_max {
                 self.schedule_next_probe(self.config.refresh_interval);
             }
-        } else if reported_status.is_public() && self.nat_status.is_public() {
+            return None;
+        }
+
+        if reported_status.is_public() && self.nat_status.is_public() {
             // Different address than the currently assumed public address was reported.
             // Switch address, but don't report as flipped.
             self.nat_status = reported_status;
-        } else if self.confidence > 0 {
+            return None;
+        }
+        if self.confidence > 0 {
             // Reduce confidence but keep old status.
             self.confidence -= 1;
-        } else {
-            log::debug!(
-                "Flipped assumed NAT status from {:?} to {:?}",
-                self.nat_status,
-                reported_status
-            );
-            let old_status = self.nat_status.clone();
-            self.nat_status = reported_status;
-            let event = Event::StatusChanged {
-                old: old_status,
-                new: self.nat_status.clone(),
-            };
-            self.pending_out_events.push_back(event);
+            return None;
         }
+
+        log::debug!(
+            "Flipped assumed NAT status from {:?} to {:?}",
+            self.nat_status,
+            reported_status
+        );
+
+        let old_status = self.nat_status.clone();
+        self.nat_status = reported_status;
+
+        Some(old_status)
     }
 }
 
@@ -549,13 +542,14 @@ impl NetworkBehaviour for Behaviour {
                             status_text: None,
                         };
                         let _ = self.inner.send_response(channel, response);
-                        let event = InboundProbeEvent::Response {
-                            probe_id,
-                            peer: *peer,
-                            address: address.clone(),
-                        };
-                        self.pending_out_events
-                            .push_back(Event::InboundProbe(event));
+
+                        self.pending_out_events.push_back(Event::InboundProbe(
+                            InboundProbeEvent::Response {
+                                probe_id,
+                                peer: *peer,
+                                address: address.clone(),
+                            },
+                        ));
                     }
                 }
             }
@@ -592,13 +586,12 @@ impl NetworkBehaviour for Behaviour {
             };
             let _ = self.inner.send_response(channel, response);
 
-            let event = InboundProbeEvent::Error {
-                probe_id,
-                peer: peer.expect("PeerId is present."),
-                error: InboundProbeError::Response(response_error),
-            };
             self.pending_out_events
-                .push_back(Event::InboundProbe(event));
+                .push_back(Event::InboundProbe(InboundProbeEvent::Error {
+                    probe_id,
+                    peer: peer.expect("PeerId is present."),
+                    error: InboundProbeError::Response(response_error),
+                }));
         }
     }
 
@@ -671,32 +664,8 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
-        let mut is_probe_ready = false;
         loop {
-            if self.schedule_probe.poll_unpin(cx).is_ready() {
-                is_probe_ready = true;
-                self.schedule_probe.reset(self.config.retry_interval);
-                continue;
-            }
-            if is_probe_ready {
-                let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-                addresses.extend(params.listened_addresses());
-
-                let probe_id = self.probe_id.next();
-                match self.do_probe(probe_id, addresses) {
-                    Ok(peer) => {
-                        let event = OutboundProbeEvent::Request { probe_id, peer };
-                        self.pending_out_events
-                            .push_back(Event::OutboundProbe(event));
-                    }
-                    Err(e) => {
-                        self.handle_reported_status(probe_id, None, Err(e));
-                    }
-                }
-            }
-            if let Some(event) = self.pending_out_events.pop_front() {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-            }
+            let mut inner_pending = false;
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::Message { peer, message },
@@ -710,16 +679,17 @@ impl NetworkBehaviour for Behaviour {
                         match self.resolve_inbound_request(peer, request) {
                             Ok(addrs) => {
                                 log::debug!("Inbound dial request from Peer {} with dial-back addresses {:?}.", peer, addrs);
+
                                 self.ongoing_inbound
                                     .insert(peer, (probe_id, addrs.clone(), channel));
 
-                                let event = InboundProbeEvent::Request {
-                                    probe_id,
-                                    peer,
-                                    addresses: addrs.clone(),
-                                };
-                                self.pending_out_events
-                                    .push_back(Event::InboundProbe(event));
+                                self.pending_out_events.push_back(Event::InboundProbe(
+                                    InboundProbeEvent::Request {
+                                        probe_id,
+                                        peer,
+                                        addresses: addrs.clone(),
+                                    },
+                                ));
 
                                 return Poll::Ready(NetworkBehaviourAction::Dial {
                                     opts: DialOpts::peer_id(peer)
@@ -742,13 +712,13 @@ impl NetworkBehaviour for Behaviour {
                                 };
                                 let _ = self.inner.send_response(channel, response.clone());
 
-                                let event = InboundProbeEvent::Error {
-                                    probe_id,
-                                    peer,
-                                    error: InboundProbeError::Response(error),
-                                };
-                                self.pending_out_events
-                                    .push_back(Event::InboundProbe(event));
+                                self.pending_out_events.push_back(Event::InboundProbe(
+                                    InboundProbeEvent::Error {
+                                        probe_id,
+                                        peer,
+                                        error: InboundProbeError::Response(error),
+                                    },
+                                ));
                             }
                         }
                     }
@@ -757,28 +727,47 @@ impl NetworkBehaviour for Behaviour {
                         request_id,
                     } => {
                         log::debug!("Outbound dial-back request returned {:?}.", response);
-                        let mut report_addr = None;
-                        if let Ok(ref addr) = response.result {
-                            // Update observed address score if it is finite.
-                            let score = params
-                                .external_addresses()
-                                .find_map(|r| (&r.addr == addr).then(|| r.score))
-                                .unwrap_or(AddressScore::Finite(0));
-                            if let AddressScore::Finite(finite_score) = score {
-                                report_addr = Some(NetworkBehaviourAction::ReportObservedAddr {
-                                    address: addr.clone(),
-                                    score: AddressScore::Finite(finite_score + 1),
-                                });
-                            }
-                        }
                         let probe_id = self
                             .ongoing_outbound
                             .remove(&request_id)
                             .expect("RequestId exists.");
-                        let result = response.result.map_err(OutboundProbeError::Response);
-                        self.handle_reported_status(probe_id, Some(peer), result);
-                        if let Some(action) = report_addr {
-                            return Poll::Ready(action);
+
+                        let event = match response.result.clone() {
+                            Ok(address) => OutboundProbeEvent::Response {
+                                probe_id,
+                                peer,
+                                address,
+                            },
+                            Err(e) => OutboundProbeEvent::Error {
+                                probe_id,
+                                peer: Some(peer),
+                                error: OutboundProbeError::Response(e),
+                            },
+                        };
+                        self.pending_out_events
+                            .push_back(Event::OutboundProbe(event));
+
+                        if let Some(old) =
+                            self.handle_reported_status(response.result.clone().into())
+                        {
+                            self.pending_out_events.push_back(Event::StatusChanged {
+                                old,
+                                new: self.nat_status.clone(),
+                            });
+                        }
+
+                        if let Ok(address) = response.result {
+                            // Update observed address score if it is finite.
+                            let score = params
+                                .external_addresses()
+                                .find_map(|r| (r.addr == address).then(|| r.score))
+                                .unwrap_or(AddressScore::Finite(0));
+                            if let AddressScore::Finite(finite_score) = score {
+                                return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr {
+                                    address,
+                                    score: AddressScore::Finite(finite_score + 1),
+                                });
+                            }
                         }
                     }
                 },
@@ -793,7 +782,7 @@ impl NetworkBehaviour for Behaviour {
                         error,
                         peer
                     );
-                    is_probe_ready = true;
+                    self.schedule_probe.reset(Duration::ZERO);
                 }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::InboundFailure { peer, .. },
@@ -801,7 +790,41 @@ impl NetworkBehaviour for Behaviour {
                     self.ongoing_inbound.remove(&peer);
                 }
                 Poll::Ready(action) => return Poll::Ready(action.map_out(|_| unreachable!())),
-                Poll::Pending => return Poll::Pending,
+                Poll::Pending => inner_pending = true,
+            }
+
+            if self.schedule_probe.poll_unpin(cx).is_ready() {
+                self.schedule_probe.reset(self.config.retry_interval);
+
+                let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
+                addresses.extend(params.listened_addresses());
+
+                let probe_id = self.probe_id.next();
+                match self.do_probe(probe_id, addresses) {
+                    Ok(peer) => {
+                        self.pending_out_events.push_back(Event::OutboundProbe(
+                            OutboundProbeEvent::Request { probe_id, peer },
+                        ));
+                    }
+                    Err(error) => {
+                        self.pending_out_events.push_back(Event::OutboundProbe(
+                            OutboundProbeEvent::Error {
+                                probe_id,
+                                peer: None,
+                                error,
+                            },
+                        ));
+                        self.handle_reported_status(NatStatus::Unknown);
+                    }
+                }
+            }
+
+            if let Some(event) = self.pending_out_events.pop_front() {
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            }
+
+            if inner_pending {
+                return Poll::Pending;
             }
         }
     }
