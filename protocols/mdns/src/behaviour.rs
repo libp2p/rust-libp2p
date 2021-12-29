@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::iface::InterfaceState;
+mod iface;
+
+use self::iface::InterfaceState;
 use crate::MdnsConfig;
 use async_io::Timer;
 use futures::prelude::*;

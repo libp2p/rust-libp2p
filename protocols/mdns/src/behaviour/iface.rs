@@ -18,8 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::dns::{build_query, build_query_response, build_service_discovery_response};
-use crate::query::MdnsPacket;
+mod dns;
+mod query;
+
+use self::dns::{build_query, build_query_response, build_service_discovery_response};
+use self::query::MdnsPacket;
 use crate::MdnsConfig;
 use async_io::{Async, Timer};
 use futures::prelude::*;

@@ -34,9 +34,6 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 mod behaviour;
-mod dns;
-mod iface;
-mod query;
 
 pub use crate::behaviour::{Mdns, MdnsEvent};
 
