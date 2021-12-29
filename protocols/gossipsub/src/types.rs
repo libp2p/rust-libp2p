@@ -22,6 +22,8 @@
 use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::{connection::ConnectionId, PeerId};
+use open_metrics_client::encoding::text::Encode;
+use prost::Message;
 use std::fmt;
 use std::fmt::Debug;
 
@@ -89,7 +91,7 @@ pub struct PeerConnections {
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Encode, Eq)]
 pub enum PeerKind {
     /// A gossipsub 1.1 peer.
     Gossipsubv1_1,
@@ -124,6 +126,21 @@ pub struct RawGossipsubMessage {
 
     /// Flag indicating if this message has been validated by the application or not.
     pub validated: bool,
+}
+
+impl RawGossipsubMessage {
+    /// Calculates the encoded length of this message (used for calculating metrics).
+    pub fn raw_protobuf_len(&self) -> usize {
+        let message = rpc_proto::Message {
+            from: self.source.map(|m| m.to_bytes()),
+            data: Some(self.data.clone()),
+            seqno: self.sequence_number.map(|s| s.to_be_bytes().to_vec()),
+            topic: TopicHash::into_string(self.topic.clone()),
+            signature: self.signature.clone(),
+            key: self.key.clone(),
+        };
+        message.encoded_len()
+    }
 }
 
 /// The message sent to the user after a [`RawGossipsubMessage`] has been transformed by a

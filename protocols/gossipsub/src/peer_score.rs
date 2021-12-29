@@ -21,6 +21,7 @@
 //!
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
+use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
 use instant::Instant;
@@ -212,8 +213,14 @@ impl PeerScore {
         }
     }
 
-    /// Returns the score for a peer.
+    /// Returns the score for a peer
     pub fn score(&self, peer_id: &PeerId) -> f64 {
+        self.metric_score(peer_id, None)
+    }
+
+    /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
+    /// increments the metric counts for penalties.
+    pub fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
         let peer_stats = match self.peer_stats.get(peer_id) {
             Some(v) => v,
             None => return 0.0,
@@ -264,6 +271,9 @@ impl PeerScore {
                         - topic_stats.mesh_message_deliveries;
                     let p3 = deficit * deficit;
                     topic_score += p3 * topic_params.mesh_message_deliveries_weight;
+                    if let Some(metrics) = metrics.as_mut() {
+                        metrics.register_score_penalty(Penalty::MessageDeficit);
+                    }
                     debug!(
                         "[Penalty] The peer {} has a mesh message deliveries deficit of {} in topic\
                          {} and will get penalized by {}",
@@ -313,6 +323,9 @@ impl PeerScore {
                 if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
+                    if let Some(metrics) = metrics.as_mut() {
+                        metrics.register_score_penalty(Penalty::IPColocation);
+                    }
                     debug!(
                         "[Penalty] The peer {} gets penalized because of too many peers with the ip {}. \
                         The surplus is {}. ",
@@ -600,6 +613,7 @@ impl PeerScore {
             "[Penalty] Message from {} rejected because of ValidationError or SelfOrigin",
             from
         );
+
         self.mark_invalid_message_delivery(from, topic_hash);
     }
 
