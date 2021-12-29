@@ -61,16 +61,20 @@ impl ProtocolsHandler for DummyProtocolsHandler {
         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
+        unreachable!("`DeniedUpgrade` is never successful.");
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
+        v: Self::OutboundOpenInfo,
     ) {
+        void::unreachable(v)
     }
 
-    fn inject_event(&mut self, _: Self::InEvent) {}
+    fn inject_event(&mut self, v: Self::InEvent) {
+        void::unreachable(v)
+    }
 
     fn inject_address_change(&mut self, _: &Multiaddr) {}
 
