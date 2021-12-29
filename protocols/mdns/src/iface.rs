@@ -36,7 +36,7 @@ use std::{
 };
 
 /// An mDNS instance for a networking interface. To discover all peers when having multiple
-/// interfaces an instance is required for each interface.
+/// interfaces an [`InterfaceState`] is required for each interface.
 #[derive(Debug)]
 pub struct InterfaceState {
     /// Address this instance is bound to.
@@ -67,7 +67,7 @@ pub struct InterfaceState {
 }
 
 impl InterfaceState {
-    /// Builds a new `Instance`.
+    /// Builds a new [`InterfaceState`].
     pub fn new(addr: IpAddr, config: MdnsConfig) -> io::Result<Self> {
         log::info!("creating instance on iface {}", addr);
         let recv_socket = match addr {

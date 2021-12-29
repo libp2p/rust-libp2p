@@ -21,7 +21,6 @@
 use crate::iface::InterfaceState;
 use crate::MdnsConfig;
 use async_io::Timer;
-use fnv::FnvHashMap;
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::connection::ListenerId;
@@ -31,7 +30,7 @@ use libp2p_swarm::{
     PollParameters, ProtocolsHandler,
 };
 use smallvec::SmallVec;
-use std::collections::hash_map::Entry;
+use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
@@ -45,7 +44,7 @@ pub struct Mdns {
     if_watch: IfWatcher,
 
     /// Mdns interface states.
-    iface_states: FnvHashMap<IpAddr, InterfaceState>,
+    iface_states: HashMap<IpAddr, InterfaceState>,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -153,7 +152,7 @@ impl NetworkBehaviour for Mdns {
                             Ok(iface_state) => {
                                 e.insert(iface_state);
                             }
-                            Err(err) => log::error!("failed to create instance: {}", err),
+                            Err(err) => log::error!("failed to create `InterfaceState`: {}", err),
                         }
                     }
                 }
@@ -210,7 +209,7 @@ impl NetworkBehaviour for Mdns {
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = Timer::at(closest_expiration);
-            Pin::new(&mut timer).poll(cx).is_pending();
+            let _ = Pin::new(&mut timer).poll(cx);
             self.closest_expiration = Some(timer);
         }
         Poll::Pending
