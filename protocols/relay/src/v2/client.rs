@@ -25,6 +25,7 @@ pub mod transport;
 
 use crate::v2::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
+use either::Either;
 use futures::channel::mpsc::Receiver;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
@@ -34,6 +35,7 @@ use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::DialOpts;
+use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
 use libp2p_swarm::{
     NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
     ProtocolsHandlerUpgrErr,
@@ -90,7 +92,9 @@ pub struct Client {
     local_peer_id: PeerId,
 
     from_transport: Receiver<transport::TransportToBehaviourMsg>,
-    connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
+    /// Set of directly connected peers, i.e. not connected via a relayed
+    /// connection.
+    directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<Event>,
@@ -104,7 +108,7 @@ impl Client {
         let behaviour = Client {
             local_peer_id,
             from_transport,
-            connected_peers: Default::default(),
+            directly_connected_peers: Default::default(),
             queued_actions: Default::default(),
         };
         (transport, behaviour)
@@ -123,47 +127,56 @@ impl NetworkBehaviour for Client {
         &mut self,
         peer_id: &PeerId,
         connection_id: &ConnectionId,
-        _: &ConnectedPoint,
+        endpoint: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
     ) {
-        self.connected_peers
-            .entry(*peer_id)
-            .or_default()
-            .push(*connection_id);
+        if !endpoint.is_relayed() {
+            self.directly_connected_peers
+                .entry(*peer_id)
+                .or_default()
+                .push(*connection_id);
+        }
     }
 
     fn inject_connection_closed(
         &mut self,
         peer_id: &PeerId,
         connection_id: &ConnectionId,
-        _: &ConnectedPoint,
-        _handler: handler::Handler,
+        endpoint: &ConnectedPoint,
+        _handler: Either<handler::Handler, DummyProtocolsHandler>,
     ) {
-        match self.connected_peers.entry(*peer_id) {
-            hash_map::Entry::Occupied(mut connections) => {
-                let position = connections
-                    .get()
-                    .iter()
-                    .position(|c| c == connection_id)
-                    .expect("Connection to be known.");
-                connections.get_mut().remove(position);
+        if !endpoint.is_relayed() {
+            match self.directly_connected_peers.entry(*peer_id) {
+                hash_map::Entry::Occupied(mut connections) => {
+                    let position = connections
+                        .get()
+                        .iter()
+                        .position(|c| c == connection_id)
+                        .expect("Connection to be known.");
+                    connections.get_mut().remove(position);
 
-                if connections.get().is_empty() {
-                    connections.remove();
+                    if connections.get().is_empty() {
+                        connections.remove();
+                    }
                 }
-            }
-            hash_map::Entry::Vacant(_) => {
-                unreachable!("`inject_connection_closed` for unconnected peer.")
-            }
-        };
+                hash_map::Entry::Vacant(_) => {
+                    unreachable!("`inject_connection_closed` for unconnected peer.")
+                }
+            };
+        }
     }
 
     fn inject_event(
         &mut self,
         event_source: PeerId,
         _connection: ConnectionId,
-        handler_event: handler::Event,
+        handler_event: Either<handler::Event, void::Void>,
     ) {
+        let handler_event = match handler_event {
+            Either::Left(e) => e,
+            Either::Right(v) => void::unreachable(v),
+        };
+
         match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => self
                 .queued_actions
@@ -228,14 +241,14 @@ impl NetworkBehaviour for Client {
                 to_listener,
             }) => {
                 match self
-                    .connected_peers
+                    .directly_connected_peers
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
                     Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
-                        event: handler::In::Reserve { to_listener },
+                        event: Either::Left(handler::In::Reserve { to_listener }),
                     },
                     None => {
                         let handler = handler::Prototype::new(
@@ -260,17 +273,17 @@ impl NetworkBehaviour for Client {
                 ..
             }) => {
                 match self
-                    .connected_peers
+                    .directly_connected_peers
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
                     Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
-                        event: handler::In::EstablishCircuit {
+                        event: Either::Left(handler::In::EstablishCircuit {
                             send_back,
                             dst_peer_id,
-                        },
+                        }),
                     },
                     None => {
                         let handler = handler::Prototype::new(

@@ -23,6 +23,7 @@ use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_hop, outbound_stop};
 use crate::v2::relay::CircuitId;
 use bytes::Bytes;
+use either::Either;
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
@@ -32,6 +33,7 @@ use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_swarm::protocols_handler::{DummyProtocolsHandler, SendWrapper};
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
     IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -339,31 +341,36 @@ pub struct Prototype {
 }
 
 impl IntoProtocolsHandler for Prototype {
-    type Handler = Handler;
+    type Handler = Either<Handler, DummyProtocolsHandler>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        Handler {
-            endpoint: endpoint.clone(),
-            config: self.config,
-            queued_events: Default::default(),
-            pending_error: Default::default(),
-            reservation_accept_futures: Default::default(),
-            reservation_deny_futures: Default::default(),
-            circuit_accept_futures: Default::default(),
-            circuit_deny_futures: Default::default(),
-            alive_lend_out_substreams: Default::default(),
-            circuits: Default::default(),
-            active_reservation: Default::default(),
-            keep_alive: KeepAlive::Yes,
+        if endpoint.is_relayed() {
+            // Deny all substreams on relayed connection.
+            Either::Right(DummyProtocolsHandler::default())
+        } else {
+            Either::Left(Handler {
+                endpoint: endpoint.clone(),
+                config: self.config,
+                queued_events: Default::default(),
+                pending_error: Default::default(),
+                reservation_accept_futures: Default::default(),
+                reservation_deny_futures: Default::default(),
+                circuit_accept_futures: Default::default(),
+                circuit_deny_futures: Default::default(),
+                alive_lend_out_substreams: Default::default(),
+                circuits: Default::default(),
+                active_reservation: Default::default(),
+                keep_alive: KeepAlive::Yes,
+            })
         }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        inbound_hop::Upgrade {
+        upgrade::EitherUpgrade::A(SendWrapper(inbound_hop::Upgrade {
             reservation_duration: self.config.reservation_duration,
             max_circuit_duration: self.config.max_circuit_duration,
             max_circuit_bytes: self.config.max_circuit_bytes,
-        }
+        }))
     }
 }
 

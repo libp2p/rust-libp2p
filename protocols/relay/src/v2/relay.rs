@@ -25,10 +25,12 @@ pub mod rate_limiter;
 
 use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
+use either::Either;
 use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
+use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
     ProtocolsHandlerUpgrErr,
@@ -210,7 +212,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
-        _handler: handler::Handler,
+        _handler: Either<handler::Handler, DummyProtocolsHandler>,
     ) {
         if let Some(connections) = self.reservations.get_mut(peer) {
             connections.remove(&connection);
@@ -238,8 +240,13 @@ impl NetworkBehaviour for Relay {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        event: handler::Event,
+        event: Either<handler::Event, void::Void>,
     ) {
+        let event = match event {
+            Either::Left(e) => e,
+            Either::Right(v) => void::unreachable(v),
+        };
+
         match event {
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
@@ -248,18 +255,13 @@ impl NetworkBehaviour for Relay {
             } => {
                 let now = Instant::now();
 
-                let action = if endpoint.is_relayed() {
-                    // Deny reservation requests over relayed circuits.
-                    NetworkBehaviourAction::NotifyHandler {
-                        handler: NotifyHandler::One(connection),
-                        peer_id: event_source,
-                        event: handler::In::DenyReservationReq {
-                            inbound_reservation_req,
-                            status: message_proto::Status::PermissionDenied,
-                        },
-                    }
-                    .into()
-                } else if
+                assert!(
+                    !endpoint.is_relayed(),
+                    "`DummyProtocolsHandler` handles relayed connections. It \
+                     denies all inbound substreams."
+                );
+
+                let action = if
                 // Deny if it is a new reservation and exceeds `max_reservations_per_peer`.
                 (!renewed
                     && self
@@ -282,15 +284,14 @@ impl NetworkBehaviour for Relay {
                         .iter_mut()
                         .all(|limiter| {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
-                        })
-                {
+                        }) {
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
-                        event: handler::In::DenyReservationReq {
+                        event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
                             status: message_proto::Status::ResourceLimitExceeded,
-                        },
+                        }),
                     }
                     .into()
                 } else {
@@ -369,20 +370,13 @@ impl NetworkBehaviour for Relay {
             } => {
                 let now = Instant::now();
 
-                let action = if endpoint.is_relayed() {
-                    // Deny circuit requests over relayed circuit.
-                    //
-                    // An attacker could otherwise build recursive or cyclic circuits.
-                    NetworkBehaviourAction::NotifyHandler {
-                        handler: NotifyHandler::One(connection),
-                        peer_id: event_source,
-                        event: handler::In::DenyCircuitReq {
-                            circuit_id: None,
-                            inbound_circuit_req,
-                            status: message_proto::Status::PermissionDenied,
-                        },
-                    }
-                } else if self.circuits.num_circuits_of_peer(event_source)
+                assert!(
+                    !endpoint.is_relayed(),
+                    "`DummyProtocolsHandler` handles relayed connections. It \
+                     denies all inbound substreams."
+                );
+
+                let action = if self.circuits.num_circuits_of_peer(event_source)
                     > self.config.max_circuits_per_peer
                     || self.circuits.len() >= self.config.max_circuits
                     || !self
@@ -391,17 +385,16 @@ impl NetworkBehaviour for Relay {
                         .iter_mut()
                         .all(|limiter| {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
-                        })
-                {
+                        }) {
                     // Deny circuit exceeding limits.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
-                        event: handler::In::DenyCircuitReq {
+                        event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
                             status: message_proto::Status::ResourceLimitExceeded,
-                        },
+                        }),
                     }
                 } else if let Some(dst_conn) = self
                     .reservations
@@ -421,24 +414,24 @@ impl NetworkBehaviour for Relay {
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(*dst_conn),
                         peer_id: event_source,
-                        event: handler::In::NegotiateOutboundConnect {
+                        event: Either::Left(handler::In::NegotiateOutboundConnect {
                             circuit_id,
                             inbound_circuit_req,
                             relay_peer_id: self.local_peer_id,
                             src_peer_id: event_source,
                             src_connection_id: connection,
-                        },
+                        }),
                     }
                 } else {
                     // Deny circuit request if no reservation present.
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
-                        event: handler::In::DenyCircuitReq {
+                        event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
                             status: message_proto::Status::NoReservation,
-                        },
+                        }),
                     }
                 };
                 self.queued_actions.push_back(action.into());
@@ -499,14 +492,14 @@ impl NetworkBehaviour for Relay {
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(src_connection_id),
                         peer_id: src_peer_id,
-                        event: handler::In::AcceptAndDriveCircuit {
+                        event: Either::Left(handler::In::AcceptAndDriveCircuit {
                             circuit_id,
                             dst_peer_id: event_source,
                             inbound_circuit_req,
                             dst_handler_notifier,
                             dst_stream,
                             dst_pending_data,
-                        },
+                        }),
                     }
                     .into(),
                 );
@@ -523,11 +516,11 @@ impl NetworkBehaviour for Relay {
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(src_connection_id),
                         peer_id: src_peer_id,
-                        event: handler::In::DenyCircuitReq {
+                        event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: Some(circuit_id),
                             inbound_circuit_req,
                             status,
-                        },
+                        }),
                     }
                     .into(),
                 );
@@ -722,7 +715,7 @@ impl Action {
             } => NetworkBehaviourAction::NotifyHandler {
                 handler,
                 peer_id,
-                event: handler::In::AcceptReservationReq {
+                event: Either::Left(handler::In::AcceptReservationReq {
                     inbound_reservation_req,
                     addrs: poll_parameters
                         .external_addresses()
@@ -731,7 +724,7 @@ impl Action {
                                 .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
                         })
                         .collect(),
-                },
+                }),
             },
         }
     }
