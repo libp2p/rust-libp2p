@@ -4,7 +4,10 @@
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
+- Derive `Clone` for `KademliaEvent` (see [PR 2411])
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2411]: https://github.com/libp2p/rust-libp2p/pull/2411
 
 # 0.33.0 [2021-11-16]
 
