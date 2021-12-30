@@ -705,9 +705,18 @@ where
                     handler,
                 }) => {
                     if let Some(error) = error.as_ref() {
-                        log::debug!("Connection {:?} closed: {:?}", connected, error);
+                        log::debug!(
+                            "Connection closed with error {:?}: {:?}; Total (peer): {}.",
+                            error,
+                            connected,
+                            remaining_established_connection_ids.len()
+                        );
                     } else {
-                        log::debug!("Connection {:?} closed (active close).", connected);
+                        log::debug!(
+                            "Connection closed: {:?}; Total (peer): {}.",
+                            connected,
+                            remaining_established_connection_ids.len()
+                        );
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
