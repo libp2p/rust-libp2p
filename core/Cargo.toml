@@ -59,7 +59,7 @@ rand07 = { package = "rand", version = "0.7" }
 prost-build = "0.9"
 
 [features]
-default = [ "secp256k1", "ecdsa", "serde" ]
+default = [ "secp256k1", "ecdsa" ]
 secp256k1 = [ "libsecp256k1" ]
 ecdsa = [ "p256" ]
 serde = ["multihash/serde-codec", "_serde"]
