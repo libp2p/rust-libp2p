@@ -30,7 +30,7 @@ use std::borrow::Cow;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// The possible errors of a `RecordStore` operation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// The store is at capacity w.r.t. the total number of stored records.
     MaxRecords,
