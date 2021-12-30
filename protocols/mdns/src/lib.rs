@@ -30,7 +30,12 @@
 //! struct will automatically discover other libp2p nodes on the local network.
 //!
 use lazy_static::lazy_static;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::time::Duration;
+
+mod behaviour;
+
+pub use crate::behaviour::{Mdns, MdnsEvent};
 
 /// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
@@ -38,13 +43,32 @@ const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
 
 lazy_static! {
-    pub static ref IPV4_MDNS_MULTICAST_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 251));
-    pub static ref IPV6_MDNS_MULTICAST_ADDRESS: IpAddr =
-        IpAddr::V6(Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB));
+    pub static ref IPV4_MDNS_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+    pub static ref IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr =
+        Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB);
 }
 
-pub use crate::behaviour::{Mdns, MdnsConfig, MdnsEvent};
+/// Configuration for mDNS.
+#[derive(Clone, Debug)]
+pub struct MdnsConfig {
+    /// TTL to use for mdns records.
+    pub ttl: Duration,
+    /// Interval at which to poll the network for new peers. This isn't
+    /// necessary during normal operation but avoids the case that an
+    /// initial packet was lost and not discovering any peers until a new
+    /// peer joins the network. Receiving an mdns packet resets the timer
+    /// preventing unnecessary traffic.
+    pub query_interval: Duration,
+    /// Use IPv6 instead of IPv4.
+    pub enable_ipv6: bool,
+}
 
-mod behaviour;
-mod dns;
-mod query;
+impl Default for MdnsConfig {
+    fn default() -> Self {
+        Self {
+            ttl: Duration::from_secs(6 * 60),
+            query_interval: Duration::from_secs(5 * 60),
+            enable_ipv6: false,
+        }
+    }
+}
