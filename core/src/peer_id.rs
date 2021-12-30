@@ -34,8 +34,6 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "_serde"))] 
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeerId {
     multihash: Multihash,
@@ -166,6 +164,60 @@ impl From<PeerId> for Multihash {
 impl From<PeerId> for Vec<u8> {
     fn from(peer_id: PeerId) -> Self {
         peer_id.to_bytes()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for PeerId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: _serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&self.to_base58())
+        } else {
+            serializer.serialize_bytes(&self.to_bytes()[..])
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for PeerId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: _serde::Deserializer<'de>,
+    {
+        use serde::de::*;
+
+        struct PeerIdVisitor;
+
+        impl<'de> Visitor<'de> for PeerIdVisitor {
+            type Value = PeerId;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "valid peer id")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                PeerId::from_bytes(v).map_err(|_| Error::invalid_value(Unexpected::Bytes(v), &self))
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                PeerId::from_str(v).map_err(|_| Error::invalid_value(Unexpected::Str(v), &self))
+            }
+        }
+
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_str(PeerIdVisitor)
+        } else {
+            deserializer.deserialize_bytes(PeerIdVisitor)
+        }
     }
 }
 
