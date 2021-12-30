@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{dns, META_QUERY_SERVICE, SERVICE_NAME};
+use super::dns;
+use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use dns_parser::{Packet, RData};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -290,9 +291,8 @@ impl fmt::Debug for MdnsPeer {
 
 #[cfg(test)]
 mod tests {
-
+    use super::super::dns::build_query_response;
     use super::*;
-    use crate::dns::build_query_response;
 
     #[test]
     fn test_create_mdns_peer() {
