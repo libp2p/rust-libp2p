@@ -23,7 +23,7 @@ libp2p-identify = { version = "0.33.0", path = "../../protocols/identify", optio
 libp2p-kad = { version = "0.34.0", path = "../../protocols/kad", optional = true }
 libp2p-ping = { version = "0.33.0", path = "../../protocols/ping", optional = true }
 libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
-open-metrics-client = "0.13.0"
+open-metrics-client = "0.14.0"
 
 [dev-dependencies]
 env_logger = "0.8.1"

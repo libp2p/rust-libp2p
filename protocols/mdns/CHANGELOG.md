@@ -13,11 +13,15 @@
 
 - Fix generation of peer expiration event and listen on specified IP version (see [PR 2359]).
 
+- Support multiple interfaces (see [PR 2383]).
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
 [PR 2311]: https://github.com/libp2p/rust-libp2p/pull/2311/
 
 [PR 2359]: https://github.com/libp2p/rust-libp2p/pull/2359
+
+[PR 2383]: https://github.com/libp2p/rust-libp2p/pull/2383
 
 # 0.33.0 [2021-11-16]
 
