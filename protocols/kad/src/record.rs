@@ -27,8 +27,12 @@ use instant::Instant;
 use libp2p_core::{multihash::Multihash, Multiaddr, PeerId};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// The (opaque) key of a record.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "_serde"))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Key(Bytes);
 
