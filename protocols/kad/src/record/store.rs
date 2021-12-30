@@ -41,9 +41,6 @@ pub enum Error {
 
     #[error("the value is too large to be stored")]
     ValueTooLarge,
-
-    #[error("the value is invalid")]
-    Invalid,
 }
 
 /// Trait for types implementing a record store.
