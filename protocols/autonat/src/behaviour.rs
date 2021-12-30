@@ -262,7 +262,15 @@ pub struct Behaviour {
     schedule_probe: Delay,
 
     // Ongoing inbound requests, where no response has been sent back to the remote yet.
-    ongoing_inbound: HashMap<PeerId, (ProbeId, Vec<Multiaddr>, ResponseChannel<DialResponse>)>,
+    ongoing_inbound: HashMap<
+        PeerId,
+        (
+            ProbeId,
+            RequestId,
+            Vec<Multiaddr>,
+            ResponseChannel<DialResponse>,
+        ),
+    >,
 
     // Ongoing outbound probes and mapped to the inner request id.
     ongoing_outbound: HashMap<RequestId, ProbeId>,
@@ -527,7 +535,7 @@ impl NetworkBehaviour for Behaviour {
 
         match endpoint {
             ConnectedPoint::Dialer { address } => {
-                if let Some((_, addrs, _)) = self.ongoing_inbound.get(peer) {
+                if let Some((_, _, addrs, _)) = self.ongoing_inbound.get(peer) {
                     // Check if the dialed address was among the requested addresses.
                     if addrs.contains(address) {
                         log::debug!(
@@ -536,7 +544,7 @@ impl NetworkBehaviour for Behaviour {
                             address
                         );
 
-                        let (probe_id, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
+                        let (probe_id, _, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
                         let response = DialResponse {
                             result: Ok(address.clone()),
                             status_text: None,
@@ -573,7 +581,8 @@ impl NetworkBehaviour for Behaviour {
         error: &DialError,
     ) {
         self.inner.inject_dial_failure(peer, handler, error);
-        if let Some((probe_id, _, channel)) = peer.and_then(|p| self.ongoing_inbound.remove(&p)) {
+        if let Some((probe_id, _, _, channel)) = peer.and_then(|p| self.ongoing_inbound.remove(&p))
+        {
             log::debug!(
                 "Dial-back to peer {} failed with error {:?}.",
                 peer.unwrap(),
@@ -671,7 +680,7 @@ impl NetworkBehaviour for Behaviour {
                     RequestResponseEvent::Message { peer, message },
                 )) => match message {
                     RequestResponseMessage::Request {
-                        request_id: _,
+                        request_id,
                         request,
                         channel,
                     } => {
@@ -681,7 +690,7 @@ impl NetworkBehaviour for Behaviour {
                                 log::debug!("Inbound dial request from Peer {} with dial-back addresses {:?}.", peer, addrs);
 
                                 self.ongoing_inbound
-                                    .insert(peer, (probe_id, addrs.clone(), channel));
+                                    .insert(peer, (probe_id, request_id, addrs.clone(), channel));
 
                                 self.pending_out_events.push_back(Event::InboundProbe(
                                     InboundProbeEvent::Request {
@@ -775,19 +784,59 @@ impl NetworkBehaviour for Behaviour {
                     RequestResponseEvent::ResponseSent { .. },
                 )) => {}
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure { error, peer, .. },
+                    RequestResponseEvent::OutboundFailure {
+                        error,
+                        peer,
+                        request_id,
+                    },
                 )) => {
                     log::debug!(
-                        "Outbound Failure {} when sending dial-back request to server {}.",
+                        "Outbound Failure {} when on dial-back request to peer {}.",
                         error,
                         peer
                     );
+                    let probe_id = self
+                        .ongoing_outbound
+                        .remove(&request_id)
+                        .unwrap_or_else(|| self.probe_id.next());
+
+                    self.pending_out_events.push_back(Event::OutboundProbe(
+                        OutboundProbeEvent::Error {
+                            probe_id,
+                            peer: Some(peer),
+                            error: OutboundProbeError::OutboundRequest(error),
+                        },
+                    ));
+
                     self.schedule_probe.reset(Duration::ZERO);
                 }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::InboundFailure { peer, .. },
+                    RequestResponseEvent::InboundFailure {
+                        peer,
+                        error,
+                        request_id,
+                    },
                 )) => {
-                    self.ongoing_inbound.remove(&peer);
+                    log::debug!(
+                        "Inbound Failure {} when on dial-back request from peer {}.",
+                        error,
+                        peer
+                    );
+
+                    let probe_id = match self.ongoing_inbound.get(&peer) {
+                        Some((_, rq_id, _, _)) if *rq_id == request_id => {
+                            self.ongoing_inbound.remove(&peer).unwrap().0
+                        }
+                        _ => self.probe_id.next(),
+                    };
+
+                    self.pending_out_events.push_back(Event::InboundProbe(
+                        InboundProbeEvent::Error {
+                            probe_id,
+                            peer,
+                            error: InboundProbeError::InboundRequest(error),
+                        },
+                    ));
                 }
                 Poll::Ready(action) => return Poll::Ready(action.map_out(|_| unreachable!())),
                 Poll::Pending => inner_pending = true,
