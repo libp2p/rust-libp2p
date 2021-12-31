@@ -10,6 +10,8 @@
 
 - Move `swarm::Toggle` to `swarm::behaviour::Toggle` (see [PR 2375]).
 
+- Add `Swarm::connected_peers` (see [PR 2378]).
+
 - Implement `swarm::NetworkBehaviour` on `either::Either` (see [PR 2370]).
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
@@ -17,6 +19,7 @@
 [PR 2362]: https://github.com/libp2p/rust-libp2p/pull/2362
 [PR 2370]: https://github.com/libp2p/rust-libp2p/pull/2370
 [PR 2375]: https://github.com/libp2p/rust-libp2p/pull/2375
+[PR 2378]: https://github.com/libp2p/rust-libp2p/pull/2378
 
 # 0.32.0 [2021-11-16]
 

@@ -4659,6 +4659,8 @@ mod tests {
 
     #[test]
     fn test_iwant_penalties() {
+        let _ = env_logger::try_init();
+
         let config = GossipsubConfigBuilder::default()
             .iwant_followup_time(Duration::from_secs(4))
             .build()
@@ -4666,9 +4668,9 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         peer_score_params.behaviour_penalty_weight = -1.0;
 
-        //fill the mesh
+        // fill the mesh
         let (mut gs, peers, topics) = inject_nodes1()
-            .peer_no(config.mesh_n_high())
+            .peer_no(2)
             .topics(vec!["test".into()])
             .to_subscribe(false)
             .gs_config(config.clone())
@@ -4677,79 +4679,76 @@ mod tests {
             .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
             .create_network();
 
-        //graft to all peers to really fill the mesh with all the peers
+        // graft to all peers to really fill the mesh with all the peers
         for peer in peers {
             gs.handle_graft(&peer, topics.clone());
         }
 
-        //add 100 more peers
+        // add 100 more peers
         let other_peers: Vec<_> = (0..100)
             .map(|_| add_peer(&mut gs, &topics, false, false))
             .collect();
 
-        //each peer sends us two ihave containing each two message ids
+        // each peer sends us an ihave containing each two message ids
         let mut first_messages = Vec::new();
         let mut second_messages = Vec::new();
         let mut seq = 0;
         for peer in &other_peers {
-            for _ in 0..2 {
-                let msg1 = random_message(&mut seq, &topics);
-                let msg2 = random_message(&mut seq, &topics);
+            let msg1 = random_message(&mut seq, &topics);
+            let msg2 = random_message(&mut seq, &topics);
 
-                // Decompress the raw message and calculate the message id.
-                // Transform the inbound message
-                let message1 = &gs.data_transform.inbound_transform(msg1.clone()).unwrap();
+            // Decompress the raw message and calculate the message id.
+            // Transform the inbound message
+            let message1 = &gs.data_transform.inbound_transform(msg1.clone()).unwrap();
 
-                // Transform the inbound message
-                let message2 = &gs.data_transform.inbound_transform(msg2.clone()).unwrap();
+            // Transform the inbound message
+            let message2 = &gs.data_transform.inbound_transform(msg2.clone()).unwrap();
 
-                first_messages.push(msg1.clone());
-                second_messages.push(msg2.clone());
-                gs.handle_ihave(
-                    peer,
-                    vec![(
-                        topics[0].clone(),
-                        vec![config.message_id(&message1), config.message_id(&message2)],
-                    )],
-                );
-            }
+            first_messages.push(msg1.clone());
+            second_messages.push(msg2.clone());
+            gs.handle_ihave(
+                peer,
+                vec![(
+                    topics[0].clone(),
+                    vec![config.message_id(&message1), config.message_id(&message2)],
+                )],
+            );
         }
 
-        //other peers send us all the first message ids in time
-        for message in first_messages {
-            gs.handle_received_message(message.clone(), &PeerId::random());
+        // the peers send us all the first message ids in time
+        for (index, peer) in other_peers.iter().enumerate() {
+            gs.handle_received_message(first_messages[index].clone(), &peer);
         }
 
-        //now we do a heartbeat no penalization should have been applied yet
+        // now we do a heartbeat no penalization should have been applied yet
         gs.heartbeat();
 
         for peer in &other_peers {
             assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 0.0);
         }
 
-        //receive the first twenty of the second messages (that are the messages of the first 10
-        // peers)
-        for message in second_messages.iter().take(20) {
-            gs.handle_received_message(message.clone(), &PeerId::random());
+        // receive the first twenty of the other peers then send their response
+        for (index, peer) in other_peers.iter().enumerate().take(20) {
+            gs.handle_received_message(second_messages[index].clone(), &peer);
         }
 
-        //sleep for one second
+        // sleep for the promise duration
         sleep(Duration::from_secs(4));
 
-        //now we do a heartbeat to apply penalization
+        // now we do a heartbeat to apply penalization
         gs.heartbeat();
 
-        //now we get all the second messages
-        for message in second_messages {
-            gs.handle_received_message(message.clone(), &PeerId::random());
+        // now we get the second messages from the last 80 peers.
+        for (index, peer) in other_peers.iter().enumerate() {
+            if index > 19 {
+                gs.handle_received_message(second_messages[index].clone(), &peer);
+            }
         }
 
-        //no further penalizations should get applied
+        // no further penalizations should get applied
         gs.heartbeat();
 
-        //now randomly some peers got penalized, some may not, and some may got penalized twice
-        //with very high probability (> 1 - 10^-50) all three cases are present under the 100 peers
-        //but the first 10 peers should all not got penalized.
+        // Only the last 80 peers should be penalized for not responding in time
         let mut not_penalized = 0;
         let mut single_penalized = 0;
         let mut double_penalized = 0;
@@ -4765,13 +4764,15 @@ mod tests {
                 assert!(i > 9);
                 double_penalized += 1
             } else {
+                println!("{}", peer);
+                println!("{}", score);
                 assert!(false, "Invalid score of peer")
             }
         }
 
-        assert!(not_penalized > 10);
-        assert!(single_penalized > 0);
-        assert!(double_penalized > 0);
+        assert_eq!(not_penalized, 20);
+        assert_eq!(single_penalized, 80);
+        assert_eq!(double_penalized, 0);
     }
 
     #[test]
@@ -5138,7 +5139,7 @@ mod tests {
             gs.handle_received_message(message.clone(), &PeerId::random());
         }
 
-        assert!(counters.fast_counter <= 5);
+        assert_eq!(counters.fast_counter, 5);
         assert_eq!(counters.slow_counter, 1);
     }
 

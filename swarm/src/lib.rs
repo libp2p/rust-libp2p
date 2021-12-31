@@ -584,6 +584,11 @@ where
         self.network.is_connected(peer_id)
     }
 
+    /// Returns the currently connected peers.
+    pub fn connected_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.network.connected_peers()
+    }
+
     /// Returns a reference to the provided [`NetworkBehaviour`].
     pub fn behaviour(&self) -> &TBehaviour {
         &self.behaviour
@@ -700,9 +705,18 @@ where
                     handler,
                 }) => {
                     if let Some(error) = error.as_ref() {
-                        log::debug!("Connection {:?} closed: {:?}", connected, error);
+                        log::debug!(
+                            "Connection closed with error {:?}: {:?}; Total (peer): {}.",
+                            error,
+                            connected,
+                            remaining_established_connection_ids.len()
+                        );
                     } else {
-                        log::debug!("Connection {:?} closed (active close).", connected);
+                        log::debug!(
+                            "Connection closed: {:?}; Total (peer): {}.",
+                            connected,
+                            remaining_established_connection_ids.len()
+                        );
                     }
                     let peer_id = connected.peer_id;
                     let endpoint = connected.endpoint;
