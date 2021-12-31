@@ -674,7 +674,11 @@ impl NetworkBehaviour for Behaviour {
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
         loop {
-            let mut inner_pending = false;
+            if let Some(event) = self.pending_out_events.pop_front() {
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            }
+
+            let mut is_inner_pending = false;
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::Message { peer, message },
@@ -839,41 +843,38 @@ impl NetworkBehaviour for Behaviour {
                     ));
                 }
                 Poll::Ready(action) => return Poll::Ready(action.map_out(|_| unreachable!())),
-                Poll::Pending => inner_pending = true,
+                Poll::Pending => is_inner_pending = true,
             }
 
-            if self.schedule_probe.poll_unpin(cx).is_ready() {
-                self.schedule_probe.reset(self.config.retry_interval);
+            match self.schedule_probe.poll_unpin(cx) {
+                Poll::Ready(()) => {
+                    self.schedule_probe.reset(self.config.retry_interval);
 
-                let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-                addresses.extend(params.listened_addresses());
+                    let mut addresses: Vec<_> =
+                        params.external_addresses().map(|r| r.addr).collect();
+                    addresses.extend(params.listened_addresses());
 
-                let probe_id = self.probe_id.next();
-                match self.do_probe(probe_id, addresses) {
-                    Ok(peer) => {
-                        self.pending_out_events.push_back(Event::OutboundProbe(
-                            OutboundProbeEvent::Request { probe_id, peer },
-                        ));
-                    }
-                    Err(error) => {
-                        self.pending_out_events.push_back(Event::OutboundProbe(
-                            OutboundProbeEvent::Error {
-                                probe_id,
-                                peer: None,
-                                error,
-                            },
-                        ));
-                        self.handle_reported_status(NatStatus::Unknown);
+                    let probe_id = self.probe_id.next();
+                    match self.do_probe(probe_id, addresses) {
+                        Ok(peer) => {
+                            self.pending_out_events.push_back(Event::OutboundProbe(
+                                OutboundProbeEvent::Request { probe_id, peer },
+                            ));
+                        }
+                        Err(error) => {
+                            self.pending_out_events.push_back(Event::OutboundProbe(
+                                OutboundProbeEvent::Error {
+                                    probe_id,
+                                    peer: None,
+                                    error,
+                                },
+                            ));
+                            self.handle_reported_status(NatStatus::Unknown);
+                        }
                     }
                 }
-            }
-
-            if let Some(event) = self.pending_out_events.pop_front() {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-            }
-
-            if inner_pending {
-                return Poll::Pending;
+                Poll::Pending if is_inner_pending => return Poll::Pending,
+                Poll::Pending => {}
             }
         }
     }
