@@ -25,11 +25,13 @@ use std::collections::HashMap;
 
 use open_metrics_client::encoding::text::Encode;
 use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::Family;
+use open_metrics_client::metrics::family::{Family, MetricConstructor};
 use open_metrics_client::metrics::gauge::Gauge;
+use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
 use open_metrics_client::registry::Registry;
 
 use crate::topic::TopicHash;
+use crate::types::{MessageAcceptance, PeerKind};
 
 // Default value that limits for how many topics do we store metrics.
 const DEFAULT_MAX_TOPICS: usize = 300;
@@ -60,48 +62,6 @@ impl Default for Config {
 /// Whether we have ever been subscribed to this topic.
 type EverSubscribed = bool;
 
-/// Reasons why a peer was included in the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Inclusion {
-    /// Peer was a fanaout peer.
-    Fanaout,
-    /// Included from random selection.
-    Random,
-    /// Peer subscribed.
-    Subscribed,
-    /// Peer was included to fill the outbound quota.
-    Outbound,
-}
-
-/// Reasons why a peer was removed from the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Churn {
-    /// Peer disconnected.
-    Dc,
-    /// Peer had a bad score.
-    BadScore,
-    /// Peer sent a PRUNE.
-    Prune,
-    /// Peer unsubscribed.
-    Unsub,
-    /// Too many peers.
-    Excess,
-}
-
-/// Label for the mesh inclusion event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-struct InclusionLabel {
-    topic: TopicHash,
-    reason: Inclusion,
-}
-
-/// Label for the mesh churn event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-struct ChurnLabel {
-    topic: TopicHash,
-    reason: Churn,
-}
-
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct Metrics {
     /* Configuration parameters */
@@ -123,6 +83,14 @@ pub struct Metrics {
     /// Number of peers subscribed to each topic. This allows us to analyze a topic's behaviour
     /// regardless of our subscription status.
     topic_peers_count: Family<TopicHash, Gauge>,
+    /// The number of invalid messages received for a given topic.
+    invalid_messages: Family<TopicHash, Counter>,
+    /// The number of messages accepted by the application (validation result).
+    accepted_messages: Family<TopicHash, Counter>,
+    /// The number of messages ignored by the application (validation result).
+    ignored_messages: Family<TopicHash, Counter>,
+    /// The number of messages rejected by the application (validation result).
+    rejected_messages: Family<TopicHash, Counter>,
 
     /* Metrics regarding mesh state */
     /// Number of peers in our mesh. This metric should be updated with the count of peers for a
@@ -133,11 +101,43 @@ pub struct Metrics {
     /// Number of times we remove peers in a topic mesh for different reasons.
     mesh_peer_churn_events: Family<ChurnLabel, Counter>,
 
-    /* Metrics regarding messages sent */
+    /* Metrics regarding messages sent/received */
     /// Number of gossip messages sent to each topic.
     topic_msg_sent_counts: Family<TopicHash, Counter>,
-    /// Bytes from gossip messages sent to each topic .
+    /// Bytes from gossip messages sent to each topic.
     topic_msg_sent_bytes: Family<TopicHash, Counter>,
+    /// Number of gossipsub messages published to each topic.
+    topic_msg_published: Family<TopicHash, Counter>,
+
+    /// Number of gossipsub messages received on each topic (without filtering duplicates).
+    topic_msg_recv_counts_unfiltered: Family<TopicHash, Counter>,
+    /// Number of gossipsub messages received on each topic (after filtering duplicates).
+    topic_msg_recv_counts: Family<TopicHash, Counter>,
+    /// Bytes received from gossip messages for each topic.
+    topic_msg_recv_bytes: Family<TopicHash, Counter>,
+
+    /* Metrics related to scoring */
+    /// Histogram of the scores for each mesh topic.
+    score_per_mesh: Family<TopicHash, Histogram, HistBuilder>,
+    /// A counter of the kind of penalties being applied to peers.
+    scoring_penalties: Family<PenaltyLabel, Counter>,
+
+    /* General Metrics */
+    /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers are classified based
+    /// on which protocol they support. This metric keeps track of the number of peers that are
+    /// connected of each type.
+    peers_per_protocol: Family<ProtocolLabel, Gauge>,
+    /// The time it takes to complete one iteration of the heartbeat.
+    heartbeat_duration: Histogram,
+
+    /* Performance metrics */
+    /// When the user validates a message, it tries to re propagate it to its mesh peers. If the
+    /// message expires from the memcache before it can be validated, we count this a cache miss
+    /// and it is an indicator that the memcache size should be increased.
+    memcache_misses: Counter,
+    /// The number of times we have decided that an IWANT control message is required for this
+    /// topic. A very high metric might indicate an underperforming network.
+    topic_iwant_msgs: Family<TopicHash, Counter>,
 }
 
 impl Metrics {
@@ -165,6 +165,26 @@ impl Metrics {
             "Number of peers subscribed to each topic"
         );
 
+        let invalid_messages = register_family!(
+            "invalid_messages_per_topic",
+            "Number of invalid messages received for each topic"
+        );
+
+        let accepted_messages = register_family!(
+            "accepted_messages_per_topic",
+            "Number of accepted messages received for each topic"
+        );
+
+        let ignored_messages = register_family!(
+            "ignored_messages_per_topic",
+            "Number of ignored messages received for each topic"
+        );
+
+        let rejected_messages = register_family!(
+            "accepted_messages_per_topic",
+            "Number of rejected messages received for each topic"
+        );
+
         let mesh_peer_counts = register_family!(
             "mesh_peer_counts",
             "Number of peers in each topic in our mesh"
@@ -177,15 +197,88 @@ impl Metrics {
             "mesh_peer_churn_events",
             "Number of times a peer gets removed from our mesh for different reasons"
         );
-
         let topic_msg_sent_counts = register_family!(
             "topic_msg_sent_counts",
-            "Number of gossip messages sent to each topic."
+            "Number of gossip messages sent to each topic"
+        );
+        let topic_msg_published = register_family!(
+            "topic_msg_published",
+            "Number of gossip messages published to each topic"
         );
         let topic_msg_sent_bytes = register_family!(
             "topic_msg_sent_bytes",
-            "Bytes from gossip messages sent to each topic."
+            "Bytes from gossip messages sent to each topic"
         );
+
+        let topic_msg_recv_counts_unfiltered = register_family!(
+            "topic_msg_recv_counts_unfiltered",
+            "Number of gossip messages received on each topic (without duplicates being filtered)"
+        );
+
+        let topic_msg_recv_counts = register_family!(
+            "topic_msg_recv_counts",
+            "Number of gossip messages received on each topic (after duplicates have been filtered)"
+        );
+        let topic_msg_recv_bytes = register_family!(
+            "topic_msg_recv_bytes",
+            "Bytes received from gossip messages for each topic"
+        );
+        // TODO: Update default variables once a builder pattern is used.
+        let gossip_threshold = -4000.0;
+        let publish_threshold = -8000.0;
+        let greylist_threshold = -16000.0;
+        let histogram_buckets: Vec<f64> = vec![
+            greylist_threshold,
+            publish_threshold,
+            gossip_threshold,
+            gossip_threshold / 2.0,
+            gossip_threshold / 4.0,
+            0.0,
+            1.0,
+            10.0,
+            100.0,
+        ];
+
+        let hist_builder = HistBuilder {
+            buckets: histogram_buckets,
+        };
+
+        let score_per_mesh: Family<_, _, HistBuilder> = Family::new_with_constructor(hist_builder);
+        registry.register(
+            "score_per_mesh",
+            "Histogram of scores per mesh topic",
+            Box::new(score_per_mesh.clone()),
+        );
+
+        let scoring_penalties = register_family!(
+            "scoring_penalties",
+            "Counter of types of scoring penalties given to peers"
+        );
+        let peers_per_protocol = register_family!(
+            "peers_per_protocol",
+            "Number of connected peers by protocol type"
+        );
+
+        let heartbeat_duration = Histogram::new(linear_buckets(0.0, 50.0, 10));
+        registry.register(
+            "heartbeat_duration",
+            "Histogram of observed heartbeat durations",
+            Box::new(heartbeat_duration.clone()),
+        );
+
+        let topic_iwant_msgs = register_family!(
+            "topic_iwant_msgs",
+            "Number of times we have decided an IWANT is required for this topic"
+        );
+        let memcache_misses = {
+            let metric = Counter::default();
+            registry.register(
+                "memcache_misses",
+                "Number of times a message is not found in the duplicate cache when validating",
+                Box::new(metric.clone()),
+            );
+            metric
+        };
 
         Self {
             max_topics,
@@ -193,11 +286,25 @@ impl Metrics {
             topic_info: HashMap::default(),
             topic_subscription_status,
             topic_peers_count,
+            invalid_messages,
+            accepted_messages,
+            ignored_messages,
+            rejected_messages,
             mesh_peer_counts,
             mesh_peer_inclusion_events,
             mesh_peer_churn_events,
             topic_msg_sent_counts,
             topic_msg_sent_bytes,
+            topic_msg_published,
+            topic_msg_recv_counts_unfiltered,
+            topic_msg_recv_counts,
+            topic_msg_recv_bytes,
+            score_per_mesh,
+            scoring_penalties,
+            peers_per_protocol,
+            heartbeat_duration,
+            memcache_misses,
+            topic_iwant_msgs,
         }
     }
 
@@ -265,7 +372,7 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_inclusion_events
                 .get_or_create(&InclusionLabel {
-                    topic: topic.clone(),
+                    hash: topic.to_string(),
                     reason,
                 })
                 .inc_by(count as u64);
@@ -277,7 +384,7 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_churn_events
                 .get_or_create(&ChurnLabel {
-                    topic: topic.clone(),
+                    hash: topic.to_string(),
                     reason,
                 })
                 .inc_by(count as u64);
@@ -292,6 +399,27 @@ impl Metrics {
         }
     }
 
+    /// Register that an invalid message was received on a specific topic.
+    pub fn register_invalid_message(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.invalid_messages.get_or_create(topic).inc();
+        }
+    }
+
+    /// Register a score penalty.
+    pub fn register_score_penalty(&mut self, penalty: Penalty) {
+        self.scoring_penalties
+            .get_or_create(&PenaltyLabel { penalty })
+            .inc();
+    }
+
+    /// Registers that a message was published on a specific topic.
+    pub fn register_published_message(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_published.get_or_create(topic).inc();
+        }
+    }
+
     /// Register sending a message over a topic.
     pub fn msg_sent(&mut self, topic: &TopicHash, bytes: usize) {
         if self.register_topic(topic).is_ok() {
@@ -300,5 +428,156 @@ impl Metrics {
                 .get_or_create(topic)
                 .inc_by(bytes as u64);
         }
+    }
+
+    /// Register that a message was received (and was not a duplicate).
+    pub fn msg_recvd(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_recv_counts.get_or_create(topic).inc();
+        }
+    }
+
+    /// Register that a message was received (could have been a duplicate).
+    pub fn msg_recvd_unfiltered(&mut self, topic: &TopicHash, bytes: usize) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_msg_recv_counts_unfiltered
+                .get_or_create(topic)
+                .inc();
+            self.topic_msg_recv_bytes
+                .get_or_create(topic)
+                .inc_by(bytes as u64);
+        }
+    }
+
+    pub fn register_msg_validation(&mut self, topic: &TopicHash, validation: &MessageAcceptance) {
+        if self.register_topic(topic).is_ok() {
+            match validation {
+                MessageAcceptance::Accept => self.accepted_messages.get_or_create(topic).inc(),
+                MessageAcceptance::Ignore => self.ignored_messages.get_or_create(topic).inc(),
+                MessageAcceptance::Reject => self.rejected_messages.get_or_create(topic).inc(),
+            };
+        }
+    }
+
+    /// Register a memcache miss.
+    pub fn memcache_miss(&mut self) {
+        self.memcache_misses.inc();
+    }
+
+    /// Register sending an IWANT msg for this topic.
+    pub fn register_iwant(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_iwant_msgs.get_or_create(topic).inc();
+        }
+    }
+
+    /// Observes a heartbeat duration.
+    pub fn observe_heartbeat_duration(&mut self, millis: u64) {
+        self.heartbeat_duration.observe(millis as f64);
+    }
+
+    /// Observe a score of a mesh peer.
+    pub fn observe_mesh_peers_score(&mut self, topic: &TopicHash, score: f64) {
+        if self.register_topic(topic).is_ok() {
+            self.score_per_mesh.get_or_create(topic).observe(score);
+        }
+    }
+
+    /// Register a new peers connection based on its protocol.
+    pub fn peer_protocol_connected(&mut self, kind: PeerKind) {
+        self.peers_per_protocol
+            .get_or_create(&ProtocolLabel { protocol: kind })
+            .inc();
+    }
+
+    /// Removes a peer from the counter based on its protocol when it disconnects.
+    pub fn peer_protocol_disconnected(&mut self, kind: PeerKind) {
+        let metric = self
+            .peers_per_protocol
+            .get_or_create(&ProtocolLabel { protocol: kind });
+        if metric.get() == 0 {
+            return;
+        } else {
+            // decrement the counter
+            metric.set(metric.get() - 1);
+        }
+    }
+}
+
+/// Reasons why a peer was included in the mesh.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Inclusion {
+    /// Peer was a fanaout peer.
+    Fanout,
+    /// Included from random selection.
+    Random,
+    /// Peer subscribed.
+    Subscribed,
+    /// Peer was included to fill the outbound quota.
+    Outbound,
+}
+
+/// Reasons why a peer was removed from the mesh.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Churn {
+    /// Peer disconnected.
+    Dc,
+    /// Peer had a bad score.
+    BadScore,
+    /// Peer sent a PRUNE.
+    Prune,
+    /// Peer unsubscribed.
+    Unsub,
+    /// Too many peers.
+    Excess,
+}
+
+/// Kinds of reasons a peer's score has been penalized
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+pub enum Penalty {
+    /// A peer grafted before waiting the back-off time.
+    GraftBackoff,
+    /// A Peer did not respond to an IWANT request in time.
+    BrokenPromise,
+    /// A Peer did not send enough messages as expected.
+    MessageDeficit,
+    /// Too many peers under one IP address.
+    IPColocation,
+}
+
+/// Label for the mesh inclusion event metrics.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct InclusionLabel {
+    hash: String,
+    reason: Inclusion,
+}
+
+/// Label for the mesh churn event metrics.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct ChurnLabel {
+    hash: String,
+    reason: Churn,
+}
+
+/// Label for the kinds of protocols peers can connect as.
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct ProtocolLabel {
+    protocol: PeerKind,
+}
+
+/// Label for the kinds of scoring penalties that can occur
+#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+struct PenaltyLabel {
+    penalty: Penalty,
+}
+
+#[derive(Clone)]
+struct HistBuilder {
+    buckets: Vec<f64>,
+}
+
+impl MetricConstructor<Histogram> for HistBuilder {
+    fn new_metric(&self) -> Histogram {
+        Histogram::new(self.buckets.clone().into_iter())
     }
 }

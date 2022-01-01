@@ -248,7 +248,10 @@ impl GossipsubConfig {
     }
 
     /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is true.
+    /// connected/trusted nodes. The default is false.
+    ///
+    /// Note: Peer exchange is not implemented today, see
+    /// https://github.com/libp2p/rust-libp2p/issues/2398.
     pub fn do_px(&self) -> bool {
         self.do_px
     }
@@ -602,7 +605,10 @@ impl GossipsubConfigBuilder {
     }
 
     /// Enables Peer eXchange. This should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is true.
+    /// connected/trusted nodes. The default is false.
+    ///
+    /// Note: Peer exchange is not implemented today, see
+    /// https://github.com/libp2p/rust-libp2p/issues/2398.
     pub fn do_px(&mut self) -> &mut Self {
         self.config.do_px = true;
         self
@@ -744,7 +750,7 @@ impl GossipsubConfigBuilder {
     }
 
     /// Constructs a [`GossipsubConfig`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<GossipsubConfig, &str> {
+    pub fn build(&self) -> Result<GossipsubConfig, &'static str> {
         // check all constraints on config
 
         if self.config.max_transmit_size < 100 {
@@ -758,12 +764,12 @@ impl GossipsubConfigBuilder {
             );
         }
 
-        if !(self.config.mesh_outbound_min < self.config.mesh_n_low
+        if !(self.config.mesh_outbound_min <= self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
             return Err("The following inequality doesn't hold \
-                mesh_outbound_min < mesh_n_low <= mesh_n <= mesh_n_high");
+                mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high");
         }
 
         if self.config.mesh_outbound_min * 2 > self.config.mesh_n {
