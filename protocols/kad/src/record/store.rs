@@ -33,12 +33,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The possible errors of a `RecordStore` operation.
 #[derive(Error, Debug, Clone)]
 pub enum Error {
+    /// The store is at capacity w.r.t. the total number of stored records.
     #[error("the store cannot contain any more records")]
     MaxRecords,
 
+    /// The store is at capacity w.r.t. the total number of stored provider records.
     #[error("the store cannot contain any more provider records")]
     MaxProvidedKeys,
 
+    /// The store cannot store this value because it is too large.
     #[error("the value is too large to be stored")]
     ValueTooLarge,
 }
