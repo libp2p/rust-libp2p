@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{channel::oneshot, FutureExt, StreamExt};
+use futures::{channel::oneshot, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p::{
     development_transport,
@@ -46,18 +46,18 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
 async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
     let (tx, rx) = oneshot::channel();
     async_std::task::spawn(async move {
-        let mut swarm = init_swarm(Config {
+        let mut server = init_swarm(Config {
             boot_delay: Duration::from_secs(60),
             throttle_clients_peer_max: usize::MAX,
             ..Default::default()
         })
         .await;
-        let peer_id = *swarm.local_peer_id();
-        swarm
+        let peer_id = *server.local_peer_id();
+        server
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
         let addr = loop {
-            match swarm.select_next_some().await {
+            match server.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => break address,
                 _ => {}
             };
@@ -66,7 +66,7 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
         let mut kill = kill.fuse();
         loop {
             futures::select! {
-                _ = swarm.select_next_some() => {},
+                _ = server.select_next_some() => {},
                 _ = kill => return,
 
             }
@@ -75,9 +75,9 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
     rx.await.unwrap()
 }
 
-async fn next_event(client: &mut Swarm<Behaviour>) -> Event {
+async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
-        match client.select_next_some().await {
+        match swarm.select_next_some().await {
             SwarmEvent::Behaviour(event) => {
                 break event;
             }
@@ -86,9 +86,16 @@ async fn next_event(client: &mut Swarm<Behaviour>) -> Event {
     }
 }
 
+async fn run_test_with_timeout(test: impl Future) {
+    futures::select! {
+        _ = test.fuse() => {},
+        _ = Delay::new(Duration::from_secs(60)).fuse() => panic!("test timed out")
+    }
+}
+
 #[async_std::test]
 async fn test_auto_probe() {
-    let run_test = async {
+    let test = async {
         let mut client = init_swarm(Config {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
@@ -164,7 +171,6 @@ async fn test_auto_probe() {
         assert!(client.behaviour().public_address().is_none());
 
         // Test new public listening address
-
         client
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
@@ -222,15 +228,12 @@ async fn test_auto_probe() {
         drop(_handle);
     };
 
-    futures::select! {
-        _ = run_test.fuse() => {},
-        _ = Delay::new(Duration::from_secs(60)).fuse() => panic!("test timed out")
-    }
+    run_test_with_timeout(test).await;
 }
 
 #[async_std::test]
 async fn test_confidence() {
-    let run_test = async {
+    let test = async {
         let mut client = init_swarm(Config {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
@@ -320,15 +323,12 @@ async fn test_confidence() {
         drop(_handle);
     };
 
-    futures::select! {
-        _ = run_test.fuse() => {},
-        _ = Delay::new(Duration::from_secs(60)).fuse() => panic!("test timed out")
-    }
+    run_test_with_timeout(test).await;
 }
 
 #[async_std::test]
 async fn test_throttle_server_period() {
-    let run_test = async {
+    let test = async {
         let mut client = init_swarm(Config {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
@@ -384,15 +384,12 @@ async fn test_throttle_server_period() {
         drop(_handle)
     };
 
-    futures::select! {
-        _ = run_test.fuse() => {},
-        _ = Delay::new(Duration::from_secs(60)).fuse() => panic!("test timed out")
-    }
+    run_test_with_timeout(test).await;
 }
 
 #[async_std::test]
 async fn test_use_connected_as_server() {
-    let run_test = async {
+    let test = async {
         let mut client = init_swarm(Config {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
@@ -439,15 +436,12 @@ async fn test_use_connected_as_server() {
         drop(_handle);
     };
 
-    futures::select! {
-        _ = run_test.fuse() => {},
-        _ = Delay::new(Duration::from_secs(60)).fuse() => panic!("test timed out")
-    }
+    run_test_with_timeout(test).await;
 }
 
 #[async_std::test]
 async fn test_outbound_failure() {
-    let run_test = async {
+    let test = async {
         let mut servers = Vec::new();
 
         let mut client = init_swarm(Config {
@@ -515,8 +509,5 @@ async fn test_outbound_failure() {
         }
     };
 
-    futures::select! {
-        _ = run_test.fuse() => {},
-        _ = Delay::new(Duration::from_secs(60)).fuse() => panic!("test timed out")
-    }
+    run_test_with_timeout(test).await;
 }
