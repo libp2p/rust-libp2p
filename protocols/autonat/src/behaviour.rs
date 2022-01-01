@@ -59,7 +59,6 @@ pub struct Config {
     /// Interval in which the NAT status should be re-tried if it is currently unknown
     /// or max confidence was not reached yet.
     pub retry_interval: Duration,
-
     /// Throttle period for re-using a peer as server for a dial-request.
     pub throttle_server_period: Duration,
     /// Use connected peers as servers for probes.
@@ -695,6 +694,7 @@ impl NetworkBehaviour for Behaviour {
 
                                 self.ongoing_inbound
                                     .insert(peer, (probe_id, request_id, addrs.clone(), channel));
+                                self.throttled_clients.push((peer, Instant::now()));
 
                                 self.pending_out_events.push_back(Event::InboundProbe(
                                     InboundProbeEvent::Request {
