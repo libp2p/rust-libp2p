@@ -18,28 +18,29 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod as_client;
+mod as_server;
+
 use crate::protocol::{AutoNatCodec, AutoNatProtocol, DialRequest, DialResponse, ResponseError};
-use futures::FutureExt;
+use as_client::AsClient;
+pub use as_client::{OutboundProbeError, OutboundProbeEvent};
+use as_server::AsServer;
+pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
-    multiaddr::Protocol,
     ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    handler::RequestResponseHandlerEvent, InboundFailure, OutboundFailure, ProtocolSupport,
-    RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
-    RequestResponseMessage, ResponseChannel,
+    handler::RequestResponseHandlerEvent, ProtocolSupport, RequestId, RequestResponse,
+    RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
-    AddressScore, DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
-use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
@@ -110,16 +111,6 @@ impl NatStatus {
     }
 }
 
-impl From<Result<Multiaddr, ResponseError>> for NatStatus {
-    fn from(result: Result<Multiaddr, ResponseError>) -> Self {
-        match result {
-            Ok(addr) => NatStatus::Public(addr),
-            Err(ResponseError::DialError) => NatStatus::Private,
-            _ => NatStatus::Unknown,
-        }
-    }
-}
-
 /// Unique identifier for a probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProbeId(usize);
@@ -130,84 +121,6 @@ impl ProbeId {
         self.0 += 1;
         current
     }
-}
-
-/// Outbound probe failed or was aborted.
-#[derive(Debug, Clone, PartialEq)]
-pub enum OutboundProbeError {
-    /// Probe was aborted because no server is known, or all servers
-    /// are throttled through [`Config::throttle_server_period`].
-    NoServer,
-    ///  Probe was aborted because the local peer has no listening or
-    /// external addresses.
-    NoAddresses,
-    /// Sending the dial-back request or receiving a response failed.
-    OutboundRequest(OutboundFailure),
-    /// The server refused or failed to dial us.
-    Response(ResponseError),
-}
-
-/// Inbound probe failed.
-#[derive(Debug, Clone, PartialEq)]
-pub enum InboundProbeError {
-    /// Receiving the dial-back request or sending a response failed.
-    InboundRequest(InboundFailure),
-    /// We refused or failed to dial the client.
-    Response(ResponseError),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum InboundProbeEvent {
-    /// A dial-back request was received from a remote peer.
-    Request {
-        probe_id: ProbeId,
-        /// Peer that sent the request.
-        peer: PeerId,
-        /// The addresses that will be attempted to dial.
-        addresses: Vec<Multiaddr>,
-    },
-    /// A dial request to the remote was successful.
-    Response {
-        probe_id: ProbeId,
-        /// Peer to which the response is sent.
-        peer: PeerId,
-        address: Multiaddr,
-    },
-    /// The inbound request failed, was rejected, or none of the remote's
-    /// addresses could be dialed.
-    Error {
-        probe_id: ProbeId,
-        /// Peer that sent the dial-back request.
-        peer: PeerId,
-        error: InboundProbeError,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum OutboundProbeEvent {
-    /// A dial-back request was sent to a remote peer.
-    Request {
-        probe_id: ProbeId,
-        /// Peer to which the request is sent.
-        peer: PeerId,
-    },
-    /// The remote successfully dialed one of our addresses.
-    Response {
-        probe_id: ProbeId,
-        /// Id of the peer that sent the response.
-        peer: PeerId,
-        /// The address at which the remote succeeded to dial us.
-        address: Multiaddr,
-    },
-    /// The outbound request failed, was rejected, or the remote could dial
-    /// none of our addresses.
-    Error {
-        probe_id: ProbeId,
-        /// Id of the peer used for the probe.
-        /// `None` if the probe was aborted due to no addresses or no qualified server.
-        peer: Option<PeerId>,
-        error: OutboundProbeError,
-    },
 }
 
 /// Event produced by [`Behaviour`].
@@ -351,168 +264,32 @@ impl Behaviour {
         self.servers.retain(|p| p != peer);
     }
 
-    // Select a random server for the probe.
-    fn random_server(&mut self) -> Option<PeerId> {
-        // Update list of throttled servers.
-        let i = self.throttled_servers.partition_point(|(_, time)| {
-            *time + self.config.throttle_server_period < Instant::now()
-        });
-        self.throttled_servers.drain(..i);
-
-        let mut servers: Vec<&PeerId> = self.servers.iter().collect();
-
-        if self.config.use_connected {
-            servers.extend(self.connected.iter().map(|(id, _)| id));
+    fn as_client(&mut self) -> AsClient {
+        AsClient {
+            inner: &mut self.inner,
+            local_peer_id: self.local_peer_id,
+            config: &self.config,
+            connected: &self.connected,
+            probe_id: &mut self.probe_id,
+            servers: &self.servers,
+            throttled_servers: &mut self.throttled_servers,
+            nat_status: &mut self.nat_status,
+            confidence: &mut self.confidence,
+            ongoing_outbound: &mut self.ongoing_outbound,
+            last_probe: &mut self.last_probe,
+            schedule_probe: &mut self.schedule_probe,
         }
-
-        servers.retain(|s| !self.throttled_servers.iter().any(|(id, _)| s == &id));
-
-        servers.choose(&mut thread_rng()).map(|&&p| p)
     }
 
-    // Send a dial-request to a randomly selected server.
-    // Returns the server that is used in this probe.
-    // `Err` if there are no qualified servers or no addresses.
-    fn do_probe(
-        &mut self,
-        probe_id: ProbeId,
-        addresses: Vec<Multiaddr>,
-    ) -> Result<PeerId, OutboundProbeError> {
-        self.last_probe = Some(Instant::now());
-        if addresses.is_empty() {
-            log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
-            return Err(OutboundProbeError::NoAddresses);
+    fn as_server(&mut self) -> AsServer {
+        AsServer {
+            inner: &mut self.inner,
+            config: &self.config,
+            connected: &self.connected,
+            probe_id: &mut self.probe_id,
+            throttled_clients: &mut self.throttled_clients,
+            ongoing_inbound: &mut self.ongoing_inbound,
         }
-        let server = match self.random_server() {
-            Some(s) => s,
-            None => {
-                log::debug!("Outbound dial-back request aborted: No qualified server.");
-                return Err(OutboundProbeError::NoServer);
-            }
-        };
-        let request_id = self.inner.send_request(
-            &server,
-            DialRequest {
-                peer_id: self.local_peer_id,
-                addresses,
-            },
-        );
-        self.throttled_servers.push((server, Instant::now()));
-        log::debug!("Send dial-back request to peer {}.", server);
-        self.ongoing_outbound.insert(request_id, probe_id);
-        Ok(server)
-    }
-
-    // Validate the inbound request and collect the addresses to be dialed.
-    fn resolve_inbound_request(
-        &mut self,
-        sender: PeerId,
-        request: DialRequest,
-    ) -> Result<Vec<Multiaddr>, (String, ResponseError)> {
-        // Update list of throttled clients.
-        let i = self.throttled_clients.partition_point(|(_, time)| {
-            *time + self.config.throttle_clients_period < Instant::now()
-        });
-        self.throttled_clients.drain(..i);
-
-        if request.peer_id != sender {
-            let status_text = "peer id mismatch".to_string();
-            return Err((status_text, ResponseError::BadRequest));
-        }
-
-        if self.ongoing_inbound.contains_key(&sender) {
-            let status_text = "dial-back already ongoing".to_string();
-            return Err((status_text, ResponseError::DialRefused));
-        }
-
-        if self.throttled_clients.len() >= self.config.throttle_clients_global_max {
-            let status_text = "too many total dials".to_string();
-            return Err((status_text, ResponseError::DialRefused));
-        }
-
-        let throttled_for_client = self
-            .throttled_clients
-            .iter()
-            .filter(|(p, _)| p == &sender)
-            .count();
-
-        if throttled_for_client >= self.config.throttle_clients_peer_max {
-            let status_text = "too many dials for peer".to_string();
-            return Err((status_text, ResponseError::DialRefused));
-        }
-
-        let observed_addr = self
-            .connected
-            .get(&sender)
-            .expect("We are connected to the peer.");
-
-        let mut addrs = filter_valid_addrs(sender, request.addresses, observed_addr);
-        addrs.truncate(self.config.max_peer_addresses);
-
-        if addrs.is_empty() {
-            let status_text = "no dialable addresses".to_string();
-            return Err((status_text, ResponseError::DialError));
-        }
-
-        Ok(addrs)
-    }
-
-    // Set the delay to the next probe based on the time of our last probe
-    // and the specified delay.
-    fn schedule_next_probe(&mut self, delay: Duration) {
-        let last_probe_instant = match self.last_probe {
-            Some(instant) => instant,
-            None => {
-                return;
-            }
-        };
-        let schedule_next = last_probe_instant + delay;
-        self.schedule_probe
-            .reset(schedule_next.saturating_duration_since(Instant::now()));
-    }
-
-    // Adapt current confidence and NAT status to the status reported by the latest probe.
-    // Return the old status if it flipped.
-    fn handle_reported_status(&mut self, reported_status: NatStatus) -> Option<NatStatus> {
-        self.schedule_next_probe(self.config.retry_interval);
-
-        if matches!(reported_status, NatStatus::Unknown) {
-            return None;
-        }
-
-        if reported_status == self.nat_status {
-            if self.confidence < self.config.confidence_max {
-                self.confidence += 1;
-            }
-            // Delay with (usually longer) refresh-interval.
-            if self.confidence >= self.config.confidence_max {
-                self.schedule_next_probe(self.config.refresh_interval);
-            }
-            return None;
-        }
-
-        if reported_status.is_public() && self.nat_status.is_public() {
-            // Different address than the currently assumed public address was reported.
-            // Switch address, but don't report as flipped.
-            self.nat_status = reported_status;
-            return None;
-        }
-        if self.confidence > 0 {
-            // Reduce confidence but keep old status.
-            self.confidence -= 1;
-            return None;
-        }
-
-        log::debug!(
-            "Flipped assumed NAT status from {:?} to {:?}",
-            self.nat_status,
-            reported_status
-        );
-
-        let old_status = self.nat_status.clone();
-        self.nat_status = reported_status;
-
-        Some(old_status)
     }
 }
 
@@ -534,42 +311,12 @@ impl NetworkBehaviour for Behaviour {
 
         match endpoint {
             ConnectedPoint::Dialer { address } => {
-                if let Some((_, _, addrs, _)) = self.ongoing_inbound.get(peer) {
-                    // Check if the dialed address was among the requested addresses.
-                    if addrs.contains(address) {
-                        log::debug!(
-                            "Dial-back to peer {} succeeded at addr {:?}.",
-                            peer,
-                            address
-                        );
-
-                        let (probe_id, _, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
-                        let response = DialResponse {
-                            result: Ok(address.clone()),
-                            status_text: None,
-                        };
-                        let _ = self.inner.send_response(channel, response);
-
-                        self.pending_out_events.push_back(Event::InboundProbe(
-                            InboundProbeEvent::Response {
-                                probe_id,
-                                peer: *peer,
-                                address: address.clone(),
-                            },
-                        ));
-                    }
+                if let Some(event) = self.as_server().on_outbound_connection(peer, address) {
+                    self.pending_out_events
+                        .push_back(Event::InboundProbe(event));
                 }
             }
-            // An inbound connection can indicate that we are public; adjust the delay to the next probe.
-            ConnectedPoint::Listener { .. } => {
-                if self.confidence == self.config.confidence_max {
-                    if self.nat_status.is_public() {
-                        self.schedule_next_probe(self.config.refresh_interval * 2);
-                    } else {
-                        self.schedule_next_probe(self.config.refresh_interval / 5);
-                    }
-                }
-            }
+            ConnectedPoint::Listener { .. } => self.as_client().on_inbound_connection(),
         }
     }
 
@@ -580,26 +327,9 @@ impl NetworkBehaviour for Behaviour {
         error: &DialError,
     ) {
         self.inner.inject_dial_failure(peer, handler, error);
-        if let Some((probe_id, _, _, channel)) = peer.and_then(|p| self.ongoing_inbound.remove(&p))
-        {
-            log::debug!(
-                "Dial-back to peer {} failed with error {:?}.",
-                peer.unwrap(),
-                error
-            );
-            let response_error = ResponseError::DialError;
-            let response = DialResponse {
-                result: Err(response_error.clone()),
-                status_text: Some("dial failed".to_string()),
-            };
-            let _ = self.inner.send_response(channel, response);
-
+        if let Some(event) = self.as_server().on_outbound_dial_error(peer, error) {
             self.pending_out_events
-                .push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                    probe_id,
-                    peer: peer.expect("PeerId is present."),
-                    error: InboundProbeError::Response(response_error),
-                }));
+                .push_back(Event::InboundProbe(event));
         }
     }
 
@@ -623,55 +353,25 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
-
-        // New address could be publicly reachable, trigger retry.
-        if !self.nat_status.is_public() {
-            if self.confidence > 0 {
-                self.confidence -= 1;
-            }
-            self.schedule_next_probe(self.config.retry_interval);
-        }
+        self.as_client().on_new_address();
     }
 
     fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_expired_listen_addr(id, addr);
-        if let Some(public_address) = self.public_address() {
-            if public_address == addr {
-                self.confidence = 0;
-                self.nat_status = NatStatus::Unknown;
-                self.schedule_probe.reset(Duration::ZERO);
-            }
-        }
+        self.as_client().on_expired_address(addr);
     }
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_new_external_addr(addr);
-
-        // New address could be publicly reachable, trigger retry.
-        if !self.nat_status.is_public() {
-            if self.confidence > 0 {
-                self.confidence -= 1;
-            }
-            self.schedule_next_probe(self.config.retry_interval);
-        }
+        self.as_client().on_new_address();
     }
 
     fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
         self.inner.inject_expired_external_addr(addr);
-        if let Some(public_address) = self.public_address() {
-            if public_address == addr {
-                self.confidence = 0;
-                self.nat_status = NatStatus::Unknown;
-                self.schedule_probe.reset(Duration::ZERO);
-            }
-        }
+        self.as_client().on_expired_address(addr);
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
         loop {
             if let Some(event) = self.pending_out_events.pop_front() {
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -679,200 +379,37 @@ impl NetworkBehaviour for Behaviour {
 
             let mut is_inner_pending = false;
             match self.inner.poll(cx, params) {
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::Message { peer, message },
-                )) => match message {
-                    RequestResponseMessage::Request {
-                        request_id,
-                        request,
-                        channel,
-                    } => {
-                        let probe_id = self.probe_id.next();
-                        match self.resolve_inbound_request(peer, request) {
-                            Ok(addrs) => {
-                                log::debug!("Inbound dial request from Peer {} with dial-back addresses {:?}.", peer, addrs);
-
-                                self.ongoing_inbound
-                                    .insert(peer, (probe_id, request_id, addrs.clone(), channel));
-                                self.throttled_clients.push((peer, Instant::now()));
-
-                                self.pending_out_events.push_back(Event::InboundProbe(
-                                    InboundProbeEvent::Request {
-                                        probe_id,
-                                        peer,
-                                        addresses: addrs.clone(),
-                                    },
-                                ));
-
-                                return Poll::Ready(NetworkBehaviourAction::Dial {
-                                    opts: DialOpts::peer_id(peer)
-                                        .condition(PeerCondition::Always)
-                                        .addresses(addrs)
-                                        .build(),
-                                    handler: self.inner.new_handler(),
-                                });
-                            }
-                            Err((status_text, error)) => {
-                                log::debug!(
-                                    "Reject inbound dial request from peer {}: {}.",
-                                    peer,
-                                    status_text
-                                );
-
-                                let response = DialResponse {
-                                    result: Err(error.clone()),
-                                    status_text: Some(status_text),
-                                };
-                                let _ = self.inner.send_response(channel, response.clone());
-
-                                self.pending_out_events.push_back(Event::InboundProbe(
-                                    InboundProbeEvent::Error {
-                                        probe_id,
-                                        peer,
-                                        error: InboundProbeError::Response(error),
-                                    },
-                                ));
-                            }
+                Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                    let (mut events, action) = match event {
+                        RequestResponseEvent::Message {
+                            message: RequestResponseMessage::Response { .. },
+                            ..
                         }
-                    }
-                    RequestResponseMessage::Response {
-                        response,
-                        request_id,
-                    } => {
-                        log::debug!("Outbound dial-back request returned {:?}.", response);
-                        let probe_id = self
-                            .ongoing_outbound
-                            .remove(&request_id)
-                            .expect("RequestId exists.");
-
-                        let event = match response.result.clone() {
-                            Ok(address) => OutboundProbeEvent::Response {
-                                probe_id,
-                                peer,
-                                address,
-                            },
-                            Err(e) => OutboundProbeEvent::Error {
-                                probe_id,
-                                peer: Some(peer),
-                                error: OutboundProbeError::Response(e),
-                            },
-                        };
-                        self.pending_out_events
-                            .push_back(Event::OutboundProbe(event));
-
-                        if let Some(old) =
-                            self.handle_reported_status(response.result.clone().into())
-                        {
-                            self.pending_out_events.push_back(Event::StatusChanged {
-                                old,
-                                new: self.nat_status.clone(),
-                            });
+                        | RequestResponseEvent::OutboundFailure { .. } => {
+                            self.as_client().handle_event(params, event)
                         }
-
-                        if let Ok(address) = response.result {
-                            // Update observed address score if it is finite.
-                            let score = params
-                                .external_addresses()
-                                .find_map(|r| (r.addr == address).then(|| r.score))
-                                .unwrap_or(AddressScore::Finite(0));
-                            if let AddressScore::Finite(finite_score) = score {
-                                return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr {
-                                    address,
-                                    score: AddressScore::Finite(finite_score + 1),
-                                });
-                            }
+                        RequestResponseEvent::Message {
+                            message: RequestResponseMessage::Request { .. },
+                            ..
                         }
-                    }
-                },
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::ResponseSent { .. },
-                )) => {}
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure {
-                        error,
-                        peer,
-                        request_id,
-                    },
-                )) => {
-                    log::debug!(
-                        "Outbound Failure {} when on dial-back request to peer {}.",
-                        error,
-                        peer
-                    );
-                    let probe_id = self
-                        .ongoing_outbound
-                        .remove(&request_id)
-                        .unwrap_or_else(|| self.probe_id.next());
-
-                    self.pending_out_events.push_back(Event::OutboundProbe(
-                        OutboundProbeEvent::Error {
-                            probe_id,
-                            peer: Some(peer),
-                            error: OutboundProbeError::OutboundRequest(error),
-                        },
-                    ));
-
-                    self.schedule_probe.reset(Duration::ZERO);
-                }
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::InboundFailure {
-                        peer,
-                        error,
-                        request_id,
-                    },
-                )) => {
-                    log::debug!(
-                        "Inbound Failure {} when on dial-back request from peer {}.",
-                        error,
-                        peer
-                    );
-
-                    let probe_id = match self.ongoing_inbound.get(&peer) {
-                        Some((_, rq_id, _, _)) if *rq_id == request_id => {
-                            self.ongoing_inbound.remove(&peer).unwrap().0
+                        | RequestResponseEvent::InboundFailure { .. } => {
+                            self.as_server().handle_event(params, event)
                         }
-                        _ => self.probe_id.next(),
+                        RequestResponseEvent::ResponseSent { .. } => (VecDeque::new(), None),
                     };
-
-                    self.pending_out_events.push_back(Event::InboundProbe(
-                        InboundProbeEvent::Error {
-                            probe_id,
-                            peer,
-                            error: InboundProbeError::InboundRequest(error),
-                        },
-                    ));
+                    self.pending_out_events.append(&mut events);
+                    if let Some(action) = action {
+                        return Poll::Ready(action);
+                    }
                 }
                 Poll::Ready(action) => return Poll::Ready(action.map_out(|_| unreachable!())),
                 Poll::Pending => is_inner_pending = true,
             }
 
-            match self.schedule_probe.poll_unpin(cx) {
-                Poll::Ready(()) => {
-                    self.schedule_probe.reset(self.config.retry_interval);
-
-                    let mut addresses: Vec<_> =
-                        params.external_addresses().map(|r| r.addr).collect();
-                    addresses.extend(params.listened_addresses());
-
-                    let probe_id = self.probe_id.next();
-                    match self.do_probe(probe_id, addresses) {
-                        Ok(peer) => {
-                            self.pending_out_events.push_back(Event::OutboundProbe(
-                                OutboundProbeEvent::Request { probe_id, peer },
-                            ));
-                        }
-                        Err(error) => {
-                            self.pending_out_events.push_back(Event::OutboundProbe(
-                                OutboundProbeEvent::Error {
-                                    probe_id,
-                                    peer: None,
-                                    error,
-                                },
-                            ));
-                            self.handle_reported_status(NatStatus::Unknown);
-                        }
-                    }
-                }
+            match self.as_client().poll_auto_probe(params, cx) {
+                Poll::Ready(event) => self
+                    .pending_out_events
+                    .push_back(Event::OutboundProbe(event)),
                 Poll::Pending if is_inner_pending => return Poll::Pending,
                 Poll::Pending => {}
             }
@@ -934,129 +471,16 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-// Filter dial addresses and replace demanded ip with the observed one.
-fn filter_valid_addrs(
-    peer: PeerId,
-    demanded: Vec<Multiaddr>,
-    observed_remote_at: &Multiaddr,
-) -> Vec<Multiaddr> {
-    // Skip if the observed address is a relay address.
-    if observed_remote_at.iter().any(|p| p == Protocol::P2pCircuit) {
-        return Vec::new();
-    }
-    let observed_ip = match observed_remote_at
-        .into_iter()
-        .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
-    {
-        Some(ip) => ip,
-        None => return Vec::new(),
-    };
-    let mut distinct = HashSet::new();
-    demanded
-        .into_iter()
-        .filter_map(|addr| {
-            // Replace the demanded ip with the observed one.
-            let i = addr
-                .iter()
-                .position(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))?;
-            let mut addr = addr.replace(i, |_| Some(observed_ip.clone()))?;
+type Action = NetworkBehaviourAction<
+    <Behaviour as NetworkBehaviour>::OutEvent,
+    <Behaviour as NetworkBehaviour>::ProtocolsHandler,
+>;
 
-            let is_valid = addr.iter().all(|proto| match proto {
-                Protocol::P2pCircuit => false,
-                Protocol::P2p(hash) => hash == peer.into(),
-                _ => true,
-            });
-
-            if !is_valid {
-                return None;
-            }
-            if !addr.iter().any(|p| matches!(p, Protocol::P2p(_))) {
-                addr.push(Protocol::P2p(peer.into()))
-            }
-            // Only collect distinct addresses.
-            distinct.insert(addr.clone()).then(|| addr)
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    use std::net::Ipv4Addr;
-
-    fn random_ip<'a>() -> Protocol<'a> {
-        Protocol::Ip4(Ipv4Addr::new(
-            rand::random(),
-            rand::random(),
-            rand::random(),
-            rand::random(),
-        ))
-    }
-    fn random_port<'a>() -> Protocol<'a> {
-        Protocol::Tcp(rand::random())
-    }
-
-    #[test]
-    fn filter_addresses() {
-        let peer_id = PeerId::random();
-        let observed_ip = random_ip();
-        let observed_addr = Multiaddr::empty()
-            .with(observed_ip.clone())
-            .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
-        // Valid address with matching peer-id
-        let demanded_1 = Multiaddr::empty()
-            .with(random_ip())
-            .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
-        // Invalid because peer_id does not match
-        let demanded_2 = Multiaddr::empty()
-            .with(random_ip())
-            .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()));
-        // Valid address without peer-id
-        let demanded_3 = Multiaddr::empty().with(random_ip()).with(random_port());
-        // Invalid because relayed
-        let demanded_4 = Multiaddr::empty()
-            .with(random_ip())
-            .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()))
-            .with(Protocol::P2pCircuit)
-            .with(Protocol::P2p(peer_id.into()));
-        let demanded = vec![
-            demanded_1.clone(),
-            demanded_2,
-            demanded_3.clone(),
-            demanded_4,
-        ];
-        let filtered = filter_valid_addrs(peer_id, demanded, &observed_addr);
-        let expected_1 = demanded_1
-            .replace(0, |_| Some(observed_ip.clone()))
-            .unwrap();
-        let expected_2 = demanded_3
-            .replace(0, |_| Some(observed_ip))
-            .unwrap()
-            .with(Protocol::P2p(peer_id.into()));
-        assert_eq!(filtered, vec![expected_1, expected_2]);
-    }
-
-    #[test]
-    fn skip_relayed_addr() {
-        let peer_id = PeerId::random();
-        let observed_ip = random_ip();
-        // Observed address is relayed.
-        let observed_addr = Multiaddr::empty()
-            .with(observed_ip.clone())
-            .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()))
-            .with(Protocol::P2pCircuit)
-            .with(Protocol::P2p(peer_id.into()));
-        let demanded = Multiaddr::empty()
-            .with(random_ip())
-            .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
-        let filtered = filter_valid_addrs(peer_id, vec![demanded], &observed_addr);
-        assert!(filtered.is_empty());
-    }
+// Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.
+trait HandleInnerEvent {
+    fn handle_event(
+        &mut self,
+        params: &mut impl PollParameters,
+        event: RequestResponseEvent<DialRequest, DialResponse>,
+    ) -> (VecDeque<Event>, Option<Action>);
 }
