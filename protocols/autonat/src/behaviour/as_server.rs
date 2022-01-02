@@ -70,7 +70,7 @@ pub enum InboundProbeEvent {
     },
 }
 
-/// View over [`Behaviour`] in a server role.
+/// View over [`super::Behaviour`] in a server role.
 pub struct AsServer<'a> {
     pub inner: &'a mut RequestResponse<AutoNatCodec>,
     pub config: &'a Config,

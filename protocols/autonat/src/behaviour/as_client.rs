@@ -81,7 +81,7 @@ pub enum OutboundProbeEvent {
     },
 }
 
-/// View over [`Behaviour`] in a client role.
+/// View over [`super::Behaviour`] in a client role.
 pub struct AsClient<'a> {
     pub inner: &'a mut RequestResponse<AutoNatCodec>,
     pub local_peer_id: PeerId,
