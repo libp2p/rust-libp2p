@@ -22,7 +22,7 @@ mod error;
 pub(crate) mod handler;
 mod listeners;
 mod substream;
-
+pub mod util;
 pub(crate) mod pool;
 
 pub use error::{

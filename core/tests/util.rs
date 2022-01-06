@@ -2,7 +2,7 @@
 
 use futures::prelude::*;
 use libp2p_core::{
-    connection::{ConnectionHandler, ConnectionHandlerEvent, Substream, SubstreamEndpoint},
+    connection::util::TestHandler,
     identity,
     muxing::{StreamMuxer, StreamMuxerBox},
     network::{Network, NetworkConfig},
@@ -30,36 +30,6 @@ pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
         .boxed();
 
     TestNetwork::new(transport, local_public_key.into(), cfg)
-}
-
-#[derive(Debug)]
-pub struct TestHandler();
-
-impl ConnectionHandler for TestHandler {
-    type InEvent = ();
-    type OutEvent = ();
-    type Error = io::Error;
-    type Substream = Substream<StreamMuxerBox>;
-    type OutboundOpenInfo = ();
-
-    fn inject_substream(
-        &mut self,
-        _: Self::Substream,
-        _: SubstreamEndpoint<Self::OutboundOpenInfo>,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
-    {
-        Poll::Pending
-    }
 }
 
 pub struct CloseMuxer<M> {

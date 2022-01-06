@@ -23,14 +23,14 @@ mod util;
 use futures::prelude::*;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::{
-    connection::PendingConnectionError,
+    connection::{PendingConnectionError, util::TestHandler},
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
     PeerId,
 };
 use rand::seq::SliceRandom;
 use std::{io, task::Poll};
-use util::{test_network, TestHandler};
+use util::test_network;
 
 #[test]
 fn deny_incoming_connec() {
