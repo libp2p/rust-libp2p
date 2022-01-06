@@ -67,11 +67,11 @@ jobs:
 
     - name: Install a recent version of clang
       run: |
-        apt-get update
-        apt-get install -y clang-11
+        sudo apt-get update
+        sudo apt-get install -y clang-11
 
     - name: Install CMake
-      run: apt-get install -y cmake
+      run: sudo apt-get install -y cmake
 
     - uses: Swatinem/rust-cache@v1.3.0
       with:
