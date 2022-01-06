@@ -44,10 +44,11 @@ jobs:
         include:
           - toolchain: wasm32-unknown-unknown
             args: "--features wasm-bindgen"
-    container:
-      image: rust
-      env:
-        CC: clang-11
+    env:
+      CC: clang-11
+    defaults:
+      run:
+        shell: bash
     steps:
 
     - name: Cancel Previous Runs
