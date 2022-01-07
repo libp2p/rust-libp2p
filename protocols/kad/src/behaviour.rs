@@ -55,6 +55,7 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
 use std::{borrow::Cow, time::Duration};
+use thiserror::Error;
 
 pub use crate::query::QueryStats;
 
@@ -2583,14 +2584,16 @@ pub struct PutRecordOk {
 }
 
 /// The error result of [`Kademlia::put_record`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum PutRecordError {
+    #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
         key: record::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize,
     },
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
@@ -2629,8 +2632,9 @@ pub struct BootstrapOk {
 }
 
 /// The error result of [`Kademlia::bootstrap`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum BootstrapError {
+    #[error("the request timed out")]
     Timeout {
         peer: PeerId,
         num_remaining: Option<u32>,
@@ -2648,8 +2652,9 @@ pub struct GetClosestPeersOk {
 }
 
 /// The error result of [`Kademlia::get_closest_peers`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
+    #[error("the request timed out")]
     Timeout { key: Vec<u8>, peers: Vec<PeerId> },
 }
 
@@ -2682,8 +2687,9 @@ pub struct GetProvidersOk {
 }
 
 /// The error result of [`Kademlia::get_providers`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetProvidersError {
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         providers: HashSet<PeerId>,
@@ -2718,9 +2724,9 @@ pub struct AddProviderOk {
 }
 
 /// The possible errors when publishing a provider record.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum AddProviderError {
-    /// The query timed out.
+    #[error("the request timed out")]
     Timeout { key: record::Key },
 }
 
