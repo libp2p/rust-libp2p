@@ -2383,7 +2383,7 @@ pub struct PeerRecord {
 /// The events produced by the `Kademlia` behaviour.
 ///
 /// See [`NetworkBehaviour::poll`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum KademliaEvent {
     /// An inbound request has been received and handled.
     //
@@ -2454,7 +2454,7 @@ pub enum KademliaEvent {
 }
 
 /// Information about a received and handled inbound request.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InboundRequest {
     /// Request for the list of nodes whose IDs are the closest to `key`.
     FindNode { num_closer_peers: usize },
@@ -2487,7 +2487,7 @@ pub enum InboundRequest {
 }
 
 /// The results of Kademlia queries.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum QueryResult {
     /// The result of [`Kademlia::bootstrap`].
     Bootstrap(BootstrapResult),
@@ -2724,7 +2724,7 @@ pub struct AddProviderOk {
 }
 
 /// The possible errors when publishing a provider record.
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum AddProviderError {
     #[error("the request timed out")]
     Timeout { key: record::Key },
