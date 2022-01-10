@@ -1,3 +1,7 @@
+# 0.32.1 [2022-01-10]
+
+- Update `lru` dependency. See https://rustsec.org/advisories/RUSTSEC-2021-0130
+
 # 0.32.0 [2021-11-16]
 
 - Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).

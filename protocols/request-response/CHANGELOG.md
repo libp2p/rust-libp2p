@@ -1,3 +1,7 @@
+# 0.14.1 [2022-01-10]
+
+- Update `lru` dependency. See https://rustsec.org/advisories/RUSTSEC-2021-0130
+
 # 0.14.0 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
