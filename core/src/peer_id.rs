@@ -185,7 +185,7 @@ impl Serialize for PeerId {
 impl<'de> Deserialize<'de> for PeerId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: _serde::Deserializer<'de>,
+        D: serde::Deserializer<'de>,
     {
         use serde::de::*;
 
