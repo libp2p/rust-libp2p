@@ -969,7 +969,12 @@ impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(mut self) {
         if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
-            notifier.send(task::PendingConnectionCommand::Abort);
+            match notifier.send(task::PendingConnectionCommand::Abort) {
+                Ok(()) => {}
+                Err(e) => {
+                    log::debug!("Failed to pending connection: {:?}", e);
+                }
+            }
         }
     }
 }
