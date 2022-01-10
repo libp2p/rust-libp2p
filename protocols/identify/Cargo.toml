@@ -2,7 +2,7 @@
 name = "libp2p-identify"
 edition = "2018"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.32.0"
+version = "0.32.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,7 +15,7 @@ futures-timer = "3.0.2"
 libp2p-core = { version = "0.30.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.32.0", path = "../../swarm" }
 log = "0.4.1"
-lru = "0.6"
+lru = "0.7.1"
 prost = "0.9"
 smallvec = "1.6.1"
 
