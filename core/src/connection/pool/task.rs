@@ -39,16 +39,11 @@ use futures::{
     SinkExt, StreamExt,
 };
 use std::pin::Pin;
-
-/// Commands that can be sent to a task driving a pending connection.
-#[derive(Debug)]
-pub enum PendingConnectionCommand {
-    Abort,
-}
+use void::Void;
 
 /// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]
-pub enum EstablishedConnectionCommand<T> {
+pub enum Command<T> {
     /// Notify the connection handler of an event.
     NotifyHandler(T),
     /// Gracefully close the connection (active close) before
@@ -108,16 +103,13 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
 pub async fn new_for_pending_outgoing_connection<TTrans>(
     connection_id: ConnectionId,
     dial: ConcurrentDial<TTrans>,
-    abort_receiver: oneshot::Receiver<PendingConnectionCommand>,
+    abort_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
 ) where
     TTrans: Transport,
 {
     match futures::future::select(abort_receiver, Box::pin(dial)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
-            unreachable!("Pool never drops channel to task.");
-        }
-        Either::Left((Ok(PendingConnectionCommand::Abort), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
@@ -125,6 +117,7 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
                 })
                 .await;
         }
+        Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok((address, output, errors)), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
@@ -148,7 +141,7 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
 pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
     connection_id: ConnectionId,
     future: TFut,
-    abort_receiver: oneshot::Receiver<PendingConnectionCommand>,
+    abort_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
 ) where
     TTrans: Transport,
@@ -156,9 +149,6 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
 {
     match futures::future::select(abort_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
-            unreachable!("Pool never drops channel to task.");
-        }
-        Either::Left((Ok(PendingConnectionCommand::Abort), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
@@ -166,6 +156,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
                 })
                 .await;
         }
+        Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok(output), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
@@ -192,7 +183,7 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
     connection_id: ConnectionId,
     peer_id: PeerId,
     mut connection: crate::connection::Connection<TMuxer, THandler::Handler>,
-    mut command_receiver: mpsc::Receiver<EstablishedConnectionCommand<THandlerInEvent<THandler>>>,
+    mut command_receiver: mpsc::Receiver<Command<THandlerInEvent<THandler>>>,
     mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
 ) where
     TMuxer: StreamMuxer,
@@ -207,10 +198,8 @@ pub async fn new_for_established_connection<TMuxer, THandler>(
         .await
         {
             Either::Left((Some(command), _)) => match command {
-                EstablishedConnectionCommand::NotifyHandler(event) => {
-                    connection.inject_event(event)
-                }
-                EstablishedConnectionCommand::Close => {
+                Command::NotifyHandler(event) => connection.inject_event(event),
+                Command::Close => {
                     command_receiver.close();
                     let (handler, closing_muxer) = connection.close();
 

@@ -50,6 +50,7 @@ use std::{
     task::Context,
     task::Poll,
 };
+use void::Void;
 
 mod concurrent_dial;
 mod task;
@@ -112,7 +113,7 @@ struct EstablishedConnectionInfo<TInEvent> {
     peer_id: PeerId,
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
-    sender: mpsc::Sender<task::EstablishedConnectionCommand<TInEvent>>,
+    sender: mpsc::Sender<task::Command<TInEvent>>,
 }
 
 impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
@@ -122,11 +123,7 @@ impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
     pub fn start_close(&mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
-        match self
-            .sender
-            .clone()
-            .try_send(task::EstablishedConnectionCommand::Close)
-        {
+        match self.sender.clone().try_send(task::Command::Close) {
             Ok(()) => {}
             Err(e) => assert!(e.is_disconnected(), "No capacity for close command."),
         };
@@ -140,7 +137,7 @@ struct PendingConnectionInfo<THandler> {
     handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    abort_notifier: Option<oneshot::Sender<task::PendingConnectionCommand>>,
+    abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
@@ -969,12 +966,7 @@ impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(mut self) {
         if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
-            match notifier.send(task::PendingConnectionCommand::Abort) {
-                Ok(()) => {}
-                Err(e) => {
-                    log::debug!("Failed to pending connection: {:?}", e);
-                }
-            }
+            drop(notifier);
         }
     }
 }
@@ -1022,13 +1014,13 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     /// of `notify_handler`, it only fails if the connection is now about
     /// to close.
     pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
-        let cmd = task::EstablishedConnectionCommand::NotifyHandler(event);
+        let cmd = task::Command::NotifyHandler(event);
         self.entry
             .get_mut()
             .sender
             .try_send(cmd)
             .map_err(|e| match e.into_inner() {
-                task::EstablishedConnectionCommand::NotifyHandler(event) => event,
+                task::Command::NotifyHandler(event) => event,
                 _ => unreachable!("Expect failed send to return initial event."),
             })
     }
