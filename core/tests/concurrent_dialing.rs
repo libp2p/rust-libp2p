@@ -27,13 +27,12 @@ use libp2p_core::{
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
     ConnectedPoint,
-    connection::util::TestHandler,
 };
 use quickcheck::*;
 use rand07::Rng;
 use std::num::NonZeroU8;
 use std::task::Poll;
-use util::{test_network};
+use util::{test_network, TestHandler};
 
 #[test]
 fn concurrent_dialing() {

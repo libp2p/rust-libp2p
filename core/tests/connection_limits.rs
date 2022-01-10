@@ -23,13 +23,13 @@ mod util;
 use futures::{future::poll_fn, ready};
 use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
-    connection::{PendingConnectionError, util::TestHandler},
+    connection::PendingConnectionError,
     network::{ConnectionLimits, DialError, NetworkConfig, NetworkEvent},
     PeerId,
 };
 use quickcheck::*;
 use std::task::Poll;
-use util::test_network;
+use util::{test_network, TestHandler};
 
 #[test]
 fn max_outgoing() {
