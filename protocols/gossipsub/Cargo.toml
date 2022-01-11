@@ -30,6 +30,7 @@ regex = "1.4.0"
 futures-timer = "3.0.2"
 pin-project = "1.0.8"
 instant = "0.1.11"
+serde = { version = "1", optional = true, features = ["derive"] }
 # Metrics dependencies
 open-metrics-client = "0.14.0"
 

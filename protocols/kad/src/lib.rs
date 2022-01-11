@@ -24,6 +24,9 @@
 //       be useful later for record store
 #![allow(dead_code)]
 
+#[cfg(feature = "serde")]
+extern crate _serde as serde;
+
 pub mod handler;
 pub mod kbucket;
 pub mod protocol;
