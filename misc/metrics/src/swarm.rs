@@ -216,7 +216,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::Aborted => {
                         record(OutgoingConnectionErrorError::Aborted)
                     }
-                    libp2p_swarm::DialError::InvalidPeerId => {
+                    libp2p_swarm::DialError::InvalidPeerId(_) => {
                         record(OutgoingConnectionErrorError::InvalidPeerId)
                     }
                     libp2p_swarm::DialError::ConnectionIo(_) => {
@@ -317,7 +317,7 @@ impl<TTransErr> From<&libp2p_core::connection::PendingInboundConnectionError<TTr
 {
     fn from(error: &libp2p_core::connection::PendingInboundConnectionError<TTransErr>) -> Self {
         match error {
-            libp2p_core::connection::PendingInboundConnectionError::InvalidPeerId => {
+            libp2p_core::connection::PendingInboundConnectionError::InvalidPeerId(_) => {
                 PendingInboundConnectionError::InvalidPeerId
             }
             libp2p_core::connection::PendingInboundConnectionError::ConnectionLimit(_) => {

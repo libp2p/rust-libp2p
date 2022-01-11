@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use crate::Multiaddr;
+use crate::{connection::ConnectionLimit, PeerId};
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -84,8 +84,8 @@ pub enum PendingConnectionError<TTransErr> {
     Aborted,
 
     /// The peer identity obtained on the connection did not
-    /// match the one that was expected or is otherwise invalid.
-    InvalidPeerId,
+    /// match the one that was expected or is the local one.
+    InvalidPeerId(PeerId),
 
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
@@ -110,8 +110,8 @@ where
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {}.", l)
             }
-            PendingConnectionError::InvalidPeerId => {
-                write!(f, "Pending connection: Invalid peer ID.")
+            PendingConnectionError::InvalidPeerId(id) => {
+                write!(f, "Pending connection: Unexpected peer ID {}.", id)
             }
         }
     }
@@ -125,7 +125,7 @@ where
         match self {
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(_) => None,
-            PendingConnectionError::InvalidPeerId => None,
+            PendingConnectionError::InvalidPeerId(_) => None,
             PendingConnectionError::Aborted => None,
             PendingConnectionError::ConnectionLimit(..) => None,
         }

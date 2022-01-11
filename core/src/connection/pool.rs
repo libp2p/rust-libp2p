@@ -771,7 +771,7 @@ where
 
                     enum Error {
                         ConnectionLimit(ConnectionLimit),
-                        InvalidPeerId,
+                        InvalidPeerId(PeerId),
                     }
 
                     impl<TransportError> From<Error> for PendingConnectionError<TransportError> {
@@ -780,7 +780,7 @@ where
                                 Error::ConnectionLimit(limit) => {
                                     PendingConnectionError::ConnectionLimit(limit)
                                 }
-                                Error::InvalidPeerId => PendingConnectionError::InvalidPeerId,
+                                Error::InvalidPeerId(x) => PendingConnectionError::InvalidPeerId(x),
                             }
                         }
                     }
@@ -803,7 +803,7 @@ where
                         .and_then(|()| {
                             if let Some(peer) = expected_peer_id {
                                 if peer != peer_id {
-                                    return Err(Error::InvalidPeerId);
+                                    return Err(Error::InvalidPeerId(peer_id));
                                 }
                             }
                             Ok(())
@@ -811,7 +811,7 @@ where
                         // Check peer is not local peer.
                         .and_then(|()| {
                             if self.local_id == peer_id {
-                                Err(Error::InvalidPeerId)
+                                Err(Error::InvalidPeerId(peer_id))
                             } else {
                                 Ok(())
                             }
@@ -839,7 +839,7 @@ where
                                     id,
                                     error: error.into(),
                                     handler,
-                                    peer: Some(peer_id),
+                                    peer: expected_peer_id.or(Some(peer_id)),
                                 })
                             }
                             ConnectedPoint::Listener {

@@ -1329,7 +1329,7 @@ pub enum DialError {
     /// The provided peer identity is invalid or the peer identity obtained on
     /// the connection did not match the one that was expected or is otherwise
     /// invalid.
-    InvalidPeerId,
+    InvalidPeerId(PeerId),
     /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
@@ -1353,7 +1353,7 @@ impl From<PendingOutboundConnectionError<io::Error>> for DialError {
         match error {
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
-            PendingConnectionError::InvalidPeerId => DialError::InvalidPeerId,
+            PendingConnectionError::InvalidPeerId(id) => DialError::InvalidPeerId(id),
             PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
@@ -1378,7 +1378,7 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::InvalidPeerId => write!(f, "Dial error: Invalid peer ID."),
+            DialError::InvalidPeerId(id) => write!(f, "Dial error: Unexpected peer ID {}.", id),
             DialError::ConnectionIo(e) => write!(
                 f,
                 "Dial error: An I/O error occurred on the connection: {:?}.", e
@@ -1397,7 +1397,7 @@ impl error::Error for DialError {
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
-            DialError::InvalidPeerId => None,
+            DialError::InvalidPeerId(_) => None,
             DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
         }

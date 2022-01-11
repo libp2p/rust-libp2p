@@ -21,6 +21,7 @@
 mod util;
 
 use futures::prelude::*;
+use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::DialOpts;
 use libp2p_core::{
@@ -86,6 +87,70 @@ fn deny_incoming_connec() {
         Poll::Pending
     }))
     .unwrap();
+}
+
+#[test]
+fn invalid_peer_id() {
+    // Checks whether dialling with the wrong peer id raises the correct error
+
+    let mut swarm1 = test_network(NetworkConfig::default());
+    let mut swarm2 = test_network(NetworkConfig::default());
+
+    swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
+
+    let address = async_std::task::block_on(future::poll_fn(|cx| match swarm1.poll(cx) {
+        Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
+            Poll::Ready(listen_addr)
+        }
+        Poll::Pending => Poll::Pending,
+        _ => panic!("Was expecting the listen address to be reported"),
+    }));
+
+    let other_keys = identity::Keypair::generate_ed25519();
+    let other_id = other_keys.public().to_peer_id();
+    let other_addr = address.with(Protocol::P2p(other_id.into()));
+
+    swarm2.dial(&other_addr, TestHandler()).unwrap();
+
+    let (peer_id, error) = async_std::task::block_on(future::poll_fn(
+        |cx| -> Poll<(PeerId, PendingConnectionError<()>)> {
+            if let Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) =
+                swarm1.poll(cx)
+            {
+                swarm1.accept(connection, TestHandler()).unwrap();
+            }
+
+            match swarm2.poll(cx) {
+                Poll::Ready(NetworkEvent::DialError {
+                    peer_id,
+                    error,
+                    handler: _,
+                }) => {
+                    let error = match error {
+                        PendingConnectionError::Transport(_) => {
+                            PendingConnectionError::Transport(())
+                        }
+                        PendingConnectionError::ConnectionLimit(l) => {
+                            PendingConnectionError::ConnectionLimit(l)
+                        }
+                        PendingConnectionError::Aborted => PendingConnectionError::Aborted,
+                        PendingConnectionError::InvalidPeerId(id) => {
+                            PendingConnectionError::InvalidPeerId(id)
+                        }
+                        PendingConnectionError::IO(e) => PendingConnectionError::IO(e),
+                    };
+                    Poll::Ready((peer_id, error))
+                }
+                Poll::Ready(x) => panic!("unexpected {:?}", x),
+                Poll::Pending => Poll::Pending,
+            }
+        },
+    ));
+    assert_eq!(peer_id, other_id);
+    match error {
+        PendingConnectionError::InvalidPeerId(id) => assert_eq!(id, *swarm1.local_peer_id()),
+        x => panic!("wrong error {:?}", x),
+    }
 }
 
 #[test]
