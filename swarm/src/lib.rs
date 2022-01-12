@@ -236,12 +236,13 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// The listener error.
         error: io::Error,
     },
-    /// A new dialing attempt has been initiated.
+    /// A new dialing attempt has been initiated by the [`NetworkBehaviour`]
+    /// implementation.
     ///
     /// A [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished) event is
     /// reported if the dialing attempt succeeds, otherwise a
     /// [`OutgoingConnectionError`](SwarmEvent::OutgoingConnectionError) event
-    /// is reported with `attempts_remaining` equal to 0.
+    /// is reported.
     Dialing(PeerId),
 }
 
