@@ -91,7 +91,8 @@ fn deny_incoming_connec() {
 
 #[test]
 fn invalid_peer_id() {
-    // Checks whether dialling with the wrong peer id raises the correct error
+    // Checks whether dialing an address containing the wrong peer id raises an error
+    // for the expected peer id instead of the obtained peer id.
 
     let mut swarm1 = test_network(NetworkConfig::default());
     let mut swarm2 = test_network(NetworkConfig::default());
@@ -106,8 +107,7 @@ fn invalid_peer_id() {
         _ => panic!("Was expecting the listen address to be reported"),
     }));
 
-    let other_keys = identity::Keypair::generate_ed25519();
-    let other_id = other_keys.public().to_peer_id();
+    let other_id = PeerId::random();
     let other_addr = address.with(Protocol::P2p(other_id.into()));
 
     swarm2.dial(&other_addr, TestHandler()).unwrap();
