@@ -27,7 +27,7 @@ use super::{
 use futures::FutureExt;
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_request_response::{
     OutboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
 };
@@ -86,7 +86,7 @@ pub struct AsClient<'a> {
     pub inner: &'a mut RequestResponse<AutoNatCodec>,
     pub local_peer_id: PeerId,
     pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, Multiaddr>,
+    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
 
     pub servers: &'a Vec<PeerId>,

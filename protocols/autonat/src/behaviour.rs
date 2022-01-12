@@ -187,9 +187,9 @@ pub struct Behaviour {
     // Ongoing outbound probes and mapped to the inner request id.
     ongoing_outbound: HashMap<RequestId, ProbeId>,
 
-    // Connected peers with their observed address.
-    // These peers may be used as servers for dial-requests.
-    connected: HashMap<PeerId, Multiaddr>,
+    // Connected peers with the observed address of each connection.
+    // If the endpoint of a connection is relayed, the observed address is `None`.
+    connected: HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
 
     // Used servers in recent outbound probes that are throttled through Config::throttle_server_period.
     throttled_servers: Vec<(PeerId, Instant)>,
@@ -306,8 +306,13 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner
             .inject_connection_established(peer, conn, endpoint, failed_addresses);
-        self.connected
-            .insert(*peer, endpoint.get_remote_address().clone());
+        let connections = self.connected.entry(*peer).or_default();
+        let addr = if endpoint.is_relayed() {
+            None
+        } else {
+            Some(endpoint.get_remote_address().clone())
+        };
+        connections.insert(*conn, addr);
 
         match endpoint {
             ConnectedPoint::Dialer { address } => {
@@ -318,6 +323,19 @@ impl NetworkBehaviour for Behaviour {
             }
             ConnectedPoint::Listener { .. } => self.as_client().on_inbound_connection(),
         }
+    }
+
+    fn inject_connection_closed(
+        &mut self,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        endpoint: &ConnectedPoint,
+        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+    ) {
+        self.inner
+            .inject_connection_closed(peer, conn, endpoint, handler);
+        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
+        connections.remove(conn);
     }
 
     fn inject_dial_failure(
@@ -347,8 +365,16 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner.inject_address_change(peer, conn, old, new);
 
-        self.connected
-            .insert(*peer, new.get_remote_address().clone());
+        if old.is_relayed() && new.is_relayed() {
+            return;
+        }
+        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
+        let addr = if new.is_relayed() {
+            None
+        } else {
+            Some(new.get_remote_address().clone())
+        };
+        connections.insert(*conn, addr);
     }
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
@@ -426,17 +452,6 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_connected(&mut self, peer: &PeerId) {
         self.inner.inject_connected(peer)
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
-    ) {
-        self.inner
-            .inject_connection_closed(peer, conn, endpoint, handler);
     }
 
     fn inject_event(

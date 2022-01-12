@@ -23,7 +23,7 @@ use super::{
     ResponseError,
 };
 use instant::Instant;
-use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
     InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
     ResponseChannel,
@@ -74,7 +74,7 @@ pub enum InboundProbeEvent {
 pub struct AsServer<'a> {
     pub inner: &'a mut RequestResponse<AutoNatCodec>,
     pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, Multiaddr>,
+    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
 
     pub throttled_clients: &'a mut Vec<(PeerId, Instant)>,
@@ -283,10 +283,17 @@ impl<'a> AsServer<'a> {
             return Err((status_text, ResponseError::DialRefused));
         }
 
+        // Obtain an observed address from non-relayed connections.
         let observed_addr = self
             .connected
             .get(&sender)
-            .expect("We are connected to the peer.");
+            .expect("Peer is connected.")
+            .values()
+            .find_map(|a| a.as_ref())
+            .ok_or_else(|| {
+                let status_text = "no dial-request over relayed connections".to_string();
+                (status_text, ResponseError::DialError)
+            })?;
 
         let mut addrs = Self::filter_valid_addrs(sender, request.addresses, observed_addr);
         addrs.truncate(self.config.max_peer_addresses);
