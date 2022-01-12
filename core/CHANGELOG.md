@@ -22,12 +22,15 @@
 
 - Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
 
+- Report negotiated and expected PeerId as well as remote address in DialError::InvalidPeerId (see [PR 2428])
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2352]: https://github.com/libp2p/rust-libp2p/pull/2352
 [PR 2392]: https://github.com/libp2p/rust-libp2p/pull/2392
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
 [PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
 
 # 0.30.1 [2021-11-16]
 
@@ -115,7 +118,7 @@
 
 # 0.28.3 [2021-04-26]
 
-- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
+- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057).
 
 # 0.28.2 [2021-04-13]
 

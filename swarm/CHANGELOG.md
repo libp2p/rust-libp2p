@@ -17,6 +17,8 @@
 - Enable overriding _dial concurrency factor_ per dial via
   `DialOpts::override_dial_concurrency_factor`. See [PR 2404].
 
+- Report negotiated and expected PeerId as well as remote address in DialError::InvalidPeerId (see [PR 2428])
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2362]: https://github.com/libp2p/rust-libp2p/pull/2362
@@ -24,6 +26,7 @@
 [PR 2375]: https://github.com/libp2p/rust-libp2p/pull/2375
 [PR 2378]: https://github.com/libp2p/rust-libp2p/pull/2378
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
 
 # 0.32.0 [2021-11-16]
 
@@ -36,16 +39,17 @@
 
    Changes required to maintain status quo:
 
-   - Previously `swarm.dial(peer_id)`
+  - Previously `swarm.dial(peer_id)`
      now `swarm.dial(DialOpts::peer_id(peer_id).build())`
      or `swarm.dial(peer_id)` given that `DialOpts` implements `From<PeerId>`.
 
-   - Previously `swarm.dial_addr(addr)`
+  - Previously `swarm.dial_addr(addr)`
      now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
      or `swarm.dial(addr)` given that `DialOpts` implements `From<Multiaddr>`.
 
-   - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
+  - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
      now
+
      ```rust
      NetworkBehaviourAction::Dial {
        opts: DialOpts::peer_id(peer_id)
@@ -55,8 +59,9 @@
      }
      ```
 
-   - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
+  - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
      now
+
      ```rust
      NetworkBehaviourAction::Dial {
        opts: DialOpts::unknown_peer_id()

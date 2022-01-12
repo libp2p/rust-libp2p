@@ -85,11 +85,30 @@ pub enum PendingConnectionError<TTransErr> {
 
     /// The peer identity obtained on the connection did not
     /// match the one that was expected or is the local one.
-    InvalidPeerId(PeerId),
+    WrongPeerId {
+        obtained: PeerId,
+        address: Multiaddr,
+    },
 
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
+}
+
+impl<T> PendingConnectionError<T> {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
+        match self {
+            PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
+            PendingConnectionError::ConnectionLimit(l) => {
+                PendingConnectionError::ConnectionLimit(l)
+            }
+            PendingConnectionError::Aborted => PendingConnectionError::Aborted,
+            PendingConnectionError::WrongPeerId { obtained, address } => {
+                PendingConnectionError::WrongPeerId { obtained, address }
+            }
+            PendingConnectionError::IO(e) => PendingConnectionError::IO(e),
+        }
+    }
 }
 
 impl<TTransErr> fmt::Display for PendingConnectionError<TTransErr>
@@ -110,8 +129,12 @@ where
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {}.", l)
             }
-            PendingConnectionError::InvalidPeerId(id) => {
-                write!(f, "Pending connection: Unexpected peer ID {}.", id)
+            PendingConnectionError::WrongPeerId { obtained, address } => {
+                write!(
+                    f,
+                    "Pending connection: Unexpected peer ID {} at {}.",
+                    obtained, address
+                )
             }
         }
     }
@@ -125,7 +148,7 @@ where
         match self {
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(_) => None,
-            PendingConnectionError::InvalidPeerId(_) => None,
+            PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
             PendingConnectionError::ConnectionLimit(..) => None,
         }

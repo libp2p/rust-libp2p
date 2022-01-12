@@ -81,6 +81,7 @@ use libp2p_core::{
         EstablishedConnection, IntoConnectionHandler, ListenerId, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError, Substream,
     },
+    multihash::Multihash,
     muxing::StreamMuxerBox,
     network::{
         self, peer::ConnectedPeer, ConnectionLimits, Network, NetworkConfig, NetworkEvent,
@@ -1326,10 +1327,13 @@ pub enum DialError {
     DialPeerConditionFalse(dial_opts::PeerCondition),
     /// Pending connection attempt has been aborted.
     Aborted,
-    /// The provided peer identity is invalid or the peer identity obtained on
-    /// the connection did not match the one that was expected or is otherwise
-    /// invalid.
-    InvalidPeerId(PeerId),
+    /// The provided peer identity is invalid
+    InvalidPeerId(Multihash),
+    /// The peer identity obtained on the connection did not match the one that was expected.
+    WrongPeerId {
+        obtained: PeerId,
+        address: Multiaddr,
+    },
     /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
@@ -1343,7 +1347,9 @@ impl DialError {
                 (DialError::ConnectionLimit(limit), handler)
             }
             network::DialError::LocalPeerId { handler } => (DialError::LocalPeerId, handler),
-            network::DialError::InvalidPeerId { handler } => (DialError::InvalidPeerId, handler),
+            network::DialError::InvalidPeerId { handler, multihash } => {
+                (DialError::InvalidPeerId(multihash), handler)
+            }
         }
     }
 }
@@ -1353,7 +1359,9 @@ impl From<PendingOutboundConnectionError<io::Error>> for DialError {
         match error {
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
-            PendingConnectionError::InvalidPeerId(id) => DialError::InvalidPeerId(id),
+            PendingConnectionError::WrongPeerId { obtained, address } => {
+                DialError::WrongPeerId { obtained, address }
+            }
             PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
@@ -1378,7 +1386,8 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::InvalidPeerId(id) => write!(f, "Dial error: Unexpected peer ID {}.", id),
+            DialError::InvalidPeerId(multihash) => write!(f, "Dial error: multihash {:?} is not a PeerId", multihash),
+            DialError::WrongPeerId { obtained, address} => write!(f, "Dial error: Unexpected peer ID {} at {}.", obtained, address),
             DialError::ConnectionIo(e) => write!(
                 f,
                 "Dial error: An I/O error occurred on the connection: {:?}.", e
@@ -1397,7 +1406,8 @@ impl error::Error for DialError {
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
-            DialError::InvalidPeerId(_) => None,
+            DialError::InvalidPeerId { .. } => None,
+            DialError::WrongPeerId { .. } => None,
             DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
         }

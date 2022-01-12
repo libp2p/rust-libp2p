@@ -37,6 +37,7 @@ use crate::{
     Executor, Multiaddr, PeerId,
 };
 use either::Either;
+use multihash::Multihash;
 use std::{
     convert::TryFrom as _,
     error, fmt,
@@ -236,7 +237,7 @@ where
                     .transpose()
                 {
                     Ok(peer_id) => peer_id,
-                    Err(_) => return Err(DialError::InvalidPeerId { handler }),
+                    Err(multihash) => return Err(DialError::InvalidPeerId { handler, multihash }),
                 };
 
                 (peer_id, Either::Right(std::iter::once(address)), None)
@@ -565,11 +566,10 @@ pub enum DialError<THandler> {
         handler: THandler,
     },
     /// The dialing attempt is rejected because the peer being dialed is the local peer.
-    LocalPeerId {
-        handler: THandler,
-    },
+    LocalPeerId { handler: THandler },
     InvalidPeerId {
         handler: THandler,
+        multihash: Multihash,
     },
 }
 
