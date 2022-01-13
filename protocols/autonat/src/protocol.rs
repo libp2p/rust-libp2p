@@ -191,17 +191,19 @@ impl From<ResponseError> for i32 {
     }
 }
 
-impl TryFrom<i32> for ResponseError {
+impl TryFrom<structs_proto::message::ResponseStatus> for ResponseError {
     type Error = io::Error;
 
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
+    fn try_from(value: structs_proto::message::ResponseStatus) -> Result<Self, Self::Error> {
         match value {
-            100 => Ok(ResponseError::DialError),
-            101 => Ok(ResponseError::DialRefused),
-            200 => Ok(ResponseError::BadRequest),
-            300 => Ok(ResponseError::InternalError),
-            _ => {
-                log::debug!("Received response with invalid status code.");
+            structs_proto::message::ResponseStatus::EDialError => Ok(ResponseError::DialError),
+            structs_proto::message::ResponseStatus::EDialRefused => Ok(ResponseError::DialRefused),
+            structs_proto::message::ResponseStatus::EBadRequest => Ok(ResponseError::BadRequest),
+            structs_proto::message::ResponseStatus::EInternalError => {
+                Ok(ResponseError::InternalError)
+            }
+            structs_proto::message::ResponseStatus::Ok => {
+                log::debug!("Received response with status code OK but expected error.");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid response error type",
@@ -227,10 +229,12 @@ impl DialResponse {
 
         Ok(match msg.dial_response {
             Some(structs_proto::message::DialResponse {
-                status: Some(0),
+                status: Some(status),
                 status_text,
                 addr: Some(addr),
-            }) => {
+            }) if structs_proto::message::ResponseStatus::from_i32(status)
+                == Some(structs_proto::message::ResponseStatus::Ok) =>
+            {
                 let addr = Multiaddr::try_from(addr)
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
                 Self {
@@ -244,7 +248,11 @@ impl DialResponse {
                 addr: None,
             }) => Self {
                 status_text,
-                result: Err(ResponseError::try_from(status)?),
+                result: Err(ResponseError::try_from(
+                    structs_proto::message::ResponseStatus::from_i32(status).ok_or(
+                        io::Error::new(io::ErrorKind::InvalidData, "invalid response status code"),
+                    )?,
+                )?),
             },
             _ => {
                 log::debug!("Received malformed response message.");
