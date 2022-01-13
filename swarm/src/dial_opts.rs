@@ -21,6 +21,7 @@
 
 use libp2p_core::connection::Endpoint;
 use libp2p_core::{Multiaddr, PeerId};
+use std::num::NonZeroU8;
 
 /// Options to configure a dial to a known or unknown peer.
 ///
@@ -52,6 +53,7 @@ impl DialOpts {
             peer_id,
             condition: Default::default(),
             role_override: Endpoint::Dialer,
+            dial_concurrency_factor_override: Default::default(),
         }
     }
 
@@ -109,12 +111,20 @@ pub struct WithPeerId {
     pub(crate) peer_id: PeerId,
     pub(crate) condition: PeerCondition,
     pub(crate) role_override: Endpoint,
+    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerId {
     /// Specify a [`PeerCondition`] for the dial.
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = condition;
+        self
+    }
+
+    /// Override
+    /// [`NetworkConfig::with_dial_concurrency_factor`](libp2p_core::network::NetworkConfig::with_dial_concurrency_factor).
+    pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor_override = Some(factor);
         self
     }
 
@@ -126,6 +136,7 @@ impl WithPeerId {
             addresses,
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
+            dial_concurrency_factor_override: self.dial_concurrency_factor_override,
         }
     }
 
@@ -135,7 +146,7 @@ impl WithPeerId {
     /// See
     /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
     /// for details.
-    pub fn role_override(mut self) -> Self {
+    pub fn override_role(mut self) -> Self {
         self.role_override = Endpoint::Listener;
         self
     }
@@ -156,6 +167,7 @@ pub struct WithPeerIdWithAddresses {
     pub(crate) addresses: Vec<Multiaddr>,
     pub(crate) extend_addresses_through_behaviour: bool,
     pub(crate) role_override: Endpoint,
+    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerIdWithAddresses {
@@ -178,10 +190,18 @@ impl WithPeerIdWithAddresses {
     /// See
     /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
     /// for details.
-    pub fn role_override(mut self) -> Self {
+    pub fn override_role(mut self) -> Self {
         self.role_override = Endpoint::Listener;
         self
     }
+
+    /// Override
+    /// [`NetworkConfig::with_dial_concurrency_factor`](libp2p_core::network::NetworkConfig::with_dial_concurrency_factor).
+    pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor_override = Some(factor);
+        self
+    }
+
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts(Opts::WithPeerIdWithAddresses(self))
@@ -214,7 +234,7 @@ impl WithoutPeerIdWithAddress {
     /// See
     /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
     /// for details.
-    pub fn role_override(mut self) -> Self {
+    pub fn override_role(mut self) -> Self {
         self.role_override = Endpoint::Listener;
         self
     }

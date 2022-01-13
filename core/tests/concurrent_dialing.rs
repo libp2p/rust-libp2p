@@ -26,7 +26,7 @@ use futures::ready;
 use libp2p_core::{
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
-    ConnectedPoint, Endpoint,
+    ConnectedPoint, DialOpts,
 };
 use quickcheck::*;
 use rand07::Rng;
@@ -73,11 +73,11 @@ fn concurrent_dialing() {
             // Have network 2 dial network 1 and wait for network 1 to receive the incoming
             // connections.
             network_2
-                .peer(*network_1.local_peer_id())
                 .dial(
-                    network_1_listen_addresses.clone(),
                     TestHandler(),
-                    Endpoint::Dialer,
+                    DialOpts::peer_id(*network_1.local_peer_id())
+                        .addresses(network_1_listen_addresses.clone().into())
+                        .build(),
                 )
                 .unwrap();
             let mut network_1_incoming_connections = Vec::new();

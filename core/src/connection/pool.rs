@@ -536,6 +536,7 @@ where
         peer: Option<PeerId>,
         handler: THandler,
         role_override: Endpoint,
+        dial_concurrency_factor_override: Option<NonZeroU8>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Clone + Send,
@@ -549,7 +550,7 @@ where
             transport,
             peer,
             addresses,
-            self.dial_concurrency_factor,
+            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
             role_override,
         );
 

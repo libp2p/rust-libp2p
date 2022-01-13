@@ -24,12 +24,9 @@ use crate::MessageId;
 use instant::Instant;
 use libp2p_core::PeerId;
 use log::debug;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
 use std::collections::HashMap;
 
-/// Tracks recently sent `IWANT` messages and checks if peers respond to them
-/// for each `IWANT` message we track one random requested message id.
+/// Tracks recently sent `IWANT` messages and checks if peers respond to them.
 #[derive(Default)]
 pub(crate) struct GossipPromises {
     /// Stores for each tracked message id and peer the instant when this promise expires.
@@ -40,12 +37,15 @@ pub(crate) struct GossipPromises {
 }
 
 impl GossipPromises {
+    /// Returns true if the message id exists in the promises.
+    pub fn contains(&self, message: &MessageId) -> bool {
+        self.promises.contains_key(message)
+    }
+
     /// Track a promise to deliver a message from a list of [`MessageId`]s we are requesting.
     pub fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
-        // Randomly select a message id
-        let mut rng = thread_rng();
-        if let Some(message_id) = messages.choose(&mut rng) {
-            // If a promise for this message id and peer already exists we don't update expires!
+        for message_id in messages {
+            // If a promise for this message id and peer already exists we don't update the expiry!
             self.promises
                 .entry(message_id.clone())
                 .or_insert_with(HashMap::new)
@@ -86,7 +86,7 @@ impl GossipPromises {
                     let count = result.entry(*peer_id).or_insert(0);
                     *count += 1;
                     debug!(
-                        "The peer {} broke the promise to deliver message {} in time!",
+                        "[Penalty] The peer {} broke the promise to deliver message {} in time!",
                         peer_id, msg
                     );
                     false
