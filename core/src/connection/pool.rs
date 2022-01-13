@@ -535,6 +535,7 @@ where
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
         handler: THandler,
+        dial_concurrency_factor_override: Option<NonZeroU8>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Clone + Send,
@@ -544,7 +545,12 @@ where
             return Err(DialError::ConnectionLimit { limit, handler });
         };
 
-        let dial = ConcurrentDial::new(transport, peer, addresses, self.dial_concurrency_factor);
+        let dial = ConcurrentDial::new(
+            transport,
+            peer,
+            addresses,
+            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
+        );
 
         let connection_id = self.next_connection_id();
 

@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{DialError, DialingOpts, Network};
+use super::Network;
 use crate::{
     connection::{
         handler::THandlerInEvent, pool::Pool, ConnectionHandler, ConnectionId,
         EstablishedConnection, EstablishedConnectionIter, IntoConnectionHandler, PendingConnection,
     },
-    Multiaddr, PeerId, Transport,
+    PeerId, Transport,
 };
 use std::{collections::VecDeque, error, fmt};
 
@@ -95,7 +95,10 @@ where
     }
 
     fn disconnected(network: &'a mut Network<TTrans, THandler>, peer_id: PeerId) -> Self {
-        Peer::Disconnected(DisconnectedPeer { network, peer_id })
+        Peer::Disconnected(DisconnectedPeer {
+            _network: network,
+            peer_id,
+        })
     }
 
     fn connected(network: &'a mut Network<TTrans, THandler>, peer_id: PeerId) -> Self {
@@ -147,38 +150,6 @@ where
     /// Returns `true` iff [`Peer::into_disconnected`] returns `Some`.
     pub fn is_disconnected(&self) -> bool {
         matches!(self, Peer::Disconnected(..))
-    }
-
-    /// Initiates a new dialing attempt to this peer using the given addresses.
-    ///
-    /// The connection ID of the first connection attempt, i.e. to `address`,
-    /// is returned, together with a [`DialingPeer`] for further use. The
-    /// `remaining` addresses are tried in order in subsequent connection
-    /// attempts in the context of the same dialing attempt, if the connection
-    /// attempt to the first address fails.
-    pub fn dial<I>(
-        self,
-        addresses: I,
-        handler: THandler,
-    ) -> Result<(ConnectionId, DialingPeer<'a, TTrans, THandler>), DialError<THandler>>
-    where
-        I: IntoIterator<Item = Multiaddr>,
-        I::IntoIter: Send + 'static,
-    {
-        let (peer_id, network) = match self {
-            Peer::Connected(p) => (p.peer_id, p.network),
-            Peer::Dialing(p) => (p.peer_id, p.network),
-            Peer::Disconnected(p) => (p.peer_id, p.network),
-            Peer::Local => return Err(DialError::LocalPeerId { handler }),
-        };
-
-        let id = network.dial_peer(DialingOpts {
-            peer: peer_id,
-            handler,
-            addresses: addresses.into_iter(),
-        })?;
-
-        Ok((id, DialingPeer { network, peer_id }))
     }
 
     /// Converts the peer into a `ConnectedPeer`, if an established connection exists.
@@ -294,7 +265,7 @@ where
     pub fn disconnect(self) -> DisconnectedPeer<'a, TTrans, THandler> {
         self.network.disconnect(&self.peer_id);
         DisconnectedPeer {
-            network: self.network,
+            _network: self.network,
             peer_id: self.peer_id,
         }
     }
@@ -354,7 +325,7 @@ where
     pub fn disconnect(self) -> DisconnectedPeer<'a, TTrans, THandler> {
         self.network.disconnect(&self.peer_id);
         DisconnectedPeer {
-            network: self.network,
+            _network: self.network,
             peer_id: self.peer_id,
         }
     }
@@ -432,7 +403,7 @@ where
     THandler: IntoConnectionHandler,
 {
     peer_id: PeerId,
-    network: &'a mut Network<TTrans, THandler>,
+    _network: &'a mut Network<TTrans, THandler>,
 }
 
 impl<'a, TTrans, THandler> fmt::Debug for DisconnectedPeer<'a, TTrans, THandler>
