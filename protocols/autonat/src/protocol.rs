@@ -249,9 +249,9 @@ impl DialResponse {
             }) => Self {
                 status_text,
                 result: Err(ResponseError::try_from(
-                    structs_proto::message::ResponseStatus::from_i32(status).ok_or(
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid response status code"),
-                    )?,
+                    structs_proto::message::ResponseStatus::from_i32(status).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "invalid response status code")
+                    })?,
                 )?),
             },
             _ => {
