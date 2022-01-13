@@ -32,7 +32,10 @@ use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    num::NonZeroU8,
+};
 
 /// Inbound probe failed.
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +134,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         action = Some(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(peer)
                                 .condition(PeerCondition::Always)
+                                .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
                                 .addresses(addrs)
                                 .build(),
                             handler: self.inner.new_handler(),

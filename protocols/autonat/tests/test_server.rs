@@ -31,20 +31,15 @@ use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
 use libp2p_core::ConnectedPoint;
-use libp2p_swarm::{DialError, SwarmBuilder};
-use std::{
-    num::{NonZeroU32, NonZeroU8},
-    time::Duration,
-};
+use libp2p_swarm::DialError;
+use std::{num::NonZeroU32, time::Duration};
 
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
     let transport = development_transport(keypair).await.unwrap();
     let behaviour = Behaviour::new(local_id, config);
-    SwarmBuilder::new(transport, behaviour, local_id)
-        .dial_concurrency_factor(NonZeroU8::new(1).unwrap())
-        .build()
+    Swarm::new(transport, behaviour, local_id)
 }
 
 async fn init_server(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, Multiaddr) {
