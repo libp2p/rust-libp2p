@@ -27,6 +27,9 @@ use prost::Message;
 use std::fmt;
 use std::fmt::Debug;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {
@@ -42,6 +45,7 @@ pub enum MessageAcceptance {
 /// Macro for declaring message id types
 macro_rules! declare_message_id_type {
     ($name: ident, $name_string: expr) => {
+        #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub struct $name(pub Vec<u8>);
 

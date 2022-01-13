@@ -60,6 +60,7 @@ wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
 websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1"]
+serde = ["libp2p-core/serde", "libp2p-kad/serde", "libp2p-gossipsub/serde"]
 
 [package.metadata.docs.rs]
 all-features = true

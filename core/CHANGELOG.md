@@ -20,11 +20,14 @@
 
   See [PR 2404].
 
+- Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2352]: https://github.com/libp2p/rust-libp2p/pull/2352
 [PR 2392]: https://github.com/libp2p/rust-libp2p/pull/2392
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
+[PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
 
 # 0.30.1 [2021-11-16]
 
