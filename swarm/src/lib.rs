@@ -359,15 +359,20 @@ where
 
     fn dial_with_handler(
         &mut self,
-        opts: DialOpts,
+        swarm_dial_opts: DialOpts,
         handler: <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
     ) -> Result<(), DialError> {
-        match opts.0 {
+        let core_dial_opts = match swarm_dial_opts.0 {
             // Dial a known peer.
-            dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { peer_id, condition })
+            dial_opts::Opts::WithPeerId(dial_opts::WithPeerId {
+                peer_id,
+                condition,
+                dial_concurrency_factor_override,
+            })
             | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
                 peer_id,
                 condition,
+                dial_concurrency_factor_override,
                 ..
             }) => {
                 // Check [`PeerCondition`] if provided.
@@ -396,7 +401,7 @@ where
 
                 // Retrieve the addresses to dial.
                 let addresses = {
-                    let mut addresses = match opts.0 {
+                    let mut addresses = match swarm_dial_opts.0 {
                         dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { .. }) => {
                             self.behaviour.addresses_of_peer(&peer_id)
                         }
@@ -433,47 +438,33 @@ where
                     addresses
                 };
 
-                let handler = handler
-                    .into_node_handler_builder()
-                    .with_substream_upgrade_protocol_override(
-                        self.substream_upgrade_protocol_override,
-                    );
+                let mut opts = libp2p_core::DialOpts::peer_id(peer_id).addresses(addresses);
 
-                match self.network.peer(peer_id).dial(addresses, handler) {
-                    Ok(_connection_id) => Ok(()),
-                    Err(error) => {
-                        let (error, handler) = DialError::from_network_dial_error(error);
-                        self.behaviour.inject_dial_failure(
-                            Some(peer_id),
-                            handler.into_protocols_handler(),
-                            &error,
-                        );
-                        return Err(error);
-                    }
+                if let Some(f) = dial_concurrency_factor_override {
+                    opts = opts.override_dial_concurrency_factor(f);
                 }
+
+                opts.build()
             }
             // Dial an unknown peer.
             dial_opts::Opts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress {
                 address,
-            }) => {
-                let handler = handler
-                    .into_node_handler_builder()
-                    .with_substream_upgrade_protocol_override(
-                        self.substream_upgrade_protocol_override,
-                    );
+            }) => libp2p_core::DialOpts::unknown_peer_id()
+                .address(address)
+                .build(),
+        };
 
-                match self.network.dial(&address, handler).map(|_id| ()) {
-                    Ok(_connection_id) => Ok(()),
-                    Err(error) => {
-                        let (error, handler) = DialError::from_network_dial_error(error);
-                        self.behaviour.inject_dial_failure(
-                            None,
-                            handler.into_protocols_handler(),
-                            &error,
-                        );
-                        return Err(error);
-                    }
-                }
+        let handler = handler
+            .into_node_handler_builder()
+            .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
+
+        match self.network.dial(handler, core_dial_opts).map(|_id| ()) {
+            Ok(_connection_id) => Ok(()),
+            Err(error) => {
+                let (error, handler) = DialError::from_network_dial_error(error);
+                self.behaviour
+                    .inject_dial_failure(None, handler.into_protocols_handler(), &error);
+                return Err(error);
             }
         }
     }
@@ -1334,8 +1325,9 @@ pub enum DialError {
     DialPeerConditionFalse(dial_opts::PeerCondition),
     /// Pending connection attempt has been aborted.
     Aborted,
-    /// The peer identity obtained on the connection did not
-    /// match the one that was expected or is otherwise invalid.
+    /// The provided peer identity is invalid or the peer identity obtained on
+    /// the connection did not match the one that was expected or is otherwise
+    /// invalid.
     InvalidPeerId,
     /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
@@ -1350,6 +1342,7 @@ impl DialError {
                 (DialError::ConnectionLimit(limit), handler)
             }
             network::DialError::LocalPeerId { handler } => (DialError::LocalPeerId, handler),
+            network::DialError::InvalidPeerId { handler } => (DialError::InvalidPeerId, handler),
         }
     }
 }
