@@ -4,6 +4,9 @@
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
+- When using PortReuse::Enabled, bind to INADDR_ANY to avoid picking the wrong IP (see [PR 2382]).
+
+[PR 2382]: https://github.com/libp2p/rust-libp2p/pull/2382
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
 # 0.30.0 [2021-11-01]

@@ -36,6 +36,7 @@ use crate::{
     transport::{Transport, TransportError},
     Executor, Multiaddr, PeerId,
 };
+use either::Either;
 use std::{
     convert::TryFrom as _,
     error, fmt,
@@ -43,6 +44,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use thiserror::Error;
 
 /// Implementation of `Stream` that handles the nodes.
 pub struct Network<TTrans, THandler>
@@ -185,16 +187,15 @@ where
         &self.local_peer_id
     }
 
-    /// Dials a [`Multiaddr`] that may or may not encapsulate a
-    /// specific expected remote peer ID.
+    /// Dial a known or unknown peer.
     ///
     /// The given `handler` will be used to create the
     /// [`Connection`](crate::connection::Connection) upon success and the
     /// connection ID is returned.
     pub fn dial(
         &mut self,
-        address: &Multiaddr,
         handler: THandler,
+        opts: impl Into<DialOpts>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Transport + Send,
@@ -203,48 +204,52 @@ where
         TTrans::Error: Send + 'static,
         TTrans::Dial: Send + 'static,
     {
-        // If the address ultimately encapsulates an expected peer ID, dial that peer
-        // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
-        // from the address, because it may be used by the `Transport`, i.e. `P2p`
-        // is a protocol component that can influence any transport, like `libp2p-dns`.
-        if let Some(multiaddr::Protocol::P2p(ma)) = address.iter().last() {
-            if let Ok(peer) = PeerId::try_from(ma) {
-                return self.dial_peer(DialingOpts {
-                    peer,
-                    addresses: std::iter::once(address.clone()),
-                    handler,
-                });
+        let opts = opts.into();
+
+        let (peer_id, addresses, dial_concurrency_factor_override) = match opts.0 {
+            // Dial a known peer.
+            Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                peer_id,
+                addresses,
+                dial_concurrency_factor_override,
+            }) => (
+                Some(peer_id),
+                Either::Left(addresses.into_iter()),
+                dial_concurrency_factor_override,
+            ),
+            // Dial an unknown peer.
+            Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { address }) => {
+                // If the address ultimately encapsulates an expected peer ID, dial that peer
+                // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
+                // from the address, because it may be used by the `Transport`, i.e. `P2p`
+                // is a protocol component that can influence any transport, like `libp2p-dns`.
+                let peer_id = match address
+                    .iter()
+                    .last()
+                    .and_then(|p| {
+                        if let multiaddr::Protocol::P2p(ma) = p {
+                            Some(PeerId::try_from(ma))
+                        } else {
+                            None
+                        }
+                    })
+                    .transpose()
+                {
+                    Ok(peer_id) => peer_id,
+                    Err(_) => return Err(DialError::InvalidPeerId { handler }),
+                };
+
+                (peer_id, Either::Right(std::iter::once(address)), None)
             }
-        }
+        };
 
         self.pool.add_outgoing(
             self.transport().clone(),
-            std::iter::once(address.clone()),
-            None,
+            addresses,
+            peer_id,
             handler,
+            dial_concurrency_factor_override,
         )
-    }
-
-    /// Initiates a connection attempt to a known peer.
-    fn dial_peer<I>(
-        &mut self,
-        opts: DialingOpts<THandler, I>,
-    ) -> Result<ConnectionId, DialError<THandler>>
-    where
-        I: Iterator<Item = Multiaddr> + Send + 'static,
-        TTrans: Transport + Send,
-        TTrans::Output: Send + 'static,
-        TTrans::Dial: Send + 'static,
-        TTrans::Error: Send + 'static,
-    {
-        let id = self.pool.add_outgoing(
-            self.transport().clone(),
-            opts.addresses,
-            Some(opts.peer),
-            opts.handler,
-        )?;
-
-        Ok(id)
     }
 
     /// Returns information about the state of the `Network`.
@@ -463,14 +468,6 @@ where
     }
 }
 
-/// Options for a dialing attempt (i.e. repeated connection attempt
-/// via a list of address) to a peer.
-struct DialingOpts<THandler, I> {
-    peer: PeerId,
-    handler: THandler,
-    addresses: I,
-}
-
 /// Information about the network obtained by [`Network::info()`].
 #[derive(Clone, Debug)]
 pub struct NetworkInfo {
@@ -560,7 +557,7 @@ impl NetworkConfig {
 }
 
 /// Possible (synchronous) errors when dialing a peer.
-#[derive(Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum DialError<THandler> {
     /// The dialing attempt is rejected because of a connection limit.
     ConnectionLimit {
@@ -568,20 +565,111 @@ pub enum DialError<THandler> {
         handler: THandler,
     },
     /// The dialing attempt is rejected because the peer being dialed is the local peer.
-    LocalPeerId { handler: THandler },
+    LocalPeerId {
+        handler: THandler,
+    },
+    InvalidPeerId {
+        handler: THandler,
+    },
 }
 
-impl<THandler> fmt::Debug for DialError<THandler> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match self {
-            DialError::ConnectionLimit { limit, handler: _ } => f
-                .debug_struct("DialError::ConnectionLimit")
-                .field("limit", limit)
-                .finish(),
-            DialError::LocalPeerId { handler: _ } => {
-                f.debug_struct("DialError::LocalPeerId").finish()
-            }
+/// Options to configure a dial to a known or unknown peer.
+///
+/// Used in [`Network::dial`].
+///
+/// To construct use either of:
+///
+/// - [`DialOpts::peer_id`] dialing a known peer
+///
+/// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
+#[derive(Debug, Clone, PartialEq)]
+pub struct DialOpts(pub(super) Opts);
+
+impl DialOpts {
+    /// Dial a known peer.
+    pub fn peer_id(peer_id: PeerId) -> WithPeerId {
+        WithPeerId { peer_id }
+    }
+
+    /// Dial an unknown peer.
+    pub fn unknown_peer_id() -> WithoutPeerId {
+        WithoutPeerId {}
+    }
+}
+
+impl From<Multiaddr> for DialOpts {
+    fn from(address: Multiaddr) -> Self {
+        DialOpts::unknown_peer_id().address(address).build()
+    }
+}
+
+/// Internal options type.
+///
+/// Not to be constructed manually. Use either of the below instead:
+///
+/// - [`DialOpts::peer_id`] dialing a known peer
+/// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum Opts {
+    WithPeerIdWithAddresses(WithPeerIdWithAddresses),
+    WithoutPeerIdWithAddress(WithoutPeerIdWithAddress),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WithPeerId {
+    pub(crate) peer_id: PeerId,
+}
+
+impl WithPeerId {
+    /// Specify a set of addresses to be used to dial the known peer.
+    pub fn addresses(self, addresses: Vec<Multiaddr>) -> WithPeerIdWithAddresses {
+        WithPeerIdWithAddresses {
+            peer_id: self.peer_id,
+            addresses,
+            dial_concurrency_factor_override: Default::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WithPeerIdWithAddresses {
+    pub(crate) peer_id: PeerId,
+    pub(crate) addresses: Vec<Multiaddr>,
+    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
+}
+
+impl WithPeerIdWithAddresses {
+    /// Override [`NetworkConfig::with_dial_concurrency_factor`].
+    pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor_override = Some(factor);
+        self
+    }
+
+    /// Build the final [`DialOpts`].
+    pub fn build(self) -> DialOpts {
+        DialOpts(Opts::WithPeerIdWithAddresses(self))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WithoutPeerId {}
+
+impl WithoutPeerId {
+    /// Specify a single address to dial the unknown peer.
+    pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
+        WithoutPeerIdWithAddress { address }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WithoutPeerIdWithAddress {
+    pub(crate) address: Multiaddr,
+}
+
+impl WithoutPeerIdWithAddress {
+    /// Build the final [`DialOpts`].
+    pub fn build(self) -> DialOpts {
+        DialOpts(Opts::WithoutPeerIdWithAddress(self))
     }
 }
 

@@ -75,7 +75,7 @@ fn transport_upgrade() {
 
         let client = async move {
             let addr = addr_receiver.await.unwrap();
-            dialer.dial(&addr, TestHandler()).unwrap();
+            dialer.dial(TestHandler(), addr).unwrap();
             futures::future::poll_fn(move |cx| loop {
                 match ready!(dialer.poll(cx)) {
                     NetworkEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
