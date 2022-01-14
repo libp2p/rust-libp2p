@@ -267,6 +267,7 @@ impl ProtocolsHandler for Handler {
         info: Self::OutboundOpenInfo,
     ) {
         match (output, info) {
+            // Outbound reservation
             (
                 outbound_hop::Output::Reservation {
                     renewal_timeout,
@@ -286,6 +287,8 @@ impl ProtocolsHandler for Handler {
                 self.queued_events
                     .push_back(ProtocolsHandlerEvent::Custom(event));
             }
+
+            // Outbound circuit
             (
                 outbound_hop::Output::Circuit {
                     substream,
@@ -300,7 +303,12 @@ impl ProtocolsHandler for Handler {
                     read_buffer,
                     tx,
                 ))) {
-                    Ok(()) => self.alive_lend_out_substreams.push(rx),
+                    Ok(()) => {
+                        self.alive_lend_out_substreams.push(rx);
+                        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                            Event::OutboundCircuitEstablished { limit },
+                        ));
+                    },
                     Err(_) => debug!(
                         "Oneshot to `RelayedDial` future dropped. \
                          Dropping established relayed connection to {:?}.",
@@ -308,10 +316,8 @@ impl ProtocolsHandler for Handler {
                     ),
                 }
 
-                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
-                    Event::OutboundCircuitEstablished { limit },
-                ));
             }
+
             _ => unreachable!(),
         }
     }
