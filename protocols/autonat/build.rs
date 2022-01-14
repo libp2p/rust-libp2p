@@ -1,4 +1,3 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
 // Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -19,12 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! libp2p circuit relay implementations
-
-pub mod v1;
-pub mod v2;
-
-// Check that we can safely cast a `usize` to a `u64`.
-static_assertions::const_assert! {
-    std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
+fn main() {
+    prost_build::compile_protos(&["src/structs.proto"], &["src"]).unwrap();
 }
