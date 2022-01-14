@@ -12,6 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 default = [
+    "autonat",
     "deflate",
     "dns-async-std",
     "floodsub",
@@ -34,6 +35,7 @@ default = [
     "websocket",
     "yamux",
 ]
+autonat = ["libp2p-autonat"]
 deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
@@ -73,6 +75,8 @@ futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` featu
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
 lazy_static = "1.2"
+
+libp2p-autonat = { version = "0.20.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.31.0", path = "core",  default-features = false }
 libp2p-floodsub = { version = "0.33.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.35.0", path = "./protocols/gossipsub", optional = true }
@@ -120,6 +124,7 @@ members = [
     "misc/peer-id-generator",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/autonat",
     "protocols/floodsub",
     "protocols/gossipsub",
     "protocols/rendezvous",
