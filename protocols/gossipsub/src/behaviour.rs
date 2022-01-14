@@ -1404,8 +1404,8 @@ where
                     {
                         if backoff_time > now {
                             warn!(
-                                "[Penalty] Peer attempted graft within backoff time, penalizing {} {remaining:?}",
-                                peer_id, remaining = backoff_time - now
+                                "[Penalty] Peer attempted graft within backoff time, penalizing {}",
+                                peer_id
                             );
                             // add behavioural penalty
                             if let Some((peer_score, ..)) = &mut self.peer_score {
