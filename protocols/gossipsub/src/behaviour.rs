@@ -1089,15 +1089,15 @@ where
             Vec::new()
         };
 
-        // update backoff
-        self.backoffs
-            .update_backoff(topic_hash, peer, self.config.prune_backoff());
-
         let backoff = if on_unsubscribe {
             self.config.unsubscribe_backoff()
         } else {
             self.config.prune_backoff()
         };
+
+        // update backoff
+        self.backoffs.update_backoff(topic_hash, peer, backoff);
+
         GossipsubControlAction::Prune {
             topic_hash: topic_hash.clone(),
             peers,
@@ -1404,8 +1404,8 @@ where
                     {
                         if backoff_time > now {
                             warn!(
-                                "[Penalty] Peer attempted graft within backoff time, penalizing {}",
-                                peer_id
+                                "[Penalty] Peer attempted graft within backoff time, penalizing {} {remaining:?}",
+                                peer_id, remaining = backoff_time - now
                             );
                             // add behavioural penalty
                             if let Some((peer_score, ..)) = &mut self.peer_score {
