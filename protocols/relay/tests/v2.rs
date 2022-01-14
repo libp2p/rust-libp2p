@@ -59,6 +59,9 @@ fn reservation() {
 
     client.listen_on(client_addr.clone()).unwrap();
 
+    // Wait for connection to relay.
+    assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
+
     // Wait for initial reservation.
     pool.run_until(wait_for_reservation(
         &mut client,
@@ -102,6 +105,9 @@ fn new_reservation_to_same_relay_replaces_old() {
         .with(Protocol::P2p(client_peer_id.into()));
 
     let old_listener = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for connection to relay.
+    assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
 
     // Wait for first (old) reservation.
     pool.run_until(wait_for_reservation(
@@ -192,6 +198,8 @@ fn connect() {
 
     dst.listen_on(dst_addr.clone()).unwrap();
 
+    assert!(pool.run_until(wait_for_dial(&mut dst, relay_peer_id)));
+
     pool.run_until(wait_for_reservation(
         &mut dst,
         dst_addr.clone(),
@@ -272,6 +280,7 @@ fn reuse_connection() {
     assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
 
     client.listen_on(client_addr.clone()).unwrap();
+
     pool.run_until(wait_for_reservation(
         &mut client,
         client_addr.with(Protocol::P2p(client_peer_id.into())),
@@ -422,25 +431,20 @@ async fn wait_for_reservation(
                 }
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
     }
 }
 
-async fn wait_for_dial(client: &mut Swarm<Client>, relay_peer_id: PeerId) -> bool {
+async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
-                return true
-            }
-            SwarmEvent::OutgoingConnectionError { peer_id, .. }
-                if peer_id == Some(relay_peer_id) =>
-            {
+            SwarmEvent::Dialing(peer_id) if peer_id == remote => {}
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
+            SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
                 return false
             }
+            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             e => panic!("{:?}", e),
         }
     }
