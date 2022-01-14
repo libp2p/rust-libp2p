@@ -750,7 +750,7 @@ impl GossipsubConfigBuilder {
     }
 
     /// Constructs a [`GossipsubConfig`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<GossipsubConfig, &str> {
+    pub fn build(&self) -> Result<GossipsubConfig, &'static str> {
         // check all constraints on config
 
         if self.config.max_transmit_size < 100 {

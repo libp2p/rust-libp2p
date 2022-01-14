@@ -20,6 +20,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::{Multiaddr, PeerId};
+use std::num::NonZeroU8;
 
 /// Options to configure a dial to a known or unknown peer.
 ///
@@ -50,6 +51,7 @@ impl DialOpts {
         WithPeerId {
             peer_id,
             condition: Default::default(),
+            dial_concurrency_factor_override: Default::default(),
         }
     }
 
@@ -106,12 +108,20 @@ pub(super) enum Opts {
 pub struct WithPeerId {
     pub(crate) peer_id: PeerId,
     pub(crate) condition: PeerCondition,
+    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerId {
     /// Specify a [`PeerCondition`] for the dial.
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = condition;
+        self
+    }
+
+    /// Override
+    /// [`NetworkConfig::with_dial_concurrency_factor`](libp2p_core::network::NetworkConfig::with_dial_concurrency_factor).
+    pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor_override = Some(factor);
         self
     }
 
@@ -122,6 +132,7 @@ impl WithPeerId {
             condition: self.condition,
             addresses,
             extend_addresses_through_behaviour: false,
+            dial_concurrency_factor_override: self.dial_concurrency_factor_override,
         }
     }
 
@@ -140,6 +151,7 @@ pub struct WithPeerIdWithAddresses {
     pub(crate) condition: PeerCondition,
     pub(crate) addresses: Vec<Multiaddr>,
     pub(crate) extend_addresses_through_behaviour: bool,
+    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerIdWithAddresses {
@@ -153,6 +165,13 @@ impl WithPeerIdWithAddresses {
     /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer).
     pub fn extend_addresses_through_behaviour(mut self) -> Self {
         self.extend_addresses_through_behaviour = true;
+        self
+    }
+
+    /// Override
+    /// [`NetworkConfig::with_dial_concurrency_factor`](libp2p_core::network::NetworkConfig::with_dial_concurrency_factor).
+    pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor_override = Some(factor);
         self
     }
 

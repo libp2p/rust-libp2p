@@ -20,13 +20,13 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.1
+      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.4.0
 
-    - uses: Swatinem/rust-cache@v1.3.0
+    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
       with:
         key: ${{ matrix.args }}
 
@@ -44,21 +44,22 @@ jobs:
         include:
           - toolchain: wasm32-unknown-unknown
             args: "--features wasm-bindgen"
-    container:
-      image: rust
-      env:
-        CC: clang-11
+    env:
+      CC: clang-11
+    defaults:
+      run:
+        shell: bash
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.1
+      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.4.0
 
     - name: Install Rust ${{ matrix.toolchain }}
-      uses: actions-rs/toolchain@v1.0.7
+      uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
       with:
         toolchain: stable
         target: ${{ matrix.toolchain }}
@@ -66,13 +67,15 @@ jobs:
 
     - name: Install a recent version of clang
       run: |
-        apt-get update
-        apt-get install -y clang-11
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main"
+        sudo apt-get update
+        sudo apt-get install -y clang-11
 
     - name: Install CMake
-      run: apt-get install -y cmake
+      run: sudo apt-get install -y cmake
 
-    - uses: Swatinem/rust-cache@v1.3.0
+    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
       with:
         key: ${{ matrix.toolchain }}
 
@@ -89,13 +92,13 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.1
+      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.4.0
 
-    - uses: Swatinem/rust-cache@v1.3.0
+    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
@@ -105,23 +108,23 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.1
+      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.4.0
 
-    - uses: actions-rs/toolchain@v1.0.7
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
       with:
         profile: minimal
         toolchain: stable
         override: true
         components: clippy
 
-    - uses: Swatinem/rust-cache@v1.3.0
+    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
     - name: Run cargo clippy
-      uses: actions-rs/cargo@v1.0.3
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
       with:
         command: custom-clippy # cargo alias to allow reuse of config locally
 
@@ -133,13 +136,13 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.1
+      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.4.0
 
-    - uses: Swatinem/rust-cache@v1.3.0
+    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
@@ -149,13 +152,13 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.9.0
+      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2.4.0
 
-    - uses: actions-rs/toolchain@v1.0.7
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
       with:
         profile: minimal
         toolchain: stable
