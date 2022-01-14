@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::circuit_relay;
-use crate::protocol;
-use crate::RequestId;
+use crate::v1::message_proto::circuit_relay;
+use crate::v1::{protocol, Connection, RequestId};
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -93,10 +92,7 @@ pub struct RelayHandler {
     accept_dst_futures: FuturesUnordered<
         BoxFuture<
             'static,
-            Result<
-                (PeerId, protocol::Connection, oneshot::Receiver<()>),
-                protocol::IncomingDstReqError,
-            >,
+            Result<(PeerId, Connection, oneshot::Receiver<()>), protocol::IncomingDstReqError>,
         >,
     >,
     /// Futures that copy from a source to a destination.
@@ -108,8 +104,8 @@ pub struct RelayHandler {
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent>,
     /// Tracks substreams lend out to other [`RelayHandler`]s or as
-    /// [`Connection`](protocol::Connection) to the
-    /// [`RelayTransport`](crate::RelayTransport).
+    /// [`Connection`](Connection) to the
+    /// [`RelayTransport`](crate::v1::RelayTransport).
     ///
     /// For each substream to the peer of this handler, there is a future in here that resolves once
     /// the given substream is dropped.
@@ -169,7 +165,7 @@ pub enum RelayHandlerEvent {
     /// > **Note**: There is no proof that we are actually communicating with the destination. An
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
-    OutgoingRelayReqSuccess(PeerId, RequestId, protocol::Connection),
+    OutgoingRelayReqSuccess(PeerId, RequestId, Connection),
 
     /// The local node has accepted an incoming destination request. Contains a substream that
     /// communicates with the source.
@@ -178,7 +174,7 @@ pub enum RelayHandlerEvent {
     /// >           encryption handshake has to be performed on top of this substream in order to
     /// >           avoid MITM attacks.
     IncomingDstReqSuccess {
-        stream: protocol::Connection,
+        stream: Connection,
         src_peer_id: PeerId,
         relay_peer_id: PeerId,
         relay_addr: Multiaddr,
@@ -429,6 +425,7 @@ impl ProtocolsHandler for RelayHandler {
                         "Can not successfully dial a destination when actually dialing a relay."
                     ),
                 };
+                // TODO: Should this not be driven by the src handler?
                 self.copy_futures
                     .push(incoming_relay_req.fulfill(to_dest_substream, from_dst_read_buffer));
             }
