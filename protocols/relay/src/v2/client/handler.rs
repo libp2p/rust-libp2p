@@ -222,7 +222,7 @@ impl ProtocolsHandler for Handler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        inbound_circuit: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output,
+        inbound_circuit: inbound_stop::Circuit,
         _: Self::InboundOpenInfo,
     ) {
         match &mut self.reservation {
@@ -308,14 +308,13 @@ impl ProtocolsHandler for Handler {
                         self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                             Event::OutboundCircuitEstablished { limit },
                         ));
-                    },
+                    }
                     Err(_) => debug!(
                         "Oneshot to `RelayedDial` future dropped. \
                          Dropping established relayed connection to {:?}.",
                         self.remote_peer_id,
                     ),
                 }
-
             }
 
             _ => unreachable!(),
