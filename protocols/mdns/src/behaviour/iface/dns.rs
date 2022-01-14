@@ -127,7 +127,7 @@ pub fn build_query_response(
     // Encode the addresses as TXT records, and multiple TXT records into a
     // response packet.
     for addr in addresses {
-        let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
+        let txt_to_send = format!("dnsaddr={}/p2p/{}", addr, peer_id.to_base58());
         let mut txt_record = Vec::with_capacity(txt_to_send.len());
         match append_txt_record(&mut txt_record, &peer_name_bytes, ttl, &txt_to_send) {
             Ok(()) => {
