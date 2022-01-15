@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [libp2p direct connection upgrade through relay
-//! specification](https://github.com/libp2p/specs/pull/173).
+//! Implementation of the [libp2p Direct Connection Upgrade through Relay
+//! specification](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md).
 
 pub mod behaviour;
 mod handler;
