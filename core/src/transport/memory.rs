@@ -205,10 +205,7 @@ impl Transport for MemoryTransport {
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         self.dial(addr)
     }
 

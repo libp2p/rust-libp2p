@@ -215,10 +215,7 @@ where
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
@@ -324,7 +321,7 @@ where
                     let transport = inner.clone();
                     let dial = match role_override {
                         Endpoint::Dialer => transport.dial(addr),
-                        Endpoint::Listener => transport.dial_with_role_override(addr),
+                        Endpoint::Listener => transport.dial_as_listener(addr),
                     };
                     let result = match dial {
                         Ok(out) => {
@@ -608,7 +605,7 @@ mod tests {
                 Ok(Box::pin(future::ready(Ok(()))))
             }
 
-            fn dial_with_role_override(
+            fn dial_as_listener(
                 self,
                 addr: Multiaddr,
             ) -> Result<Self::Dial, TransportError<Self::Error>> {

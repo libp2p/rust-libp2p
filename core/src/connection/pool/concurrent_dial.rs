@@ -68,9 +68,7 @@ where
             Ok(address) => {
                 let dial = match role_override {
                     Endpoint::Dialer => transport.clone().dial(address.clone()),
-                    Endpoint::Listener => {
-                        transport.clone().dial_with_role_override(address.clone())
-                    }
+                    Endpoint::Listener => transport.clone().dial_as_listener(address.clone()),
                 };
                 match dial {
                     Ok(fut) => fut

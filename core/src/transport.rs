@@ -130,16 +130,12 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// As [`Transport::dial`] but overrides the role of the local node on the connection . I.e. has
-    /// the local node act as a listener on the outgoing connection.
+    /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
     /// This option is needed for NAT and firewall hole punching.
     ///
     /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
 

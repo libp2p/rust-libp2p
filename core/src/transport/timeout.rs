@@ -109,13 +109,10 @@ where
         })
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
-            .dial_with_role_override(addr)
+            .dial_as_listener(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,

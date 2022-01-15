@@ -224,10 +224,7 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
@@ -247,7 +244,7 @@ impl<T: Transport + Clone> RelayTransport<T> {
             Err(addr) => {
                 let dial = match role_override {
                     Endpoint::Dialer => self.inner_transport.dial(addr),
-                    Endpoint::Listener => self.inner_transport.dial_with_role_override(addr),
+                    Endpoint::Listener => self.inner_transport.dial_as_listener(addr),
                 };
                 match dial {
                     Ok(dialer) => Ok(EitherFuture::First(dialer)),

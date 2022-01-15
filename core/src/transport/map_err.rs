@@ -68,12 +68,9 @@ where
         }
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map;
-        match self.transport.dial_with_role_override(addr) {
+        match self.transport.dial_as_listener(addr) {
             Ok(future) => Ok(MapErrDial {
                 inner: future,
                 map: Some(map),

@@ -405,10 +405,7 @@ where
         Ok(Box::pin(self.do_dial(socket_addr)))
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.dial(addr)
     }
 

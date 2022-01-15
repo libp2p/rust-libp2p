@@ -25,7 +25,7 @@
 - Allow overriding role when dialing. This option is needed for NAT and firewall
   hole punching.
 
-    - Add `Transport::dial_with_role_override`. As `Transport::dial` but
+    - Add `Transport::dial_as_listener`. As `Transport::dial` but
       overrides the role of the local node on the connection . I.e. has the
       local node act as a listener on the outgoing connection.
 

@@ -88,13 +88,10 @@ where
         Ok(future)
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
-            .dial_with_role_override(addr.clone())
+            .dial_as_listener(addr.clone())
             .map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),

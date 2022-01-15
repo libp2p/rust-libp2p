@@ -75,12 +75,9 @@ where
         }
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0 {
-            inner.dial_with_role_override(addr)
+            inner.dial_as_listener(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }

@@ -89,13 +89,10 @@ where
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let sinks = self.sinks;
         self.inner
-            .dial_with_role_override(addr)
+            .dial_as_listener(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 

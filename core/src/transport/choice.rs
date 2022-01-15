@@ -83,11 +83,8 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = match self.0.dial_with_role_override(addr) {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let addr = match self.0.dial_as_listener(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
@@ -95,7 +92,7 @@ where
             }
         };
 
-        let addr = match self.1.dial_with_role_override(addr) {
+        let addr = match self.1.dial_as_listener(addr) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {

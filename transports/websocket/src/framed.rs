@@ -249,10 +249,7 @@ where
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
@@ -316,7 +313,7 @@ where
 
         let dial = match role_override {
             Endpoint::Dialer => self.transport.dial(addr.tcp_addr),
-            Endpoint::Listener => self.transport.dial_with_role_override(addr.tcp_addr),
+            Endpoint::Listener => self.transport.dial_as_listener(addr.tcp_addr),
         }
         .map_err(|e| match e {
             TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),

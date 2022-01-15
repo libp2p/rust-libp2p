@@ -70,11 +70,8 @@ where
         })
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial_with_role_override(addr.clone())?;
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.transport.dial_as_listener(addr.clone())?;
         let p = ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Listener,

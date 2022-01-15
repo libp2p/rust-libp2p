@@ -225,10 +225,7 @@ impl Transport for ExtTransport {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized,
     {

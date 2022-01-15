@@ -70,10 +70,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

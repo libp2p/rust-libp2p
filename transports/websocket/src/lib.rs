@@ -130,13 +130,10 @@ where
             .dial(addr)
     }
 
-    fn dial_with_role_override(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.transport
             .map(wrap_connection as WrapperFn<T::Output>)
-            .dial_with_role_override(addr)
+            .dial_as_listener(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

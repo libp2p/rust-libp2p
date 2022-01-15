@@ -491,7 +491,7 @@ mod tests {
                 panic!()
             }
 
-            fn dial_with_role_override(
+            fn dial_as_listener(
                 self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
@@ -549,7 +549,7 @@ mod tests {
                 panic!()
             }
 
-            fn dial_with_role_override(
+            fn dial_as_listener(
                 self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
