@@ -14,15 +14,15 @@
 - Enable overriding _dial concurrency factor_ per dial via
   `DialOpts::override_dial_concurrency_factor`.
 
-    - Introduces `libp2p_core::DialOpts` mirroring `libp2p_swarm::DialOpts`.
+  - Introduces `libp2p_core::DialOpts` mirroring `libp2p_swarm::DialOpts`.
       Passed as an argument to `Network::dial`.
-    - Removes `Peer::dial` in favor of `Network::dial`.
+  - Removes `Peer::dial` in favor of `Network::dial`.
 
   See [PR 2404].
 
 - Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
 
-- Report negotiated and expected PeerId as well as remote address in DialError::InvalidPeerId (see [PR 2428])
+- Report negotiated and expected PeerId as well as remote address in DialError::WrongPeerId (see [PR 2428])
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
