@@ -30,7 +30,7 @@ use libp2p::{
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
-use libp2p_core::ConnectedPoint;
+use libp2p_core::{ConnectedPoint, Endpoint};
 use libp2p_swarm::DialError;
 use std::{num::NonZeroU32, time::Duration};
 
@@ -191,7 +191,11 @@ async fn test_dial_back() {
             match server.select_next_some().await {
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
-                    endpoint: ConnectedPoint::Dialer { address },
+                    endpoint:
+                        ConnectedPoint::Dialer {
+                            address,
+                            role_override: Endpoint::Dialer,
+                        },
                     num_established,
                     concurrent_dial_errors,
                 } => {
@@ -399,7 +403,11 @@ async fn test_dial_multiple_addr() {
             match server.select_next_some().await {
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
-                    endpoint: ConnectedPoint::Dialer { address },
+                    endpoint:
+                        ConnectedPoint::Dialer {
+                            address,
+                            role_override: Endpoint::Dialer,
+                        },
                     concurrent_dial_errors,
                     ..
                 } => {
