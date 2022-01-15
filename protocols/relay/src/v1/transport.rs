@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{BehaviourToListenerMsg, OutgoingRelayReqError};
-use crate::protocol;
-use crate::RequestId;
+use crate::v1::behaviour::BehaviourToListenerMsg;
+use crate::v1::{Connection, RequestId};
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
@@ -44,7 +43,7 @@ use std::task::{Context, Poll};
 ///    ```
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
 ///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
@@ -58,7 +57,7 @@ use std::task::{Context, Poll};
 ///    ```
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, PeerId, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
 ///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
@@ -78,7 +77,7 @@ use std::task::{Context, Poll};
 ///    ```
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, PeerId, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
 ///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
@@ -99,7 +98,7 @@ use std::task::{Context, Poll};
 ///    ```
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, PeerId, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
-///    # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
+///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
 ///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
@@ -122,7 +121,7 @@ impl<T: Clone> RelayTransport<T> {
     ///
     ///```
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_relay::{RelayConfig, new_transport_and_behaviour};
+    /// # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
     ///
     /// let inner_transport = DummyTransport::<()>::new();
     /// let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
@@ -144,7 +143,7 @@ impl<T: Clone> RelayTransport<T> {
 }
 
 impl<T: Transport + Clone> Transport for RelayTransport<T> {
-    type Output = EitherOutput<<T as Transport>::Output, protocol::Connection>;
+    type Output = EitherOutput<<T as Transport>::Output, Connection>;
     type Error = EitherError<<T as Transport>::Error, RelayError>;
     type Listener = RelayListener<T>;
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
@@ -453,17 +452,17 @@ impl<T: Transport> Stream for RelayListener<T> {
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<protocol::Connection, RelayError>>;
+pub type RelayedDial = BoxFuture<'static, Result<Connection, RelayError>>;
 
 #[pin_project(project = RelayedListenerUpgradeProj)]
 pub enum RelayedListenerUpgrade<T: Transport> {
     Inner(#[pin] <T as Transport>::ListenerUpgrade),
-    Relayed(Option<protocol::Connection>),
+    Relayed(Option<Connection>),
 }
 
 impl<T: Transport> Future for RelayedListenerUpgrade<T> {
     type Output = Result<
-        EitherOutput<<T as Transport>::Output, protocol::Connection>,
+        EitherOutput<<T as Transport>::Output, Connection>,
         EitherError<<T as Transport>::Error, RelayError>,
     >;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -560,7 +559,7 @@ impl std::fmt::Display for RelayError {
 
 impl std::error::Error for RelayError {}
 
-/// Message from the [`RelayTransport`] to the [`Relay`](crate::Relay)
+/// Message from the [`RelayTransport`] to the [`Relay`](crate::v1::Relay)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
@@ -570,7 +569,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<protocol::Connection, OutgoingRelayReqError>>,
+        send_back: oneshot::Sender<Result<Connection, OutgoingRelayReqError>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
@@ -580,4 +579,9 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id_and_addr: Option<(PeerId, Multiaddr)>,
         to_listener: mpsc::Sender<BehaviourToListenerMsg>,
     },
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum OutgoingRelayReqError {
+    DialingRelay,
 }
