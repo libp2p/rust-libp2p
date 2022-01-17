@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use crate::connection::{ConnectionCounters, ConnectionLimits};
-
 use crate::{
+    connection::Endpoint,
     transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
@@ -63,14 +62,21 @@ where
         peer: Option<PeerId>,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         concurrency_factor: NonZeroU8,
+        role_override: Endpoint,
     ) -> Self {
         let mut pending_dials = addresses.map(move |address| match p2p_addr(peer, address) {
-            Ok(address) => match transport.clone().dial(address.clone()) {
-                Ok(fut) => fut
-                    .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
-                    .boxed(),
-                Err(err) => futures::future::ready((address, Err(err))).boxed(),
-            },
+            Ok(address) => {
+                let dial = match role_override {
+                    Endpoint::Dialer => transport.clone().dial(address.clone()),
+                    Endpoint::Listener => transport.clone().dial_as_listener(address.clone()),
+                };
+                match dial {
+                    Ok(fut) => fut
+                        .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
+                        .boxed(),
+                    Err(err) => futures::future::ready((address, Err(err))).boxed(),
+                }
+            }
             Err(address) => futures::future::ready((
                 address.clone(),
                 Err(TransportError::MultiaddrNotSupported(address)),
