@@ -61,7 +61,7 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::dns::DnsConfig;
 use libp2p::plaintext;
-use libp2p::relay::{Relay, RelayConfig};
+use libp2p::relay::v1::{Relay, RelayConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
     let (relay_wrapped_transport, relay_behaviour) =
-        libp2p_relay::new_transport_and_behaviour(relay_config, transport);
+        libp2p_relay::v1::new_transport_and_behaviour(relay_config, transport);
 
     let behaviour = Behaviour {
         relay: relay_behaviour,

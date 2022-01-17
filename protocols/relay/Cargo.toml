@@ -4,7 +4,7 @@ edition = "2021"
 rust-version = "1.56.1"
 description = "Communications relaying for libp2p"
 version = "0.6.0"
-authors = ["Parity Technologies <admin@parity.io>"]
+authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asynchronous-codec = "0.6"
 bytes = "1"
+either = "1.6.0"
 futures = "0.3.1"
 futures-timer = "3"
 instant = "0.1.11"
@@ -21,8 +22,10 @@ libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
 prost = "0.9"
-rand = "0.7"
+rand = "0.8.4"
 smallvec = "1.6.1"
+static_assertions = "1"
+thiserror = "1.0"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
 
@@ -31,10 +34,11 @@ prost-build = "0.9"
 
 [dev-dependencies]
 env_logger = "0.9.0"
-structopt = "0.3.21"
 libp2p = { path = "../.." }
+libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }
 libp2p-ping = { path = "../ping" }
-libp2p-identify = { path = "../identify" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
+quickcheck = "1"
+structopt = "0.3.21"
