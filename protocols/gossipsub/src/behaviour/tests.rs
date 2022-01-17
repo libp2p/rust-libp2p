@@ -2038,6 +2038,77 @@ mod tests {
     }
 
     #[test]
+    fn test_unsubscribe_backoff() {
+        const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
+        let config = GossipsubConfigBuilder::default()
+            .backoff_slack(1)
+            // ensure a prune_backoff > unsubscribe_backoff
+            .prune_backoff(Duration::from_secs(5))
+            .unsubscribe_backoff(1)
+            .heartbeat_interval(HEARTBEAT_INTERVAL)
+            .build()
+            .unwrap();
+
+        let topic = String::from("test");
+        // only one peer => mesh too small and will try to regraft as early as possible
+        let (mut gs, _, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec![topic.clone()])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
+
+        let _ = gs.unsubscribe(&Topic::new(topic.clone()));
+
+        assert_eq!(
+            count_control_msgs(&gs, |_, m| match m {
+                GossipsubControlAction::Prune { backoff, .. } => backoff == &Some(1),
+                _ => false,
+            }),
+            1,
+            "Peer should be pruned with `unsubscribe_backoff`."
+        );
+
+        let _ = gs.subscribe(&Topic::new(topics[0].to_string()));
+
+        // forget all events until now
+        flush_events(&mut gs);
+
+        // call heartbeat
+        gs.heartbeat();
+
+        // Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
+        for _ in 0..10 {
+            sleep(HEARTBEAT_INTERVAL);
+            gs.heartbeat();
+        }
+
+        // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+        // is needed).
+        assert_eq!(
+            count_control_msgs(&gs, |_, m| match m {
+                GossipsubControlAction::Graft { .. } => true,
+                _ => false,
+            }),
+            0,
+            "Graft message created too early within backoff period"
+        );
+
+        // Heartbeat one more time this should graft now
+        sleep(HEARTBEAT_INTERVAL);
+        gs.heartbeat();
+
+        // check that graft got created
+        assert!(
+            count_control_msgs(&gs, |_, m| match m {
+                GossipsubControlAction::Graft { .. } => true,
+                _ => false,
+            }) > 0,
+            "No graft message was created after backoff period"
+        );
+    }
+
+    #[test]
     fn test_flood_publish() {
         let config: GossipsubConfig = GossipsubConfig::default();
 
