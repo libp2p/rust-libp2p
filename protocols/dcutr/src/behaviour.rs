@@ -276,6 +276,7 @@ impl NetworkBehaviour for Behaviour {
                         opts: DialOpts::peer_id(event_source)
                             .condition(dial_opts::PeerCondition::Always)
                             .addresses(remote_addrs)
+                            .override_role()
                             .build(),
                         handler: handler::Prototype::DirectConnection {
                             relayed_connection_id: connection,
