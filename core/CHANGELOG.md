@@ -22,12 +22,24 @@
 
 - Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
 
+- Allow overriding role when dialing. This option is needed for NAT and firewall
+  hole punching.
+
+    - Add `Transport::dial_as_listener`. As `Transport::dial` but
+      overrides the role of the local node on the connection . I.e. has the
+      local node act as a listener on the outgoing connection.
+
+    - Add `override_role` option to `DialOpts`.
+
+  See [PR 2363].
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2352]: https://github.com/libp2p/rust-libp2p/pull/2352
 [PR 2392]: https://github.com/libp2p/rust-libp2p/pull/2392
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
 [PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
 
 # 0.30.1 [2021-11-16]
 
