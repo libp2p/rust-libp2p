@@ -30,7 +30,7 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
-    ConnectedPoint, Multiaddr, PeerId,
+    ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
     handler::RequestResponseHandlerEvent, ProtocolSupport, RequestId, RequestResponse,
@@ -315,11 +315,22 @@ impl NetworkBehaviour for Behaviour {
         connections.insert(*conn, addr);
 
         match endpoint {
-            ConnectedPoint::Dialer { address } => {
+            ConnectedPoint::Dialer {
+                address,
+                role_override: Endpoint::Dialer,
+            } => {
                 if let Some(event) = self.as_server().on_outbound_connection(peer, address) {
                     self.pending_out_events
                         .push_back(Event::InboundProbe(event));
                 }
+            }
+            ConnectedPoint::Dialer {
+                address: _,
+                role_override: Endpoint::Listener,
+            } => {
+                // Outgoing connection was dialed as a listener. In other words outgoing connection
+                // was dialed as part of a hole punch. `libp2p-autonat` never attempts to hole
+                // punch, thus this connection has not been requested by this [`NetworkBehaviour`].
             }
             ConnectedPoint::Listener { .. } => self.as_client().on_inbound_connection(),
         }

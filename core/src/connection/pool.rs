@@ -22,8 +22,8 @@
 use crate::{
     connection::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
-        IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint,
+        IncomingInfo, IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
         PendingOutboundConnectionError, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
@@ -460,7 +460,7 @@ where
                     local_addr,
                     send_back_addr,
                 }),
-                PendingPoint::Dialer => None,
+                PendingPoint::Dialer { .. } => None,
             })
     }
 
@@ -535,6 +535,7 @@ where
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
         handler: THandler,
+        role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
@@ -550,6 +551,7 @@ where
             peer,
             addresses,
             dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
+            role_override,
         );
 
         let connection_id = self.next_connection_id();
@@ -566,13 +568,15 @@ where
             .boxed(),
         );
 
-        self.counters.inc_pending(&PendingPoint::Dialer);
+        let endpoint = PendingPoint::Dialer { role_override };
+
+        self.counters.inc_pending(&endpoint);
         self.pending.insert(
             connection_id,
             PendingConnectionInfo {
                 peer_id: peer,
                 handler,
-                endpoint: PendingPoint::Dialer,
+                endpoint: endpoint,
                 _drop_notifier: drop_notifier,
             },
         );
@@ -745,9 +749,13 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer, Some((address, errors))) => {
-                            (ConnectedPoint::Dialer { address }, Some(errors))
-                        }
+                        (PendingPoint::Dialer { role_override }, Some((address, errors))) => (
+                            ConnectedPoint::Dialer {
+                                address,
+                                role_override,
+                            },
+                            Some(errors),
+                        ),
                         (
                             PendingPoint::Listener {
                                 local_addr,
@@ -761,7 +769,7 @@ where
                             },
                             None,
                         ),
-                        (PendingPoint::Dialer, None) => unreachable!(
+                        (PendingPoint::Dialer { .. }, None) => unreachable!(
                             "Established incoming connection via pending outgoing connection."
                         ),
                         (PendingPoint::Listener { .. }, Some(_)) => unreachable!(
@@ -910,7 +918,7 @@ where
                         self.counters.dec_pending(&endpoint);
 
                         match (endpoint, error) {
-                            (PendingPoint::Dialer, Either::Left(error)) => {
+                            (PendingPoint::Dialer { .. }, Either::Left(error)) => {
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
                                     error,
@@ -933,7 +941,7 @@ where
                                     local_addr,
                                 });
                             }
-                            (PendingPoint::Dialer, Either::Right(_)) => {
+                            (PendingPoint::Dialer { .. }, Either::Right(_)) => {
                                 unreachable!("Inbound error for outbound connection.")
                             }
                             (PendingPoint::Listener { .. }, Either::Left(_)) => {
@@ -1176,7 +1184,7 @@ impl ConnectionCounters {
 
     fn inc_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            PendingPoint::Dialer => {
+            PendingPoint::Dialer { .. } => {
                 self.pending_outgoing += 1;
             }
             PendingPoint::Listener { .. } => {
@@ -1191,7 +1199,7 @@ impl ConnectionCounters {
 
     fn dec_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            PendingPoint::Dialer => {
+            PendingPoint::Dialer { .. } => {
                 self.pending_outgoing -= 1;
             }
             PendingPoint::Listener { .. } => {

@@ -33,7 +33,7 @@ use libp2p_core::{
     multiaddr::{multiaddr, Multiaddr, Protocol},
     multihash::{Code, Multihash, MultihashDigest},
     transport::MemoryTransport,
-    upgrade, PeerId, Transport,
+    upgrade, Endpoint, PeerId, Transport,
 };
 use libp2p_noise as noise;
 use libp2p_swarm::{Swarm, SwarmEvent};
@@ -1287,6 +1287,7 @@ fn network_behaviour_inject_address_change() {
 
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),
+        role_override: Endpoint::Dialer,
     };
 
     // Mimick a connection being established.
@@ -1316,9 +1317,11 @@ fn network_behaviour_inject_address_change() {
         &connection_id,
         &ConnectedPoint::Dialer {
             address: old_address.clone(),
+            role_override: Endpoint::Dialer,
         },
         &ConnectedPoint::Dialer {
             address: new_address.clone(),
+            role_override: Endpoint::Dialer,
         },
     );
 

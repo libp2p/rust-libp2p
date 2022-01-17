@@ -197,6 +197,17 @@ impl Transport for ClientTransport {
         .boxed())
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized,
+    {
+        // [`Transport::dial_as_listener`] is used for NAT and firewall
+        // traversal. One would coordinate such traversal via a previously
+        // established relayed connection, but never using a relayed connection
+        // itself.
+        return Err(TransportError::MultiaddrNotSupported(addr));
+    }
+
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }

@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::ConnectedPoint;
+use crate::connection::ConnectedPoint;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
@@ -127,6 +127,15 @@ pub trait Transport {
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized;
+
+    /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
+    ///
+    /// This option is needed for NAT and firewall hole punching.
+    ///
+    /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
 

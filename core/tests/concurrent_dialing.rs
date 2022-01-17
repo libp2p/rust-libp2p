@@ -120,7 +120,7 @@ fn concurrent_dialing() {
                         ..
                     }) => {
                         match connection.endpoint() {
-                            ConnectedPoint::Dialer { address } => {
+                            ConnectedPoint::Dialer { address, .. } => {
                                 assert_eq!(
                                     *address,
                                     accepted_addr

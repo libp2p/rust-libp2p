@@ -405,6 +405,10 @@ where
         Ok(Box::pin(self.do_dial(socket_addr)))
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.dial(addr)
+    }
+
     /// When port reuse is disabled and hence ephemeral local ports are
     /// used for outgoing connections, the returned address is the
     /// `observed` address with the port replaced by the port of the

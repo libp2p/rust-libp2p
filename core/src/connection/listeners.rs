@@ -491,6 +491,13 @@ mod tests {
                 panic!()
             }
 
+            fn dial_as_listener(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+                panic!()
+            }
+
             fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
                 None
             }
@@ -536,6 +543,13 @@ mod tests {
             }
 
             fn dial(
+                self,
+                _: Multiaddr,
+            ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+                panic!()
+            }
+
+            fn dial_as_listener(
                 self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {

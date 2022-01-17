@@ -193,7 +193,7 @@ impl ProtocolsHandler for Handler {
         match output {
             EitherOutput::First(inbound_connect) => {
                 let remote_addr = match & self.endpoint {
-                    ConnectedPoint::Dialer { address } => address.clone(),
+                    ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ProtocolsHandler>::listen_protocol` denies all incoming substreams as a listener."),
                 };
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
