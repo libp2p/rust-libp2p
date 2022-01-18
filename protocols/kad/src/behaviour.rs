@@ -672,8 +672,8 @@ where
         &'s mut self,
         key: &'t kbucket::Key<T>,
     ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 's
-        where
-            T: Clone,
+    where
+        T: Clone,
     {
         self.kbuckets.closest_keys(key)
     }
