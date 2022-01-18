@@ -27,7 +27,7 @@ use libp2p_core::{
     connection::PendingConnectionError,
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
-    PeerId,
+    ConnectedPoint, Endpoint, PeerId,
 };
 use rand::seq::SliceRandom;
 use std::{io, task::Poll};
@@ -126,9 +126,15 @@ fn invalid_peer_id() {
     }));
     assert_eq!(peer_id, other_id);
     match error {
-        PendingConnectionError::WrongPeerId { obtained, address } => {
+        PendingConnectionError::WrongPeerId { obtained, endpoint } => {
             assert_eq!(obtained, *swarm1.local_peer_id());
-            assert_eq!(address, other_addr);
+            assert_eq!(
+                endpoint,
+                ConnectedPoint::Dialer {
+                    address: other_addr,
+                    role_override: Endpoint::Dialer,
+                }
+            );
         }
         x => panic!("wrong error {:?}", x),
     }
