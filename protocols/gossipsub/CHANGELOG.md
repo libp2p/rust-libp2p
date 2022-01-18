@@ -13,11 +13,15 @@
 
 - Fix `GossipsubConfigBuilder::build()` requiring `&self` to live for `'static` (see [PR 2409])
 
+- Implement Unsubscribe backoff as per [libp2p specs PR 383] (see [PR 2403]).
+
 [PR 2346]: https://github.com/libp2p/rust-libp2p/pull/2346
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2327]: https://github.com/libp2p/rust-libp2p/pull/2327
 [PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
 [PR 2409]: https://github.com/libp2p/rust-libp2p/pull/2409
+[PR 2403]: https://github.com/libp2p/rust-libp2p/pull/2403
+[libp2p specs PR 383]: https://github.com/libp2p/specs/pull/383
 
 # 0.34.0 [2021-11-16]
 

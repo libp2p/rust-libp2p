@@ -77,6 +77,7 @@ pub struct GossipsubConfig {
     do_px: bool,
     prune_peers: usize,
     prune_backoff: Duration,
+    unsubscribe_backoff: Duration,
     backoff_slack: u32,
     flood_publish: bool,
     graft_flood_threshold: Duration,
@@ -276,6 +277,15 @@ impl GossipsubConfig {
         self.prune_backoff
     }
 
+    /// Controls the backoff time when unsubscribing from a topic.
+    ///
+    /// This is how long to wait before resubscribing to the topic. A short backoff period in case
+    /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
+    /// is 10 seconds.
+    pub fn unsubscribe_backoff(&self) -> Duration {
+        self.unsubscribe_backoff
+    }
+
     /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
     /// solves problems occuring through high latencies. In particular if
@@ -421,6 +431,7 @@ impl Default for GossipsubConfigBuilder {
                 do_px: false,
                 prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
                 prune_backoff: Duration::from_secs(60),
+                unsubscribe_backoff: Duration::from_secs(10),
                 backoff_slack: 1,
                 flood_publish: true,
                 graft_flood_threshold: Duration::from_secs(10),
@@ -636,6 +647,16 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Controls the backoff time when unsubscribing from a topic.
+    ///
+    /// This is how long to wait before resubscribing to the topic. A short backoff period in case
+    /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
+    /// is 10 seconds.
+    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: u64) -> &mut Self {
+        self.config.unsubscribe_backoff = Duration::from_secs(unsubscribe_backoff);
+        self
+    }
+
     /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
     /// solves problems occuring through high latencies. In particular if
@@ -777,6 +798,11 @@ impl GossipsubConfigBuilder {
                 "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
             );
         }
+
+        if self.config.unsubscribe_backoff.as_millis() == 0 {
+            return Err("The unsubscribe_backoff parameter should be positive.");
+        }
+
         Ok(self.config.clone())
     }
 }

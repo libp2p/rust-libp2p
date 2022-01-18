@@ -368,11 +368,13 @@ where
             dial_opts::Opts::WithPeerId(dial_opts::WithPeerId {
                 peer_id,
                 condition,
+                role_override,
                 dial_concurrency_factor_override,
             })
             | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
                 peer_id,
                 condition,
+                role_override,
                 dial_concurrency_factor_override,
                 ..
             }) => {
@@ -439,7 +441,9 @@ where
                     addresses
                 };
 
-                let mut opts = libp2p_core::DialOpts::peer_id(peer_id).addresses(addresses);
+                let mut opts = libp2p_core::DialOpts::peer_id(peer_id)
+                    .addresses(addresses)
+                    .override_role(role_override);
 
                 if let Some(f) = dial_concurrency_factor_override {
                     opts = opts.override_dial_concurrency_factor(f);
@@ -450,8 +454,10 @@ where
             // Dial an unknown peer.
             dial_opts::Opts::WithoutPeerIdWithAddress(dial_opts::WithoutPeerIdWithAddress {
                 address,
+                role_override,
             }) => libp2p_core::DialOpts::unknown_peer_id()
                 .address(address)
+                .override_role(role_override)
                 .build(),
         };
 

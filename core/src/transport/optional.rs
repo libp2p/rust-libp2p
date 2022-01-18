@@ -75,6 +75,14 @@ where
         }
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0 {
+            inner.dial_as_listener(addr)
+        } else {
+            Err(TransportError::MultiaddrNotSupported(addr))
+        }
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if let Some(inner) = &self.0 {
             inner.address_translation(server, observed)

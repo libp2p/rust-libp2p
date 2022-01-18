@@ -21,7 +21,7 @@
 mod event;
 pub mod peer;
 
-pub use crate::connection::{ConnectionCounters, ConnectionLimits};
+pub use crate::connection::{ConnectionCounters, ConnectionLimits, Endpoint};
 pub use event::{IncomingConnection, NetworkEvent};
 pub use peer::Peer;
 
@@ -97,7 +97,7 @@ where
         self.pool
             .iter_pending_info()
             .filter(move |(_, endpoint, peer_id)| {
-                matches!(endpoint, PendingPoint::Dialer) && peer_id.as_ref() == Some(&peer)
+                matches!(endpoint, PendingPoint::Dialer { .. }) && peer_id.as_ref() == Some(&peer)
             })
             .map(|(connection_id, _, _)| connection_id)
     }
@@ -206,19 +206,24 @@ where
     {
         let opts = opts.into();
 
-        let (peer_id, addresses, dial_concurrency_factor_override) = match opts.0 {
+        let (peer_id, addresses, dial_concurrency_factor_override, role_override) = match opts.0 {
             // Dial a known peer.
             Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
                 peer_id,
                 addresses,
                 dial_concurrency_factor_override,
+                role_override,
             }) => (
                 Some(peer_id),
                 Either::Left(addresses.into_iter()),
                 dial_concurrency_factor_override,
+                role_override,
             ),
             // Dial an unknown peer.
-            Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { address }) => {
+            Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
+                address,
+                role_override,
+            }) => {
                 // If the address ultimately encapsulates an expected peer ID, dial that peer
                 // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
                 // from the address, because it may be used by the `Transport`, i.e. `P2p`
@@ -239,7 +244,12 @@ where
                     Err(_) => return Err(DialError::InvalidPeerId { handler }),
                 };
 
-                (peer_id, Either::Right(std::iter::once(address)), None)
+                (
+                    peer_id,
+                    Either::Right(std::iter::once(address)),
+                    None,
+                    role_override,
+                )
             }
         };
 
@@ -248,6 +258,7 @@ where
             addresses,
             peer_id,
             handler,
+            role_override,
             dial_concurrency_factor_override,
         )
     }
@@ -284,7 +295,7 @@ where
     pub fn dialing_peers(&self) -> impl Iterator<Item = &PeerId> {
         self.pool
             .iter_pending_info()
-            .filter(|(_, endpoint, _)| matches!(endpoint, PendingPoint::Dialer))
+            .filter(|(_, endpoint, _)| matches!(endpoint, PendingPoint::Dialer { .. }))
             .filter_map(|(_, _, peer)| peer.as_ref())
     }
 
@@ -627,6 +638,7 @@ impl WithPeerId {
             peer_id: self.peer_id,
             addresses,
             dial_concurrency_factor_override: Default::default(),
+            role_override: Endpoint::Dialer,
         }
     }
 }
@@ -636,12 +648,24 @@ pub struct WithPeerIdWithAddresses {
     pub(crate) peer_id: PeerId,
     pub(crate) addresses: Vec<Multiaddr>,
     pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
+    pub(crate) role_override: Endpoint,
 }
 
 impl WithPeerIdWithAddresses {
     /// Override [`NetworkConfig::with_dial_concurrency_factor`].
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
+        self
+    }
+
+    /// Override role of local node on connection. I.e. execute the dial _as a
+    /// listener_.
+    ///
+    /// See
+    /// [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer)
+    /// for details.
+    pub fn override_role(mut self, role: Endpoint) -> Self {
+        self.role_override = role;
         self
     }
 
@@ -657,16 +681,31 @@ pub struct WithoutPeerId {}
 impl WithoutPeerId {
     /// Specify a single address to dial the unknown peer.
     pub fn address(self, address: Multiaddr) -> WithoutPeerIdWithAddress {
-        WithoutPeerIdWithAddress { address }
+        WithoutPeerIdWithAddress {
+            address,
+            role_override: Endpoint::Dialer,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WithoutPeerIdWithAddress {
     pub(crate) address: Multiaddr,
+    pub(crate) role_override: Endpoint,
 }
 
 impl WithoutPeerIdWithAddress {
+    /// Override role of local node on connection. I.e. execute the dial _as a
+    /// listener_.
+    ///
+    /// See
+    /// [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer)
+    /// for details.
+    pub fn override_role(mut self, role: Endpoint) -> Self {
+        self.role_override = role;
+        self
+    }
+
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts(Opts::WithoutPeerIdWithAddress(self))
