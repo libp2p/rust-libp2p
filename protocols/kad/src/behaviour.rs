@@ -673,7 +673,7 @@ where
         key: &'k kbucket::Key<K>,
     ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 's
     where
-        K: AsRef<kbucket::Key<K>> + Clone
+        K: Clone
     {
         self.kbuckets.closest_keys(key)
     }
