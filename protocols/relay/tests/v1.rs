@@ -1264,6 +1264,10 @@ impl<T: Transport> Transport for Firewall<T> {
         self.0.dial(addr)
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial_as_listener(addr)
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.0.address_translation(server, observed)
     }

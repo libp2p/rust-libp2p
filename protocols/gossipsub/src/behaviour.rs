@@ -1049,6 +1049,7 @@ where
         topic_hash: &TopicHash,
         peer: &PeerId,
         do_px: bool,
+        on_unsubscribe: bool,
     ) -> GossipsubControlAction {
         if let Some((peer_score, ..)) = &mut self.peer_score {
             peer_score.prune(peer, topic_hash.clone());
@@ -1088,14 +1089,19 @@ where
             Vec::new()
         };
 
+        let backoff = if on_unsubscribe {
+            self.config.unsubscribe_backoff()
+        } else {
+            self.config.prune_backoff()
+        };
+
         // update backoff
-        self.backoffs
-            .update_backoff(topic_hash, peer, self.config.prune_backoff());
+        self.backoffs.update_backoff(topic_hash, peer, backoff);
 
         GossipsubControlAction::Prune {
             topic_hash: topic_hash.clone(),
             peers,
-            backoff: Some(self.config.prune_backoff().as_secs()),
+            backoff: Some(backoff.as_secs()),
         }
     }
 
@@ -1111,7 +1117,9 @@ where
             for peer in peers {
                 // Send a PRUNE control message
                 debug!("LEAVE: Sending PRUNE to peer: {:?}", peer);
-                let control = self.make_prune(topic_hash, &peer, self.config.do_px());
+                let on_unsubscribe = true;
+                let control =
+                    self.make_prune(topic_hash, &peer, self.config.do_px(), on_unsubscribe);
                 Self::control_pool_add(&mut self.control_pool, peer, control);
 
                 // If the peer did not previously exist in any mesh, inform the handler
@@ -1487,9 +1495,10 @@ where
 
         if !to_prune_topics.is_empty() {
             // build the prune messages to send
+            let on_unsubscribe = false;
             let prune_messages = to_prune_topics
                 .iter()
-                .map(|t| self.make_prune(t, peer_id, do_px))
+                .map(|t| self.make_prune(t, peer_id, do_px, on_unsubscribe))
                 .collect();
             // Send the prune messages to the peer
             debug!(
@@ -2598,6 +2607,9 @@ where
             // NOTE: In this case a peer has been added to a topic mesh, and removed from another.
             // It therefore must be in at least one mesh and we do not need to inform the handler
             // of its removal from another.
+
+            // The following prunes are not due to unsubscribing.
+            let on_unsubscribe = false;
             if let Some(topics) = to_prune.remove(&peer) {
                 let mut prunes = topics
                     .iter()
@@ -2606,6 +2618,7 @@ where
                             topic_hash,
                             &peer,
                             self.config.do_px() && !no_px.contains(&peer),
+                            on_unsubscribe,
                         )
                     })
                     .collect::<Vec<_>>();
@@ -2630,6 +2643,8 @@ where
         }
 
         // handle the remaining prunes
+        // The following prunes are not due to unsubscribing.
+        let on_unsubscribe = false;
         for (peer, topics) in to_prune.iter() {
             let mut remaining_prunes = Vec::new();
             for topic_hash in topics {
@@ -2637,6 +2652,7 @@ where
                     topic_hash,
                     peer,
                     self.config.do_px() && !no_px.contains(peer),
+                    on_unsubscribe,
                 );
                 remaining_prunes.push(prune);
                 // inform the handler

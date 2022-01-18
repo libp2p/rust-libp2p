@@ -14,10 +14,15 @@
 
 - Implement `swarm::NetworkBehaviour` on `either::Either` (see [PR 2370]).
 
-- Enable overriding _dial concurrency factor_ per dial via
+- Allow overriding _dial concurrency factor_ per dial via
   `DialOpts::override_dial_concurrency_factor`. See [PR 2404].
 
-- Report negotiated and expected PeerId as well as remote address in DialError::WrongPeerId (see [PR 2428])
+- Report negotiated and expected `PeerId` as well as remote address in
+  `DialError::WrongPeerId` (see [PR 2428]).
+
+- Allow overriding role when dialing through `override_role` option on
+  `DialOpts`. This option is needed for NAT and firewall hole punching. See [PR
+  2363].
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
@@ -27,6 +32,7 @@
 [PR 2378]: https://github.com/libp2p/rust-libp2p/pull/2378
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
 [PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
+[PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
 
 # 0.32.0 [2021-11-16]
 

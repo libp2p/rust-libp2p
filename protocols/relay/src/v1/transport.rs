@@ -25,6 +25,7 @@ use futures::channel::oneshot;
 use futures::future::{BoxFuture, Future, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
+use libp2p_core::connection::Endpoint;
 use libp2p_core::either::{EitherError, EitherFuture, EitherOutput};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{ListenerEvent, TransportError};
@@ -220,15 +221,41 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Dialer)
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Listener)
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner_transport.address_translation(server, observed)
+    }
+}
+
+impl<T: Transport + Clone> RelayTransport<T> {
+    fn do_dial(
+        self,
+        addr: Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
         match parse_relayed_multiaddr(addr)? {
             // Address does not contain circuit relay protocol. Use inner transport.
-            Err(addr) => match self.inner_transport.dial(addr) {
-                Ok(dialer) => Ok(EitherFuture::First(dialer)),
-                Err(TransportError::MultiaddrNotSupported(addr)) => {
-                    Err(TransportError::MultiaddrNotSupported(addr))
+            Err(addr) => {
+                let dial = match role_override {
+                    Endpoint::Dialer => self.inner_transport.dial(addr),
+                    Endpoint::Listener => self.inner_transport.dial_as_listener(addr),
+                };
+                match dial {
+                    Ok(dialer) => Ok(EitherFuture::First(dialer)),
+                    Err(TransportError::MultiaddrNotSupported(addr)) => {
+                        Err(TransportError::MultiaddrNotSupported(addr))
+                    }
+                    Err(TransportError::Other(err)) => {
+                        Err(TransportError::Other(EitherError::A(err)))
+                    }
                 }
-                Err(TransportError::Other(err)) => Err(TransportError::Other(EitherError::A(err))),
-            },
+            }
             // Address does contain circuit relay protocol. Dial destination via relay.
             Ok(RelayedMultiaddr {
                 relay_peer_id,
@@ -262,10 +289,6 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
                 ))
             }
         }
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner_transport.address_translation(server, observed)
     }
 }
 
