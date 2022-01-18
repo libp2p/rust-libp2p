@@ -668,12 +668,12 @@ where
     }
 
     /// Returns closest peers to the given key; takes peers from local routing table only.
-    pub fn get_closest_local_peers<'s, 'k: 's, K: 's>(
+    pub fn get_local_closest_peers<'s, 't: 's, T: 's>(
         &'s mut self,
-        key: &'k kbucket::Key<K>,
+        key: &'t kbucket::Key<T>,
     ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 's
-    where
-        K: Clone,
+        where
+            T: Clone,
     {
         self.kbuckets.closest_keys(key)
     }
