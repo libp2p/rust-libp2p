@@ -733,7 +733,7 @@ where
             match event {
                 task::PendingConnectionEvent::ConnectionEstablished {
                     id,
-                    output: (peer_id, muxer),
+                    output: (obtained_peer_id, muxer),
                     outgoing,
                 } => {
                     let PendingConnectionInfo {
@@ -777,49 +777,42 @@ where
                         ),
                     };
 
-                    enum Error {
-                        ConnectionLimit(ConnectionLimit),
-                        InvalidPeerId,
-                    }
-
-                    impl<TransportError> From<Error> for PendingConnectionError<TransportError> {
-                        fn from(error: Error) -> Self {
-                            match error {
-                                Error::ConnectionLimit(limit) => {
-                                    PendingConnectionError::ConnectionLimit(limit)
-                                }
-                                Error::InvalidPeerId => PendingConnectionError::InvalidPeerId,
-                            }
-                        }
-                    }
-
-                    let error = self
+                    let error: Result<(), PendingInboundConnectionError<_>> = self
                         .counters
                         // Check general established connection limit.
                         .check_max_established(&endpoint)
-                        .map_err(Error::ConnectionLimit)
+                        .map_err(PendingConnectionError::ConnectionLimit)
                         // Check per-peer established connection limit.
                         .and_then(|()| {
                             self.counters
                                 .check_max_established_per_peer(num_peer_established(
                                     &self.established,
-                                    peer_id,
+                                    obtained_peer_id,
                                 ))
-                                .map_err(Error::ConnectionLimit)
+                                .map_err(PendingConnectionError::ConnectionLimit)
                         })
                         // Check expected peer id matches.
                         .and_then(|()| {
                             if let Some(peer) = expected_peer_id {
-                                if peer != peer_id {
-                                    return Err(Error::InvalidPeerId);
+                                if peer != obtained_peer_id {
+                                    Err(PendingConnectionError::WrongPeerId {
+                                        obtained: obtained_peer_id,
+                                        endpoint: endpoint.clone(),
+                                    })
+                                } else {
+                                    Ok(())
                                 }
+                            } else {
+                                Ok(())
                             }
-                            Ok(())
                         })
                         // Check peer is not local peer.
                         .and_then(|()| {
-                            if self.local_id == peer_id {
-                                Err(Error::InvalidPeerId)
+                            if self.local_id == obtained_peer_id {
+                                Err(PendingConnectionError::WrongPeerId {
+                                    obtained: obtained_peer_id,
+                                    endpoint: endpoint.clone(),
+                                })
                             } else {
                                 Ok(())
                             }
@@ -832,7 +825,7 @@ where
                                     log::debug!(
                                         "Failed to close connection {:?} to peer {}: {:?}",
                                         id,
-                                        peer_id,
+                                        obtained_peer_id,
                                         e
                                     );
                                 }
@@ -845,9 +838,10 @@ where
                             ConnectedPoint::Dialer { .. } => {
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
-                                    error: error.into(),
+                                    error: error
+                                        .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
                                     handler,
-                                    peer: Some(peer_id),
+                                    peer: expected_peer_id.or(Some(obtained_peer_id)),
                                 })
                             }
                             ConnectedPoint::Listener {
@@ -856,7 +850,7 @@ where
                             } => {
                                 return Poll::Ready(PoolEvent::PendingInboundConnectionError {
                                     id,
-                                    error: error.into(),
+                                    error,
                                     handler,
                                     send_back_addr,
                                     local_addr,
@@ -866,7 +860,7 @@ where
                     }
 
                     // Add the connection to the pool.
-                    let conns = self.established.entry(peer_id).or_default();
+                    let conns = self.established.entry(obtained_peer_id).or_default();
                     let other_established_connection_ids = conns.keys().cloned().collect();
                     self.counters.inc_established(&endpoint);
 
@@ -875,20 +869,23 @@ where
                     conns.insert(
                         id,
                         EstablishedConnectionInfo {
-                            peer_id,
+                            peer_id: obtained_peer_id,
                             endpoint: endpoint.clone(),
                             sender: command_sender,
                         },
                     );
 
-                    let connected = Connected { peer_id, endpoint };
+                    let connected = Connected {
+                        peer_id: obtained_peer_id,
+                        endpoint,
+                    };
 
                     let connection =
                         super::Connection::new(muxer, handler.into_handler(&connected));
                     self.spawn(
                         task::new_for_established_connection(
                             id,
-                            peer_id,
+                            obtained_peer_id,
                             connection,
                             command_receiver,
                             self.established_connection_events_tx.clone(),

@@ -1919,7 +1919,8 @@ where
             DialError::Banned
             | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId
-            | DialError::InvalidPeerId
+            | DialError::InvalidPeerId { .. }
+            | DialError::WrongPeerId { .. }
             | DialError::Aborted
             | DialError::ConnectionIo(_)
             | DialError::Transport(_)
