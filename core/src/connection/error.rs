@@ -20,7 +20,7 @@
 
 use crate::transport::TransportError;
 use crate::Multiaddr;
-use crate::{connection::ConnectionLimit, PeerId};
+use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -87,7 +87,7 @@ pub enum PendingConnectionError<TTransErr> {
     /// match the one that was expected or is the local one.
     WrongPeerId {
         obtained: PeerId,
-        address: Multiaddr,
+        endpoint: ConnectedPoint,
     },
 
     /// An I/O error occurred on the connection.
@@ -103,8 +103,8 @@ impl<T> PendingConnectionError<T> {
                 PendingConnectionError::ConnectionLimit(l)
             }
             PendingConnectionError::Aborted => PendingConnectionError::Aborted,
-            PendingConnectionError::WrongPeerId { obtained, address } => {
-                PendingConnectionError::WrongPeerId { obtained, address }
+            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
+                PendingConnectionError::WrongPeerId { obtained, endpoint }
             }
             PendingConnectionError::IO(e) => PendingConnectionError::IO(e),
         }
@@ -129,11 +129,11 @@ where
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {}.", l)
             }
-            PendingConnectionError::WrongPeerId { obtained, address } => {
+            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 write!(
                     f,
-                    "Pending connection: Unexpected peer ID {} at {}.",
-                    obtained, address
+                    "Pending connection: Unexpected peer ID {} at {:?}.",
+                    obtained, endpoint
                 )
             }
         }

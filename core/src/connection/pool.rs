@@ -787,20 +787,23 @@ where
                         .and_then(|()| {
                             if let Some(peer) = expected_peer_id {
                                 if peer != obtained_peer_id {
-                                    return Err(PendingConnectionError::WrongPeerId {
+                                    Err(PendingConnectionError::WrongPeerId {
                                         obtained: obtained_peer_id,
-                                        address: endpoint.get_remote_address().clone(),
-                                    });
+                                        endpoint: endpoint.clone(),
+                                    })
+                                } else {
+                                    Ok(())
                                 }
+                            } else {
+                                Ok(())
                             }
-                            Ok(())
                         })
                         // Check peer is not local peer.
                         .and_then(|()| {
                             if self.local_id == obtained_peer_id {
                                 Err(PendingConnectionError::WrongPeerId {
                                     obtained: obtained_peer_id,
-                                    address: endpoint.get_remote_address().clone(),
+                                    endpoint: endpoint.clone(),
                                 })
                             } else {
                                 Ok(())
