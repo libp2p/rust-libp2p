@@ -6,7 +6,10 @@
 
 - Move from `open-metrics-client` to `prometheus-client`.
 
+- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
 
 # 0.2.0 [2021-11-16]
 
