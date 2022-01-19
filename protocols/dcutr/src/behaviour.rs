@@ -329,7 +329,7 @@ impl NetworkBehaviour for Behaviour {
 }
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
-/// before being returned in [`Relay::poll`].
+/// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
     Done(NetworkBehaviourAction<Event, handler::Prototype>),
