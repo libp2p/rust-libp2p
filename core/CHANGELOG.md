@@ -14,13 +14,16 @@
 - Enable overriding _dial concurrency factor_ per dial via
   `DialOpts::override_dial_concurrency_factor`.
 
-    - Introduces `libp2p_core::DialOpts` mirroring `libp2p_swarm::DialOpts`.
+  - Introduces `libp2p_core::DialOpts` mirroring `libp2p_swarm::DialOpts`.
       Passed as an argument to `Network::dial`.
-    - Removes `Peer::dial` in favor of `Network::dial`.
+  - Removes `Peer::dial` in favor of `Network::dial`.
 
   See [PR 2404].
 
 - Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
+
+- Report negotiated and expected `PeerId` as well as remote address in
+  `DialError::WrongPeerId` (see [PR 2428]).
 
 - Allow overriding role when dialing. This option is needed for NAT and firewall
   hole punching.
@@ -39,6 +42,7 @@
 [PR 2392]: https://github.com/libp2p/rust-libp2p/pull/2392
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
 [PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
 [PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
 
 # 0.30.1 [2021-11-16]
@@ -127,7 +131,7 @@
 
 # 0.28.3 [2021-04-26]
 
-- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
+- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057).
 
 # 0.28.2 [2021-04-13]
 
