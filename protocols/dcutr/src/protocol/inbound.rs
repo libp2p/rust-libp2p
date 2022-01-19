@@ -22,7 +22,7 @@ use crate::message_proto::{hole_punch, HolePunch};
 use asynchronous_codec::Framed;
 use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{upgrade, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
 use std::convert::TryFrom;
@@ -65,7 +65,12 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             } else {
                 obs_addrs
                     .into_iter()
-                    .map(TryFrom::try_from)
+                    .map(Multiaddr::try_from)
+                    // Filter out relayed addresses.
+                    .filter(|a| match a {
+                        Ok(a) => !a.iter().any(|p| p == Protocol::P2pCircuit),
+                        Err(_) => true,
+                    })
                     .collect::<Result<Vec<Multiaddr>, _>>()
                     .map_err(|_| UpgradeError::InvalidAddrs)?
             };
