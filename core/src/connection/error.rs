@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use crate::Multiaddr;
+use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -84,12 +84,31 @@ pub enum PendingConnectionError<TTransErr> {
     Aborted,
 
     /// The peer identity obtained on the connection did not
-    /// match the one that was expected or is otherwise invalid.
-    InvalidPeerId,
+    /// match the one that was expected or is the local one.
+    WrongPeerId {
+        obtained: PeerId,
+        endpoint: ConnectedPoint,
+    },
 
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
+}
+
+impl<T> PendingConnectionError<T> {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
+        match self {
+            PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
+            PendingConnectionError::ConnectionLimit(l) => {
+                PendingConnectionError::ConnectionLimit(l)
+            }
+            PendingConnectionError::Aborted => PendingConnectionError::Aborted,
+            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
+                PendingConnectionError::WrongPeerId { obtained, endpoint }
+            }
+            PendingConnectionError::IO(e) => PendingConnectionError::IO(e),
+        }
+    }
 }
 
 impl<TTransErr> fmt::Display for PendingConnectionError<TTransErr>
@@ -110,8 +129,12 @@ where
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {}.", l)
             }
-            PendingConnectionError::InvalidPeerId => {
-                write!(f, "Pending connection: Invalid peer ID.")
+            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
+                write!(
+                    f,
+                    "Pending connection: Unexpected peer ID {} at {:?}.",
+                    obtained, endpoint
+                )
             }
         }
     }
@@ -125,7 +148,7 @@ where
         match self {
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(_) => None,
-            PendingConnectionError::InvalidPeerId => None,
+            PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
             PendingConnectionError::ConnectionLimit(..) => None,
         }
