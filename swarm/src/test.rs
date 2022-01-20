@@ -99,9 +99,8 @@ where
     inner: TInner,
 
     pub addresses_of_peer: Vec<PeerId>,
-    pub inject_connected: Vec<PeerId>,
     pub inject_disconnected: Vec<PeerId>,
-    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
+    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
     pub inject_event: Vec<(
         PeerId,
@@ -127,7 +126,6 @@ where
         Self {
             inner,
             addresses_of_peer: Vec::new(),
-            inject_connected: Vec::new(),
             inject_disconnected: Vec::new(),
             inject_connection_established: Vec::new(),
             inject_connection_closed: Vec::new(),
@@ -147,7 +145,6 @@ where
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
-        self.inject_connected = Vec::new();
         self.inject_disconnected = Vec::new();
         self.inject_connection_established = Vec::new();
         self.inject_connection_closed = Vec::new();
@@ -192,7 +189,15 @@ where
         expected_connections: usize,
     ) -> bool {
         if self.inject_connection_established.len() == expected_established_connections {
-            assert_eq!(self.inject_connected.len(), expected_connections);
+            assert_eq!(
+                self.inject_connection_established
+                    .iter()
+                    .filter(|(.., reported_aditional_connections)| {
+                        *reported_aditional_connections == 0
+                    })
+                    .count(),
+                expected_connections
+            );
             return true;
         }
 
@@ -226,8 +231,39 @@ where
         errors: Option<&Vec<Multiaddr>>,
         other_established: usize,
     ) {
-        self.inject_connection_established
-            .push((p.clone(), c.clone(), e.clone()));
+        let mut other_peer_connections = self
+            .inject_connection_established
+            .iter()
+            .rev() // take last to first
+            .filter_map(|(peer, .., other_established)| {
+                if p == peer {
+                    Some(other_established)
+                } else {
+                    None
+                }
+            })
+            .take(other_established);
+
+        // We are informed that there are `other_established` additional connections. Ensure that the
+        // number of previous connections is consistent with this
+        if let Some(&prev) = other_peer_connections.next() {
+            if prev < other_established {
+                assert_eq!(
+                    prev,
+                    other_established - 1,
+                    "Inconsistent connection reporting"
+                )
+            }
+            assert_eq!(other_peer_connections.count(), other_established - 1);
+        } else {
+            assert_eq!(other_established, 0)
+        }
+        self.inject_connection_established.push((
+            p.clone(),
+            c.clone(),
+            e.clone(),
+            other_established,
+        ));
         self.inner
             .inject_connection_established(p, c, e, errors, other_established);
     }
@@ -252,7 +288,9 @@ where
     ) {
         let connection = (p.clone(), c.clone(), e.clone());
         assert!(
-            self.inject_connection_established.contains(&connection),
+            self.inject_connection_established
+                .iter()
+                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint) == (p, c, e)),
             "`inject_connection_closed` is called only for connections for \
             which `inject_connection_established` was called first."
         );
@@ -269,7 +307,7 @@ where
         assert!(
             self.inject_connection_established
                 .iter()
-                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
+                .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
             "`inject_event` is called for reported connections."
         );
         assert!(

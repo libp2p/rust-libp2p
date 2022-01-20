@@ -1864,7 +1864,7 @@ mod tests {
                             s.behaviour.inject_connection_established.len(),
                             num_connections
                         );
-                        assert_eq!(s.behaviour.inject_connected.len(), 1);
+                        s.behaviour.assert_connected(num_connections, 1);
                     }
                     if [&swarm1, &swarm2]
                         .iter()
