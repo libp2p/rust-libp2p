@@ -3055,48 +3055,6 @@ where
         )
     }
 
-    fn inject_connected(&mut self, peer_id: &PeerId) {
-        // Ignore connections from blacklisted peers.
-        if self.blacklisted_peers.contains(peer_id) {
-            debug!("Ignoring connection from blacklisted peer: {}", peer_id);
-        } else {
-            debug!("New peer connected: {}", peer_id);
-            // We need to send our subscriptions to the newly-connected node.
-            let mut subscriptions = vec![];
-            for topic_hash in self.mesh.keys() {
-                subscriptions.push(GossipsubSubscription {
-                    topic_hash: topic_hash.clone(),
-                    action: GossipsubSubscriptionAction::Subscribe,
-                });
-            }
-
-            if !subscriptions.is_empty() {
-                // send our subscriptions to the peer
-                if self
-                    .send_message(
-                        *peer_id,
-                        GossipsubRpc {
-                            messages: Vec::new(),
-                            subscriptions,
-                            control_msgs: Vec::new(),
-                        }
-                        .into_protobuf(),
-                    )
-                    .is_err()
-                {
-                    error!("Failed to send subscriptions, message too large");
-                }
-            }
-        }
-
-        // Insert an empty set of the topics of this peer until known.
-        self.peer_topics.insert(*peer_id, Default::default());
-
-        if let Some((peer_score, ..)) = &mut self.peer_score {
-            peer_score.add_peer(*peer_id);
-        }
-    }
-
     fn inject_disconnected(&mut self, peer_id: &PeerId) {
         // remove from mesh, topic_peers, peer_topic and the fanout
         debug!("Peer disconnected: {}", peer_id);
@@ -3185,18 +3143,13 @@ where
         _: Option<&Vec<Multiaddr>>,
         other_established: usize,
     ) {
-        // Check if the peer is an outbound peer
-        if let ConnectedPoint::Dialer { .. } = endpoint {
-            // Diverging from the go implementation we only want to consider a peer as outbound peer
-            // if its first connection is outbound. To check if this connection is the first we
-            // check if the peer isn't connected yet. This only works because the
-            // `inject_connection_established` event for the first connection gets called immediately
-            // before `inject_connected` gets called.
-            if !self.peer_topics.contains_key(peer_id) && !self.px_peers.contains(peer_id) {
-                // The first connection is outbound and it is not a peer from peer exchange => mark
-                // it as outbound peer
-                self.outbound_peers.insert(*peer_id);
-            }
+        // Diverging from the go implementation we only want to consider a peer as outbound peer
+        // if its first connection is outbound.
+
+        if endpoint.is_dialer() && other_established == 0 && !self.px_peers.contains(peer_id) {
+            // The first connection is outbound and it is not a peer from peer exchange => mark
+            // it as outbound peer
+            self.outbound_peers.insert(*peer_id);
         }
 
         // Add the IP to the peer scoring system
@@ -3225,6 +3178,48 @@ where
             })
             .connections
             .push(*connection_id);
+
+        if other_established == 0 {
+            // Ignore connections from blacklisted peers.
+            if self.blacklisted_peers.contains(peer_id) {
+                debug!("Ignoring connection from blacklisted peer: {}", peer_id);
+            } else {
+                debug!("New peer connected: {}", peer_id);
+                // We need to send our subscriptions to the newly-connected node.
+                let mut subscriptions = vec![];
+                for topic_hash in self.mesh.keys() {
+                    subscriptions.push(GossipsubSubscription {
+                        topic_hash: topic_hash.clone(),
+                        action: GossipsubSubscriptionAction::Subscribe,
+                    });
+                }
+
+                if !subscriptions.is_empty() {
+                    // send our subscriptions to the peer
+                    if self
+                        .send_message(
+                            *peer_id,
+                            GossipsubRpc {
+                                messages: Vec::new(),
+                                subscriptions,
+                                control_msgs: Vec::new(),
+                            }
+                            .into_protobuf(),
+                        )
+                        .is_err()
+                    {
+                        error!("Failed to send subscriptions, message too large");
+                    }
+                }
+            }
+
+            // Insert an empty set of the topics of this peer until known.
+            self.peer_topics.insert(*peer_id, Default::default());
+
+            if let Some((peer_score, ..)) = &mut self.peer_score {
+                peer_score.add_peer(*peer_id);
+            }
+        }
     }
 
     fn inject_connection_closed(

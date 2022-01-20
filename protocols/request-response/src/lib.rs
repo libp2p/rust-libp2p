@@ -614,15 +614,6 @@ where
         connection.address = new_address;
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-            for request in pending {
-                let request = self.try_send_request(peer, request);
-                assert!(request.is_none());
-            }
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer: &PeerId,
@@ -639,6 +630,15 @@ where
             .entry(*peer)
             .or_default()
             .push(Connection::new(*conn, address));
+
+        if other_established == 0 {
+            if let Some(pending) = self.pending_outbound_requests.remove(peer) {
+                for request in pending {
+                    let request = self.try_send_request(peer, request);
+                    assert!(request.is_none());
+                }
+            }
+        }
     }
 
     fn inject_connection_closed(

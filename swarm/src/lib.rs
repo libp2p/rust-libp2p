@@ -662,9 +662,6 @@ where
                             u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
                         )
                         .expect("n + 1 is always non-zero; qed");
-                        let first_non_banned = other_established_connection_ids
-                            .iter()
-                            .all(|conn_id| this.banned_peer_connections.contains(conn_id));
                         let non_banned_established = other_established_connection_ids
                             .into_iter()
                             .filter(|conn_id| !this.banned_peer_connections.contains(&conn_id))
@@ -688,12 +685,6 @@ where
                             failed_addresses.as_ref(),
                             non_banned_established,
                         );
-                        // The peer is not banned, but there could be previous banned connections
-                        // if the peer was just unbanned. Check if this is the first non-banned
-                        // connection.
-                        if first_non_banned {
-                            this.behaviour.inject_connected(&peer_id);
-                        }
                         return Poll::Ready(SwarmEvent::ConnectionEstablished {
                             peer_id,
                             num_established,

@@ -218,17 +218,6 @@ where
         self.inner.addresses_of_peer(p)
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        assert!(
-            self.inject_connection_established
-                .iter()
-                .any(|(peer_id, _, _)| peer_id == peer),
-            "`inject_connected` is called after at least one `inject_connection_established`."
-        );
-        self.inject_connected.push(peer.clone());
-        self.inner.inject_connected(peer);
-    }
-
     fn inject_connection_established(
         &mut self,
         p: &PeerId,

@@ -129,7 +129,7 @@ impl NetworkBehaviour for Client {
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
-        other_established: usize,
+        _other_established: usize,
     ) {
         if !endpoint.is_relayed() {
             self.directly_connected_peers

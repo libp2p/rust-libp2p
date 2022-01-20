@@ -239,69 +239,61 @@ impl NetworkBehaviour for Relay {
                 },
             );
         }
-    }
 
-    fn inject_connected(&mut self, peer_id: &PeerId) {
-        assert!(
-            self.connected_peers
-                .get(peer_id)
-                .map(|cs| !cs.is_empty())
-                .unwrap_or(false),
-            "Expect to be connected to peer with at least one connection."
-        );
+        if other_established == 0 {
+            if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer) {
+                for req in reqs {
+                    let OutgoingDialingRelayReq {
+                        request_id,
+                        src_peer_id,
+                        relay_addr: _,
+                        dst_addr,
+                        dst_peer_id,
+                        send_back,
+                    } = req;
+                    self.outbox_to_swarm
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: *peer,
+                            handler: NotifyHandler::Any,
+                            event: RelayHandlerIn::OutgoingRelayReq {
+                                src_peer_id,
+                                request_id,
+                                dst_peer_id,
+                                dst_addr: dst_addr.clone(),
+                            },
+                        });
 
-        if let Some(reqs) = self.outgoing_relay_reqs.dialing.remove(peer_id) {
-            for req in reqs {
-                let OutgoingDialingRelayReq {
-                    request_id,
-                    src_peer_id,
-                    relay_addr: _,
-                    dst_addr,
-                    dst_peer_id,
-                    send_back,
-                } = req;
-                self.outbox_to_swarm
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: *peer_id,
-                        handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::OutgoingRelayReq {
-                            src_peer_id,
-                            request_id,
-                            dst_peer_id,
-                            dst_addr: dst_addr.clone(),
-                        },
-                    });
-
-                self.outgoing_relay_reqs
-                    .upgrading
-                    .insert(request_id, OutgoingUpgradingRelayReq { send_back });
+                    self.outgoing_relay_reqs
+                        .upgrading
+                        .insert(request_id, OutgoingUpgradingRelayReq { send_back });
+                }
             }
-        }
 
-        // Ask the newly-opened connection to be used as destination if relevant.
-        if let Some(reqs) = self.incoming_relay_reqs.remove(peer_id) {
-            for req in reqs {
-                let IncomingRelayReq::DialingDst {
-                    src_peer_id,
-                    src_addr,
-                    src_connection_id,
-                    request_id,
-                    incoming_relay_req,
-                } = req;
-                let event = RelayHandlerIn::OutgoingDstReq {
-                    src_peer_id,
-                    src_addr,
-                    src_connection_id,
-                    request_id,
-                    incoming_relay_req,
-                };
+            // Ask the newly-opened connection to be used as destination if relevant.
+            if let Some(reqs) = self.incoming_relay_reqs.remove(peer) {
+                for req in reqs {
+                    let IncomingRelayReq::DialingDst {
+                        src_peer_id,
+                        src_addr,
+                        src_connection_id,
+                        request_id,
+                        incoming_relay_req,
+                    } = req;
+                    let event = RelayHandlerIn::OutgoingDstReq {
+                        src_peer_id,
+                        src_addr,
+                        src_connection_id,
+                        request_id,
+                        incoming_relay_req,
+                    };
 
-                self.outbox_to_swarm
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: *peer_id,
-                        handler: NotifyHandler::Any,
-                        event,
-                    });
+                    self.outbox_to_swarm
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: *peer,
+                            handler: NotifyHandler::Any,
+                            event,
+                        });
+                }
             }
         }
     }

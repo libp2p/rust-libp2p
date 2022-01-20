@@ -1825,27 +1825,28 @@ where
         // remote supports the configured protocol name. Only once a connection
         // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
         // update the local routing table.
-    }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        // Queue events for sending pending RPCs to the connected peer.
-        // There can be only one pending RPC for a particular peer and query per definition.
-        for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-            q.inner
-                .pending_rpcs
-                .iter()
-                .position(|(p, _)| p == peer)
-                .map(|p| q.inner.pending_rpcs.remove(p))
-        }) {
-            self.queued_events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    event,
-                    handler: NotifyHandler::Any,
-                });
+        // Peer's first connection.
+        if other_established == 0 {
+            // Queue events for sending pending RPCs to the connected peer.
+            // There can be only one pending RPC for a particular peer and query per definition.
+            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+                q.inner
+                    .pending_rpcs
+                    .iter()
+                    .position(|(p, _)| p == peer_id)
+                    .map(|p| q.inner.pending_rpcs.remove(p))
+            }) {
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        event,
+                        handler: NotifyHandler::Any,
+                    });
+            }
+
+            self.connected_peers.insert(*peer_id);
         }
-
-        self.connected_peers.insert(*peer);
     }
 
     fn inject_address_change(

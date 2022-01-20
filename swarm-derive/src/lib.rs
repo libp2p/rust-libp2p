@@ -163,23 +163,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
     };
 
-    // Build the list of statements to put in the body of `inject_connected()`.
-    let inject_connected_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_connected(peer_id); },
-                    None => quote! { self.#field_n.inject_connected(peer_id); },
-                })
-            })
-    };
-
     // Build the list of statements to put in the body of `inject_disconnected()`.
     let inject_disconnected_stmts = {
         data_struct
@@ -647,10 +630,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 let mut out = Vec::new();
                 #(#addresses_of_peer_stmts);*
                 out
-            }
-
-            fn inject_connected(&mut self, peer_id: &#peer_id) {
-                #(#inject_connected_stmts);*
             }
 
             fn inject_disconnected(&mut self, peer_id: &#peer_id) {

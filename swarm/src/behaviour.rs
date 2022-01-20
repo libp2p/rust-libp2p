@@ -190,14 +190,6 @@ pub trait NetworkBehaviour: Send + 'static {
         vec![]
     }
 
-    /// Indicate to the behaviour that we connected to the node with the given peer id.
-    ///
-    /// This node now has a handler (as spawned by `new_handler`) running in the background.
-    ///
-    /// This method is only called when the first connection to the peer is established, preceded by
-    /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
-    fn inject_connected(&mut self, _: &PeerId) {}
-
     /// Indicates to the behaviour that we disconnected from the node with the given peer id.
     ///
     /// There is no handler running anymore for this node. Any event that has been sent to it may

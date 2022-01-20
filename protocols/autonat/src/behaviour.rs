@@ -467,10 +467,6 @@ impl NetworkBehaviour for Behaviour {
         self.inner.addresses_of_peer(peer)
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        self.inner.inject_connected(peer)
-    }
-
     fn inject_event(
         &mut self,
         peer_id: PeerId,

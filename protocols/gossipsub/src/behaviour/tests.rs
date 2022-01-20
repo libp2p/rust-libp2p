@@ -202,7 +202,6 @@ mod tests {
             None,
             0, // first connection
         );
-        <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
             gs.inject_event(
                 peer.clone(),
@@ -543,7 +542,6 @@ mod tests {
                 None,
                 0,
             );
-            gs.inject_connected(&random_peer);
 
             // add the new peer to the fanout
             let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
