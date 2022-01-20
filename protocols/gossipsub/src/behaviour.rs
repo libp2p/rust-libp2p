@@ -3183,6 +3183,7 @@ where
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
         _: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         // Check if the peer is an outbound peer
         if let ConnectedPoint::Dialer { .. } = endpoint {

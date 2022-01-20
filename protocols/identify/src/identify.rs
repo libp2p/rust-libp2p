@@ -226,6 +226,7 @@ impl NetworkBehaviour for Identify {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         failed_addresses: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address, .. } => address.clone(),

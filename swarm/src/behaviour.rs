@@ -214,6 +214,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _connection_id: &ConnectionId,
         _endpoint: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
     ) {
     }
 

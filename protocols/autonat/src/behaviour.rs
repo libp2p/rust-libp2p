@@ -303,9 +303,15 @@ impl NetworkBehaviour for Behaviour {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         failed_addresses: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
-        self.inner
-            .inject_connection_established(peer, conn, endpoint, failed_addresses);
+        self.inner.inject_connection_established(
+            peer,
+            conn,
+            endpoint,
+            failed_addresses,
+            other_established,
+        );
         let connections = self.connected.entry(*peer).or_default();
         let addr = if endpoint.is_relayed() {
             None

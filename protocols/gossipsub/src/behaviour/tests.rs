@@ -185,7 +185,6 @@ mod tests {
         F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         let peer = PeerId::random();
-        //peers.push(peer.clone());
         gs.inject_connection_established(
             &peer,
             &ConnectionId::new(0),
@@ -201,6 +200,7 @@ mod tests {
                 }
             },
             None,
+            0, // first connection
         );
         <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
@@ -541,6 +541,7 @@ mod tests {
                     role_override: Endpoint::Dialer,
                 },
                 None,
+                0,
             );
             gs.inject_connected(&random_peer);
 
@@ -4154,6 +4155,7 @@ mod tests {
                     role_override: Endpoint::Dialer,
                 },
                 None,
+                0,
             );
         }
 
@@ -4174,6 +4176,7 @@ mod tests {
                     role_override: Endpoint::Dialer,
                 },
                 None,
+                1,
             );
         }
 
@@ -4203,6 +4206,7 @@ mod tests {
                 role_override: Endpoint::Dialer,
             },
             None,
+            2,
         );
 
         //nothing changed

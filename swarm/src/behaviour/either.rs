@@ -73,14 +73,23 @@ where
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         match self {
-            Either::Left(a) => {
-                a.inject_connection_established(peer_id, connection, endpoint, errors)
-            }
-            Either::Right(b) => {
-                b.inject_connection_established(peer_id, connection, endpoint, errors)
-            }
+            Either::Left(a) => a.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            ),
+            Either::Right(b) => b.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            ),
         }
     }
 

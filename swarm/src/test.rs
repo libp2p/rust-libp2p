@@ -235,10 +235,12 @@ where
         c: &ConnectionId,
         e: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         self.inject_connection_established
             .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_established(p, c, e, errors);
+        self.inner
+            .inject_connection_established(p, c, e, errors, other_established);
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {

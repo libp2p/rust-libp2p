@@ -104,9 +104,16 @@ where
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_established(peer_id, connection, endpoint, errors)
+            inner.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            )
         }
     }
 
