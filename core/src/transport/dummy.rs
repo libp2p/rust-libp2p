@@ -70,6 +70,10 @@ impl<TOut> Transport for DummyTransport<TOut> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        Err(TransportError::MultiaddrNotSupported(addr))
+    }
+
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }

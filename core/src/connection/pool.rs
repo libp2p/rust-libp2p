@@ -22,8 +22,8 @@
 use crate::{
     connection::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, IncomingInfo,
-        IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
+        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint,
+        IncomingInfo, IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
         PendingOutboundConnectionError, PendingPoint, Substream,
     },
     muxing::StreamMuxer,
@@ -460,7 +460,7 @@ where
                     local_addr,
                     send_back_addr,
                 }),
-                PendingPoint::Dialer => None,
+                PendingPoint::Dialer { .. } => None,
             })
     }
 
@@ -535,6 +535,8 @@ where
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
         handler: THandler,
+        role_override: Endpoint,
+        dial_concurrency_factor_override: Option<NonZeroU8>,
     ) -> Result<ConnectionId, DialError<THandler>>
     where
         TTrans: Clone + Send,
@@ -544,7 +546,13 @@ where
             return Err(DialError::ConnectionLimit { limit, handler });
         };
 
-        let dial = ConcurrentDial::new(transport, peer, addresses, self.dial_concurrency_factor);
+        let dial = ConcurrentDial::new(
+            transport,
+            peer,
+            addresses,
+            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
+            role_override,
+        );
 
         let connection_id = self.next_connection_id();
 
@@ -560,13 +568,15 @@ where
             .boxed(),
         );
 
-        self.counters.inc_pending(&PendingPoint::Dialer);
+        let endpoint = PendingPoint::Dialer { role_override };
+
+        self.counters.inc_pending(&endpoint);
         self.pending.insert(
             connection_id,
             PendingConnectionInfo {
                 peer_id: peer,
                 handler,
-                endpoint: PendingPoint::Dialer,
+                endpoint: endpoint,
                 _drop_notifier: drop_notifier,
             },
         );
@@ -723,7 +733,7 @@ where
             match event {
                 task::PendingConnectionEvent::ConnectionEstablished {
                     id,
-                    output: (peer_id, muxer),
+                    output: (obtained_peer_id, muxer),
                     outgoing,
                 } => {
                     let PendingConnectionInfo {
@@ -739,9 +749,13 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer, Some((address, errors))) => {
-                            (ConnectedPoint::Dialer { address }, Some(errors))
-                        }
+                        (PendingPoint::Dialer { role_override }, Some((address, errors))) => (
+                            ConnectedPoint::Dialer {
+                                address,
+                                role_override,
+                            },
+                            Some(errors),
+                        ),
                         (
                             PendingPoint::Listener {
                                 local_addr,
@@ -755,7 +769,7 @@ where
                             },
                             None,
                         ),
-                        (PendingPoint::Dialer, None) => unreachable!(
+                        (PendingPoint::Dialer { .. }, None) => unreachable!(
                             "Established incoming connection via pending outgoing connection."
                         ),
                         (PendingPoint::Listener { .. }, Some(_)) => unreachable!(
@@ -763,49 +777,42 @@ where
                         ),
                     };
 
-                    enum Error {
-                        ConnectionLimit(ConnectionLimit),
-                        InvalidPeerId,
-                    }
-
-                    impl<TransportError> From<Error> for PendingConnectionError<TransportError> {
-                        fn from(error: Error) -> Self {
-                            match error {
-                                Error::ConnectionLimit(limit) => {
-                                    PendingConnectionError::ConnectionLimit(limit)
-                                }
-                                Error::InvalidPeerId => PendingConnectionError::InvalidPeerId,
-                            }
-                        }
-                    }
-
-                    let error = self
+                    let error: Result<(), PendingInboundConnectionError<_>> = self
                         .counters
                         // Check general established connection limit.
                         .check_max_established(&endpoint)
-                        .map_err(Error::ConnectionLimit)
+                        .map_err(PendingConnectionError::ConnectionLimit)
                         // Check per-peer established connection limit.
                         .and_then(|()| {
                             self.counters
                                 .check_max_established_per_peer(num_peer_established(
                                     &self.established,
-                                    peer_id,
+                                    obtained_peer_id,
                                 ))
-                                .map_err(Error::ConnectionLimit)
+                                .map_err(PendingConnectionError::ConnectionLimit)
                         })
                         // Check expected peer id matches.
                         .and_then(|()| {
                             if let Some(peer) = expected_peer_id {
-                                if peer != peer_id {
-                                    return Err(Error::InvalidPeerId);
+                                if peer != obtained_peer_id {
+                                    Err(PendingConnectionError::WrongPeerId {
+                                        obtained: obtained_peer_id,
+                                        endpoint: endpoint.clone(),
+                                    })
+                                } else {
+                                    Ok(())
                                 }
+                            } else {
+                                Ok(())
                             }
-                            Ok(())
                         })
                         // Check peer is not local peer.
                         .and_then(|()| {
-                            if self.local_id == peer_id {
-                                Err(Error::InvalidPeerId)
+                            if self.local_id == obtained_peer_id {
+                                Err(PendingConnectionError::WrongPeerId {
+                                    obtained: obtained_peer_id,
+                                    endpoint: endpoint.clone(),
+                                })
                             } else {
                                 Ok(())
                             }
@@ -818,7 +825,7 @@ where
                                     log::debug!(
                                         "Failed to close connection {:?} to peer {}: {:?}",
                                         id,
-                                        peer_id,
+                                        obtained_peer_id,
                                         e
                                     );
                                 }
@@ -831,9 +838,10 @@ where
                             ConnectedPoint::Dialer { .. } => {
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
-                                    error: error.into(),
+                                    error: error
+                                        .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
                                     handler,
-                                    peer: Some(peer_id),
+                                    peer: expected_peer_id.or(Some(obtained_peer_id)),
                                 })
                             }
                             ConnectedPoint::Listener {
@@ -842,7 +850,7 @@ where
                             } => {
                                 return Poll::Ready(PoolEvent::PendingInboundConnectionError {
                                     id,
-                                    error: error.into(),
+                                    error,
                                     handler,
                                     send_back_addr,
                                     local_addr,
@@ -852,7 +860,7 @@ where
                     }
 
                     // Add the connection to the pool.
-                    let conns = self.established.entry(peer_id).or_default();
+                    let conns = self.established.entry(obtained_peer_id).or_default();
                     let other_established_connection_ids = conns.keys().cloned().collect();
                     self.counters.inc_established(&endpoint);
 
@@ -861,20 +869,23 @@ where
                     conns.insert(
                         id,
                         EstablishedConnectionInfo {
-                            peer_id,
+                            peer_id: obtained_peer_id,
                             endpoint: endpoint.clone(),
                             sender: command_sender,
                         },
                     );
 
-                    let connected = Connected { peer_id, endpoint };
+                    let connected = Connected {
+                        peer_id: obtained_peer_id,
+                        endpoint,
+                    };
 
                     let connection =
                         super::Connection::new(muxer, handler.into_handler(&connected));
                     self.spawn(
                         task::new_for_established_connection(
                             id,
-                            peer_id,
+                            obtained_peer_id,
                             connection,
                             command_receiver,
                             self.established_connection_events_tx.clone(),
@@ -904,7 +915,7 @@ where
                         self.counters.dec_pending(&endpoint);
 
                         match (endpoint, error) {
-                            (PendingPoint::Dialer, Either::Left(error)) => {
+                            (PendingPoint::Dialer { .. }, Either::Left(error)) => {
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
                                     error,
@@ -927,7 +938,7 @@ where
                                     local_addr,
                                 });
                             }
-                            (PendingPoint::Dialer, Either::Right(_)) => {
+                            (PendingPoint::Dialer { .. }, Either::Right(_)) => {
                                 unreachable!("Inbound error for outbound connection.")
                             }
                             (PendingPoint::Listener { .. }, Either::Left(_)) => {
@@ -1170,7 +1181,7 @@ impl ConnectionCounters {
 
     fn inc_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            PendingPoint::Dialer => {
+            PendingPoint::Dialer { .. } => {
                 self.pending_outgoing += 1;
             }
             PendingPoint::Listener { .. } => {
@@ -1185,7 +1196,7 @@ impl ConnectionCounters {
 
     fn dec_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
-            PendingPoint::Dialer => {
+            PendingPoint::Dialer { .. } => {
                 self.pending_outgoing -= 1;
             }
             PendingPoint::Listener { .. } => {

@@ -40,6 +40,10 @@ pub use libp2p_core::multihash;
 #[doc(inline)]
 pub use multiaddr;
 
+#[cfg(feature = "autonat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "autonat")))]
+#[doc(inline)]
+pub use libp2p_autonat as autonat;
 #[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(feature = "deflate")]

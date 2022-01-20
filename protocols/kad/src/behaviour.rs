@@ -1919,7 +1919,8 @@ where
             DialError::Banned
             | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId
-            | DialError::InvalidPeerId
+            | DialError::InvalidPeerId { .. }
+            | DialError::WrongPeerId { .. }
             | DialError::Aborted
             | DialError::ConnectionIo(_)
             | DialError::Transport(_)
@@ -1968,7 +1969,7 @@ where
                 // since the remote address on an inbound connection may be specific
                 // to that connection (e.g. typically the TCP port numbers).
                 let address = match endpoint {
-                    ConnectedPoint::Dialer { address } => Some(address),
+                    ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
                 self.connection_updated(source, address, NodeStatus::Connected);
