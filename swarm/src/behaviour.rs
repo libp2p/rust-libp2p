@@ -221,6 +221,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
     }
 

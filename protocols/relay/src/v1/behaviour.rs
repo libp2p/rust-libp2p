@@ -353,6 +353,7 @@ impl NetworkBehaviour for Relay {
         connection: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         // Remove connection from the set of connections for the given peer. In case the set is
         // empty it will be removed in `inject_disconnected`.

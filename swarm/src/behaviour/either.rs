@@ -92,14 +92,24 @@ where
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         match (self, handler) {
-            (Either::Left(behaviour), Either::Left(handler)) => {
-                behaviour.inject_connection_closed(peer_id, connection, endpoint, handler)
-            }
-            (Either::Right(behaviour), Either::Right(handler)) => {
-                behaviour.inject_connection_closed(peer_id, connection, endpoint, handler)
-            }
+            (Either::Left(behaviour), Either::Left(handler)) => behaviour.inject_connection_closed(
+                peer_id,
+                connection,
+                endpoint,
+                handler,
+                remaining_established,
+            ),
+            (Either::Right(behaviour), Either::Right(handler)) => behaviour
+                .inject_connection_closed(
+                    peer_id,
+                    connection,
+                    endpoint,
+                    handler,
+                    remaining_established,
+                ),
             _ => unreachable!(),
         }
     }

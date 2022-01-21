@@ -720,18 +720,22 @@ where
                         u32::try_from(remaining_established_connection_ids.len()).unwrap();
                     let conn_was_reported = !this.banned_peer_connections.remove(&id);
                     if conn_was_reported {
+                        // This connection was reported as open to the behaviour. Check if this is
+                        // the last non-banned connection for the peer.
+                        let last_non_banned = remaining_established_connection_ids
+                            .iter()
+                            .all(|conn_id| this.banned_peer_connections.contains(conn_id));
+                        let remaining_non_banned = remaining_established_connection_ids
+                            .into_iter()
+                            .filter(|conn_id| !this.banned_peer_connections.contains(&conn_id))
+                            .count();
                         this.behaviour.inject_connection_closed(
                             &peer_id,
                             &id,
                             &endpoint,
                             handler.into_protocols_handler(),
+                            remaining_non_banned,
                         );
-
-                        // This connection was reported as open to the behaviour. Check if this is
-                        // the last non-banned connection for the peer.
-                        let last_non_banned = remaining_established_connection_ids
-                            .into_iter()
-                            .all(|conn_id| this.banned_peer_connections.contains(&conn_id));
 
                         if last_non_banned {
                             this.behaviour.inject_disconnected(&peer_id)

@@ -101,7 +101,7 @@ where
     pub addresses_of_peer: Vec<PeerId>,
     pub inject_disconnected: Vec<PeerId>,
     pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
+    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub inject_event: Vec<(
         PeerId,
         ConnectionId,
@@ -269,12 +269,6 @@ where
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
-        assert!(
-            self.inject_connection_closed
-                .iter()
-                .any(|(peer_id, _, _)| peer_id == peer),
-            "`inject_disconnected` is called after at least one `inject_connection_closed`."
-        );
         self.inject_disconnected.push(*peer);
         self.inner.inject_disconnected(peer);
     }
@@ -285,8 +279,35 @@ where
         c: &ConnectionId,
         e: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
-        let connection = (p.clone(), c.clone(), e.clone());
+        let mut other_closed_connections = self
+            .inject_connection_established
+            .iter()
+            .rev() // take last to first
+            .filter_map(|(peer, .., remaining_established)| {
+                if p == peer {
+                    Some(remaining_established)
+                } else {
+                    None
+                }
+            })
+            .take(remaining_established);
+
+        // We are informed that there are `other_established` additional connections. Ensure that the
+        // number of previous connections is consistent with this
+        if let Some(&prev) = other_closed_connections.next() {
+            if prev < remaining_established {
+                assert_eq!(
+                    prev,
+                    remaining_established - 1,
+                    "Inconsistent closed connection reporting"
+                )
+            }
+            assert_eq!(other_closed_connections.count(), remaining_established - 1);
+        } else {
+            assert_eq!(remaining_established, 0)
+        }
         assert!(
             self.inject_connection_established
                 .iter()
@@ -294,8 +315,10 @@ where
             "`inject_connection_closed` is called only for connections for \
             which `inject_connection_established` was called first."
         );
-        self.inject_connection_closed.push(connection);
-        self.inner.inject_connection_closed(p, c, e, handler);
+        self.inject_connection_closed
+            .push((*p, *c, e.clone(), remaining_established));
+        self.inner
+            .inject_connection_closed(p, c, e, handler, remaining_established);
     }
 
     fn inject_event(
@@ -314,7 +337,7 @@ where
             !self
                 .inject_connection_closed
                 .iter()
-                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
+                .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
             "`inject_event` is never called for closed connections."
         );
 

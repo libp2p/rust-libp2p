@@ -213,6 +213,7 @@ impl NetworkBehaviour for Relay {
         connection: &ConnectionId,
         _: &ConnectedPoint,
         _handler: Either<handler::Handler, DummyProtocolsHandler>,
+        remaining_established: usize,
     ) {
         if let Some(connections) = self.reservations.get_mut(peer) {
             connections.remove(&connection);

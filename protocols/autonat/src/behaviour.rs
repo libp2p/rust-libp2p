@@ -348,9 +348,10 @@ impl NetworkBehaviour for Behaviour {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         self.inner
-            .inject_connection_closed(peer, conn, endpoint, handler);
+            .inject_connection_closed(peer, conn, endpoint, handler, remaining_established);
         let connections = self.connected.get_mut(peer).expect("Peer is connected.");
         connections.remove(conn);
     }

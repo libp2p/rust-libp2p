@@ -117,10 +117,17 @@ where
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             if let Some(handler) = handler.inner {
-                inner.inject_connection_closed(peer_id, connection, endpoint, handler)
+                inner.inject_connection_closed(
+                    peer_id,
+                    connection,
+                    endpoint,
+                    handler,
+                    remaining_established,
+                )
             }
         }
     }

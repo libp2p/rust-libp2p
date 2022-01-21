@@ -255,6 +255,7 @@ impl NetworkBehaviour for Identify {
         conn: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);

@@ -647,6 +647,7 @@ where
         conn: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         let connections = self
             .connected
