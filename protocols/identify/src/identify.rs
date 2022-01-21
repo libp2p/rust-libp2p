@@ -257,7 +257,10 @@ impl NetworkBehaviour for Identify {
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
         remaining_established: usize,
     ) {
-        if let Some(addrs) = self.connected.get_mut(peer_id) {
+        if remaining_established == 0 {
+            self.connected.remove(peer_id);
+            self.pending_push.remove(peer_id);
+        } else if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);
         }
     }
@@ -281,11 +284,6 @@ impl NetworkBehaviour for Identify {
                 }
             }
         }
-    }
-
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        self.connected.remove(peer_id);
-        self.pending_push.remove(peer_id);
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {

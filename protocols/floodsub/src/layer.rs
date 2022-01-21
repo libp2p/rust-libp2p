@@ -322,7 +322,19 @@ impl NetworkBehaviour for Floodsub {
         self.connected_peers.insert(*id, SmallVec::new());
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId) {
+    fn inject_connection_closed(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: Self::ProtocolsHandler,
+        remaining_established: usize,
+    ) {
+        if remaining_established > 0 {
+            // we only care about peer disconnections
+            return;
+        }
+
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in.is_some());
 

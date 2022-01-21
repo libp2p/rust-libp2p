@@ -190,15 +190,6 @@ pub trait NetworkBehaviour: Send + 'static {
         vec![]
     }
 
-    /// Indicates to the behaviour that we disconnected from the node with the given peer id.
-    ///
-    /// There is no handler running anymore for this node. Any event that has been sent to it may
-    /// or may not have been processed by the handler.
-    ///
-    /// This method is only called when the last established connection to the peer is closed,
-    /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
     /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(
         &mut self,
@@ -221,7 +212,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
-        remaining_established: usize,
+        _remaining_established: usize,
     ) {
     }
 

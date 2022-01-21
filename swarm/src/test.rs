@@ -99,7 +99,6 @@ where
     inner: TInner,
 
     pub addresses_of_peer: Vec<PeerId>,
-    pub inject_disconnected: Vec<PeerId>,
     pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub inject_event: Vec<(
@@ -126,7 +125,6 @@ where
         Self {
             inner,
             addresses_of_peer: Vec::new(),
-            inject_disconnected: Vec::new(),
             inject_connection_established: Vec::new(),
             inject_connection_closed: Vec::new(),
             inject_event: Vec::new(),
@@ -145,7 +143,6 @@ where
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
-        self.inject_disconnected = Vec::new();
         self.inject_connection_established = Vec::new();
         self.inject_connection_closed = Vec::new();
         self.inject_event = Vec::new();
@@ -172,7 +169,13 @@ where
         expected_disconnections: usize,
     ) -> bool {
         if self.inject_connection_closed.len() == expected_closed_connections {
-            assert_eq!(self.inject_disconnected.len(), expected_disconnections);
+            assert_eq!(
+                self.inject_connection_closed
+                    .iter()
+                    .filter(|(.., remaining_established)| { *remaining_established == 0 })
+                    .count(),
+                expected_disconnections
+            );
             return true;
         }
 
@@ -266,11 +269,6 @@ where
         ));
         self.inner
             .inject_connection_established(p, c, e, errors, other_established);
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inject_disconnected.push(*peer);
-        self.inner.inject_disconnected(peer);
     }
 
     fn inject_connection_closed(

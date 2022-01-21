@@ -1949,12 +1949,21 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId) {
-        for query in self.queries.iter_mut() {
-            query.on_failure(id);
+    fn inject_connection_closed(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
+    ) {
+        if remaining_established == 0 {
+            for query in self.queries.iter_mut() {
+                query.on_failure(id);
+            }
+            self.connection_updated(*id, None, NodeStatus::Disconnected);
+            self.connected_peers.remove(id);
         }
-        self.connection_updated(*id, None, NodeStatus::Disconnected);
-        self.connected_peers.remove(id);
     }
 
     fn inject_event(

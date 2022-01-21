@@ -352,8 +352,12 @@ impl NetworkBehaviour for Behaviour {
     ) {
         self.inner
             .inject_connection_closed(peer, conn, endpoint, handler, remaining_established);
-        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
-        connections.remove(conn);
+        if remaining_established == 0 {
+            self.connected.remove(peer);
+        } else {
+            let connections = self.connected.get_mut(peer).expect("Peer is connected.");
+            connections.remove(conn);
+        }
     }
 
     fn inject_dial_failure(
@@ -367,11 +371,6 @@ impl NetworkBehaviour for Behaviour {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
         }
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inner.inject_disconnected(peer);
-        self.connected.remove(peer);
     }
 
     fn inject_address_change(

@@ -213,9 +213,10 @@ impl NetworkBehaviour for Relay {
         connection: &ConnectionId,
         _: &ConnectedPoint,
         _handler: Either<handler::Handler, DummyProtocolsHandler>,
-        remaining_established: usize,
+        _remaining_established: usize,
     ) {
         if let Some(connections) = self.reservations.get_mut(peer) {
+            // TODO: it looks like `peer` is never removed from `self.reservations`?
             connections.remove(&connection);
         }
 

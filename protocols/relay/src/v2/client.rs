@@ -145,7 +145,7 @@ impl NetworkBehaviour for Client {
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
         _handler: Either<handler::Handler, DummyProtocolsHandler>,
-        remaining_established: usize,
+        _remaining_established: usize,
     ) {
         if !endpoint.is_relayed() {
             match self.directly_connected_peers.entry(*peer_id) {

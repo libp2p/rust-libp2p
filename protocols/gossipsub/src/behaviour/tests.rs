@@ -228,6 +228,32 @@ mod tests {
         peer
     }
 
+    fn disconnect_peer<D, F>(gs: &mut Gossipsub<D, F>, peer_id: &PeerId)
+    where
+        D: DataTransform + Default + Clone + Send + 'static,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
+    {
+        if let Some(peer_connections) = gs.connected_peers.get(peer_id) {
+            let fake_endpoint = ConnectedPoint::Dialer {
+                address: Multiaddr::empty(),
+                role_override: Endpoint::Dialer,
+            }; // this is not relevant
+               // peer_connections.connections should never be empty.
+            let mut active_connections = peer_connections.connections.len() - 1;
+            for conn_id in peer_connections.connections.clone() {
+                let handler = gs.new_handler();
+                gs.inject_connection_closed(
+                    peer_id,
+                    &conn_id,
+                    &fake_endpoint,
+                    handler,
+                    active_connections,
+                );
+                active_connections = active_connections.saturating_sub(1);
+            }
+        }
+    }
+
     // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
     fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
         // Store valid messages.
@@ -1382,7 +1408,7 @@ mod tests {
         flush_events(&mut gs);
 
         //disconnect peer
-        gs.inject_disconnected(peer);
+        disconnect_peer(&mut gs, peer);
 
         gs.heartbeat();
 
@@ -5335,7 +5361,7 @@ mod tests {
         gs.handle_graft(&peers[0], subscribe_topic_hash);
 
         // The node disconnects
-        gs.inject_disconnected(&peers[0]);
+        disconnect_peer(&mut gs, &peers[0]);
 
         // We unsubscribe from the topic.
         let _ = gs.unsubscribe(&Topic::new(topic));

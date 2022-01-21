@@ -3055,86 +3055,6 @@ where
         )
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        // remove from mesh, topic_peers, peer_topic and the fanout
-        debug!("Peer disconnected: {}", peer_id);
-        {
-            let topics = match self.peer_topics.get(peer_id) {
-                Some(topics) => (topics),
-                None => {
-                    debug_assert!(
-                        self.blacklisted_peers.contains(peer_id),
-                        "Disconnected node not in connected list"
-                    );
-                    return;
-                }
-            };
-
-            // remove peer from all mappings
-            for topic in topics {
-                // check the mesh for the topic
-                if let Some(mesh_peers) = self.mesh.get_mut(topic) {
-                    // check if the peer is in the mesh and remove it
-                    if mesh_peers.remove(peer_id) {
-                        if let Some(m) = self.metrics.as_mut() {
-                            m.peers_removed(topic, Churn::Dc, 1);
-                            m.set_mesh_peers(topic, mesh_peers.len());
-                        }
-                    };
-                }
-
-                // remove from topic_peers
-                if let Some(peer_list) = self.topic_peers.get_mut(topic) {
-                    if !peer_list.remove(peer_id) {
-                        // debugging purposes
-                        warn!(
-                            "Disconnected node: {} not in topic_peers peer list",
-                            peer_id
-                        );
-                    }
-                    if let Some(m) = self.metrics.as_mut() {
-                        m.set_topic_peers(topic, peer_list.len())
-                    }
-                } else {
-                    warn!(
-                        "Disconnected node: {} with topic: {:?} not in topic_peers",
-                        &peer_id, &topic
-                    );
-                }
-
-                // remove from fanout
-                self.fanout
-                    .get_mut(topic)
-                    .map(|peers| peers.remove(peer_id));
-            }
-        }
-
-        // Forget px and outbound status for this peer
-        self.px_peers.remove(peer_id);
-        self.outbound_peers.remove(peer_id);
-
-        // Remove peer from peer_topics and connected_peers
-        // NOTE: It is possible the peer has already been removed from all mappings if it does not
-        // support the protocol.
-        self.peer_topics.remove(peer_id);
-
-        // If metrics are enabled, register the disconnection of a peer based on its protocol.
-        if let Some(metrics) = self.metrics.as_mut() {
-            let peer_kind = &self
-                .connected_peers
-                .get(peer_id)
-                .expect("Connected peer must be registered")
-                .kind;
-            metrics.peer_protocol_disconnected(peer_kind.clone());
-        }
-
-        self.connected_peers.remove(peer_id);
-
-        if let Some((peer_score, ..)) = &mut self.peer_score {
-            peer_score.remove_peer(peer_id);
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
@@ -3243,34 +3163,113 @@ where
             }
         }
 
-        // Remove the connection from the list
-        // If there are no connections left, inject_disconnected will remove the mapping entirely.
-        if let Some(connections) = self.connected_peers.get_mut(peer_id) {
-            let index = connections
-                .connections
-                .iter()
-                .position(|v| v == connection_id)
-                .expect("Previously established connection to peer must be present");
-            connections.connections.remove(index);
+        if remaining_established != 0 {
+            // Remove the connection from the list
+            if let Some(connections) = self.connected_peers.get_mut(peer_id) {
+                let index = connections
+                    .connections
+                    .iter()
+                    .position(|v| v == connection_id)
+                    .expect("Previously established connection to peer must be present");
+                connections.connections.remove(index);
 
-            // If there are more connections and this peer is in a mesh, inform the first connection
-            // handler.
-            if !connections.connections.is_empty() {
-                if let Some(topics) = self.peer_topics.get(peer_id) {
-                    for topic in topics {
-                        if let Some(mesh_peers) = self.mesh.get(topic) {
-                            if mesh_peers.contains(peer_id) {
-                                self.events
-                                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                                        peer_id: *peer_id,
-                                        event: Arc::new(GossipsubHandlerIn::JoinedMesh),
-                                        handler: NotifyHandler::One(connections.connections[0]),
-                                    });
-                                break;
+                // If there are more connections and this peer is in a mesh, inform the first connection
+                // handler.
+                if !connections.connections.is_empty() {
+                    if let Some(topics) = self.peer_topics.get(peer_id) {
+                        for topic in topics {
+                            if let Some(mesh_peers) = self.mesh.get(topic) {
+                                if mesh_peers.contains(peer_id) {
+                                    self.events
+                                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                                            peer_id: *peer_id,
+                                            event: Arc::new(GossipsubHandlerIn::JoinedMesh),
+                                            handler: NotifyHandler::One(connections.connections[0]),
+                                        });
+                                    break;
+                                }
                             }
                         }
                     }
                 }
+            }
+        } else {
+            // remove from mesh, topic_peers, peer_topic and the fanout
+            debug!("Peer disconnected: {}", peer_id);
+            {
+                let topics = match self.peer_topics.get(peer_id) {
+                    Some(topics) => (topics),
+                    None => {
+                        debug_assert!(
+                            self.blacklisted_peers.contains(peer_id),
+                            "Disconnected node not in connected list"
+                        );
+                        return;
+                    }
+                };
+
+                // remove peer from all mappings
+                for topic in topics {
+                    // check the mesh for the topic
+                    if let Some(mesh_peers) = self.mesh.get_mut(topic) {
+                        // check if the peer is in the mesh and remove it
+                        if mesh_peers.remove(peer_id) {
+                            if let Some(m) = self.metrics.as_mut() {
+                                m.peers_removed(topic, Churn::Dc, 1);
+                                m.set_mesh_peers(topic, mesh_peers.len());
+                            }
+                        };
+                    }
+
+                    // remove from topic_peers
+                    if let Some(peer_list) = self.topic_peers.get_mut(topic) {
+                        if !peer_list.remove(peer_id) {
+                            // debugging purposes
+                            warn!(
+                                "Disconnected node: {} not in topic_peers peer list",
+                                peer_id
+                            );
+                        }
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.set_topic_peers(topic, peer_list.len())
+                        }
+                    } else {
+                        warn!(
+                            "Disconnected node: {} with topic: {:?} not in topic_peers",
+                            &peer_id, &topic
+                        );
+                    }
+
+                    // remove from fanout
+                    self.fanout
+                        .get_mut(topic)
+                        .map(|peers| peers.remove(peer_id));
+                }
+            }
+
+            // Forget px and outbound status for this peer
+            self.px_peers.remove(peer_id);
+            self.outbound_peers.remove(peer_id);
+
+            // Remove peer from peer_topics and connected_peers
+            // NOTE: It is possible the peer has already been removed from all mappings if it does not
+            // support the protocol.
+            self.peer_topics.remove(peer_id);
+
+            // If metrics are enabled, register the disconnection of a peer based on its protocol.
+            if let Some(metrics) = self.metrics.as_mut() {
+                let peer_kind = &self
+                    .connected_peers
+                    .get(peer_id)
+                    .expect("Connected peer must be registered")
+                    .kind;
+                metrics.peer_protocol_disconnected(peer_kind.clone());
+            }
+
+            self.connected_peers.remove(peer_id);
+
+            if let Some((peer_score, ..)) = &mut self.peer_score {
+                peer_score.remove_peer(peer_id);
             }
         }
     }

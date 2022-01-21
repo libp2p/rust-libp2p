@@ -53,13 +53,6 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        match self {
-            Either::Left(a) => a.inject_disconnected(peer_id),
-            Either::Right(b) => b.inject_disconnected(peer_id),
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,

@@ -720,11 +720,6 @@ where
                         u32::try_from(remaining_established_connection_ids.len()).unwrap();
                     let conn_was_reported = !this.banned_peer_connections.remove(&id);
                     if conn_was_reported {
-                        // This connection was reported as open to the behaviour. Check if this is
-                        // the last non-banned connection for the peer.
-                        let last_non_banned = remaining_established_connection_ids
-                            .iter()
-                            .all(|conn_id| this.banned_peer_connections.contains(conn_id));
                         let remaining_non_banned = remaining_established_connection_ids
                             .into_iter()
                             .filter(|conn_id| !this.banned_peer_connections.contains(&conn_id))
@@ -736,10 +731,6 @@ where
                             handler.into_protocols_handler(),
                             remaining_non_banned,
                         );
-
-                        if last_non_banned {
-                            this.behaviour.inject_disconnected(&peer_id)
-                        }
                     }
                     return Poll::Ready(SwarmEvent::ConnectionClosed {
                         peer_id,
@@ -1535,9 +1526,10 @@ mod tests {
         [swarm1, swarm2]
             .iter()
             .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
-            && [swarm1, swarm2]
-                .iter()
-                .all(|s| s.behaviour.inject_disconnected.len() == 1)
+            && [swarm1, swarm2].iter().all(|s| {
+                let (.., last_remaining) = s.behaviour.inject_connection_closed.last().unwrap();
+                *last_remaining == 0
+            })
     }
 
     /// Establishes multiple connections between two peers,
@@ -1863,7 +1855,11 @@ mod tests {
                 }
                 State::Disconnecting => {
                     for s in &[&swarm1, &swarm2] {
-                        assert_eq!(s.behaviour.inject_disconnected.len(), 0);
+                        assert!(s
+                            .behaviour
+                            .inject_connection_closed
+                            .iter()
+                            .all(|(.., remaining_conns)| *remaining_conns > 0));
                         assert_eq!(
                             s.behaviour.inject_connection_established.len(),
                             num_connections

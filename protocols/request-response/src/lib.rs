@@ -660,6 +660,7 @@ where
             .map(|p: usize| connections.remove(p))
             .expect("Expected connection to be established before closing.");
 
+        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
         if connections.is_empty() {
             self.connected.remove(peer_id);
         }
@@ -685,10 +686,6 @@ where
                     },
                 ));
         }
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.connected.remove(peer);
     }
 
     fn inject_dial_failure(

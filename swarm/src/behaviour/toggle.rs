@@ -86,12 +86,6 @@ where
             .unwrap_or_else(Vec::new)
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_disconnected(peer_id)
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,

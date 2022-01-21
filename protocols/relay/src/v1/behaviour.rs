@@ -408,34 +408,34 @@ impl NetworkBehaviour for Relay {
                 }
             }
         }
+
+        if remaining_established == 0 {
+            self.connected_peers.remove(peer);
+
+            if let Some(reqs) = self.incoming_relay_reqs.remove(peer) {
+                for req in reqs {
+                    let IncomingRelayReq::DialingDst {
+                        src_peer_id,
+                        incoming_relay_req,
+                        ..
+                    } = req;
+                    self.outbox_to_swarm
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: src_peer_id,
+                            handler: NotifyHandler::Any,
+                            event: RelayHandlerIn::DenyIncomingRelayReq(
+                                incoming_relay_req.deny(circuit_relay::Status::HopCantDialDst),
+                            ),
+                        })
+                }
+            }
+        }
     }
 
     fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
     }
 
     fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {}
-
-    fn inject_disconnected(&mut self, id: &PeerId) {
-        self.connected_peers.remove(id);
-
-        if let Some(reqs) = self.incoming_relay_reqs.remove(id) {
-            for req in reqs {
-                let IncomingRelayReq::DialingDst {
-                    src_peer_id,
-                    incoming_relay_req,
-                    ..
-                } = req;
-                self.outbox_to_swarm
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: src_peer_id,
-                        handler: NotifyHandler::Any,
-                        event: RelayHandlerIn::DenyIncomingRelayReq(
-                            incoming_relay_req.deny(circuit_relay::Status::HopCantDialDst),
-                        ),
-                    })
-            }
-        }
-    }
 
     fn inject_event(
         &mut self,
