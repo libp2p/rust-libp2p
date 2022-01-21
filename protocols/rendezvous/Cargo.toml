@@ -31,7 +31,7 @@ async-trait = "0.1"
 env_logger = "0.8"
 libp2p = { path = "../.." }
 rand = "0.8"
-tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+tokio = { version = "1.15", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 
 [build-dependencies]
 prost-build = "0.9"
