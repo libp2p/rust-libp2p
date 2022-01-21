@@ -45,6 +45,7 @@
 ## Version 0.42.0 [2022-01-17]
 
 - Update individual crates.
+    - `libp2p-autonat`
     - `libp2p-core`
     - `libp2p-deflate`
     - `libp2p-dns`

@@ -16,7 +16,7 @@ futures-timer = "3.0.2"
 libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
 log = "0.4.1"
-lru = "0.7"
+lru = "0.7.2"
 prost = "0.9"
 smallvec = "1.6.1"
 
