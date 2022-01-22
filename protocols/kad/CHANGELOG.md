@@ -8,9 +8,12 @@
 
 - Derive `Serialize`, `Deserialize` for `store::record::Key` (see [PR 2408])
 
+- Add `get_closest_local_peers` to `Kademlia` (see [PR 2436])
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2411]: https://github.com/libp2p/rust-libp2p/pull/2411
 [PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2436]: https://github.com/libp2p/rust-libp2p/pull/2436
 
 # 0.33.0 [2021-11-16]
 
