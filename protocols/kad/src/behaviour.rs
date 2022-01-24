@@ -667,6 +667,14 @@ where
         self.queries.add_iter_closest(target.clone(), peers, inner)
     }
 
+    /// Returns closest peers to the given key; takes peers from local routing table only.
+    pub fn get_closest_local_peers<'a, K: Clone>(
+        &'a mut self,
+        key: &'a kbucket::Key<K>,
+    ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 'a {
+        self.kbuckets.closest_keys(key)
+    }
+
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
