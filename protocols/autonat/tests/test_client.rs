@@ -194,12 +194,16 @@ async fn test_auto_probe() {
             match client.select_next_some().await {
                 SwarmEvent::ConnectionEstablished {
                     endpoint, peer_id, ..
-                } if endpoint.is_listener() => {
+                } => {
+                    assert!(endpoint.is_listener());
                     assert_eq!(peer_id, server_id);
                     break;
                 }
-                SwarmEvent::IncomingConnection { .. } | SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::IncomingConnectionError { .. } => {
+                    panic!("Unexpected error on inbound connection.")
+                }
+                SwarmEvent::Behaviour(event) => panic!("Unexpected behaviour event {:?}.", event),
+                _ => {}
             }
         }
 

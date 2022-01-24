@@ -165,8 +165,11 @@ async fn test_dial_back() {
                     };
                     break observed_client_ip;
                 }
-                SwarmEvent::IncomingConnection { .. } | SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::IncomingConnectionError { .. } => {
+                    panic!("Unexpected error on inbound connection.")
+                }
+                SwarmEvent::Behaviour(event) => panic!("Unexpected behaviour event {:?}.", event),
+                _ => {}
             }
         };
         let expect_addr = Multiaddr::empty()
@@ -206,8 +209,11 @@ async fn test_dial_back() {
                     break;
                 }
                 SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
-                SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::OutgoingConnectionError { .. } => {
+                    panic!("Unexpected error on outbound connection.")
+                }
+                SwarmEvent::Behaviour(event) => panic!("Unexpected behaviour event {:?}.", event),
+                _ => {}
             }
         }
 
@@ -252,8 +258,11 @@ async fn test_dial_error() {
                     break;
                 }
                 SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
-                SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::ConnectionEstablished { .. } => {
+                    panic!("Unexpected connection established.")
+                }
+                SwarmEvent::Behaviour(event) => panic!("Unexpected behaviour event {:?}.", event),
+                _ => {}
             }
         }
 
@@ -419,8 +428,11 @@ async fn test_dial_multiple_addr() {
                     break;
                 }
                 SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
-                SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::OutgoingConnectionError { .. } => {
+                    panic!("Unexpected error on outbound connection.")
+                }
+                SwarmEvent::Behaviour(event) => panic!("Unexpected behaviour event {:?}.", event),
+                _ => {}
             }
         }
     };
