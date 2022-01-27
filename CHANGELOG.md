@@ -68,7 +68,7 @@
     - `libp2p-mplex`
       - [v0.31.0](muxers/mplex/CHANGELOG.md#0310-2022-01-27)
     - `libp2p-noise`
-      - [v0.34.0](muxers/noise/CHANGELOG.md#0340-2022-01-27)
+      - [v0.34.0](transports/noise/CHANGELOG.md#0340-2022-01-27)
     - `libp2p-ping`
       - [v0.33.0](protocols/ping/CHANGELOG.md#0330-2022-01-27)
     - `libp2p-plaintext`
@@ -92,7 +92,7 @@
     - `libp2p-websocket`
       - [v0.33.0](transports/websocket/CHANGELOG.md#0330-2022-01-27)
     - `libp2p-yamux`
-      - [v0.35.0](transports/websocket/CHANGELOG.md#0350-2022-01-27)
+      - [v0.35.0](transports/yamux/CHANGELOG.md#0350-2022-01-27)
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
