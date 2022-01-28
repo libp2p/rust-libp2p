@@ -2,6 +2,7 @@
 name = "libp2p-autonat"
 edition = "2021"
 rust-version = "1.56.1"
+description = "NAT and firewall detection for libp2p"
 version = "0.1.0"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
 license = "MIT"
