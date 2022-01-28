@@ -176,7 +176,7 @@ async fn test_auto_probe() {
             .unwrap();
         loop {
             match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => break,
+                SwarmEvent::NewListenAddr { .. } => break,
                 _ => {}
             }
         }
@@ -258,9 +258,7 @@ async fn test_confidence() {
                 .unwrap();
             loop {
                 match client.select_next_some().await {
-                    SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {
-                        break
-                    }
+                    SwarmEvent::NewListenAddr { .. } => break,
                     _ => {}
                 }
             }
@@ -349,7 +347,7 @@ async fn test_throttle_server_period() {
             .unwrap();
         loop {
             match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => break,
+                SwarmEvent::NewListenAddr { .. } => break,
                 _ => {}
             }
         }
@@ -471,7 +469,7 @@ async fn test_outbound_failure() {
 
         loop {
             match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => break,
+                SwarmEvent::NewListenAddr { .. } => break,
                 _ => {}
             }
         }
