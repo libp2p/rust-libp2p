@@ -165,8 +165,10 @@ async fn test_dial_back() {
                     };
                     break observed_client_ip;
                 }
-                SwarmEvent::IncomingConnection { .. } | SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::IncomingConnection { .. }
+                | SwarmEvent::NewListenAddr { .. }
+                | SwarmEvent::ExpiredListenAddr { .. } => {}
+                other => panic!("Unexpected swarm event: {:?}.", other),
             }
         };
         let expect_addr = Multiaddr::empty()
@@ -184,7 +186,7 @@ async fn test_dial_back() {
                 assert_eq!(addresses[0], expect_addr);
                 probe_id
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
         loop {
@@ -206,8 +208,8 @@ async fn test_dial_back() {
                     break;
                 }
                 SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
-                SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
+                other => panic!("Unexpected swarm event: {:?}.", other),
             }
         }
 
@@ -221,7 +223,7 @@ async fn test_dial_back() {
                 assert_eq!(peer, client_id);
                 assert_eq!(address, expect_addr);
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         }
 
         drop(_handle);
@@ -241,7 +243,7 @@ async fn test_dial_error() {
                 assert_eq!(peer, client_id);
                 probe_id
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
         loop {
@@ -252,8 +254,8 @@ async fn test_dial_error() {
                     break;
                 }
                 SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
-                SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
+                other => panic!("Unexpected swarm event: {:?}.", other),
             }
         }
 
@@ -267,7 +269,7 @@ async fn test_dial_error() {
                 assert_eq!(peer, client_id);
                 assert_eq!(error, InboundProbeError::Response(ResponseError::DialError));
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         }
 
         drop(_handle);
@@ -296,7 +298,7 @@ async fn test_throttle_global_max() {
             Event::InboundProbe(InboundProbeEvent::Request { peer, probe_id, .. }) => {
                 (probe_id, peer)
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
         loop {
@@ -314,7 +316,7 @@ async fn test_throttle_global_max() {
                     assert_eq!(first_peer_id, peer);
                     assert_eq!(first_probe_id, probe_id);
                 }
-                other => panic!("Unexpected Event: {:?}", other),
+                other => panic!("Unexpected behaviour event: {:?}.", other),
             };
         }
 
@@ -342,7 +344,7 @@ async fn test_throttle_peer_max() {
                 assert_eq!(client_id, peer);
                 probe_id
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
         match next_event(&mut server).await {
@@ -350,7 +352,7 @@ async fn test_throttle_peer_max() {
                 assert_eq!(peer, client_id);
                 assert_eq!(probe_id, first_probe_id);
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         }
 
         match next_event(&mut server).await {
@@ -366,7 +368,7 @@ async fn test_throttle_peer_max() {
                     InboundProbeError::Response(ResponseError::DialRefused)
                 )
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
         drop(_handle);
@@ -396,7 +398,7 @@ async fn test_dial_multiple_addr() {
                 assert_eq!(client_id, peer);
                 addresses
             }
-            other => panic!("Unexpected Event: {:?}", other),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
         loop {
@@ -419,8 +421,8 @@ async fn test_dial_multiple_addr() {
                     break;
                 }
                 SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
-                SwarmEvent::NewListenAddr { .. } => {}
-                _ => panic!("Unexpected Swarm Event"),
+                SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
+                other => panic!("Unexpected swarm event: {:?}.", other),
             }
         }
     };
