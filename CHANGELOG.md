@@ -92,7 +92,7 @@
     - `libp2p-websocket`
       - [v0.33.0](transports/websocket/CHANGELOG.md#0330-2022-01-27)
     - `libp2p-yamux`
-      - [v0.35.0](transports/yamux/CHANGELOG.md#0350-2022-01-27)
+      - [v0.35.0](muxers/yamux/CHANGELOG.md#0350-2022-01-27)
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
