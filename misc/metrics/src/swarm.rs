@@ -216,8 +216,11 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::Aborted => {
                         record(OutgoingConnectionErrorError::Aborted)
                     }
-                    libp2p_swarm::DialError::InvalidPeerId => {
+                    libp2p_swarm::DialError::InvalidPeerId { .. } => {
                         record(OutgoingConnectionErrorError::InvalidPeerId)
+                    }
+                    libp2p_swarm::DialError::WrongPeerId { .. } => {
+                        record(OutgoingConnectionErrorError::WrongPeerId)
                     }
                     libp2p_swarm::DialError::ConnectionIo(_) => {
                         record(OutgoingConnectionErrorError::ConnectionIo)
@@ -292,6 +295,7 @@ enum OutgoingConnectionErrorError {
     DialPeerConditionFalse,
     Aborted,
     InvalidPeerId,
+    WrongPeerId,
     ConnectionIo,
     TransportMultiaddrNotSupported,
     TransportOther,
@@ -304,7 +308,7 @@ struct IncomingConnectionErrorLabels {
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 enum PendingInboundConnectionError {
-    InvalidPeerId,
+    WrongPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
@@ -317,8 +321,8 @@ impl<TTransErr> From<&libp2p_core::connection::PendingInboundConnectionError<TTr
 {
     fn from(error: &libp2p_core::connection::PendingInboundConnectionError<TTransErr>) -> Self {
         match error {
-            libp2p_core::connection::PendingInboundConnectionError::InvalidPeerId => {
-                PendingInboundConnectionError::InvalidPeerId
+            libp2p_core::connection::PendingInboundConnectionError::WrongPeerId { .. } => {
+                PendingInboundConnectionError::WrongPeerId
             }
             libp2p_core::connection::PendingInboundConnectionError::ConnectionLimit(_) => {
                 PendingInboundConnectionError::ConnectionLimit
