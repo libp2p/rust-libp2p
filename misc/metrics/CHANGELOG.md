@@ -1,13 +1,16 @@
+# 0.4.0 [unreleased]
+
+- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
+
+[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+
 # 0.3.0 [2022-01-27]
 
 - Update dependencies.
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
-- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
-
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
-[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
 
 # 0.2.0 [2021-11-16]
 

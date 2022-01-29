@@ -1,3 +1,9 @@
+# 0.36.0 [unreleased]
+
+- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
+
+[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+
 # 0.35.0 [2022-01-27]
 
 - Update dependencies.
@@ -15,8 +21,6 @@
 
 - Implement Unsubscribe backoff as per [libp2p specs PR 383] (see [PR 2403]).
 
-- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
-
 [PR 2346]: https://github.com/libp2p/rust-libp2p/pull/2346
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2327]: https://github.com/libp2p/rust-libp2p/pull/2327
@@ -24,7 +28,6 @@
 [PR 2409]: https://github.com/libp2p/rust-libp2p/pull/2409
 [PR 2403]: https://github.com/libp2p/rust-libp2p/pull/2403
 [libp2p specs PR 383]: https://github.com/libp2p/specs/pull/383
-[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
 
 # 0.34.0 [2021-11-16]
 
