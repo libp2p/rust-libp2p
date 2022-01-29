@@ -117,44 +117,7 @@ impl NetworkBehaviourEventProcess<IdentifyEvent> for ChatBehaviour {
 }
 
 impl NetworkBehaviourEventProcess<KademliaEvent> for ChatBehaviour {
-    fn inject_event(&mut self, event: KademliaEvent) {
-        match event {
-            KademliaEvent::OutboundQueryCompleted {
-                result: QueryResult::GetClosestPeers(result),
-                ..
-            } => {
-                match result {
-                    Ok(GetClosestPeersOk { key: _, peers }) => {
-                        if !peers.is_empty() {
-                            println!("Query finished with closest peers: {:#?}", peers);
-                            for peer in peers {
-                                println!("gossipsub adding peer {peer}");
-                                self.gossipsub.add_explicit_peer(&peer);
-                            }
-                        } else {
-                            // The example is considered failed as there
-                            // should always be at least 1 reachable peer.
-                            println!("Query finished with no closest peers.")
-                        }
-                    }
-                    Err(GetClosestPeersError::Timeout { peers, .. }) => {
-                        if !peers.is_empty() {
-                            println!("Query timed out with closest peers: {:#?}", peers);
-                            for peer in peers {
-                                println!("gossipsub adding peer {peer}");
-                                self.gossipsub.add_explicit_peer(&peer);
-                            }
-                        } else {
-                            // The example is considered failed as there
-                            // should always be at least 1 reachable peer.
-                            println!("Query timed out with no closest peers.");
-                        }
-                    }
-                };
-            }
-            _ => {}
-        }
-    }
+    fn inject_event(&mut self, _: KademliaEvent) {}
 }
 
 /// The `tokio::main` attribute sets up a tokio runtime.
