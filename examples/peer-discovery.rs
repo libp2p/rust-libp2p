@@ -180,12 +180,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         swarm.dial(boot_addr.clone())?;
         println!("Dialed {:?}", &boot_addr);
 
-        println!("pushing identity to boot node");
-        swarm
-            .behaviour_mut()
-            .identify
-            .push(std::iter::once(boot_peerid.unwrap()));
-
         println!("pushing adding boot node to kademlia routing table");
         swarm
             .behaviour_mut()
