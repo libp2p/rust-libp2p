@@ -125,6 +125,8 @@
 //!
 //! You should see the following logs appear:
 //!
+//! TODO: Link to each concrete to type to make sure the below stays up to date on renames.
+//!
 //! 1. The dialing client establishing a relayed connection to the listening client via the relay
 //!    server. Note the [`/p2p-circuit` protocol](crate::multiaddr::Protocol::P2pCircuit) in the
 //!    [`Multiaddr`](crate::Multiaddr).
