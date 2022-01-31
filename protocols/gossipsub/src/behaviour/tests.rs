@@ -239,9 +239,10 @@ mod tests {
                 role_override: Endpoint::Dialer,
             }; // this is not relevant
                // peer_connections.connections should never be empty.
-            let mut active_connections = peer_connections.connections.len() - 1;
+            let mut active_connections = peer_connections.connections.len();
             for conn_id in peer_connections.connections.clone() {
                 let handler = gs.new_handler();
+                active_connections = active_connections.checked_sub(1).unwrap();
                 gs.inject_connection_closed(
                     peer_id,
                     &conn_id,
@@ -249,7 +250,6 @@ mod tests {
                     handler,
                     active_connections,
                 );
-                active_connections = active_connections.saturating_sub(1);
             }
         }
     }
