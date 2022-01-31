@@ -607,7 +607,23 @@ impl<THandler> fmt::Debug for DialError<THandler> {
 
 impl<THandler> fmt::Display for DialError<THandler> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            DialError::ConnectionLimit { limit, handler: _ } => {
+                write!(
+                    f,
+                    "The dialing attempt was rejected because of a connection limit: {limit}"
+                )
+            }
+            DialError::LocalPeerId { .. } => {
+                write!(f, "The dialing attempt was rejected because the peer being dialed is the local peer.")
+            }
+            DialError::InvalidPeerId {
+                multihash,
+                handler: _,
+            } => {
+                write!(f, "The dialing attempt was rejected because a valid PeerId could not be constructed from: {:?}", multihash)
+            }
+        }
     }
 }
 
