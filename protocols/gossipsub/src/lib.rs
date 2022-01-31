@@ -51,6 +51,18 @@
 //! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
 //! the current go implementation.
 //!
+//! # Peer Discovery
+//!
+//! Gossipsub does not provide peer discovery by itself. Peer discovery is the process by which
+//! peers in a p2p network exchange information about eachother in order to become resistant
+//! against the failure or replacement of "boot nodes". Boot nodes are the nodes through which an
+//! initial connection to a p2p network is made.
+//!
+//! If your application needs to be resistant against the failure of these boot nodes, peer
+//! discovery can be implemented with the help of the [Kademlia](libp2p_kad::Kademlia) protocol
+//! in combination with the [Identify](libp2p_identify::Identify) protocol. See the [Kademlia]
+//! documentation for more information.
+//!
 //! # Using Gossipsub
 //!
 //! ## GossipsubConfig
