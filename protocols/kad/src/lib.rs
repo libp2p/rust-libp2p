@@ -19,6 +19,23 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the libp2p-specific Kademlia protocol.
+//!
+//! # Overview
+//! Kademlia provides a distributed hash table in which data can be stored. Kademlia can also be
+//! used to store information about peers in a p2p network.
+//!
+//! # Important Discrepancies
+//!
+//! - **Peer Discovery with Identify** In other libp2p implementations, the
+//! [Identify](libp2p_identify::Identify) protocol might be seen as a core protocol. Rust-libp2p
+//! tries to stay as generic as possible, and does not make this assumption.
+//! This means that the Identify protocol must be manually hooked up to Kademlia through calls
+//! to [`Kademlia::add_address`].
+//! If you choose not to implement the Identify protocol, and do not provide an alternative peer
+//! discovery mechanism, your kademlia network will not be resistant against the failure of your
+//! boot nodes. Without the Identify protocol, existing nodes in the kademlia network cannot
+//! obtain the [Multiaddr](multiaddr::Multiaddr) of nodes querying them, and thus will not be
+//! able to reach out to newer nodes.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store
