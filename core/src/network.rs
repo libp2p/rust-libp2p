@@ -578,6 +578,7 @@ pub enum DialError<THandler> {
     },
     /// The dialing attempt is rejected because the peer being dialed is the local peer.
     LocalPeerId { handler: THandler },
+    /// The dialing attempt is rejected because the PeerId is invalid.
     InvalidPeerId {
         handler: THandler,
         multihash: Multihash,
