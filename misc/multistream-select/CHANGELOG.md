@@ -1,4 +1,4 @@
-# 0.11.0 [unreleased]
+# 0.11.0 [2022-01-27]
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
