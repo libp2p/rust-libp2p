@@ -39,7 +39,6 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::task::{Context, Poll};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -230,39 +229,34 @@ fn main() -> Result<(), Box<dyn Error>> {
             .unwrap();
     }
 
-    block_on(futures::future::poll_fn(move |cx: &mut Context<'_>| {
+    block_on(async {
         loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::NewListenAddr { address, .. })) => {
+            match swarm.next().await.unwrap() {
+                SwarmEvent::NewListenAddr { address, .. } => {
                     info!("Listening on {:?}", address);
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Relay(event)))) => {
+                SwarmEvent::Behaviour(Event::Relay(event)) => {
                     info!("{:?}", event)
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Dcutr(event)))) => {
+                SwarmEvent::Behaviour(Event::Dcutr(event)) => {
                     info!("{:?}", event)
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Identify(event)))) => {
+                SwarmEvent::Behaviour(Event::Identify(event)) => {
                     info!("{:?}", event)
                 }
-                Poll::Ready(Some(SwarmEvent::Behaviour(Event::Ping(_)))) => {}
-                Poll::Ready(Some(SwarmEvent::ConnectionEstablished {
+                SwarmEvent::Behaviour(Event::Ping(_)) => {}
+                SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
-                })) => {
+                } => {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
-                Poll::Ready(Some(SwarmEvent::OutgoingConnectionError { peer_id, error })) => {
+                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
-                Poll::Ready(Some(_)) => {}
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Pending => {
-                    break;
-                }
+                _ => {}
             }
         }
-        Poll::Pending
-    }))
+    })
 }
 
 fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
