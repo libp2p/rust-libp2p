@@ -569,7 +569,7 @@ impl NetworkConfig {
 }
 
 /// Possible (synchronous) errors when dialing a peer.
-#[derive(Clone, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum DialError<THandler> {
     /// The dialing attempt is rejected because of a connection limit.
     #[error("The dialing attempt was rejected because of a connection limit: {limit}")]
@@ -586,27 +586,6 @@ pub enum DialError<THandler> {
         handler: THandler,
         multihash: Multihash,
     },
-}
-
-impl<THandler> fmt::Debug for DialError<THandler> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            DialError::ConnectionLimit { limit, handler: _ } => f
-                .debug_struct("DialError::ConnectionLimit")
-                .field("limit", limit)
-                .finish(),
-            DialError::LocalPeerId { handler: _ } => {
-                f.debug_struct("DialError::LocalPeerId").finish()
-            }
-            DialError::InvalidPeerId {
-                handler: _,
-                multihash,
-            } => f
-                .debug_struct("DialError::InvalidPeerId")
-                .field("multihash", multihash)
-                .finish(),
-        }
-    }
 }
 
 /// Options to configure a dial to a known or unknown peer.
