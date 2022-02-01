@@ -107,8 +107,6 @@ impl NetworkBehaviourEventProcess<IdentifyEvent> for ChatBehaviour {
                     for addr in listen_addrs {
                         self.kademlia.add_address(&peer_id, addr);
                     }
-                } else {
-                    println!("some funky shit happened, investigate it");
                 }
             }
             _ => {}
@@ -180,7 +178,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         swarm.dial(boot_addr.clone())?;
         println!("Dialed {:?}", &boot_addr);
 
-        println!("pushing adding boot node to kademlia routing table");
+        println!("adding boot node to kademlia routing table");
         swarm
             .behaviour_mut()
             .kademlia
