@@ -1,3 +1,7 @@
+# 0.31.1 [unreleased]
+
+- Call `TcpSocket::take_error` to report connection establishment errors early.
+
 # 0.31.0 [2022-01-27]
 
 - Update dependencies.
