@@ -92,8 +92,6 @@ impl NetworkBehaviour for Behaviour {
         vec![]
     }
 
-    fn inject_connected(&mut self, _peer_id: &PeerId) {}
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
