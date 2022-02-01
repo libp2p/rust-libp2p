@@ -61,7 +61,7 @@ struct Opts {
     remote_peer_id: Option<PeerId>,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, StructOpt, PartialEq)]
 enum Mode {
     Dial,
     Listen,
@@ -218,7 +218,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    if matches!(opts.mode, Mode::Dial) {
+    if opts.mode == Mode::Dial {
         swarm
             .dial(
                 opts.relay_address
