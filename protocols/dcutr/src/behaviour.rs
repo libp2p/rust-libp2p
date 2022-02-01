@@ -149,7 +149,7 @@ impl NetworkBehaviour for Behaviour {
                 role: handler::Role::Initiator { attempt },
             } => {
                 let peer_id =
-                    peer_id.expect("Prototype::DirectConnection is always for known peer.");
+                    peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
                 if attempt < 3 {
                     self.queued_actions.push_back(Action::Connect {
                         peer_id,
