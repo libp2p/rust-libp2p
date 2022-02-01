@@ -58,7 +58,7 @@ enum EventType {
 impl From<&libp2p_dcutr::behaviour::Event> for EventType {
     fn from(event: &libp2p_dcutr::behaviour::Event) -> Self {
         match event {
-            libp2p_dcutr::behaviour::Event::InitiateDirectConnectionUpgrade {
+            libp2p_dcutr::behaviour::Event::InitiatedDirectConnectionUpgrade {
                 remote_peer_id: _,
                 local_relayed_addr: _,
             } => EventType::InitiateDirectConnectionUpgrade,

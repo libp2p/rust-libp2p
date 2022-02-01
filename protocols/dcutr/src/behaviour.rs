@@ -38,7 +38,7 @@ use thiserror::Error;
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
 pub enum Event {
-    InitiateDirectConnectionUpgrade {
+    InitiatedDirectConnectionUpgrade {
         remote_peer_id: PeerId,
         local_relayed_addr: Multiaddr,
     },
@@ -120,10 +120,12 @@ impl NetworkBehaviour for Behaviour {
                     ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
                 };
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::InitiateDirectConnectionUpgrade {
-                        remote_peer_id: *peer_id,
-                        local_relayed_addr: local_addr.clone(),
-                    })
+                    NetworkBehaviourAction::GenerateEvent(
+                        Event::InitiatedDirectConnectionUpgrade {
+                            remote_peer_id: *peer_id,
+                            local_relayed_addr: local_addr.clone(),
+                        },
+                    )
                     .into(),
                 );
             }
