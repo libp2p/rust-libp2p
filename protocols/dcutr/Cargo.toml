@@ -32,7 +32,6 @@ prost-build = "0.7"
 env_logger = "0.8.3"
 libp2p = { path = "../..", features = ["dcutr"] }
 libp2p-identify = { path = "../identify" }
-libp2p-ping = { path = "../ping" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-relay = { path = "../relay" }
 libp2p-yamux = { path = "../../muxers/yamux" }

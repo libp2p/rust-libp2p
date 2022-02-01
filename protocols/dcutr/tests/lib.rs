@@ -30,7 +30,6 @@ use libp2p::core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
 use libp2p::core::PublicKey;
 use libp2p::core::{identity, PeerId};
 use libp2p::dcutr;
-use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
@@ -94,7 +93,7 @@ fn connect() {
     ));
 }
 
-fn build_relay() -> Swarm<Relay> {
+fn build_relay() -> Swarm<relay::Relay> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.clone().to_peer_id();
@@ -103,16 +102,13 @@ fn build_relay() -> Swarm<Relay> {
 
     Swarm::new(
         transport,
-        Relay {
-            ping: Ping::new(PingConfig::new()),
-            relay: relay::Relay::new(
-                local_peer_id,
-                relay::Config {
-                    reservation_duration: Duration::from_secs(2),
-                    ..Default::default()
-                },
-            ),
-        },
+        relay::Relay::new(
+            local_peer_id,
+            relay::Config {
+                reservation_duration: Duration::from_secs(2),
+                ..Default::default()
+            },
+        ),
         local_peer_id,
     )
 }
@@ -131,7 +127,6 @@ fn build_client() -> Swarm<Client> {
     Swarm::new(
         transport,
         Client {
-            ping: Ping::new(PingConfig::new()),
             relay: behaviour,
             dcutr: dcutr::behaviour::Behaviour::new(),
         },
@@ -156,54 +151,21 @@ where
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "RelayEvent", event_process = false)]
-struct Relay {
-    relay: relay::Relay,
-    ping: Ping,
-}
-
-#[derive(Debug)]
-enum RelayEvent {
-    Relay(relay::Event),
-    Ping(PingEvent),
-}
-
-impl From<relay::Event> for RelayEvent {
-    fn from(event: relay::Event) -> Self {
-        RelayEvent::Relay(event)
-    }
-}
-
-impl From<PingEvent> for RelayEvent {
-    fn from(event: PingEvent) -> Self {
-        RelayEvent::Ping(event)
-    }
-}
-
-#[derive(NetworkBehaviour)]
 #[behaviour(out_event = "ClientEvent", event_process = false)]
 struct Client {
     relay: client::Client,
-    ping: Ping,
     dcutr: dcutr::behaviour::Behaviour,
 }
 
 #[derive(Debug)]
 enum ClientEvent {
     Relay(client::Event),
-    Ping(PingEvent),
     Dcutr(dcutr::behaviour::Event),
 }
 
 impl From<client::Event> for ClientEvent {
     fn from(event: client::Event) -> Self {
         ClientEvent::Relay(event)
-    }
-}
-
-impl From<PingEvent> for ClientEvent {
-    fn from(event: PingEvent) -> Self {
-        ClientEvent::Ping(event)
     }
 }
 
@@ -233,7 +195,6 @@ async fn wait_for_reservation(
                 renewal,
                 ..
             })) if relay_peer_id == peer_id && renewal == is_renewal => break,
-            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
@@ -257,7 +218,6 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
                 break
             }
             SwarmEvent::Dialing(_) => {}
-            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 client::Event::OutboundCircuitEstablished { .. },
             )) => {}
@@ -278,7 +238,6 @@ async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::E
     loop {
         match client.select_next_some().await {
             SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
-            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             e => panic!("{:?}", e),
         }
     }
