@@ -44,11 +44,11 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(name = "libp2p DCUtR client")]
 struct Opts {
-    /// The mode (relay, client-listen, client-dial)
+    /// The mode (client-listen, client-dial).
     #[structopt(long)]
     mode: Mode,
 
-    /// Fixed value to generate deterministic peer id
+    /// Fixed value to generate deterministic peer id.
     #[structopt(long)]
     secret_key_seed: u8,
 
