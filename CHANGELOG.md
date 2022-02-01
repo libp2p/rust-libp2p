@@ -45,6 +45,7 @@
 ## Version 0.42.1 [unreleased]
 
 - Update individual crates.
+  - `libp2p-relay`
   - `libp2p-tcp`
 
 ## Version 0.42.0 [2022-01-27]
