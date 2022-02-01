@@ -165,23 +165,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .unwrap();
 
-    // Wait to listen on localhost.
+    // Wait to listen on all interfaces.
     block_on(async {
         let mut delay = futures_timer::Delay::new(std::time::Duration::from_secs(1)).fuse();
         loop {
             futures::select! {
-                            event = swarm.next() => {
-                                match event.unwrap() {
-                                    SwarmEvent::NewListenAddr { address, .. } => {
-            info!("Listening on {:?}", address);
-                                    }
-                                    event => panic!("{:?}", event),
-                                }
-                            }
-                            _ = delay => {
-                                break;
-                            }
+                event = swarm.next() => {
+                    match event.unwrap() {
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            info!("Listening on {:?}", address);
                         }
+                        event => panic!("{:?}", event),
+                    }
+                }
+                _ = delay => {
+                    // Likely listening on all interfaces now, thus continuing by breaking the loop.
+                    break;
+                }
+            }
         }
     });
 
