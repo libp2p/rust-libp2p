@@ -1,4 +1,4 @@
-# 0.31.1 [unreleased]
+# 0.31.1 [2022-02-02]
 
 - Call `TcpSocket::take_error` to report connection establishment errors early.
 

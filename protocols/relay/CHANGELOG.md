@@ -1,4 +1,4 @@
-# 0.6.1 [unreleased]
+# 0.6.1 [2022-02-02]
 
 - Remove empty peer entries in `reservations` `HashMap`. See [PR 2464].
 
