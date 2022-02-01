@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Peer-to-peer networking library"
-version = "0.42.0"
+version = "0.42.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -88,7 +88,7 @@ libp2p-noise = { version = "0.34.0", path = "transports/noise", optional = true 
 libp2p-ping = { version = "0.33.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.31.0", path = "transports/plaintext", optional = true }
 libp2p-pnet = { version = "0.22.0", path = "transports/pnet", optional = true }
-libp2p-relay = { version = "0.6.0", path = "protocols/relay", optional = true }
+libp2p-relay = { version = "0.6.1", path = "protocols/relay", optional = true }
 libp2p-rendezvous = { version = "0.3.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.15.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.33.0", path = "swarm" }
