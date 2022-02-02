@@ -1,3 +1,9 @@
+# 0.31.1 [unreleased]
+
+- Implement `Display` on `DialError`. See [PR 2456].
+
+[PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
+
 # 0.31.0 [2022-01-27]
 
 - Update dependencies.
