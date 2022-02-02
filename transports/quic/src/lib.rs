@@ -58,12 +58,12 @@ mod endpoint;
 mod error;
 mod muxer;
 mod upgrade;
-mod x509;
+mod tls;
 
 pub mod transport;
 
 pub use endpoint::{Config, Endpoint};
 pub use error::Error;
-pub use muxer::QuicMuxer;
+pub use muxer::{QuicMuxer, Substream};
 pub use transport::QuicTransport;
 pub use upgrade::Upgrade;

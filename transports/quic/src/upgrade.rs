@@ -23,7 +23,7 @@
 use crate::{
     connection::{Connection, ConnectionEvent},
     muxer::QuicMuxer,
-    transport, x509,
+    transport, tls,
 };
 
 use futures::prelude::*;
@@ -59,7 +59,9 @@ impl Future for Upgrade {
 
         loop {
             if let Some(mut certificates) = connection.peer_certificates() {
-                let peer_id = x509::extract_peerid_or_panic(certificates.next().unwrap().as_der()); // TODO: bad API
+                let cert = certificates.next().unwrap();
+                let p2p_cert = tls::certificate::parse_certificate(cert.as_ref()).unwrap(); // TODO: bad API
+                let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
                 let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                 return Poll::Ready(Ok((peer_id, muxer)));
             }

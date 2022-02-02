@@ -29,6 +29,8 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
+pub type Substream = quinn_proto::StreamId;
+
 /// State for a single opened QUIC connection.
 pub struct QuicMuxer {
     // Note: This could theoretically be an asynchronous future, in order to yield the current
@@ -47,6 +49,8 @@ struct QuicMuxerInner {
     poll_substream_opened_waker: Option<Waker>,
     /// Waker to wake if the connection is closed.
     poll_close_waker: Option<Waker>,
+    /// Waker to wake if any event is happened.
+    poll_event_waker: Option<Waker>,
 }
 
 /// State of a single substream.
@@ -77,6 +81,7 @@ impl QuicMuxer {
                 substreams: Default::default(),
                 poll_substream_opened_waker: None,
                 poll_close_waker: None,
+                poll_event_waker: None,
             }),
         }
     }
@@ -95,7 +100,7 @@ impl StreamMuxer for QuicMuxer {
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {
                 ConnectionEvent::Connected => {
-                    log::error!("Unexpected Connected event on established QUIC connection");
+                    tracing::error!("Unexpected Connected event on established QUIC connection");
                 }
                 ConnectionEvent::ConnectionLost(_) => {
                     if let Some(waker) = inner.poll_close_waker.take() {
@@ -149,6 +154,7 @@ impl StreamMuxer for QuicMuxer {
             inner.substreams.insert(substream, Default::default());
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream)))
         } else {
+            inner.poll_event_waker = Some(cx.waker().clone());
             Poll::Pending
         }
     }
@@ -193,72 +199,140 @@ impl StreamMuxer for QuicMuxer {
         substream: &mut Self::Substream,
         buf: &[u8],
     ) -> Poll<Result<usize, Self::Error>> {
-        let mut inner = self.inner.lock();
+        use quinn_proto::{WriteError};
 
-        match inner.connection.write_substream(*substream, buf) {
+        let mut inner = self.inner.lock();
+        let id = substream;
+
+        match inner.connection.connection.send_stream(*id).write(buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(quinn_proto::WriteError::Stopped(err_code)) => {
-                Poll::Ready(Err(Error::Reset(err_code)))
-            },
-            Err(quinn_proto::WriteError::Blocked) => {
-                if let Some(substream) = inner.substreams.get_mut(substream) {
-                    if !substream
-                        .write_waker
-                        .as_ref()
-                        .map_or(false, |w| w.will_wake(cx.waker()))
-                    {
-                        substream.write_waker = Some(cx.waker().clone());
-                    }
-                }
+            Err(WriteError::Blocked) => {
+                let mut substream = inner.substreams.get_mut(id).expect("known substream; qed");
+                substream.write_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
-            Err(quinn_proto::WriteError::UnknownStream) => {
-                log::error!(
-                    "The application used a connection that is already being \
-                    closed. This is a bug in the application or in libp2p."
-                );
-                Poll::Pending
+            Err(WriteError::Stopped(_)) => Poll::Ready(Ok(0)),
+            Err(WriteError::UnknownStream) => {
+                Poll::Ready(Err(Self::Error::ExpiredStream))
             }
         }
+
+        // match inner.connection.write_substream(*substream, buf) {
+        //     Ok(bytes) => Poll::Ready(Ok(bytes)),
+        //     Err(quinn_proto::WriteError::Stopped(err_code)) => {
+        //         Poll::Ready(Err(Error::Reset(err_code)))
+        //     },
+        //     Err(quinn_proto::WriteError::Blocked) => {
+        //         if let Some(substream) = inner.substreams.get_mut(substream) {
+        //             if !substream
+        //                 .write_waker
+        //                 .as_ref()
+        //                 .map_or(false, |w| w.will_wake(cx.waker()))
+        //             {
+        //                 substream.write_waker = Some(cx.waker().clone());
+        //             }
+        //         }
+        //         Poll::Pending
+        //     }
+        //     Err(quinn_proto::WriteError::UnknownStream) => {
+        //         tracing::error!(
+        //             "The application used a connection that is already being \
+        //             closed. This is a bug in the application or in libp2p."
+        //         );
+        //         Poll::Pending
+        //     }
+        // }
     }
 
     fn read_substream(
         &self,
         cx: &mut Context<'_>,
         substream: &mut Self::Substream,
-        buf: &mut [u8],
+        mut buf: &mut [u8],
     ) -> Poll<Result<usize, Self::Error>> {
+        // let mut inner = self.inner.lock();
+
+        // match inner.connection.read_substream(*substream, buf) {
+        //     Ok(bytes) => Poll::Ready(Ok(bytes)),
+        //     Err(quinn_proto::ReadError::Blocked) => {
+        //         if let Some(substream) = inner.substreams.get_mut(substream) {
+        //             if !substream
+        //                 .read_waker
+        //                 .as_ref()
+        //                 .map_or(false, |w| w.will_wake(cx.waker()))
+        //             {
+        //                 substream.read_waker = Some(cx.waker().clone());
+        //             }
+        //         }
+        //         Poll::Pending
+        //     }
+
+        //     Err(quinn_proto::ReadError::Reset(err_code)) => {
+        //         Poll::Ready(Err(Error::Reset(err_code)))
+        //     },
+
+        //     // `IllegalOrderedRead` happens if an unordered read followed with an ordered read are
+        //     // performed. `libp2p-quic` never does any unordered read.
+        //     Err(quinn_proto::ReadError::IllegalOrderedRead) => unreachable!(),
+        //     Err(quinn_proto::ReadError::UnknownStream) => {
+        //         tracing::error!(
+        //             "The application used a connection that is already being \
+        //             closed. This is a bug in the application or in libp2p."
+        //         );
+        //         Poll::Pending
+        //     }
+        // }
+
+        use quinn_proto::{ReadableError, ReadError};
+        use std::io::Write;
+
+        let id = *substream;
+
         let mut inner = self.inner.lock();
-
-        match inner.connection.read_substream(*substream, buf) {
-            Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(quinn_proto::ReadError::Blocked) => {
-                if let Some(substream) = inner.substreams.get_mut(substream) {
-                    if !substream
-                        .read_waker
-                        .as_ref()
-                        .map_or(false, |w| w.will_wake(cx.waker()))
-                    {
-                        substream.read_waker = Some(cx.waker().clone());
-                    }
+        let mut stream = inner.connection.connection.recv_stream(id);
+        let mut chunks = match stream.read(true) {
+            Ok(chunks) => chunks,
+            Err(ReadableError::UnknownStream) => {
+                return Poll::Ready(Err(Self::Error::ExpiredStream))
+            }
+            Err(ReadableError::IllegalOrderedRead) => {
+                panic!("Illegal ordered read can only happen if `stream.read(false)` is used.");
+            }
+        };
+        let mut bytes = 0;
+        let mut pending = false;
+        loop {
+            if buf.is_empty() {
+                break;
+            }
+            match chunks.next(buf.len()) {
+                Ok(Some(chunk)) => {
+                    buf.write_all(&chunk.bytes).expect("enough buffer space");
+                    bytes += chunk.bytes.len();
                 }
-                Poll::Pending
+                Ok(None) => break,
+                Err(ReadError::Reset(error_code)) => {
+                    tracing::debug!("substream {} was reset with error code {}", id, error_code);
+                    bytes = 0;
+                    break;
+                }
+                Err(ReadError::Blocked) => {
+                    pending = true;
+                    break;
+                }
             }
-
-            Err(quinn_proto::ReadError::Reset(err_code)) => {
-                Poll::Ready(Err(Error::Reset(err_code)))
-            },
-
-            // `IllegalOrderedRead` happens if an unordered read followed with an ordered read are
-            // performed. `libp2p-quic` never does any unordered read.
-            Err(quinn_proto::ReadError::IllegalOrderedRead) => unreachable!(),
-            Err(quinn_proto::ReadError::UnknownStream) => {
-                log::error!(
-                    "The application used a connection that is already being \
-                    closed. This is a bug in the application or in libp2p."
-                );
-                Poll::Pending
+        }
+        if chunks.finalize().should_transmit() {
+            if let Some(waker) = inner.poll_event_waker.take() {
+                waker.wake();
             }
+        }
+        let substream = inner.substreams.get_mut(&id).expect("known substream; qed");
+        if pending && bytes == 0 {
+            substream.read_waker = Some(cx.waker().clone());
+            Poll::Pending
+        } else {
+            Poll::Ready(Ok(bytes))
         }
     }
 

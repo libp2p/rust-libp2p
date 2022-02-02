@@ -28,21 +28,27 @@
 //! the rest of the code only happens through channels. See the documentation of the
 //! [`background_task`] for a thorough description.
 
-use crate::{connection::Connection, x509};
+use crate::{connection::Connection, tls};
 
 use async_std::net::SocketAddr;
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
     prelude::*,
+    stream::Stream,
 };
 use libp2p_core::multiaddr::Multiaddr;
 use std::{
     collections::{HashMap, VecDeque},
     fmt, io,
+    pin::Pin,
     sync::{Arc, Weak},
-    task::Poll,
+    task::{Context, Poll},
     time::{Duration, Instant},
+};
+use quinn_proto::{
+    ClientConfig as QuinnClientConfig,
+    ServerConfig as QuinnServerConfig,
 };
 
 /// Represents the configuration for the [`Endpoint`].
@@ -63,19 +69,21 @@ impl Config {
     pub fn new(
         keypair: &libp2p_core::identity::Keypair,
         multiaddr: Multiaddr,
-    ) -> Result<Self, x509::ConfigError> {
+    ) -> Result<Self, tls::ConfigError> {
         let mut transport = quinn_proto::TransportConfig::default();
-        transport.stream_window_uni(0).unwrap();  // Can only panic if value is out of range.
+        transport.max_concurrent_uni_streams(0u32.into());  // Can only panic if value is out of range.
         transport.datagram_receive_buffer_size(None);
         transport.keep_alive_interval(Some(Duration::from_millis(10)));
         let transport = Arc::new(transport);
-        let (client_tls_config, server_tls_config) = x509::make_tls_config(keypair)?;
-        let mut server_config = quinn_proto::ServerConfig::default();
-        server_config.transport = transport.clone();
-        server_config.crypto = Arc::new(server_tls_config);
-        let mut client_config = quinn_proto::ClientConfig::default();
+
+        let client_tls_config = tls::make_client_config(keypair).unwrap();
+        let server_tls_config = tls::make_server_config(keypair).unwrap();
+
+        let mut server_config = QuinnServerConfig::with_crypto(Arc::new(server_tls_config));
+        server_config.transport = Arc::clone(&transport);
+
+        let mut client_config = QuinnClientConfig::new(Arc::new(client_tls_config));
         client_config.transport = transport;
-        client_config.crypto = Arc::new(client_tls_config);
         Ok(Self {
             client_config,
             server_config: Arc::new(server_config),
@@ -115,6 +123,7 @@ pub struct Endpoint {
 
 impl Endpoint {
     /// Builds a new `Endpoint`.
+    #[tracing::instrument(skip_all)]
     pub fn new(config: Config) -> Result<Arc<Endpoint>, io::Error> {
         let local_socket_addr = match crate::transport::multiaddr_to_socketaddr(&config.multiaddr) {
             Ok(a) => a,
@@ -205,6 +214,7 @@ impl Endpoint {
     ///
     /// Note that this method only *starts* the dialing. `Ok` is returned as soon as possible, even
     /// when the remote might end up being unreachable.
+    #[tracing::instrument]
     pub(crate) async fn dial(
         &self,
         addr: SocketAddr,
@@ -233,6 +243,21 @@ impl Endpoint {
             .next()
             .await
             .expect("background task has crashed")
+    }
+
+    pub(crate) fn poll_incoming(&self, cx: &mut Context) -> Poll<Option<Connection>> {
+        // The `expect` below can panic if the background task has stopped. The background task
+        // can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
+        // words, we panic here iff a panic has already happened somewhere else, which is a
+        // reasonable thing to do.
+        let mut connections_lock = self.new_connections.lock();
+        let guard_poll = Pin::new(&mut connections_lock).poll(cx);
+        let mut guard = match guard_poll {
+            Poll::Ready(guard) => guard,
+            Poll::Pending => return Poll::Pending,
+        };
+        let mut new_connections = &mut *guard;
+        Pin::new(&mut new_connections).poll_next(cx)
     }
 
     /// Asks the endpoint to send a UDP packet.
@@ -408,6 +433,7 @@ enum ToEndpoint {
 /// guarantees that the [`Endpoint`], and therefore the background task, is properly kept alive
 /// for as long as any QUIC connection is open.
 ///
+#[tracing::instrument(skip_all)]
 async fn background_task(
     config: Config,
     endpoint_weak: Weak<Endpoint>,
@@ -447,9 +473,10 @@ async fn background_task(
             // network interface is too busy, we back-pressure all of our internal
             // channels.
             // TODO: set ECN bits; there is no support for them in the ecosystem right now
+            tracing::trace_span!("udp_socket.send_to");
             match udp_socket.send_to(&data, destination).await {
                 Ok(n) if n == data.len() => {}
-                Ok(_) => log::error!(
+                Ok(_) => tracing::error!(
                     "QUIC UDP socket violated expectation that packets are always fully \
                     transferred"
                 ),
@@ -458,7 +485,7 @@ async fn background_task(
                 // printing a log message. The packet gets discarded in case of error, but we are
                 // robust to packet losses and it is consequently not a logic error to process with
                 // normal operations.
-                Err(err) => log::error!("Error while sending on QUIC UDP socket: {:?}", err),
+                Err(err) => tracing::error!("Error while sending on QUIC UDP socket: {:?}", err),
             }
         }
 
@@ -553,7 +580,7 @@ async fn background_task(
                     .expect("if queue is empty, the future above is always Pending; qed");
                 new_connections.start_send(elem)
                     .expect("future is waken up only if poll_ready returned Ready; qed");
-                endpoint.accept();
+                //endpoint.accept();
             }
 
             result = udp_socket.recv_from(&mut socket_recv_buffer).fuse() => {
@@ -562,7 +589,7 @@ async fn background_task(
                     // Errors on the socket are expected to never happen, and we handle them by
                     // simply printing a log message.
                     Err(err) => {
-                        log::error!("Error while receive on QUIC UDP socket: {:?}", err);
+                        tracing::error!("Error while receive on QUIC UDP socket: {:?}", err);
                         continue;
                     },
                 };
@@ -570,15 +597,16 @@ async fn background_task(
                 // Received a UDP packet from the socket.
                 debug_assert!(packet_len <= socket_recv_buffer.len());
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
+                let local_ip = udp_socket.local_addr().ok().map(|a| a.ip());
                 // TODO: ECN bits aren't handled
-                match endpoint.handle(Instant::now(), packet_src, None, packet) {
+                match endpoint.handle(Instant::now(), packet_src, local_ip, None, packet) {
                     None => {},
                     Some((connec_id, quinn_proto::DatagramEvent::ConnectionEvent(event))) => {
                         // Event to send to an existing connection.
                         if let Some(sender) = alive_connections.get_mut(&connec_id) {
                             let _ = sender.send(event).await; // TODO: don't await here /!\
                         } else {
-                            log::error!("State mismatch: event for closed connection");
+                            tracing::error!("State mismatch: event for closed connection");
                         }
                     },
                     Some((connec_id, quinn_proto::DatagramEvent::NewConnection(connec))) => {

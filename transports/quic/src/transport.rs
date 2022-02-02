@@ -31,6 +31,7 @@ use libp2p_core::{
     PeerId, Transport,
 };
 use std::{net::SocketAddr, pin::Pin, sync::Arc};
+use std::task::{Poll, Context};
 
 // We reexport the errors that are exposed in the API.
 // All of these types use one another.
@@ -61,32 +62,34 @@ pub enum Error {
 impl Transport for QuicTransport {
     type Output = (PeerId, QuicMuxer);
     type Error = Error;
-    type Listener = Pin<
-        Box<dyn Stream<Item = Result<ListenerEvent<Upgrade, Self::Error>, Self::Error>> + Send>,
-    >;
+    // type Listener = Pin<
+    //     Box<dyn Stream<Item = Result<ListenerEvent<Upgrade, Self::Error>, Self::Error>> + Send>,
+    // >;
+    type Listener = Self;
     type ListenerUpgrade = Upgrade;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        // TODO: check address correctness
+        Ok(self)
+        // // TODO: check address correctness
 
-        // TODO: report the locally opened addresses
+        // // TODO: report the locally opened addresses
 
-        Ok(stream::unfold((), move |()| {
-            let endpoint = self.0.clone();
-            let addr = addr.clone();
-            async move {
-                let connec = endpoint.next_incoming().await;
-                let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
-                let event = Ok(ListenerEvent::Upgrade {
-                    upgrade: Upgrade::from_connection(connec),
-                    local_addr: addr.clone(), // TODO: hack
-                    remote_addr,
-                });
-                Some((event, ()))
-            }
-        })
-        .boxed())
+        // Ok(stream::unfold((), move |()| {
+        //     let endpoint = self.0.clone();
+        //     let addr = addr.clone();
+        //     async move {
+        //         let connec = endpoint.next_incoming().await;
+        //         let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
+        //         let event = Ok(ListenerEvent::Upgrade {
+        //             upgrade: Upgrade::from_connection(connec),
+        //             local_addr: addr.clone(), // TODO: hack
+        //             remote_addr,
+        //         });
+        //         Some((event, ()))
+        //     }
+        // })
+        // .boxed())
     }
     
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -109,6 +112,32 @@ impl Transport for QuicTransport {
             Ok(final_connec)
         }
         .boxed())
+    }
+}
+
+
+impl Stream for QuicTransport {
+    type Item = Result<ListenerEvent<Upgrade, Error>, Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let endpoint = self.0.clone();
+        //let addr = addr.clone();
+
+            let connec = match endpoint.poll_incoming(cx) {
+                Poll::Ready(Some(conn)) => conn,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
+            };
+            let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
+            let event = ListenerEvent::Upgrade {
+                upgrade: Upgrade::from_connection(connec),
+                local_addr: "/ip4/127.0.0.1/udp/0/quic".parse().unwrap(), // addr.clone(), // TODO: hack
+                remote_addr,
+            };
+            Poll::Ready(Some(Ok(event)))
+            //Some((event, ()))
+    
+        //Poll::Pending
     }
 }
 

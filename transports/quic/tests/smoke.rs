@@ -9,7 +9,9 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p_quic::QuicConfig;
+use libp2p_core::muxing::StreamMuxerBox;
+use libp2p::{Multiaddr, Transport};
+use libp2p_quic::{Config as QuicConfig, Endpoint as QuicEndpoint, QuicTransport};
 use rand::RngCore;
 use std::{io, iter};
 
@@ -17,19 +19,24 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }
 
+#[tracing::instrument]
 async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let mut transport = QuicConfig::new(keypair);
-    transport
-        .transport
-        .max_idle_timeout(Some(quinn_proto::VarInt::from_u32(1_000u32).into()));
-    if keylog {
-        transport.enable_keylogger();
-    }
-    let transport = transport
-        .listen_on("/ip4/127.0.0.1/udp/0/quic".parse()?)
-        .await?
+    let addr: Multiaddr = "/ip4/127.0.0.1/udp/0/quic".parse()?;
+    let config = QuicConfig::new(&keypair, addr.clone()).unwrap();
+    let endpoint = QuicEndpoint::new(config).unwrap();
+    let transport = QuicTransport(endpoint);
+
+    // transport
+    //     .transport
+    //     .max_idle_timeout(Some(quinn_proto::VarInt::from_u32(1_000u32).into()));
+    // if keylog {
+    //     transport.enable_keylogger();
+    // }
+
+    let transport = 
+        Transport::map(transport, |(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));

@@ -52,7 +52,7 @@ pub(crate) struct Connection {
     from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
 
     /// The QUIC state machine for this specific connection.
-    connection: quinn_proto::Connection,
+    pub(crate) connection: quinn_proto::Connection,
     /// Identifier for this connection according to the endpoint. Used when sending messages to
     /// the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
@@ -98,6 +98,7 @@ impl Connection {
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     // TODO: maybe abstract `to_endpoint` more and make it generic? dunno
+    #[tracing::instrument(skip_all)]
     pub(crate) fn from_quinn_connection(
         endpoint: Arc<Endpoint>,
         connection: quinn_proto::Connection,
@@ -124,11 +125,11 @@ impl Connection {
     // TODO: it seems to happen that is_handshaking is false but this returns None
     pub(crate) fn peer_certificates(
         &self,
-    ) -> Option<impl Iterator<Item = quinn_proto::Certificate>> {
-        self.connection
-            .crypto_session()
-            .get_peer_certificates()
-            .map(|l| l.into_iter().map(|l| l.into()))
+    ) -> Option<impl Iterator<Item = rustls::Certificate>> {
+        let session = self.connection.crypto_session();
+        let identity = session.peer_identity()?;
+        let certs: Box<Vec<rustls::Certificate>> = identity.downcast().ok()?;
+        Some(certs.into_iter())
     }
 
     /// Returns the address of the node we're connected to.
@@ -166,7 +167,7 @@ impl Connection {
     /// If `None` is returned, then a [`ConnectionEvent::StreamAvailable`] event will later be
     /// produced when a substream is available.
     pub(crate) fn pop_incoming_substream(&mut self) -> Option<quinn_proto::StreamId> {
-        self.connection.accept(quinn_proto::Dir::Bi)
+        self.connection.streams().accept(quinn_proto::Dir::Bi)
     }
 
     /// Pops a new substream opened locally.
@@ -177,56 +178,61 @@ impl Connection {
     /// If `None` is returned, then a [`ConnectionEvent::StreamOpened`] event will later be
     /// produced when a substream is available.
     pub(crate) fn pop_outgoing_substream(&mut self) -> Option<quinn_proto::StreamId> {
-        self.connection.open(quinn_proto::Dir::Bi)
+        self.connection.streams().open(quinn_proto::Dir::Bi)
     }
 
-    /// Reads data from the given substream. Similar to the API of `std::io::Read`.
-    ///
-    /// If `Err(ReadError::Blocked)` is returned, then a [`ConnectionEvent::StreamReadable`] event
-    /// will later be produced when the substream has readable data. A
-    /// [`ConnectionEvent::StreamStopped`] event can also be emitted.
-    pub(crate) fn read_substream(
-        &mut self,
-        id: quinn_proto::StreamId,
-        buf: &mut [u8],
-    ) -> Result<usize, quinn_proto::ReadError> {
-        self.connection.read(id, buf).map(|n| {
-            // `n` is `None` in case of EOF.
-            // See https://github.com/quinn-rs/quinn/blob/9aa3bde3aa1319b2c743f792312508de9270b8c6/quinn/src/streams.rs#L367-L370
-            debug_assert_ne!(n, Some(0));  // Sanity check
-            n.unwrap_or(0)
-        })
-    }
+    // /// Reads data from the given substream. Similar to the API of `std::io::Read`.
+    // ///
+    // /// If `Err(ReadError::Blocked)` is returned, then a [`ConnectionEvent::StreamReadable`] event
+    // /// will later be produced when the substream has readable data. A
+    // /// [`ConnectionEvent::StreamStopped`] event can also be emitted.
+    // pub(crate) fn read_substream(
+    //     &mut self,
+    //     id: quinn_proto::StreamId,
+    //     buf: &mut [u8],
+    // ) -> Result<usize, quinn_proto::ReadError> {
+    //     let mut stream = self.connection.recv_stream(id);
+    //     let mut chunks = stream.read(true)?;
+    //     self.connection.read(id, buf).map(|n| {
+    //         // `n` is `None` in case of EOF.
+    //         // See https://github.com/quinn-rs/quinn/blob/9aa3bde3aa1319b2c743f792312508de9270b8c6/quinn/src/streams.rs#L367-L370
+    //         debug_assert_ne!(n, Some(0));  // Sanity check
+    //         n.unwrap_or(0)
+    //     })
+    // }
 
-    /// Writes data to the given substream. Similar to the API of `std::io::Write`.
-    ///
-    /// If `Err(WriteError::Blocked)` is returned, then a [`ConnectionEvent::StreamWritable`] event
-    /// will later be produced when the substream can be written to. A
-    /// [`ConnectionEvent::StreamStopped`] event can also be emitted.
-    pub(crate) fn write_substream(
-        &mut self,
-        id: quinn_proto::StreamId,
-        buf: &[u8],
-    ) -> Result<usize, quinn_proto::WriteError> {
-        self.connection.write(id, buf)
-    }
+    // /// Writes data to the given substream. Similar to the API of `std::io::Write`.
+    // ///
+    // /// If `Err(WriteError::Blocked)` is returned, then a [`ConnectionEvent::StreamWritable`] event
+    // /// will later be produced when the substream can be written to. A
+    // /// [`ConnectionEvent::StreamStopped`] event can also be emitted.
+    // pub(crate) fn write_substream(
+    //     &mut self,
+    //     id: quinn_proto::StreamId,
+    //     buf: &[u8],
+    // ) -> Result<usize, quinn_proto::WriteError> {
+    //     self.connection.write(id, buf)
+    // }
 
     /// Closes the given substream.
     ///
     /// [`Connection::write_substream`] must no longer be called. The substream is however still
     /// readable.
     ///
-    /// On success, a [`ConnectionEvent::StreamFinished`] event will later be produced when the
+    /// On success, a [`StreamEvent::Finished`] event will later be produced when the
     /// substream has been effectively closed. A [`ConnectionEvent::StreamStopped`] event can also
     /// be emitted.
     pub(crate) fn shutdown_substream(
         &mut self,
         id: quinn_proto::StreamId,
     ) -> Result<(), quinn_proto::FinishError> {
-        self.connection.finish(id)
+        // closes the write end of the substream without waiting for the remote to receive the
+        // event. use flush substream to wait for the remote to receive the event.
+        self.connection.send_stream(id).finish()
     }
 
     /// Polls the connection for an event that happend on it.
+    #[tracing::instrument]
     pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
         // Nothing more can be done if the connection is closed.
         // Return `Pending` without registering the waker, essentially freezing the task forever.
@@ -270,7 +276,7 @@ impl Connection {
 
             // Poll the connection for packets to send on the UDP socket and try to send them on
             // `to_endpoint`.
-            while let Some(transmit) = self.connection.poll_transmit(now) {
+            while let Some(transmit) = self.connection.poll_transmit(now, 0) {
                 let endpoint = self.endpoint.clone();
                 debug_assert!(self.pending_to_endpoint.is_none());
                 self.pending_to_endpoint = Some(Box::pin(async move {
