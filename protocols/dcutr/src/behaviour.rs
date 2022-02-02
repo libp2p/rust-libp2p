@@ -112,24 +112,23 @@ impl NetworkBehaviour for Behaviour {
                 // connection upgrade by initiating a direct connection to A.
                 //
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                self.queued_actions.push_back(Action::Connect {
-                    peer_id: *peer_id,
-                    attempt: 1,
-                    handler: NotifyHandler::One(*connection_id),
-                });
-                let local_addr = match connected_point {
-                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
-                    ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
-                };
-                self.queued_actions.push_back(
+                self.queued_actions.extend([
+                    Action::Connect {
+                        peer_id: *peer_id,
+                        attempt: 1,
+                        handler: NotifyHandler::One(*connection_id),
+                    },
                     NetworkBehaviourAction::GenerateEvent(
                         Event::InitiatedDirectConnectionUpgrade {
                             remote_peer_id: *peer_id,
-                            local_relayed_addr: local_addr.clone(),
+                            local_relayed_addr: match connected_point {
+                                ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
+                                ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
+                            },
                         },
                     )
                     .into(),
-                );
+                ]);
             }
         } else {
             self.direct_connections
@@ -159,7 +158,7 @@ impl NetworkBehaviour for Behaviour {
                         attempt: attempt + 1,
                     });
                 } else {
-                    self.queued_actions.push_back(
+                    self.queued_actions.extend([
                         NetworkBehaviourAction::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::One(relayed_connection_id),
@@ -168,8 +167,6 @@ impl NetworkBehaviour for Behaviour {
                             ),
                         }
                         .into(),
-                    );
-                    self.queued_actions.push_back(
                         NetworkBehaviourAction::GenerateEvent(
                             Event::DirectConnectionUpgradeFailed {
                                 remote_peer_id: peer_id,
@@ -177,7 +174,7 @@ impl NetworkBehaviour for Behaviour {
                             },
                         )
                         .into(),
-                    );
+                    ]);
                 }
             }
             _ => {}
@@ -221,12 +218,12 @@ impl NetworkBehaviour for Behaviour {
                 inbound_connect,
                 remote_addr,
             }) => {
-                self.queued_actions.push_back(Action::AcceptInboundConnect {
-                    peer_id: event_source,
-                    handler: NotifyHandler::One(connection),
-                    inbound_connect,
-                });
-                self.queued_actions.push_back(
+                self.queued_actions.extend([
+                    Action::AcceptInboundConnect {
+                        peer_id: event_source,
+                        handler: NotifyHandler::One(connection),
+                        inbound_connect,
+                    },
                     NetworkBehaviourAction::GenerateEvent(
                         Event::RemoteInitiatedDirectConnectionUpgrade {
                             remote_peer_id: event_source,
@@ -234,7 +231,7 @@ impl NetworkBehaviour for Behaviour {
                         },
                     )
                     .into(),
-                );
+                ]);
             }
             Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
                 self.queued_actions.push_back(
@@ -293,7 +290,7 @@ impl NetworkBehaviour for Behaviour {
                     relayed_connection_id,
                 },
             )) => {
-                self.queued_actions.push_back(
+                self.queued_actions.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
                         handler: NotifyHandler::One(relayed_connection_id),
@@ -302,16 +299,13 @@ impl NetworkBehaviour for Behaviour {
                         ),
                     }
                     .into(),
-                );
-                self.queued_actions.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         Event::DirectConnectionUpgradeSucceeded {
                             remote_peer_id: event_source,
                         },
                     )
                     .into(),
-                );
-                return;
+                ]);
             }
             Either::Right(Either::Right(event)) => void::unreachable(event),
         };
