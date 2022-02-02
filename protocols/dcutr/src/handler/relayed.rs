@@ -180,6 +180,11 @@ impl ProtocolsHandler for Handler {
                 SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}), ())
             }
             ConnectedPoint::Listener { .. } => {
+                // By the protocol specification the listening side of a relayed connection
+                // initiates the _direct connection upgrade_. In other words the listening side of
+                // the relayed connection opens a substream to the dialing side. (Connection roles
+                // and substream roles are reversed.) The listening side on a relayed connection
+                // never expects incoming substreams, hence the denied upgrade below.
                 SubstreamProtocol::new(upgrade::EitherUpgrade::B(DeniedUpgrade), ())
             }
         }
@@ -192,7 +197,7 @@ impl ProtocolsHandler for Handler {
     ) {
         match output {
             EitherOutput::First(inbound_connect) => {
-                let remote_addr = match & self.endpoint {
+                let remote_addr = match &self.endpoint {
                     ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ProtocolsHandler>::listen_protocol` denies all incoming substreams as a listener."),
                 };
