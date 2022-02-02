@@ -67,7 +67,7 @@ pub enum UpgradeError {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<Action>,
+    queued_actions: VecDeque<ActionBuilder>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -113,7 +113,7 @@ impl NetworkBehaviour for Behaviour {
                 //
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
                 self.queued_actions.extend([
-                    Action::Connect {
+                    ActionBuilder::Connect {
                         peer_id: *peer_id,
                         attempt: 1,
                         handler: NotifyHandler::One(*connection_id),
@@ -152,7 +152,7 @@ impl NetworkBehaviour for Behaviour {
                 let peer_id =
                     peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
                 if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-                    self.queued_actions.push_back(Action::Connect {
+                    self.queued_actions.push_back(ActionBuilder::Connect {
                         peer_id,
                         handler: NotifyHandler::One(relayed_connection_id),
                         attempt: attempt + 1,
@@ -219,7 +219,7 @@ impl NetworkBehaviour for Behaviour {
                 remote_addr,
             }) => {
                 self.queued_actions.extend([
-                    Action::AcceptInboundConnect {
+                    ActionBuilder::AcceptInboundConnect {
                         peer_id: event_source,
                         handler: NotifyHandler::One(connection),
                         inbound_connect,
@@ -327,7 +327,7 @@ impl NetworkBehaviour for Behaviour {
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
-enum Action {
+enum ActionBuilder {
     Done(NetworkBehaviourAction<Event, handler::Prototype>),
     Connect {
         attempt: u8,
@@ -341,13 +341,13 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
+impl From<NetworkBehaviourAction<Event, handler::Prototype>> for ActionBuilder {
     fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
         Self::Done(action)
     }
 }
 
-impl Action {
+impl ActionBuilder {
     fn build(
         self,
         poll_parameters: &mut impl PollParameters,
@@ -364,8 +364,8 @@ impl Action {
         };
 
         match self {
-            Action::Done(action) => action,
-            Action::AcceptInboundConnect {
+            ActionBuilder::Done(action) => action,
+            ActionBuilder::AcceptInboundConnect {
                 inbound_connect,
                 handler,
                 peer_id,
@@ -377,7 +377,7 @@ impl Action {
                     obs_addrs: obs_addrs(),
                 }),
             },
-            Action::Connect {
+            ActionBuilder::Connect {
                 attempt,
                 handler,
                 peer_id,
