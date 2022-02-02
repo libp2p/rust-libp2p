@@ -261,8 +261,6 @@ impl ProtocolsHandler for Handler {
         _: Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        self.keep_alive = KeepAlive::No;
-
         match error {
             ProtocolsHandlerUpgrErr::Timeout => {
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
@@ -282,6 +280,7 @@ impl ProtocolsHandler for Handler {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
+                self.keep_alive = KeepAlive::No;
                 self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
                     Event::InboundNegotiationFailed {
                         error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(
