@@ -27,6 +27,10 @@ webpki = "0.22.0"
 x509-parser = "0.12.0"
 yasna = { version = "0.4.0" }
 
+async-std = "*"
+log = "*"
+futures-timer = "*"
+
 [dev-dependencies]
 anyhow = "1.0.41"
 async-std = { version = "1.9.0", features = ["attributes"] }
