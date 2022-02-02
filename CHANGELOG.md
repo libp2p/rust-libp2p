@@ -42,11 +42,13 @@
 
 # `libp2p` facade crate
 
-## Version 0.42.1 [unreleased]
+## Version 0.42.1 [2022-02-02]
 
 - Update individual crates.
   - `libp2p-relay`
+      - [v0.6.1](protocols/relay/CHANGELOG.md#061-2022-02-02)
   - `libp2p-tcp`
+      - [v0.31.1](transports/tcp/CHANGELOG.md#0311-2022-02-02)
 
 ## Version 0.42.0 [2022-01-27]
 
