@@ -356,6 +356,17 @@ impl Action {
         self,
         poll_parameters: &mut impl PollParameters,
     ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+        let obs_addrs = || {
+            poll_parameters
+                .external_addresses()
+                .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
+                .map(|a| {
+                    a.addr
+                        .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                })
+                .collect()
+        };
+
         match self {
             Action::Done(action) => action,
             Action::AcceptInboundConnect {
@@ -367,14 +378,7 @@ impl Action {
                 peer_id,
                 event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
                     inbound_connect,
-                    obs_addrs: poll_parameters
-                        .external_addresses()
-                        .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
-                        .map(|a| {
-                            a.addr
-                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                        })
-                        .collect(),
+                    obs_addrs: obs_addrs(),
                 }),
             },
             Action::Connect {
@@ -386,14 +390,7 @@ impl Action {
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect {
                     attempt,
-                    obs_addrs: poll_parameters
-                        .external_addresses()
-                        .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
-                        .map(|a| {
-                            a.addr
-                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                        })
-                        .collect(),
+                    obs_addrs: obs_addrs(),
                 }),
             },
         }
