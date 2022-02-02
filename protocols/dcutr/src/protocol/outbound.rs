@@ -20,18 +20,14 @@
 
 use crate::message_proto::{hole_punch, HolePunch};
 use asynchronous_codec::Framed;
-use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
-use prost::Message;
 use std::convert::TryFrom;
-use std::io::Cursor;
 use std::iter;
 use std::time::Instant;
 use thiserror::Error;
-use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {
     obs_addrs: Vec<Multiaddr>,
@@ -58,32 +54,28 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+        let mut substream = Framed::new(substream, super::codec::Codec::new());
+
         let msg = HolePunch {
             r#type: hole_punch::Type::Connect.into(),
             obs_addrs: self.obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
-        let mut encoded_msg = BytesMut::new();
-        msg.encode(&mut encoded_msg)
-            .expect("BytesMut to have sufficient capacity.");
-
-        let mut codec = UviBytes::default();
-        codec.set_max_len(super::MAX_MESSAGE_SIZE_BYTES);
-        let mut substream = Framed::new(substream, codec);
-
         async move {
-            substream.send(encoded_msg.freeze()).await?;
+            substream.send(msg).await?;
 
             let sent_time = Instant::now();
 
-            let msg: bytes::BytesMut = substream
-                .next()
-                .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
+            let HolePunch { r#type, obs_addrs } =
+                substream
+                    .next()
+                    .await
+                    .ok_or(super::codec::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "",
+                    )))??;
 
             let rtt = sent_time.elapsed();
-
-            let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
 
             let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
             match r#type {
@@ -111,11 +103,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 obs_addrs: vec![],
             };
 
-            let mut encoded_msg = BytesMut::new();
-            msg.encode(&mut encoded_msg)
-                .expect("BytesMut to have sufficient capacity.");
-
-            substream.send(encoded_msg.freeze()).await?;
+            substream.send(msg).await?;
 
             Delay::new(rtt / 2).await;
 
@@ -131,17 +119,11 @@ pub struct Connect {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to decode response: {0}.")]
-    Decode(
+    #[error("Failed to encode or decode: {0}")]
+    Codec(
         #[from]
         #[source]
-        prost::DecodeError,
-    ),
-    #[error("Io error {0}")]
-    Io(
-        #[from]
-        #[source]
-        std::io::Error,
+        super::codec::Error,
     ),
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,

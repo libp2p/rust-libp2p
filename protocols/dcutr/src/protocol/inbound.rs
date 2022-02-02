@@ -20,16 +20,12 @@
 
 use crate::message_proto::{hole_punch, HolePunch};
 use asynchronous_codec::Framed;
-use bytes::BytesMut;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
 use libp2p_swarm::NegotiatedSubstream;
-use prost::Message;
 use std::convert::TryFrom;
-use std::io::Cursor;
 use std::iter;
 use thiserror::Error;
-use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {}
 
@@ -48,17 +44,17 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut codec = UviBytes::default();
-        codec.set_max_len(super::MAX_MESSAGE_SIZE_BYTES);
-        let mut substream = Framed::new(substream, codec);
+        let mut substream = Framed::new(substream, super::codec::Codec::new());
 
         async move {
-            let msg: bytes::BytesMut = substream
-                .next()
-                .await
-                .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
-
-            let HolePunch { r#type, obs_addrs } = HolePunch::decode(Cursor::new(msg))?;
+            let HolePunch { r#type, obs_addrs } =
+                substream
+                    .next()
+                    .await
+                    .ok_or(super::codec::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "",
+                    )))??;
 
             let obs_addrs = if obs_addrs.is_empty() {
                 return Err(UpgradeError::NoAddresses);
@@ -92,7 +88,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 }
 
 pub struct PendingConnect {
-    substream: Framed<NegotiatedSubstream, UviBytes>,
+    substream: Framed<NegotiatedSubstream, super::codec::Codec>,
     remote_obs_addrs: Vec<Multiaddr>,
 }
 
@@ -106,18 +102,15 @@ impl PendingConnect {
             obs_addrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
-        let mut encoded_msg = BytesMut::new();
-        msg.encode(&mut encoded_msg)
-            .expect("BytesMut to have sufficient capacity.");
-
-        self.substream.send(encoded_msg.freeze()).await?;
-        let msg: bytes::BytesMut = self
-            .substream
-            .next()
-            .await
-            .ok_or(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
-
-        let HolePunch { r#type, .. } = HolePunch::decode(Cursor::new(msg))?;
+        self.substream.send(msg).await?;
+        let HolePunch { r#type, .. } =
+            self.substream
+                .next()
+                .await
+                .ok_or(super::codec::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "",
+                )))??;
 
         let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
         match r#type {
@@ -131,17 +124,11 @@ impl PendingConnect {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to decode response: {0}.")]
-    Decode(
+    #[error("Failed to encode or decode: {0}")]
+    Codec(
         #[from]
         #[source]
-        prost::DecodeError,
-    ),
-    #[error("Io error {0}")]
-    Io(
-        #[from]
-        #[source]
-        std::io::Error,
+        super::codec::Error,
     ),
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
