@@ -35,6 +35,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use thiserror::Error;
 
+const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
+
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
 pub enum Event {
@@ -150,7 +152,7 @@ impl NetworkBehaviour for Behaviour {
             } => {
                 let peer_id =
                     peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
-                if attempt < 3 {
+                if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
                     self.queued_actions.push_back(Action::Connect {
                         peer_id,
                         handler: NotifyHandler::One(relayed_connection_id),
