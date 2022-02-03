@@ -45,9 +45,29 @@
 ## Version 0.43.0 [unreleased]
 
 - Update individual crates.
-  - `libp2p-core`
-  - `libp2p-gossipsub`
-  - `libp2p-metrics`
+  - Update to `libp2p-autonat` `v0.2.0`.
+  - Update to `libp2p-core` `v0.32.0`.
+  - Update to `libp2p-deflate` `v0.32.0`.
+  - Update to `libp2p-dns` `v0.32.0`.
+  - Update to `libp2p-floodsub` `v0.34.0`.
+  - Update to `libp2p-gossipsub` `v0.36.0`.
+  - Update to `libp2p-identify` `v0.34.0`.
+  - Update to `libp2p-kad` `v0.35.0`.
+  - Update to `libp2p-mdns` `v0.35.0`.
+  - Update to `libp2p-metrics` `v0.4.0`.
+  - Update to `libp2p-mplex` `v0.32.0`.
+  - Update to `libp2p-noise` `v0.35.0`.
+  - Update to `libp2p-ping` `v0.34.0`.
+  - Update to `libp2p-plaintext` `v0.32.0`.
+  - Update to `libp2p-relay` `v0.7.0`.
+  - Update to `libp2p-rendezvous` `v0.4.0`.
+  - Update to `libp2p-request-response` `v0.16.0`.
+  - Update to `libp2p-swarm` `v0.34.0`.
+  - Update to `libp2p-tcp` `v0.32.0`.
+  - Update to `libp2p-uds` `v0.32.0`.
+  - Update to `libp2p-wasm-ext` `v0.32.0`.
+  - Update to `libp2p-websocket` `v0.34.0`.
+  - Update to `libp2p-yamux` `v0.36.0`.
 
 ## Version 0.42.1 [2022-02-02]
 
