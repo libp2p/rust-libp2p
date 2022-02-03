@@ -1,4 +1,8 @@
-# 0.31.1 [unreleased]
+# 0.32.0 [unreleased]
+
+- Update to `multiaddr` `v0.14.0`.
+
+- Update to `multihash` `v0.16.0`.
 
 - Implement `Display` on `DialError`. See [PR 2456].
 

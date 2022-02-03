@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Rendezvous protocol for libp2p"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,8 +12,8 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
+libp2p-core = { version = "0.32.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.34.0", path = "../../swarm" }
 prost = "0.9"
 void = "1"
 log = "0.4"

@@ -1,3 +1,7 @@
+# 0.34.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
 # 0.33.0 [2022-01-27]
 
 - Patch reporting on banned peers and their non-banned and banned connections (see [PR 2350]).

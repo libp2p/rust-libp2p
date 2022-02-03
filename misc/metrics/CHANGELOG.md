@@ -1,5 +1,17 @@
 # 0.4.0 [unreleased]
 
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Update to `libp2p-ping` `v0.34.0`.
+
+- Update to `libp2p-identify` `v0.34.0`.
+
+- Update to `libp2p-relay` `v0.7.0`.
+
+- Update to `libp2p-kad` `v0.35.0`.
+
 - Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
 
 [PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442

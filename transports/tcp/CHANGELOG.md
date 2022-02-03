@@ -1,3 +1,7 @@
+# 0.32.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
 # 0.31.1 [2022-02-02]
 
 - Call `TcpSocket::take_error` to report connection establishment errors early.
