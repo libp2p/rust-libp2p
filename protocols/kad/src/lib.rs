@@ -33,9 +33,9 @@
 //! to [`Kademlia::add_address`].
 //! If you choose not to implement the Identify protocol, and do not provide an alternative peer
 //! discovery mechanism, your kademlia network will not be resistant against the failure of your
-//! boot nodes. Without the Identify protocol, existing nodes in the kademlia network cannot
-//! obtain the [Multiaddr](multiaddr::Multiaddr) of nodes querying them, and thus will not be
-//! able to reach out to newer nodes.
+//! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node). Without the Identify protocol,
+//! existing nodes in the kademlia network cannot obtain the [Multiaddr](multiaddr::Multiaddr)
+//! of nodes querying them, and thus will not be able to reach out to newer nodes.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store
