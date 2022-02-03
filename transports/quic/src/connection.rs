@@ -37,6 +37,7 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
+use libp2p_core::PeerId;
 
 /// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Upgrade`].
 ///
@@ -120,18 +121,6 @@ impl Connection {
         }
     }
 
-    /// Returns the certificates sent by the remote through the underlying TLS session.
-    /// Returns `None` if the connection is still handshaking.
-    // TODO: it seems to happen that is_handshaking is false but this returns None
-    pub(crate) fn peer_certificates(
-        &self,
-    ) -> Option<impl Iterator<Item = rustls::Certificate>> {
-        let session = self.connection.crypto_session();
-        let identity = session.peer_identity()?;
-        let certs: Box<Vec<rustls::Certificate>> = identity.downcast().ok()?;
-        Some(certs.into_iter())
-    }
-
     /// Returns the address of the node we're connected to.
     // TODO: can change /!\
     pub(crate) fn remote_addr(&self) -> SocketAddr {
@@ -142,6 +131,24 @@ impl Connection {
     /// the remote or if the connection is closed.
     pub(crate) fn is_handshaking(&self) -> bool {
         self.is_handshaking
+    }
+
+    /// Returns the address of the node we're connected to.
+    /// Panics if the connection is still handshaking.
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn remote_peer_id(&self) -> PeerId {
+        debug_assert!(!self.is_handshaking());
+        let session = self.connection.crypto_session();
+        let identity = session.peer_identity()
+            .expect("connection got identity because it passed TLS handshake; qed");
+        let certificates: Box<Vec<rustls::Certificate>> = identity.downcast().ok()
+            .expect("we rely on rustls feature; qed");
+        let end_entity = certificates.get(0)
+            .expect("there should be exactly one certificate; qed");
+        let end_entity_der = end_entity.as_ref();
+        let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
+            .expect("the certificate was validated during TLS handshake; qed");
+        PeerId::from_public_key(&p2p_cert.extension.public_key)
     }
 
     /// If the connection is closed, returns why. If the connection is open, returns `None`.

@@ -23,7 +23,7 @@
 use crate::{
     connection::{Connection, ConnectionEvent},
     muxer::QuicMuxer,
-    transport, tls,
+    transport,
 };
 
 use futures::prelude::*;
@@ -59,16 +59,7 @@ impl Future for Upgrade {
         match Connection::poll_event(connection, cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(ConnectionEvent::Connected) => {
-                debug_assert!(!connection.is_handshaking());
-
-                let mut certificates = connection.peer_certificates()
-                    .expect("connection got certificates because it passed TLS handshake; qed");
-                let end_entity = certificates.next()
-                    .expect("there should be exactly one certificate; qed");
-                let end_entity_der = end_entity.as_ref();
-                let p2p_cert = tls::certificate::parse_certificate(end_entity_der)
-                    .expect("the certificate was validated during TLS handshake; qed");
-                let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
+                let peer_id = connection.remote_peer_id();
                 let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                 return Poll::Ready(Ok((peer_id, muxer)));
             }
