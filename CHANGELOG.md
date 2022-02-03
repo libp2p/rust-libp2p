@@ -45,6 +45,7 @@
 ## Version 0.43.0 [unreleased]
 
 - Update individual crates.
+  - `libp2p-core`
   - `libp2p-gossipsub`
   - `libp2p-metrics`
 
