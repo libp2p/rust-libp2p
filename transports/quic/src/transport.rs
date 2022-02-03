@@ -46,7 +46,13 @@ pub use quinn_proto::{
 /// > **Note**: This type is necessary because Rust unfortunately forbids implementing the
 /// >           `Transport` trait directly on `Arc<Endpoint>`.
 #[derive(Debug, Clone)]
-pub struct QuicTransport(pub Arc<Endpoint>);
+pub struct QuicTransport(pub Arc<Endpoint>, /* addr reported */ bool); // FIXME IfWatcher
+
+impl QuicTransport {
+    pub fn new(endpoint: Arc<Endpoint>) -> Self {
+        Self(endpoint, false)
+    }
+}
 
 /// Error that can happen on the transport.
 #[derive(Debug, thiserror::Error)]
@@ -69,6 +75,7 @@ impl Transport for QuicTransport {
     type ListenerUpgrade = Upgrade;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
+    #[tracing::instrument]
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         Ok(self)
         // // TODO: check address correctness
@@ -96,13 +103,17 @@ impl Transport for QuicTransport {
       panic!("not implemented")
     }
 
+    #[tracing::instrument]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-                return Err(TransportError::MultiaddrNotSupported(addr));
-            }
+        let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
+            // FIXME IfWatcher
+            // if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+            //     tracing::error!("multiaddr not supported");
+            //     return Err(TransportError::MultiaddrNotSupported(addr));
+            // }
             socket_addr
         } else {
+            tracing::error!("multiaddr not supported");
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
@@ -119,8 +130,18 @@ impl Transport for QuicTransport {
 impl Stream for QuicTransport {
     type Item = Result<ListenerEvent<Upgrade, Error>, Error>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    #[tracing::instrument(skip_all)]
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        tracing::trace!("QuicTransport::poll_next");
         let endpoint = self.0.clone();
+
+        if !self.1 { // FIXME IfWatcher
+            self.1 = true;
+            let addr = socketaddr_to_multiaddr(&endpoint.local_addr);
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
+        }
+
+
         //let addr = addr.clone();
 
             let connec = match endpoint.poll_incoming(cx) {
@@ -141,26 +162,29 @@ impl Stream for QuicTransport {
     }
 }
 
-/// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns an error if the format
+/// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
 /// of the multiaddr is wrong.
-pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
+pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let mut iter = addr.iter();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
-    let proto3 = iter.next().ok_or(())?;
+    let proto1 = iter.next()?;
+    let proto2 = iter.next()?;
+    let proto3 = iter.next()?;
 
-    if iter.next().is_some() {
-        return Err(());
+    while let Some(proto) = iter.next() {
+        match proto {
+            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            _ => return None,
+        }
     }
 
     match (proto1, proto2, proto3) {
         (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok(SocketAddr::new(ip.into(), port))
+            Some(SocketAddr::new(ip.into(), port))
         }
         (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok(SocketAddr::new(ip.into(), port))
+            Some(SocketAddr::new(ip.into(), port))
         }
-        _ => Err(()),
+        _ => None,
     }
 }
 
@@ -178,7 +202,7 @@ fn multiaddr_to_udp_conversion() {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     assert!(
-        multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err()
+        multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_none()
     );
 
     assert_eq!(
@@ -187,7 +211,7 @@ fn multiaddr_to_udp_conversion() {
                 .parse::<Multiaddr>()
                 .unwrap()
         ),
-        Ok(SocketAddr::new(
+        Some(SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             12345,
         ))
@@ -198,14 +222,25 @@ fn multiaddr_to_udp_conversion() {
                 .parse::<Multiaddr>()
                 .unwrap()
         ),
-        Ok(SocketAddr::new(
+        Some(SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
             8080,
         ))
     );
     assert_eq!(
+        multiaddr_to_socketaddr(
+            &"/ip4/127.0.0.1/udp/55148/quic/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                .parse::<Multiaddr>()
+                .unwrap()
+        ),
+        Some(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            55148,
+        ))
+    );
+    assert_eq!(
         multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
-        Ok(SocketAddr::new(
+        Some(SocketAddr::new(
             IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
             12345,
         ))
@@ -216,7 +251,7 @@ fn multiaddr_to_udp_conversion() {
                 .parse::<Multiaddr>()
                 .unwrap()
         ),
-        Ok(SocketAddr::new(
+        Some(SocketAddr::new(
             IpAddr::V6(Ipv6Addr::new(
                 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
             )),

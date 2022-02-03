@@ -51,33 +51,43 @@ impl Upgrade {
 impl Future for Upgrade {
     type Output = Result<(PeerId, QuicMuxer), transport::Error>;
 
+    #[tracing::instrument(skip_all)]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let connection = match self.connection.as_mut() {
-            Some(c) => c,
-            None => panic!("Future polled after it has ended"),
-        };
+        let connection = self.connection.as_mut()
+            .expect("Future polled after it has completed");
 
-        loop {
-            if let Some(mut certificates) = connection.peer_certificates() {
-                let cert = certificates.next().unwrap();
-                let p2p_cert = tls::certificate::parse_certificate(cert.as_ref()).unwrap(); // TODO: bad API
+        match Connection::poll_event(connection, cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(ConnectionEvent::Connected) => {
+                debug_assert!(!connection.is_handshaking());
+
+                let mut certificates = connection.peer_certificates()
+                    .expect("connection got certificates because it passed TLS handshake; qed");
+                let end_entity = certificates.next()
+                    .expect("there should be exactly one certificate; qed");
+                let end_entity_der = end_entity.as_ref();
+                let p2p_cert = tls::certificate::parse_certificate(end_entity_der)
+                    .expect("the certificate was validated during TLS handshake; qed");
                 let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
                 let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                 return Poll::Ready(Ok((peer_id, muxer)));
             }
-
-            match Connection::poll_event(connection, cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(ConnectionEvent::Connected) => {
-                    // `is_handshaking()` will return `false` at the next loop iteration.
-                    continue;
-                }
-                Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
-                    return Poll::Ready(Err(transport::Error::Established(err)));
-                }
-                // TODO: enumerate the items and explain how they can't happen
-                _ => unreachable!(),
+            Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
+                return Poll::Ready(Err(transport::Error::Established(err)));
             }
+            // Other items are:
+            // - StreamAvailable
+            // - StreamOpened
+            // - StreamReadable
+            // - StreamWritable
+            // - StreamFinished
+            // - StreamStopped
+            Poll::Ready(_) => {
+                // They can happen only after we finished handshake and connected to the peer.
+                // But for `Upgrade` we get `Connected` event, wrap connection into a muxer
+                // and pass it to the result Stream of muxers.
+                unreachable!()
+            },
         }
     }
 }

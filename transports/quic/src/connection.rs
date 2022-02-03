@@ -276,7 +276,8 @@ impl Connection {
 
             // Poll the connection for packets to send on the UDP socket and try to send them on
             // `to_endpoint`.
-            while let Some(transmit) = self.connection.poll_transmit(now, 0) {
+            // FIXME max_datagrams
+            while let Some(transmit) = self.connection.poll_transmit(now, 1) {
                 let endpoint = self.endpoint.clone();
                 debug_assert!(self.pending_to_endpoint.is_none());
                 self.pending_to_endpoint = Some(Box::pin(async move {
@@ -383,8 +384,9 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::Connected);
                     }
                     quinn_proto::Event::HandshakeDataReady => {
-                        debug_assert!(self.is_handshaking);
-                        debug_assert!(self.connection.is_handshaking());
+                        if !self.is_handshaking {
+                            tracing::error!("Got HandshakeDataReady while not handshaking");
+                        }
                     }
                 }
             }

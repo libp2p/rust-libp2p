@@ -93,6 +93,7 @@ impl StreamMuxer for QuicMuxer {
     type Error = Error;
 
     // TODO: what if called multiple times? register all wakers?
+    #[tracing::instrument]
     fn poll_event(&self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
         // We use `poll_inbound` to perform the background processing of the entire connection.
         let mut inner = self.inner.lock();

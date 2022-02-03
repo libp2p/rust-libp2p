@@ -24,10 +24,11 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let addr: Multiaddr = "/ip4/127.0.0.1/udp/0/quic".parse()?;
-    let config = QuicConfig::new(&keypair, addr.clone()).unwrap();
+    let config = QuicConfig::new(&keypair, addr).unwrap();
     let endpoint = QuicEndpoint::new(config).unwrap();
-    let transport = QuicTransport(endpoint);
+    let transport = QuicTransport::new(endpoint);
 
+    // TODO:
     // transport
     //     .transport
     //     .max_idle_timeout(Some(quinn_proto::VarInt::from_u32(1_000u32).into()));
@@ -42,13 +43,14 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
-    tracing::info!("{}", peer_id);
+    tracing::info!(?peer_id);
     Ok(Swarm::new(transport, behaviour, peer_id))
 }
 
 #[async_std::test]
 async fn smoke() -> Result<()> {
     tracing_subscriber::fmt()
+        .pretty()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init()
         .ok();

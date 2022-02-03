@@ -119,6 +119,9 @@ pub struct Endpoint {
     /// Multiaddr of the local UDP socket passed in the configuration at initialization after it
     /// has potentially been modified to handle port number `0`.
     local_multiaddr: Multiaddr,
+
+    // after bind(), the result is without port=0
+    pub(crate) local_addr: SocketAddr,
 }
 
 impl Endpoint {
@@ -126,8 +129,8 @@ impl Endpoint {
     #[tracing::instrument(skip_all)]
     pub fn new(config: Config) -> Result<Arc<Endpoint>, io::Error> {
         let local_socket_addr = match crate::transport::multiaddr_to_socketaddr(&config.multiaddr) {
-            Ok(a) => a,
-            Err(()) => panic!(), // TODO: Err(TransportError::MultiaddrNotSupported(multiaddr)),
+            Some(a) => a,
+            None => panic!(), // TODO: Err(TransportError::MultiaddrNotSupported(multiaddr)),
         };
 
         // NOT blocking, as per man:bind(2), as we pass an IP address.
@@ -153,6 +156,7 @@ impl Endpoint {
             new_connections: Mutex::new(new_connections_rx),
             config: config.clone(),
             local_multiaddr: config.multiaddr.clone(), // TODO: no
+            local_addr: socket.local_addr()?,
         });
 
         // TODO: just for testing, do proper task spawning
@@ -245,19 +249,18 @@ impl Endpoint {
             .expect("background task has crashed")
     }
 
+    #[tracing::instrument]
     pub(crate) fn poll_incoming(&self, cx: &mut Context) -> Poll<Option<Connection>> {
         // The `expect` below can panic if the background task has stopped. The background task
         // can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
         // words, we panic here iff a panic has already happened somewhere else, which is a
         // reasonable thing to do.
         let mut connections_lock = self.new_connections.lock();
-        let guard_poll = Pin::new(&mut connections_lock).poll(cx);
-        let mut guard = match guard_poll {
+        let mut guard = match Pin::new(&mut connections_lock).poll(cx) {
             Poll::Ready(guard) => guard,
             Poll::Pending => return Poll::Pending,
         };
-        let mut new_connections = &mut *guard;
-        Pin::new(&mut new_connections).poll_next(cx)
+        Pin::new(&mut *guard).poll_next(cx)
     }
 
     /// Asks the endpoint to send a UDP packet.
@@ -491,11 +494,13 @@ async fn background_task(
 
         // The endpoint might request packets to be sent out. This is handled in priority to avoid
         // buffering up packets.
+        let span = tracing::trace_span!("endpoint.poll_transmit");
         if let Some(packet) = endpoint.poll_transmit() {
             debug_assert!(next_packet_out.is_none());
             next_packet_out = Some((packet.destination, packet.contents));
             continue;
         }
+        drop(span);
 
         futures::select! {
             message = receiver.next() => {
@@ -509,6 +514,7 @@ async fn background_task(
                         // This `"l"` seems necessary because an empty string is an invalid domain
                         // name. While we don't use domain names, the underlying rustls library
                         // is based upon the assumption that we do.
+                        tracing::trace!("endpoint.connect");
                         let (connection_id, connection) =
                             match endpoint.connect(config.client_config.clone(), addr, "l") {
                                 Ok(c) => c,
@@ -539,7 +545,13 @@ async fn background_task(
                         if is_drained_event {
                             alive_connections.remove(&connection_id);
                         }
-                        if let Some(event_back) = endpoint.handle_event(connection_id, event) {
+
+                        let span = tracing::trace_span!("endpoint.handle_event");
+                        let event_back = endpoint.handle_event(connection_id, event);
+                        drop(span);
+
+                        if let Some(event_back) = event_back {
+                            tracing::trace_span!("process event back");
                             debug_assert!(!is_drained_event);
                             // TODO: don't await here /!\
                             alive_connections.get_mut(&connection_id).unwrap().send(event_back).await;
@@ -599,7 +611,12 @@ async fn background_task(
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
                 let local_ip = udp_socket.local_addr().ok().map(|a| a.ip());
                 // TODO: ECN bits aren't handled
-                match endpoint.handle(Instant::now(), packet_src, local_ip, None, packet) {
+                let span = tracing::trace_span!("endpoint.handle_event");
+                let event = endpoint.handle(Instant::now(), packet_src, local_ip, None, packet);
+                drop(span);
+
+                tracing::trace_span!("process endpoint event");
+                match event {
                     None => {},
                     Some((connec_id, quinn_proto::DatagramEvent::ConnectionEvent(event))) => {
                         // Event to send to an existing connection.
