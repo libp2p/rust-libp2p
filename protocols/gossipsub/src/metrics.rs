@@ -23,12 +23,12 @@
 
 use std::collections::HashMap;
 
-use open_metrics_client::encoding::text::Encode;
-use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::{Family, MetricConstructor};
-use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
-use open_metrics_client::registry::Registry;
+use prometheus_client::encoding::text::Encode;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::{Family, MetricConstructor};
+use prometheus_client::metrics::gauge::Gauge;
+use prometheus_client::metrics::histogram::{linear_buckets, Histogram};
+use prometheus_client::registry::Registry;
 
 use crate::topic::TopicHash;
 use crate::types::{MessageAcceptance, PeerKind};

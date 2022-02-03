@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Metrics for libp2p"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -19,13 +19,13 @@ relay = ["libp2p-relay"]
 
 [dependencies]
 libp2p-core = { version = "0.31.0", path = "../../core", default-features = false }
-libp2p-gossipsub =  { version = "0.35.0", path = "../../protocols/gossipsub", optional = true }
+libp2p-gossipsub =  { version = "0.36.0", path = "../../protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.33.0", path = "../../protocols/identify", optional = true }
 libp2p-kad = { version = "0.34.0", path = "../../protocols/kad", optional = true }
 libp2p-ping = { version = "0.33.0", path = "../../protocols/ping", optional = true }
 libp2p-relay =  { version = "0.6.0", path = "../../protocols/relay", optional = true }
 libp2p-swarm = { version = "0.33.0", path = "../../swarm" }
-open-metrics-client = "0.14.0"
+prometheus-client = "0.15.0"
 
 [dev-dependencies]
 env_logger = "0.8.1"

@@ -42,6 +42,12 @@
 
 # `libp2p` facade crate
 
+## Version 0.43.0 [unreleased]
+
+- Update individual crates.
+  - `libp2p-gossipsub`
+  - `libp2p-metrics`
+
 ## Version 0.42.1 [2022-02-02]
 
 - Update individual crates.
