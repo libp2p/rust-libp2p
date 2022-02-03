@@ -37,7 +37,7 @@ mod ping;
 mod relay;
 mod swarm;
 
-use open_metrics_client::registry::Registry;
+use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {
@@ -58,7 +58,7 @@ impl Metrics {
     /// Create a new set of Swarm and protocol [`Metrics`].
     ///
     /// ```
-    /// use open_metrics_client::registry::Registry;
+    /// use prometheus_client::registry::Registry;
     /// use libp2p_metrics::Metrics;
     /// let mut registry = Registry::default();
     /// let metrics = Metrics::new(&mut registry);
