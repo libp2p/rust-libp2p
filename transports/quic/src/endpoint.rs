@@ -237,18 +237,6 @@ impl Endpoint {
     }
 
     /// Tries to pop a new incoming connection from the queue.
-    pub(crate) async fn next_incoming(&self) -> Connection {
-        // The `expect` below can panic if the background task has stopped. The background task
-        // can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
-        // words, we panic here iff a panic has already happened somewhere else, which is a
-        // reasonable thing to do.
-        let mut new_connections = self.new_connections.lock().await;
-        new_connections
-            .next()
-            .await
-            .expect("background task has crashed")
-    }
-
     #[tracing::instrument]
     pub(crate) fn poll_incoming(&self, cx: &mut Context) -> Poll<Option<Connection>> {
         // The `expect` below can panic if the background task has stopped. The background task
