@@ -17,7 +17,7 @@ asynchronous-codec = "0.6"
 libp2p-core = { version = "0.32.0", path = "../../core", default-features = false }
 log = "0.4"
 nohash-hasher = "0.2"
-parking_lot = "0.11"
+parking_lot = "0.12"
 rand = "0.7"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
