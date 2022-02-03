@@ -852,6 +852,8 @@ mod tests {
                             panic!("No TCP port in address: {}", a)
                         }
                         ready_tx.send(a).await.ok();
+                    }
+                    ListenerEvent::Upgrade { .. } => {
                         return;
                     }
                     _ => {}
