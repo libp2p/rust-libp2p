@@ -27,8 +27,6 @@
 //! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
 //! Upgrade through Relay (DCUtR)](crate::dcutr) protocol.
 //!
-//! TODO: What about the Autonat protocol?
-//!
 //! You will need 3 machines for this tutorial:
 //!
 //! - A relay server
@@ -110,8 +108,9 @@
 //! RUST_LOG=info ./client --secret-key-seed 1 --mode listen --relay-address /dns4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
 //! ```
 //!
-//! Now let's make sure that the listening client is not public, in other words let's make sure one can not reach it
-//! through the Internet. From the dialing client test that you can not connect on Layer 4 (TCP):
+//! Now let's make sure that the listening client is not public, in other words let's make sure one
+//! can not reach it directly through the Internet. From the dialing client test that you can not
+//! connect on Layer 4 (TCP):
 //!
 //! ``` bash
 //! telnet $RELAY_SERVER_IP 4001
@@ -136,12 +135,16 @@
 //!    ```
 //!
 //! 2. The listening client initiating a direct connection upgrade for the new relayed connection.
+//!    Reported by [`dcutr`](crate::dcutr) through
+//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade).
 //!
 //!    ```
 //!    [2022-01-30T12:54:11Z INFO  client] RemoteInitiatedDirectConnectionUpgrade { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), remote_relayed_addr: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X" }
 //!    ```
 //!
-//! 3. The direct connection upgrade, also known as hole punch, succeeding.
+//! 3. The direct connection upgrade, also known as hole punch, succeeding. Reported by
+//!    [`dcutr`](crate::dcutr) through
+//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::behaviour::Event::DirectConnectionUpgradeSucceeded).
 //!
 //!    ```
 //!    [2022-01-30T12:54:11Z INFO  client] DirectConnectionUpgradeSucceeded { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") }
