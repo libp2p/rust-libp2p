@@ -6,6 +6,10 @@
 
 - Implement `Display` on `DialError`. See [PR 2456].
 
+- Update to `parking_lot` `v0.12.0`. See [PR 2463].
+
+[PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
+
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
 
 # 0.31.0 [2022-01-27]
