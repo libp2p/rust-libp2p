@@ -1,3 +1,15 @@
+# 0.7.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+# 0.6.1 [2022-02-02]
+
+- Remove empty peer entries in `reservations` `HashMap`. See [PR 2464].
+
+[PR 2464]: https://github.com/libp2p/rust-libp2p/pull/2464
+
 # 0.6.0 [2022-01-27]
 
 - Update dependencies.

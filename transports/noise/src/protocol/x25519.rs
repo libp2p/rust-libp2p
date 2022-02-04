@@ -260,7 +260,7 @@ impl snow::types::Dh for Keypair<X25519> {
         secret.zeroize();
     }
 
-    fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), ()> {
+    fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), snow::Error> {
         let mut p = [0; 32];
         p.copy_from_slice(&pk[..32]);
         let ss = x25519((self.secret.0).0, p);
