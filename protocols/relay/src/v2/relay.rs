@@ -35,7 +35,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
     ProtocolsHandlerUpgrErr,
 };
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
@@ -215,9 +215,11 @@ impl NetworkBehaviour for Relay {
         _handler: Either<handler::Handler, DummyProtocolsHandler>,
         _remaining_established: usize,
     ) {
-        if let Some(connections) = self.reservations.get_mut(peer) {
-            // TODO: it looks like `peer` is never removed from `self.reservations`?
-            connections.remove(&connection);
+        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
+            peer.get_mut().remove(&connection);
+            if peer.get().is_empty() {
+                peer.remove();
+            }
         }
 
         for circuit in self
@@ -355,9 +357,21 @@ impl NetworkBehaviour for Relay {
                 );
             }
             handler::Event::ReservationTimedOut {} => {
-                self.reservations
-                    .get_mut(&event_source)
-                    .map(|cs| cs.remove(&connection));
+                match self.reservations.entry(event_source) {
+                    hash_map::Entry::Occupied(mut peer) => {
+                        peer.get_mut().remove(&connection);
+                        if peer.get().is_empty() {
+                            peer.remove();
+                        }
+                    }
+                    hash_map::Entry::Vacant(_) => {
+                        unreachable!(
+                            "Expect to track timed out reservation with peer {:?} on connection {:?}",
+                            event_source,
+                            connection,
+                        );
+                    }
+                }
 
                 self.queued_actions.push_back(
                     NetworkBehaviourAction::GenerateEvent(Event::ReservationTimedOut {

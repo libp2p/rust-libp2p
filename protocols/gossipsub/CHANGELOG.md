@@ -1,3 +1,13 @@
+# 0.36.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
+
+[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+
 # 0.35.0 [2022-01-27]
 
 - Update dependencies.

@@ -572,12 +572,16 @@ impl NetworkConfig {
 #[derive(Debug, Clone, Error)]
 pub enum DialError<THandler> {
     /// The dialing attempt is rejected because of a connection limit.
+    #[error("The dialing attempt was rejected because of a connection limit: {limit}")]
     ConnectionLimit {
         limit: ConnectionLimit,
         handler: THandler,
     },
     /// The dialing attempt is rejected because the peer being dialed is the local peer.
+    #[error("The dialing attempt was rejected because the peer being dialed is the local peer")]
     LocalPeerId { handler: THandler },
+    /// The dialing attempt is rejected because the PeerId is invalid.
+    #[error("The dialing attempt was rejected because a valid PeerId could not be constructed from: {multihash:?}")]
     InvalidPeerId {
         handler: THandler,
         multihash: Multihash,

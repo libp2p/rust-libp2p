@@ -32,7 +32,7 @@ use std::{
 
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
-use open_metrics_client::registry::Registry;
+use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 

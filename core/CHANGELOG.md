@@ -1,3 +1,13 @@
+# 0.32.0 [unreleased]
+
+- Update to `multiaddr` `v0.14.0`.
+
+- Update to `multihash` `v0.16.0`.
+
+- Implement `Display` on `DialError`. See [PR 2456].
+
+[PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
+
 # 0.31.0 [2022-01-27]
 
 - Update dependencies.
