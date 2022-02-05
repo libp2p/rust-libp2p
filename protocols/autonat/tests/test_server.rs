@@ -72,8 +72,7 @@ async fn spawn_client(
     async_std::task::spawn(async move {
         let mut client = init_swarm(Config {
             boot_delay: Duration::from_millis(100),
-            refresh_interval: Duration::from_millis(100),
-            retry_interval: Duration::from_millis(200),
+            retry_interval: Duration::from_millis(100),
             throttle_server_period: Duration::ZERO,
             ..Default::default()
         })
