@@ -66,7 +66,9 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
         let mut kill = kill.fuse();
         loop {
             futures::select! {
-                _ = server.select_next_some() => {},
+                e = server.select_next_some() => {
+                    println!("[SERVER {:?}]: {:?}", peer_id, e);
+                },
                 _ = kill => return,
 
             }
@@ -79,9 +81,10 @@ async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::Behaviour(event) => {
+                println!("[CLIENT] Behaviour event {:?}.", event);
                 break event;
             }
-            _ => {}
+            e => println!("[CLIENT] Ignoring event {:?}.", e),
         }
     }
 }

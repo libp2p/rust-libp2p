@@ -98,14 +98,16 @@ async fn spawn_client(
             }
         }
         if add_dummy_external_addr {
-            let dummy_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
+            let dummy_addr: Multiaddr = "/ip4/127.0.0.1/tcp/2042".parse().unwrap();
             client.add_external_address(dummy_addr, AddressScore::Infinite);
         }
         tx.send((peer_id, addr)).unwrap();
         let mut kill = kill.fuse();
         loop {
             futures::select! {
-                _ = client.select_next_some() => {},
+                e = client.select_next_some() => {
+                    println!("[CLIENT {:?}]: {:?}", peer_id, e);
+                },
                 _ = kill => return,
 
             }
@@ -118,9 +120,10 @@ async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::Behaviour(event) => {
+                println!("[SERVER] Behaviour event {:?}.", event);
                 break event;
             }
-            _ => {}
+            e => println!("[SERVER] Ignoring event {:?}.", e),
         }
     }
 }
