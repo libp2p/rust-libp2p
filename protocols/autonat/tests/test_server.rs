@@ -71,8 +71,8 @@ async fn spawn_client(
     let (tx, rx) = oneshot::channel();
     async_std::task::spawn(async move {
         let mut client = init_swarm(Config {
-            boot_delay: Duration::from_millis(1),
-            retry_interval: Duration::from_millis(1),
+            boot_delay: Duration::from_secs(1),
+            retry_interval: Duration::from_secs(1),
             throttle_server_period: Duration::ZERO,
             ..Default::default()
         })
