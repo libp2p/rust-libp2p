@@ -28,5 +28,4 @@ jobs:
       with:
         key: ${{ matrix.args }}
 
-    - run: cargo test --workspace ${{ matrix.args }}
     - run: while cargo test ${{ matrix.args }} -p libp2p-autonat; do :; done
