@@ -98,7 +98,7 @@ async fn spawn_client(
             }
         }
         if add_dummy_external_addr {
-            let dummy_addr: Multiaddr = "/ip4/127.0.0.1/tcp/2042".parse().unwrap();
+            let dummy_addr: Multiaddr = "/ip4/127.0.0.1/tcp/12345".parse().unwrap();
             client.add_external_address(dummy_addr, AddressScore::Infinite);
         }
         tx.send((peer_id, addr)).unwrap();
