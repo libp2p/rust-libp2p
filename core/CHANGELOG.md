@@ -1,3 +1,7 @@
+# 0.31.1 [2022-02-06]
+
+- Validate PeerRecord signature matching peer ID.
+
 # 0.31.0 [2022-01-27]
 
 - Update dependencies.
