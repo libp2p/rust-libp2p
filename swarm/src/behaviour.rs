@@ -152,6 +152,13 @@ type THandlerInEvent<THandler> =
 /// struct members are delegated to [`NetworkBehaviourEventProcess`] implementations. Those must be
 /// provided by the user on the type that [`NetworkBehaviour`] is derived on.
 ///
+/// Because these implementations are granted exclusive access to the [`NetworkBehaviour`],
+/// [blocking code](https://ryhl.io/blog/async-what-is-blocking/) in these implementations will
+/// stop the entire swarm from processing new events, since the swarm cannot progress without also
+/// having access exclusive access to the NetworkBehaviour. A better alternative is to spawn
+/// blocking or asynchronous tasks on a (separate) executor, which may be provided to the behaviour's
+/// constructor.
+///
 /// Optionally one can provide a custom `poll` function through the `#[behaviour(poll_method =
 /// "poll")]` attribute. This function must have the same signature as the [`NetworkBehaviour#poll`]
 /// function and will be called last within the generated [`NetworkBehaviour`] implementation.
