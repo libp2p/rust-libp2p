@@ -54,9 +54,9 @@
 //! # Peer Discovery
 //!
 //! Gossipsub does not provide peer discovery by itself. Peer discovery is the process by which
-//! peers in a p2p network exchange information about eachother in order to become resistant
-//! against the failure or replacement of your
-//! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node).
+//! peers in a p2p network exchange information about each other among other reasons to become resistant
+//! against the failure or replacement of the
+//! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node) of the network.
 //!
 //! If your application needs to be resistant against the failure of your boot nodes, peer
 //! discovery can be implemented with the help of the [Kademlia](libp2p_kad::Kademlia) protocol
