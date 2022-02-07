@@ -6,7 +6,10 @@
 
 - Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
 
+- Emit gossip of all non empty topics (see [PR 2481]).
+
 [PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+[PR 2481]: https://github.com/libp2p/rust-libp2p/pull/2481
 
 # 0.35.0 [2022-01-27]
 
