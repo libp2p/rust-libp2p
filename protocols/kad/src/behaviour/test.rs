@@ -817,7 +817,9 @@ fn get_record_many() {
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
-    let qid = swarms[0].behaviour_mut().get_record(record.key.clone(), quorum);
+    let qid = swarms[0]
+        .behaviour_mut()
+        .get_record(record.key.clone(), quorum);
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
