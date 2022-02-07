@@ -2508,7 +2508,7 @@ where
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
             let mut message_ids = self.mcache.get_gossip_message_ids(topic_hash);
             if message_ids.is_empty() {
-                return;
+                continue;
             }
 
             // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
