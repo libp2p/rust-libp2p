@@ -58,8 +58,8 @@
 //! against the failure or replacement of the
 //! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node) of the network.
 //!
-//! If your application needs to be resistant against the failure of your boot nodes, peer
-//! discovery can be implemented with the help of the [Kademlia](libp2p_kad::Kademlia) protocol
+//! Peer
+//! discovery can e.g. be implemented with the help of the [Kademlia](libp2p_kad::Kademlia) protocol
 //! in combination with the [Identify](libp2p_identify::Identify) protocol. See the
 //! [Kademlia](libp2p_kad::Kademlia) documentation for more information.
 //!
