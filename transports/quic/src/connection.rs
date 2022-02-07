@@ -121,6 +121,22 @@ impl Connection {
         }
     }
 
+    /// The local address which was used when the peer established the connection.
+    ///
+    /// Works for server connections only.
+    pub(crate) fn local_addr(&self) -> SocketAddr {
+        debug_assert_eq!(self.connection.side(), quinn_proto::Side::Server);
+        let endpoint_addr = self.endpoint.local_addr;
+        self.connection.local_ip()
+            .map(|ip| SocketAddr::new(ip, endpoint_addr.port()))
+            .unwrap_or_else(|| {
+                // In a normal case scenario this should not happen, because
+                // we get want to get a local addr for a server connection only.
+                tracing::error!("trying to get quinn::local_ip for a client");
+                endpoint_addr
+            })
+    }
+
     /// Returns the address of the node we're connected to.
     // TODO: can change /!\
     pub(crate) fn remote_addr(&self) -> SocketAddr {

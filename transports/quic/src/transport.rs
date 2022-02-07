@@ -149,10 +149,11 @@ impl Stream for QuicTransport {
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => return Poll::Pending,
             };
+            let local_addr = socketaddr_to_multiaddr(&connec.local_addr());
             let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
             let event = ListenerEvent::Upgrade {
                 upgrade: Upgrade::from_connection(connec),
-                local_addr: "/ip4/127.0.0.1/udp/0/quic".parse().unwrap(), // addr.clone(), // TODO: hack
+                local_addr,
                 remote_addr,
             };
             Poll::Ready(Some(Ok(event)))
