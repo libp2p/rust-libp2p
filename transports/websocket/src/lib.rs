@@ -219,10 +219,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::framed;
     use super::WsConfig;
     use futures::prelude::*;
+
     use libp2p::core::{multiaddr::Protocol, Multiaddr, PeerId, Transport};
     use libp2p::tcp;
+    use std::borrow::Cow;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
@@ -239,6 +242,24 @@ mod tests {
     fn new_ws_config() -> WsConfig<tcp::async_io::Transport> {
         WsConfig::new(tcp::async_io::Transport::new(tcp::Config::default()))
     }
+    #[test]
+    fn get_wss_proto_from_wss_addr() {
+        let mut a = "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap();
+        let expect = (true, Protocol::Wss(Cow::Borrowed("/")));
+        let result = framed::WsConfig::<()>::get_address_proto(&mut a).unwrap();
+        assert_eq!(expect, result);
+    }
+
+    #[test]
+    fn get_wss_proto_from_tls_addr() {
+        let mut a = "/ip4/127.0.0.1/tcp/0/tls/wss".parse().unwrap();
+        let expect = (true, Protocol::Wss(Cow::Borrowed("/")));
+        let result = framed::WsConfig::<()>::get_address_proto(&mut a).unwrap();
+        assert_eq!(expect, result);
+    }
+
+    async fn connect(listen_addr: Multiaddr) {
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
     async fn connect(listen_addr: Multiaddr) {
         let mut ws_config = new_ws_config().boxed();

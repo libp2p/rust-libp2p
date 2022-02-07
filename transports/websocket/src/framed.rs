@@ -37,6 +37,7 @@ use soketto::{
     handshake,
 };
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
+use std::borrow::Cow;
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -106,6 +107,24 @@ impl<T> WsConfig<T> {
         self.use_deflate = flag;
         self
     }
+
+    /// Look backward to if addr has a trailing "/ws" and returns a Wss protocol if "/tls" was found.
+    pub(crate) fn get_address_proto(
+        addr: &mut Multiaddr,
+    ) -> Result<(bool, Protocol<'static>), String> {
+        match addr.pop() {
+            Some(p @ Protocol::Wss(_)) => Ok((true, p)),
+            Some(ref p @ Protocol::Ws(ref s)) => {
+                let mut addr = addr.clone();
+                if let Some(Protocol::Tls) = addr.pop() {
+                    Ok((true, Protocol::Wss(s.clone())))
+                } else {
+                    Ok((false, p.clone()))
+                }
+            }
+            _ => Err(format!("{} is not a websocket multiaddr", addr)),
+        }
+    }
 }
 
 type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
@@ -137,6 +156,10 @@ where
             Some(p @ Protocol::Ws(_)) => p,
             _ => {
                 debug!("{} is not a websocket multiaddr", addr);
+        let (use_tls, proto) = match Self::get_address_proto(&mut inner_addr) {
+            Ok(result) => result,
+            Err(e) => {
+                debug!("{}", e);
                 return Err(TransportError::MultiaddrNotSupported(addr));
             }
         };
