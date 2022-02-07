@@ -42,6 +42,11 @@
 
 # `libp2p` facade crate
 
+## Version 0.41.2 [2022-02-07]
+
+- Update individual crates.
+    - `libp2p-core`
+
 ## Version 0.41.1 [2022-01-10]
 
 - Update individual crates.

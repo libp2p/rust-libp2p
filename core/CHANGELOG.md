@@ -1,3 +1,7 @@
+# 0.30.2 [2022-02-07]
+
+- Validate PeerRecord signature matching peer ID.
+
 # 0.30.1 [2021-11-16]
 
 - Use `instant` instead of `wasm-timer` (see [PR 2245]).
