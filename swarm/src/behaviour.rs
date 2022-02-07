@@ -154,8 +154,8 @@ type THandlerInEvent<THandler> =
 ///
 /// Because these implementations are granted exclusive access to the [`NetworkBehaviour`],
 /// [blocking code](https://ryhl.io/blog/async-what-is-blocking/) in these implementations will
-/// block the entire swarm from processing new events, since the swarm cannot progress without also
-/// having exclusive access to the [`NetworkBehaviour`]. A better alternative is to spawn
+/// block the entire [`Swarm`](crate::Swarm) from processing new events, since the swarm cannot progress
+/// without also having exclusive access to the [`NetworkBehaviour`]. A better alternative is to spawn
 /// blocking or asynchronous tasks on a (separate) executor, which may be provided to the behaviour's
 /// constructor.
 ///
