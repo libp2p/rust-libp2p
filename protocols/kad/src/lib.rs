@@ -20,9 +20,7 @@
 
 //! Implementation of the libp2p-specific Kademlia protocol.
 //!
-//! # Overview
-//! Kademlia provides a distributed hash table in which data can be stored. Kademlia can also be
-//! used to store information about peers in a p2p network.
+//! See [specification](https://github.com/libp2p/specs/blob/master/kad-dht/README.md) for details.
 //!
 //! # Important Discrepancies
 //!
