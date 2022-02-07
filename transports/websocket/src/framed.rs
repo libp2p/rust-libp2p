@@ -36,8 +36,11 @@ use soketto::{
     extension::deflate::Deflate,
     handshake,
 };
+<<<<<<< HEAD
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
 use std::borrow::Cow;
+=======
+>>>>>>> 7abf2005 (Guard against an edge case in which an addr has a trailing "/tls/wss")
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -113,7 +116,14 @@ impl<T> WsConfig<T> {
         addr: &mut Multiaddr,
     ) -> Result<(bool, Protocol<'static>), String> {
         match addr.pop() {
-            Some(p @ Protocol::Wss(_)) => Ok((true, p)),
+            Some(p @ Protocol::Wss(_)) => {
+                let mut addr = addr.clone();
+                if let Some(Protocol::Tls) = addr.pop() {
+                    return Err(format!("{} is not a websocket multiaddr", addr));
+                } else {
+                    Ok((true, p))
+                }
+            }
             Some(ref p @ Protocol::Ws(ref s)) => {
                 let mut addr = addr.clone();
                 if let Some(Protocol::Tls) = addr.pop() {

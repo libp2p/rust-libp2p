@@ -252,10 +252,17 @@ mod tests {
 
     #[test]
     fn get_wss_proto_from_tls_addr() {
-        let mut a = "/ip4/127.0.0.1/tcp/0/tls/wss".parse().unwrap();
+        let mut a = "/ip4/127.0.0.1/tcp/0/tls/ws".parse().unwrap();
         let expect = (true, Protocol::Wss(Cow::Borrowed("/")));
         let result = framed::WsConfig::<()>::get_address_proto(&mut a).unwrap();
         assert_eq!(expect, result);
+    }
+
+    #[test]
+    fn err_from_bad_tls_addr() {
+        let mut a = "/ip4/127.0.0.1/tcp/0/tls/wss".parse().unwrap();
+        let result = framed::WsConfig::<()>::get_address_proto(&mut a);
+        assert!(result.is_err());
     }
 
     async fn connect(listen_addr: Multiaddr) {
