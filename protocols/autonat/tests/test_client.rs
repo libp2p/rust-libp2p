@@ -66,8 +66,8 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
         let mut kill = kill.fuse();
         loop {
             futures::select! {
-                e = server.select_next_some() => {
-                    println!("[SERVER {:?}]: {:?}", peer_id, e);
+                _e = server.select_next_some() => {
+                    // println!("[SERVER {:?}]: {:?}", peer_id, _e);
                 },
                 _ = kill => return,
 
@@ -81,10 +81,10 @@ async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::Behaviour(event) => {
-                println!("[CLIENT] Behaviour event {:?}.", event);
+                // println!("[CLIENT] Behaviour event {:?}.", event);
                 break event;
             }
-            e => println!("[CLIENT] Ignoring event {:?}.", e),
+            _e => {} // println!("[CLIENT] Ignoring event {:?}.", _e)},
         }
     }
 }
@@ -98,6 +98,7 @@ async fn run_test_with_timeout(test: impl Future) {
 
 #[async_std::test]
 async fn test_auto_probe() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let test = async {
         let mut client = init_swarm(Config {
             retry_interval: TEST_RETRY_INTERVAL,
@@ -132,6 +133,7 @@ async fn test_auto_probe() {
         assert_eq!(client.behaviour().confidence(), 0);
 
         // Test Private NAT Status
+        // println!("\n\n=== Test private===\n\n");
 
         // Artificially add a faulty address.
         let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
@@ -172,6 +174,8 @@ async fn test_auto_probe() {
         assert_eq!(client.behaviour().confidence(), 0);
         assert_eq!(client.behaviour().nat_status(), NatStatus::Private);
         assert!(client.behaviour().public_address().is_none());
+
+        // println!("\n\n=== Test public===\n\n");
 
         // Test new public listening address
         client
@@ -229,7 +233,6 @@ async fn test_auto_probe() {
         assert_eq!(client.behaviour().confidence(), 0);
         assert!(client.behaviour().nat_status().is_public());
         assert!(client.behaviour().public_address().is_some());
-
         drop(_handle);
     };
 
@@ -237,6 +240,7 @@ async fn test_auto_probe() {
 }
 
 #[async_std::test]
+#[ignore]
 async fn test_confidence() {
     let test = async {
         let mut client = init_swarm(Config {
@@ -332,6 +336,7 @@ async fn test_confidence() {
 }
 
 #[async_std::test]
+#[ignore]
 async fn test_throttle_server_period() {
     let test = async {
         let mut client = init_swarm(Config {
@@ -393,6 +398,7 @@ async fn test_throttle_server_period() {
 }
 
 #[async_std::test]
+#[ignore]
 async fn test_use_connected_as_server() {
     let test = async {
         let mut client = init_swarm(Config {
@@ -445,6 +451,7 @@ async fn test_use_connected_as_server() {
 }
 
 #[async_std::test]
+#[ignore]
 async fn test_outbound_failure() {
     let test = async {
         let mut servers = Vec::new();

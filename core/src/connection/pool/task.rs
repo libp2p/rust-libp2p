@@ -143,12 +143,15 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
     future: TFut,
     drop_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
+    i: usize,
 ) where
     TTrans: Transport,
     TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
 {
+    println!("[Pool {}] new_for_pending_incoming_connection.", i);
     match futures::future::select(drop_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
+            println!("[Pool {}] Inbound connection aborted.", i);
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,
@@ -158,6 +161,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok(output), _)) => {
+            println!("[Pool {}] Inbound connection established.", i);
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
@@ -167,6 +171,7 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
                 .await;
         }
         Either::Right((Err(e), _)) => {
+            println!("[Pool {}] Inbound connection failed.", i);
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
                     id: connection_id,

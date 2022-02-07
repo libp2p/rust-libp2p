@@ -28,4 +28,4 @@ jobs:
       with:
         key: ${{ matrix.args }}
 
-    - run: for i in {1..100}; do if cargo test ${{ matrix.args }} -p libp2p-autonat; then continue; else break; fi ; done
+    - run: for i in {1..100}; do if cargo test ${{ matrix.args }} -p libp2p-autonat --test test_client; then continue; else break; fi ; done
