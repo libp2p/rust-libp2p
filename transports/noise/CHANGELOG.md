@@ -2,6 +2,10 @@
 
 - Update to `libp2p-core` `v0.32.0`.
 
+- Update to `snow` `v0.9.0`. See [PR 2472].
+
+[PR 2472]: https://github.com/libp2p/rust-libp2p/pull/2472
+
 # 0.34.0 [2022-01-27]
 
 - Update dependencies.
