@@ -25,6 +25,7 @@ use crate::{
     Multiaddr, Transport,
 };
 use futures::{prelude::*, task::Context, task::Poll};
+use libp2p_core::connection::ListenerId;
 use log::debug;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, fmt, mem, pin::Pin};
@@ -45,7 +46,7 @@ use std::{collections::VecDeque, fmt, mem, pin::Pin};
 ///
 /// ```no_run
 /// use futures::prelude::*;
-/// use libp2p_core::connection::{ListenersEvent, ListenersStream};
+/// use libp2p_swarm::connection::{ListenersEvent, ListenersStream};
 ///
 /// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
 ///
@@ -93,13 +94,6 @@ where
     /// Pending listeners events to return from [`ListenersStream::poll`].
     pending_events: VecDeque<ListenersEvent<TTrans>>,
 }
-
-/// The ID of a single listener.
-///
-/// It is part of most [`ListenersEvent`]s and can be used to remove
-/// individual listeners from the [`ListenersStream`].
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ListenerId(u64);
 
 /// A single active listener.
 #[pin_project::pin_project]
@@ -178,18 +172,7 @@ where
         ListenersStream {
             transport,
             listeners: VecDeque::new(),
-            next_id: ListenerId(1),
-            pending_events: VecDeque::new(),
-        }
-    }
-
-    /// Same as `new`, but pre-allocates enough memory for the given number of
-    /// simultaneous listeners.
-    pub fn with_capacity(transport: TTrans, capacity: usize) -> Self {
-        ListenersStream {
-            transport,
-            listeners: VecDeque::with_capacity(capacity),
-            next_id: ListenerId(1),
+            next_id: ListenerId::new(1),
             pending_events: VecDeque::new(),
         }
     }
@@ -211,7 +194,7 @@ where
             addresses: SmallVec::new(),
         }));
         let id = self.next_id;
-        self.next_id = ListenerId(self.next_id.0 + 1);
+        self.next_id = self.next_id + 1;
         Ok(id)
     }
 

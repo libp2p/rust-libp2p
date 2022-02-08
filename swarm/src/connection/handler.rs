@@ -113,32 +113,3 @@ pub enum ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// Other event.
     Custom(TCustom),
 }
-
-/// Event produced by a handler.
-impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
-    /// If this is `OutboundSubstreamRequest`, maps the content to something else.
-    pub fn map_outbound_open_info<F, I>(self, map: F) -> ConnectionHandlerEvent<I, TCustom>
-    where
-        F: FnOnce(TOutboundOpenInfo) -> I,
-    {
-        match self {
-            ConnectionHandlerEvent::OutboundSubstreamRequest(val) => {
-                ConnectionHandlerEvent::OutboundSubstreamRequest(map(val))
-            }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
-        }
-    }
-
-    /// If this is `Custom`, maps the content to something else.
-    pub fn map_custom<F, I>(self, map: F) -> ConnectionHandlerEvent<TOutboundOpenInfo, I>
-    where
-        F: FnOnce(TCustom) -> I,
-    {
-        match self {
-            ConnectionHandlerEvent::OutboundSubstreamRequest(val) => {
-                ConnectionHandlerEvent::OutboundSubstreamRequest(val)
-            }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
-        }
-    }
-}
