@@ -400,16 +400,15 @@ where
                     // Check [`PeerCondition`] if provided.
                     let condition_matched = match condition {
                         PeerCondition::Disconnected => !self.is_connected(&peer_id),
-                        PeerCondition::NotDialing => !self
-                            .pool
-                            .iter_pending_info()
-                            .filter(move |(_, endpoint, peer)| {
-                                matches!(endpoint, PendingPoint::Dialer { .. })
-                                    && peer.as_ref() == Some(&peer_id)
-                            })
-                            .map(|(connection_id, _, _)| connection_id)
-                            .next()
-                            .is_some(),
+                        PeerCondition::NotDialing => {
+                            !self
+                                .pool
+                                .iter_pending_info()
+                                .any(move |(_, endpoint, peer)| {
+                                    matches!(endpoint, PendingPoint::Dialer { .. })
+                                        && peer.as_ref() == Some(&peer_id)
+                                })
+                        }
                         PeerCondition::Always => true,
                     };
                     if !condition_matched {
@@ -1144,7 +1143,7 @@ fn notify_one<'a, THandlerInEvent>(
 ///
 /// Returns `None` if either all connections are closing or the event
 /// was successfully sent to a handler, in either case the event is consumed.
-fn notify_any<'a, TTrans, THandler, TBehaviour>(
+fn notify_any<TTrans, THandler, TBehaviour>(
     ids: SmallVec<[ConnectionId; 10]>,
     pool: &mut Pool<THandler, TTrans>,
     event: THandlerInEvent<TBehaviour>,
