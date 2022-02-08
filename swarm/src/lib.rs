@@ -319,7 +319,7 @@ where
         SwarmBuilder::new(transport, behaviour, local_peer_id).build()
     }
 
-    /// Returns information about the [`Network`] underlying the `Swarm`.
+    /// Returns information about the connections underlying the [`Swarm`].
     pub fn network_info(&self) -> NetworkInfo {
         let num_peers = self.pool.num_peers();
         let connection_counters = self.pool.counters().clone();
@@ -633,7 +633,7 @@ where
         Err(())
     }
 
-    /// Checks whether the [`Network`] has an established connection to a peer.
+    /// Checks whether there is an established connection to a peer.
     pub fn is_connected(&self, peer_id: &PeerId) -> bool {
         self.pool.is_connected(*peer_id)
     }
@@ -1247,8 +1247,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     }
 }
 
-/// A `SwarmBuilder` provides an API for configuring and constructing a `Swarm`,
-/// including the underlying [`Network`].
+/// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
 pub struct SwarmBuilder<TBehaviour> {
     local_peer_id: PeerId,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -1543,7 +1542,7 @@ impl NetworkBehaviour for DummyBehaviour {
     }
 }
 
-/// Information about the network obtained by [`Network::info()`].
+/// Information about the connections obtained by [`Swarm::network_info()`].
 #[derive(Clone, Debug)]
 pub struct NetworkInfo {
     /// The total number of connected peers.

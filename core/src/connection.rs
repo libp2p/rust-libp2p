@@ -44,9 +44,6 @@ impl std::ops::Add<usize> for ConnectionId {
 }
 
 /// The ID of a single listener.
-///
-/// It is part of most [`ListenersEvent`]s and can be used to remove
-/// individual listeners from the [`ListenersStream`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ListenerId(u64);
 

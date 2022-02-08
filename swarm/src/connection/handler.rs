@@ -34,7 +34,7 @@ pub trait ConnectionHandler {
     /// The outbound type of events that the handler emits to the `Network`
     /// through [`ConnectionHandler::poll`].
     ///
-    /// See also [`NetworkEvent::ConnectionEvent`](crate::network::NetworkEvent::ConnectionEvent).
+    /// See also [`PoolEvent::ConnectionEvent`](crate::connection::pool::PoolEvent::ConnectionEvent).
     type OutEvent: Debug + Send + 'static;
     /// The type of errors that the handler can produce when polled by the `Network`.
     type Error: Debug + Send + 'static;

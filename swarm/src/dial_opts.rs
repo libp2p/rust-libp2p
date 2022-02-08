@@ -40,7 +40,7 @@ impl DialOpts {
     /// Dial a known peer.
     ///
     ///   ```
-    ///   # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+    ///   # use crate::dial_opts::{DialOpts, PeerCondition};
     ///   # use libp2p_core::PeerId;
     ///   DialOpts::peer_id(PeerId::random())
     ///      .condition(PeerCondition::Disconnected)
@@ -60,7 +60,7 @@ impl DialOpts {
     /// Dial an unknown peer.
     ///
     ///   ```
-    ///   # use libp2p_swarm::dial_opts::DialOpts;
+    ///   # use crate::dial_opts::DialOpts;
     ///   DialOpts::unknown_peer_id()
     ///      .address("/ip6/::1/tcp/12345".parse().unwrap())
     ///      .build();
@@ -122,7 +122,7 @@ impl WithPeerId {
     }
 
     /// Override
-    /// [`NetworkConfig::with_dial_concurrency_factor`](libp2p_core::network::NetworkConfig::with_dial_concurrency_factor).
+    /// [`PoolConfig::with_dial_concurrency_factor`](crate::connection::pool::PoolConfig::with_dial_concurrency_factor).
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
@@ -196,7 +196,7 @@ impl WithPeerIdWithAddresses {
     }
 
     /// Override
-    /// [`NetworkConfig::with_dial_concurrency_factor`](libp2p_core::network::NetworkConfig::with_dial_concurrency_factor).
+    /// [`PoolConfig::with_dial_concurrency_factor`](crate::connection::pool::PoolConfig::with_dial_concurrency_factor).
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
@@ -248,7 +248,7 @@ impl WithoutPeerIdWithAddress {
 /// a known peer is initiated.
 ///
 /// ```
-/// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+/// # use crate::dial_opts::{DialOpts, PeerCondition};
 /// # use libp2p_core::PeerId;
 /// #
 /// DialOpts::peer_id(PeerId::random())
