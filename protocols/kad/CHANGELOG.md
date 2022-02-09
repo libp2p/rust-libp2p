@@ -4,6 +4,10 @@
 
 - Update to `libp2p-swarm` `v0.34.0`.
 
+- Require owned key in `get_record()` method (see [PR 2477]).
+
+[PR 2477]: https://github.com/libp2p/rust-libp2p/pull/2477
+
 # 0.34.0 [2022-01-27]
 
 - Update dependencies.

@@ -25,6 +25,8 @@
 //!
 //! See `examples` directory for more.
 
+#[cfg(feature = "dcutr")]
+mod dcutr;
 #[cfg(feature = "gossipsub")]
 mod gossipsub;
 #[cfg(feature = "identify")]
@@ -41,6 +43,8 @@ use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {
+    #[cfg(feature = "dcutr")]
+    dcutr: dcutr::Metrics,
     #[cfg(feature = "gossipsub")]
     gossipsub: gossipsub::Metrics,
     #[cfg(feature = "identify")]
@@ -66,6 +70,8 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("libp2p");
         Self {
+            #[cfg(feature = "dcutr")]
+            dcutr: dcutr::Metrics::new(sub_registry),
             #[cfg(feature = "gossipsub")]
             gossipsub: gossipsub::Metrics::new(sub_registry),
             #[cfg(feature = "identify")]
