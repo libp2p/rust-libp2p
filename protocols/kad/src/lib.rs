@@ -25,7 +25,7 @@
 //! # Important Discrepancies
 //!
 //! - **Peer Discovery with Identify** In other libp2p implementations, the
-//! [Identify](libp2p_identify::Identify) protocol might be seen as a core protocol. Rust-libp2p
+//! [Identify](https://github.com/libp2p/specs/tree/master/identify) protocol might be seen as a core protocol. Rust-libp2p
 //! tries to stay as generic as possible, and does not make this assumption.
 //! This means that the Identify protocol must be manually hooked up to Kademlia through calls
 //! to [`Kademlia::add_address`].
