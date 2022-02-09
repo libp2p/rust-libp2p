@@ -30,7 +30,7 @@ use std::{fmt, sync::Arc};
 use zeroize::Zeroize;
 
 /// An RSA keypair.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Keypair(Arc<RsaKeyPair>);
 
 impl Keypair {

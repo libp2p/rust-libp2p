@@ -84,7 +84,7 @@ mod generic {
     }
 
     /// Configuration for a [`RateLimiter`].
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct RateLimiterConfig {
         /// The maximum number of tokens in the bucket at any point in time.
         pub limit: NonZeroU32,

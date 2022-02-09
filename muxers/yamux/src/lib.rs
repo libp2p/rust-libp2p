@@ -198,7 +198,7 @@ where
 }
 
 /// The yamux configuration.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct YamuxConfig {
     inner: yamux::Config,
     mode: Option<yamux::Mode>,

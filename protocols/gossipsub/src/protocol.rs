@@ -44,7 +44,7 @@ use unsigned_varint::codec;
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
 /// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
     protocol_ids: Vec<ProtocolId>,
