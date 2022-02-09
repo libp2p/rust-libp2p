@@ -27,7 +27,7 @@ pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Endpoint, Multiaddr, PeerId,

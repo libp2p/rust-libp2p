@@ -23,7 +23,7 @@
 use crate::protocol;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{self, DeniedUpgrade, NegotiationError, UpgradeError};

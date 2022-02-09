@@ -21,7 +21,7 @@
 pub use generic::{
     RateLimiter as GenericRateLimiter, RateLimiterConfig as GenericRateLimiterConfig,
 };
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::PeerId;
 use std::net::IpAddr;
@@ -65,7 +65,7 @@ fn multiaddr_to_ip(addr: &Multiaddr) -> Option<IpAddr> {
 }
 
 mod generic {
-    use instant::Instant;
+    use wasm_timer::Instant;
     use std::collections::{HashMap, VecDeque};
     use std::convert::TryInto;
     use std::hash::Hash;

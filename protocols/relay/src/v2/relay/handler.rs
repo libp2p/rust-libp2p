@@ -29,7 +29,7 @@ use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};

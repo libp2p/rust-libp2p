@@ -22,7 +22,7 @@ use super::{
     Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
     ResponseError,
 };
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
     InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
