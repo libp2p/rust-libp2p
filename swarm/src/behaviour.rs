@@ -190,23 +190,6 @@ pub trait NetworkBehaviour: Send + 'static {
         vec![]
     }
 
-    /// Indicate to the behaviour that we connected to the node with the given peer id.
-    ///
-    /// This node now has a handler (as spawned by `new_handler`) running in the background.
-    ///
-    /// This method is only called when the first connection to the peer is established, preceded by
-    /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    /// Indicates to the behaviour that we disconnected from the node with the given peer id.
-    ///
-    /// There is no handler running anymore for this node. Any event that has been sent to it may
-    /// or may not have been processed by the handler.
-    ///
-    /// This method is only called when the last established connection to the peer is closed,
-    /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
     /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(
         &mut self,
@@ -214,6 +197,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _connection_id: &ConnectionId,
         _endpoint: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
     ) {
     }
 
@@ -228,6 +212,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _remaining_established: usize,
     ) {
     }
 

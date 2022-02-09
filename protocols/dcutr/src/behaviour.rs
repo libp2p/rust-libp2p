@@ -100,6 +100,7 @@ impl NetworkBehaviour for Behaviour {
         connection_id: &ConnectionId,
         connected_point: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
     ) {
         if connected_point.is_relayed() {
             if connected_point.is_listener() && !self.direct_connections.contains_key(peer_id) {
@@ -181,16 +182,13 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        assert!(!self.direct_connections.contains_key(peer_id));
-    }
-
     fn inject_connection_closed(
         &mut self,
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         connected_point: &ConnectedPoint,
         _handler: <<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _remaining_established: usize,
     ) {
         if !connected_point.is_relayed() {
             let connections = self
