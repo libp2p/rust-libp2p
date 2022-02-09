@@ -24,6 +24,7 @@ prost = "0.7"
 thiserror = "1.0"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
+wasm-timer = "0.2"
 
 [build-dependencies]
 prost-build = "0.7"
