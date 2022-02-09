@@ -158,6 +158,7 @@ type THandlerInEvent<THandler> =
 /// without also having exclusive access to the [`NetworkBehaviour`]. A better alternative is to execute
 /// blocking or asynchronous logic on a separate task, perhaps with the help of a bounded channel to
 /// maintain backpressure. The sender for the channel could be included in the NetworkBehaviours constructor.
+///
 /// Optionally one can provide a custom `poll` function through the `#[behaviour(poll_method =
 /// "poll")]` attribute. This function must have the same signature as the [`NetworkBehaviour#poll`]
 /// function and will be called last within the generated [`NetworkBehaviour`] implementation.
