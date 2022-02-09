@@ -59,9 +59,9 @@
 //! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node) of the network.
 //!
 //! Peer
-//! discovery can e.g. be implemented with the help of the [Kademlia](libp2p_kad::Kademlia) protocol
-//! in combination with the [Identify](libp2p_identify::Identify) protocol. See the
-//! [Kademlia](libp2p_kad::Kademlia) documentation for more information.
+//! discovery can e.g. be implemented with the help of the [Kademlia](https://github.com/libp2p/specs/blob/master/kad-dht/README.md) protocol
+//! in combination with the [Identify](https://github.com/libp2p/specs/tree/master/identify) protocol. See the
+//! Kademlia implementation documentation for more information.
 //!
 //! # Using Gossipsub
 //!
