@@ -27,7 +27,6 @@
 
 use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
-use instant::Instant;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
@@ -39,7 +38,7 @@ use std::fmt;
 use std::future::Future;
 use std::hash::Hash;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use void::Void;
 
 /// Handles a substream throughout its lifetime.

@@ -19,6 +19,7 @@ libp2p-swarm = { version = "0.34.0", path = "../../swarm" }
 log = "0.4.1"
 rand = "0.7.2"
 void = "1.0"
+wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"

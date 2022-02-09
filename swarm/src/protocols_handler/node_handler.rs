@@ -26,8 +26,6 @@ use crate::upgrade::SendWrapper;
 
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
-use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::{
     connection::{
         ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, Substream,
@@ -38,6 +36,7 @@ use libp2p_core::{
     Connected, Multiaddr,
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
+use wasm_timer::{Delay, Instant};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
@@ -160,7 +159,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         match self.timeout.poll_unpin(cx) {
-            Poll::Ready(()) => {
+            Poll::Ready(Ok(_)) => {
                 return Poll::Ready((
                     self.user_data
                         .take()
@@ -168,7 +167,14 @@ where
                     Err(ProtocolsHandlerUpgrErr::Timeout),
                 ))
             }
-
+            Poll::Ready(Err(_)) => {
+                return Poll::Ready((
+                    self.user_data
+                        .take()
+                        .expect("Future not to be polled again once ready."),
+                    Err(ProtocolsHandlerUpgrErr::Timer),
+                ))
+            }
             Poll::Pending => {}
         }
 
@@ -356,16 +362,10 @@ where
             (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
                 if *deadline != t {
                     *deadline = t;
-                    if let Some(dur) = deadline.checked_duration_since(Instant::now()) {
-                        timer.reset(dur)
-                    }
+                    timer.reset_at(t)
                 }
             }
-            (_, KeepAlive::Until(t)) => {
-                if let Some(dur) = t.checked_duration_since(Instant::now()) {
-                    self.shutdown = Shutdown::Later(Delay::new(dur), t)
-                }
-            }
+            (_, KeepAlive::Until(t)) => self.shutdown = Shutdown::Later(Delay::new_at(t), t),
             (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
             (_, KeepAlive::Yes) => self.shutdown = Shutdown::None,
         };

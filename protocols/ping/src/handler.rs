@@ -21,7 +21,6 @@
 use crate::protocol;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use futures_timer::Delay;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
@@ -36,6 +35,7 @@ use std::{
     time::Duration,
 };
 use void::Void;
+use wasm_timer::Delay;
 
 /// The configuration for outbound pings.
 #[derive(Clone, Debug)]
@@ -349,9 +349,14 @@ impl ProtocolsHandler for Handler {
                         self.outbound = Some(PingState::Idle(stream));
                         break;
                     }
-                    Poll::Ready(()) => {
+                    Poll::Ready(Ok(())) => {
                         self.timer.reset(self.config.timeout);
                         self.outbound = Some(PingState::Ping(protocol::send_ping(stream).boxed()));
+                    }
+                    Poll::Ready(Err(e)) => {
+                        return Poll::Ready(ProtocolsHandlerEvent::Close(Failure::Other {
+                            error: Box::new(e),
+                        }))
                     }
                 },
                 Some(PingState::OpenStream) => {

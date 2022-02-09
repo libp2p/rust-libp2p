@@ -17,9 +17,8 @@ libp2p-core = { version = "0.32.0", path = "../core", default-features = false }
 log = "0.4"
 rand = "0.7"
 smallvec = "1.6.1"
+wasm-timer = "0.2"
 void = "1"
-futures-timer = "3.0.2"
-instant = "0.1.11"
 
 [dev-dependencies]
 libp2p = { path = "../", default-features = false, features = ["identify", "ping", "plaintext", "yamux"] }

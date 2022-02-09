@@ -19,6 +19,7 @@ log = "0.4.1"
 lru = "0.7.2"
 prost = "0.9"
 smallvec = "1.6.1"
+wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"
