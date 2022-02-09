@@ -240,7 +240,7 @@ where
     /// increasing distance.
     pub fn closest_keys<'a, T>(&'a mut self, target: &'a T) -> impl Iterator<Item = TKey> + 'a
     where
-        T: Clone + AsRef<KeyBytes>,
+        T: AsRef<KeyBytes>,
     {
         let distance = self.local_key.as_ref().distance(target);
         ClosestIter {
