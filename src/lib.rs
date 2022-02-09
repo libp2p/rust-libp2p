@@ -46,6 +46,10 @@ pub use multiaddr;
 pub use libp2p_autonat as autonat;
 #[doc(inline)]
 pub use libp2p_core as core;
+#[cfg(feature = "dcutr")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dcutr")))]
+#[doc(inline)]
+pub use libp2p_dcutr as dcutr;
 #[cfg(feature = "deflate")]
 #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
