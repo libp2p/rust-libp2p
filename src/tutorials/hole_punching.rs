@@ -21,8 +21,9 @@
 //! # Hole Punching Tutorial
 //!
 //! This tutorial shows hands-on how to overcome firewalls and NATs with libp2p's hole punching
-//! mechanism. Before we get started, please read the [blog post](TODO link to IPFS blog post) to
-//! familiarize yourself with libp2p's hole punching mechanism on a conceptual level.
+//! mechanism. Before we get started, please read the [blog
+//! post](https://github.com/ipfs/ipfs-blog/pull/375) to familiarize yourself with libp2p's hole
+//! punching mechanism on a conceptual level.
 //!
 //! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
 //! Upgrade through Relay (DCUtR)](crate::dcutr) protocol.
@@ -123,8 +124,6 @@
 //! ```
 //!
 //! You should see the following logs appear:
-//!
-//! TODO: Link to each concrete to type to make sure the below stays up to date on renames.
 //!
 //! 1. The dialing client establishing a relayed connection to the listening client via the relay
 //!    server. Note the [`/p2p-circuit` protocol](crate::multiaddr::Protocol::P2pCircuit) in the
