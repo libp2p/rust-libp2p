@@ -36,6 +36,7 @@ default = [
     "yamux",
 ]
 autonat = ["libp2p-autonat"]
+dcutr = ["libp2p-dcutr", "libp2p-metrics/dcutr"]
 deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
@@ -78,6 +79,7 @@ lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.2.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.32.0", path = "core",  default-features = false }
+libp2p-dcutr = { version = "0.1.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.34.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.36.0", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.34.0", path = "protocols/identify", optional = true }
@@ -124,6 +126,7 @@ members = [
     "misc/peer-id-generator",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/dcutr",
     "protocols/autonat",
     "protocols/floodsub",
     "protocols/gossipsub",

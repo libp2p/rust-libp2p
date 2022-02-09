@@ -679,13 +679,13 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) -> QueryId {
+    pub fn get_record(&mut self, key: record::Key, quorum: Quorum) -> QueryId {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
 
-        if let Some(record) = self.store.get(key) {
+        if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
-                self.store.remove(key)
+                self.store.remove(&key)
             } else {
                 records.push(PeerRecord {
                     peer: None,
@@ -697,7 +697,7 @@ where
         let done = records.len() >= quorum.get();
         let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord {
-            key: key.clone(),
+            key,
             records,
             quorum,
             cache_candidates: BTreeMap::new(),
@@ -1231,7 +1231,7 @@ where
 
                 if let Some(target) = remaining.next() {
                     let info = QueryInfo::Bootstrap {
-                        peer: target.clone().into_preimage(),
+                        peer: *target.preimage(),
                         remaining: Some(remaining),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
@@ -1823,6 +1823,7 @@ where
         _: &ConnectionId,
         _: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         for addr in errors.map(|a| a.into_iter()).into_iter().flatten() {
             self.address_failed(*peer_id, addr);
@@ -1832,27 +1833,28 @@ where
         // remote supports the configured protocol name. Only once a connection
         // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
         // update the local routing table.
-    }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        // Queue events for sending pending RPCs to the connected peer.
-        // There can be only one pending RPC for a particular peer and query per definition.
-        for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-            q.inner
-                .pending_rpcs
-                .iter()
-                .position(|(p, _)| p == peer)
-                .map(|p| q.inner.pending_rpcs.remove(p))
-        }) {
-            self.queued_events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    event,
-                    handler: NotifyHandler::Any,
-                });
+        // Peer's first connection.
+        if other_established == 0 {
+            // Queue events for sending pending RPCs to the connected peer.
+            // There can be only one pending RPC for a particular peer and query per definition.
+            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+                q.inner
+                    .pending_rpcs
+                    .iter()
+                    .position(|(p, _)| p == peer_id)
+                    .map(|p| q.inner.pending_rpcs.remove(p))
+            }) {
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        event,
+                        handler: NotifyHandler::Any,
+                    });
+            }
+
+            self.connected_peers.insert(*peer_id);
         }
-
-        self.connected_peers.insert(*peer);
     }
 
     fn inject_address_change(
@@ -1955,12 +1957,21 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId) {
-        for query in self.queries.iter_mut() {
-            query.on_failure(id);
+    fn inject_connection_closed(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
+    ) {
+        if remaining_established == 0 {
+            for query in self.queries.iter_mut() {
+                query.on_failure(id);
+            }
+            self.connection_updated(*id, None, NodeStatus::Disconnected);
+            self.connected_peers.remove(id);
         }
-        self.connection_updated(*id, None, NodeStatus::Disconnected);
-        self.connected_peers.remove(id);
     }
 
     fn inject_event(

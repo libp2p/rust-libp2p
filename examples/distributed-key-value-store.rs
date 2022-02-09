@@ -187,7 +187,7 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                     }
                 }
             };
-            kademlia.get_record(&key, Quorum::One);
+            kademlia.get_record(key, Quorum::One);
         }
         Some("GET_PROVIDERS") => {
             let key = {

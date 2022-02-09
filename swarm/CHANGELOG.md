@@ -28,6 +28,8 @@
   `DialOpts`. This option is needed for NAT and firewall hole punching. See [PR
   2363].
 
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2362]: https://github.com/libp2p/rust-libp2p/pull/2362
@@ -37,6 +39,7 @@
 [PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
 [PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
 [PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
 
 # 0.32.0 [2021-11-16]
 
