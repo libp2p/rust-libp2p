@@ -679,13 +679,13 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) -> QueryId {
+    pub fn get_record(&mut self, key: record::Key, quorum: Quorum) -> QueryId {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
 
-        if let Some(record) = self.store.get(key) {
+        if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
-                self.store.remove(key)
+                self.store.remove(&key)
             } else {
                 records.push(PeerRecord {
                     peer: None,
@@ -697,7 +697,7 @@ where
         let done = records.len() >= quorum.get();
         let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord {
-            key: key.clone(),
+            key,
             records,
             quorum,
             cache_candidates: BTreeMap::new(),
@@ -1231,7 +1231,7 @@ where
 
                 if let Some(target) = remaining.next() {
                     let info = QueryInfo::Bootstrap {
-                        peer: target.clone().into_preimage(),
+                        peer: *target.preimage(),
                         remaining: Some(remaining),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
