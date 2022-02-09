@@ -26,7 +26,6 @@ pub mod rate_limiter;
 use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
 use either::Either;
-use wasm_timer::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
@@ -40,6 +39,7 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use wasm_timer::Instant;
 
 use super::protocol::outbound_stop;
 

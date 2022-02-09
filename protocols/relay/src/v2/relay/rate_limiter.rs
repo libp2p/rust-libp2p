@@ -21,10 +21,10 @@
 pub use generic::{
     RateLimiter as GenericRateLimiter, RateLimiterConfig as GenericRateLimiterConfig,
 };
-use wasm_timer::Instant;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::PeerId;
 use std::net::IpAddr;
+use wasm_timer::Instant;
 
 /// Allows rate limiting access to some resource based on the [`PeerId`] and
 /// [`Multiaddr`] of a remote peer.
@@ -65,12 +65,12 @@ fn multiaddr_to_ip(addr: &Multiaddr) -> Option<IpAddr> {
 }
 
 mod generic {
-    use wasm_timer::Instant;
     use std::collections::{HashMap, VecDeque};
     use std::convert::TryInto;
     use std::hash::Hash;
     use std::num::NonZeroU32;
     use std::time::Duration;
+    use wasm_timer::Instant;
 
     /// Rate limiter using the [Token Bucket] algorithm.
     ///

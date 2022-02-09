@@ -27,7 +27,6 @@ pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
-use wasm_timer::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     ConnectedPoint, Endpoint, Multiaddr, PeerId,
@@ -45,6 +44,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use wasm_timer::Instant;
 
 /// Config for the [`Behaviour`].
 #[derive(Debug, Clone, PartialEq, Eq)]

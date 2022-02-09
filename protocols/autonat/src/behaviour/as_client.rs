@@ -26,7 +26,6 @@ use super::{
 };
 use futures::FutureExt;
 use futures_timer::Delay;
-use wasm_timer::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_request_response::{
     OutboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
@@ -38,6 +37,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use wasm_timer::Instant;
 
 /// Outbound probe failed or was aborted.
 #[derive(Debug, Clone, PartialEq)]

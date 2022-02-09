@@ -23,7 +23,6 @@
 use crate::protocol;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
-use wasm_timer::Instant;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{self, DeniedUpgrade, NegotiationError, UpgradeError};
@@ -37,6 +36,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use wasm_timer::Instant;
 
 pub enum Command {
     Connect {

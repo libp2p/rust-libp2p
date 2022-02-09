@@ -22,7 +22,6 @@ use super::{
     Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
     ResponseError,
 };
-use wasm_timer::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
     InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
@@ -36,6 +35,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
 };
+use wasm_timer::Instant;
 
 /// Inbound probe failed.
 #[derive(Debug, Clone, PartialEq)]
