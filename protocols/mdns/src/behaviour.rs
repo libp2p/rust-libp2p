@@ -127,8 +127,17 @@ impl NetworkBehaviour for Mdns {
         }
     }
 
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.expire_node(peer);
+    fn inject_connection_closed(
+        &mut self,
+        peer: &PeerId,
+        _: &libp2p_core::connection::ConnectionId,
+        _: &libp2p_core::ConnectedPoint,
+        _: Self::ProtocolsHandler,
+        remaining_established: usize,
+    ) {
+        if remaining_established == 0 {
+            self.expire_node(peer);
+        }
     }
 
     fn poll(
