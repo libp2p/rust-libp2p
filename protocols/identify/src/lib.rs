@@ -26,6 +26,13 @@
 //! At least one identification request is sent on a newly established
 //! connection, beyond which the behaviour does not keep connections alive.
 //!
+//! # Important Discrepancies
+//!
+//! - **Using Identify with other protocols** Unlike some other libp2p implementations,
+//! rust-libp2p does not treat Identify as a core protocol. This means that other protocols cannot
+//! rely upon the existence of Identify, and need to be manually hooked up to Identify in order to
+//! make use of its capabilities.
+//!
 //! # Usage
 //!
 //! The [`Identify`] struct implements a `NetworkBehaviour` that negotiates
