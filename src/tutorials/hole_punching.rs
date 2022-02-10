@@ -129,7 +129,7 @@
 //!    server. Note the [`/p2p-circuit` protocol](crate::multiaddr::Protocol::P2pCircuit) in the
 //!    [`Multiaddr`](crate::Multiaddr).
 //!
-//!    ```
+//!    ``` ignore
 //!    [2022-01-30T12:54:10Z INFO  client] Established connection to PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") via Dialer { address: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X", role_override: Dialer }
 //!    ```
 //!
@@ -137,7 +137,7 @@
 //!    Reported by [`dcutr`](crate::dcutr) through
 //!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade).
 //!
-//!    ```
+//!    ``` ignore
 //!    [2022-01-30T12:54:11Z INFO  client] RemoteInitiatedDirectConnectionUpgrade { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), remote_relayed_addr: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X" }
 //!    ```
 //!
@@ -145,6 +145,6 @@
 //!    [`dcutr`](crate::dcutr) through
 //!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::behaviour::Event::DirectConnectionUpgradeSucceeded).
 //!
-//!    ```
+//!    ``` ignore
 //!    [2022-01-30T12:54:11Z INFO  client] DirectConnectionUpgradeSucceeded { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") }
 //!    ```
