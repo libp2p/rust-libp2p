@@ -6,7 +6,10 @@
 
 - Implement `Display` on `DialError`. See [PR 2456].
 
+- Validate PeerRecord signature matching peer ID. See [RUSTSEC-2022-0009].
+
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
+[RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
 
 # 0.31.0 [2022-01-27]
 
