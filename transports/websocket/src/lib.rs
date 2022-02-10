@@ -244,24 +244,24 @@ mod tests {
     }
     #[test]
     fn get_wss_proto_from_wss_addr() {
-        let mut a = "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap();
+        let a = "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap();
         let expect = (true, Protocol::Wss(Cow::Borrowed("/")));
-        let result = framed::WsConfig::<()>::get_address_proto(&mut a).unwrap();
-        assert_eq!(expect, result);
+        let (use_tls, proto, _) = framed::get_address_proto(a).unwrap();
+        assert_eq!(expect, (use_tls, proto));
     }
 
     #[test]
     fn get_wss_proto_from_tls_addr() {
-        let mut a = "/ip4/127.0.0.1/tcp/0/tls/ws".parse().unwrap();
+        let a = "/ip4/127.0.0.1/tcp/0/tls/ws".parse().unwrap();
         let expect = (true, Protocol::Wss(Cow::Borrowed("/")));
-        let result = framed::WsConfig::<()>::get_address_proto(&mut a).unwrap();
-        assert_eq!(expect, result);
+        let (use_tls, proto, _) = framed::get_address_proto(a).unwrap();
+        assert_eq!(expect, (use_tls, proto));
     }
 
     #[test]
     fn err_from_bad_tls_addr() {
-        let mut a = "/ip4/127.0.0.1/tcp/0/tls/wss".parse().unwrap();
-        let result = framed::WsConfig::<()>::get_address_proto(&mut a);
+        let a = "/ip4/127.0.0.1/tcp/0/tls/wss".parse().unwrap();
+        let result = framed::get_address_proto(a);
         assert!(result.is_err());
     }
 

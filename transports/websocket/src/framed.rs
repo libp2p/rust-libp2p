@@ -110,34 +110,32 @@ impl<T> WsConfig<T> {
         self.use_deflate = flag;
         self
     }
-
-    /// Look backward to if addr has a trailing "/ws" and returns a Wss protocol if "/tls" was found.
-    pub(crate) fn get_address_proto(
-        addr: &mut Multiaddr,
-    ) -> Result<(bool, Protocol<'static>), String> {
-        match addr.pop() {
-            Some(p @ Protocol::Wss(_)) => {
-                let mut addr = addr.clone();
-                if let Some(Protocol::Tls) = addr.pop() {
-                    return Err(format!("{} is not a websocket multiaddr", addr));
-                } else {
-                    Ok((true, p))
-                }
-            }
-            Some(ref p @ Protocol::Ws(ref s)) => {
-                let mut addr = addr.clone();
-                if let Some(Protocol::Tls) = addr.pop() {
-                    Ok((true, Protocol::Wss(s.clone())))
-                } else {
-                    Ok((false, p.clone()))
-                }
-            }
-            _ => Err(format!("{} is not a websocket multiaddr", addr)),
-        }
-    }
 }
 
 type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
+
+/// Look backward to if addr has a trailing "/ws" and returns a Wss protocol if "/tls" was found.
+pub(crate) fn get_address_proto(
+    mut addr: Multiaddr,
+) -> Result<(bool, Protocol<'static>, Multiaddr), String> {
+    match addr.pop() {
+        Some(p @ Protocol::Wss(_)) => {
+            if let Some(Protocol::Tls) = addr.clone().pop() {
+                return Err(format!("{} is not a websocket multiaddr", addr));
+            } else {
+                Ok((true, p, addr))
+            }
+        }
+        Some(ref p @ Protocol::Ws(ref s)) => {
+            if let Some(Protocol::Tls) = addr.clone().pop() {
+                Ok((true, Protocol::Wss(s.clone()), addr))
+            } else {
+                Ok((false, p.clone(), addr))
+            }
+        }
+        _ => Err(format!("{} is not a websocket multiaddr", addr)),
+    }
+}
 
 impl<T> Transport for WsConfig<T>
 where
@@ -152,6 +150,7 @@ where
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
+<<<<<<< HEAD
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
         let proto = match inner_addr.pop() {
@@ -167,6 +166,11 @@ where
             _ => {
                 debug!("{} is not a websocket multiaddr", addr);
         let (use_tls, proto) = match Self::get_address_proto(&mut inner_addr) {
+=======
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let inner_addr = addr.clone();
+        let (use_tls, proto, next_addr) = match get_address_proto(inner_addr) {
+>>>>>>> ecc7c232 (Refactor get_address_proto as a free-standing function and move multiaddr into it)
             Ok(result) => result,
             Err(e) => {
                 debug!("{}", e);
@@ -182,8 +186,118 @@ where
         }
     }
 
+<<<<<<< HEAD
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.transport.lock().remove_listener(id)
+=======
+        let tls_config = self.tls_config;
+        let max_size = self.max_data_size;
+        let use_deflate = self.use_deflate;
+        let transport = self
+            .transport
+            .listen_on(next_addr)
+            .map_err(|e| e.map(Error::Transport))?;
+        let listen = transport
+            .map_err(Error::Transport)
+            .map_ok(move |event| match event {
+                ListenerEvent::NewAddress(mut a) => {
+                    a = a.with(proto.clone());
+                    debug!("Listening on {}", a);
+                    println!("Listening on {}", a);
+                    ListenerEvent::NewAddress(a)
+                }
+                ListenerEvent::AddressExpired(mut a) => {
+                    a = a.with(proto.clone());
+                    ListenerEvent::AddressExpired(a)
+                }
+                ListenerEvent::Error(err) => ListenerEvent::Error(Error::Transport(err)),
+                ListenerEvent::Upgrade {
+                    upgrade,
+                    mut local_addr,
+                    mut remote_addr,
+                } => {
+                    local_addr = local_addr.with(proto.clone());
+                    remote_addr = remote_addr.with(proto.clone());
+                    let remote1 = remote_addr.clone(); // used for logging
+                    let remote2 = remote_addr.clone(); // used for logging
+                    let tls_config = tls_config.clone();
+
+                    let upgrade = async move {
+                        let stream = upgrade.map_err(Error::Transport).await?;
+                        trace!("incoming connection from {}", remote1);
+
+                        let stream = if use_tls {
+                            // begin TLS session
+                            let server = tls_config
+                                .server
+                                .expect("for use_tls we checked server is not none");
+
+                            trace!("awaiting TLS handshake with {}", remote1);
+
+                            let stream = server
+                                .accept(stream)
+                                .map_err(move |e| {
+                                    debug!("TLS handshake with {} failed: {}", remote1, e);
+                                    Error::Tls(tls::Error::from(e))
+                                })
+                                .await?;
+
+                            let stream: TlsOrPlain<_> =
+                                EitherOutput::First(EitherOutput::Second(stream));
+
+                            stream
+                        } else {
+                            // continue with plain stream
+                            EitherOutput::Second(stream)
+                        };
+
+                        trace!("receiving websocket handshake request from {}", remote2);
+
+                        let mut server = handshake::Server::new(stream);
+
+                        if use_deflate {
+                            server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
+                        }
+
+                        let ws_key = {
+                            let request = server
+                                .receive_request()
+                                .map_err(|e| Error::Handshake(Box::new(e)))
+                                .await?;
+                            request.key()
+                        };
+
+                        trace!("accepting websocket handshake request from {}", remote2);
+
+                        let response = handshake::server::Response::Accept {
+                            key: ws_key,
+                            protocol: None,
+                        };
+
+                        server
+                            .send_response(&response)
+                            .map_err(|e| Error::Handshake(Box::new(e)))
+                            .await?;
+
+                        let conn = {
+                            let mut builder = server.into_builder();
+                            builder.set_max_message_size(max_size);
+                            builder.set_max_frame_size(max_size);
+                            Connection::new(builder)
+                        };
+
+                        Ok(conn)
+                    };
+
+                    ListenerEvent::Upgrade {
+                        upgrade: Box::pin(upgrade) as BoxFuture<'static, _>,
+                        local_addr,
+                        remote_addr,
+                    }
+                }
+            });
+        Ok(Box::pin(listen))
+>>>>>>> ecc7c232 (Refactor get_address_proto as a free-standing function and move multiaddr into it)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
