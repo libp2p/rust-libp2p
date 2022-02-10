@@ -118,22 +118,14 @@ type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::Tls
 pub(crate) fn get_address_proto(
     mut addr: Multiaddr,
 ) -> Result<(bool, Protocol<'static>, Multiaddr), String> {
-    match addr.pop() {
-        Some(p @ Protocol::Wss(_)) => {
-            if let Some(Protocol::Tls) = addr.clone().pop() {
-                return Err(format!("{} is not a websocket multiaddr", addr));
-            } else {
-                Ok((true, p, addr))
-            }
-        }
-        Some(ref p @ Protocol::Ws(ref s)) => {
-            if let Some(Protocol::Tls) = addr.clone().pop() {
-                Ok((true, Protocol::Wss(s.clone()), addr))
-            } else {
-                Ok((false, p.clone(), addr))
-            }
-        }
-        _ => Err(format!("{} is not a websocket multiaddr", addr)),
+    use Protocol::{Tls, Ws, Wss};
+
+    let (last, next_last) = (addr.pop(), addr.into_iter().last());
+    match (last, next_last) {
+        (Some(p1 @ Wss(_)), Some(p2)) if p2 != Tls => Ok((true, p1, addr)),
+        (Some(Ws(ref s)), Some(Tls)) => Ok((true, Protocol::Wss(s.clone()), addr)),
+        (Some(ref p @ Ws(_)), Some(_)) => Ok((false, p.clone(), addr)),
+        (Some(Wss(_)), Some(Tls)) | _ => Err(format!("{} is not a websocket multiaddr", addr)),
     }
 }
 
