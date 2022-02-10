@@ -33,7 +33,7 @@ use libp2p_core::{
     multiaddr::{multiaddr, Multiaddr, Protocol},
     multihash::{Code, Multihash, MultihashDigest},
     transport::MemoryTransport,
-    upgrade, PeerId, Transport,
+    upgrade, Endpoint, PeerId, Transport,
 };
 use libp2p_noise as noise;
 use libp2p_swarm::{Swarm, SwarmEvent};
@@ -313,6 +313,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
+    let _ = env_logger::try_init();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
@@ -447,7 +448,7 @@ fn get_record_not_found() {
     let target_key = record::Key::from(random_multihash());
     let qid = swarms[0]
         .behaviour_mut()
-        .get_record(&target_key, Quorum::One);
+        .get_record(target_key.clone(), Quorum::One);
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -601,19 +602,28 @@ fn put_record() {
                             }
                         }
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::InboundPutRecordRequest { record, .. },
+                            KademliaEvent::InboundRequest {
+                                request: InboundRequest::PutRecord { record, .. },
+                            },
                         ))) => {
-                            assert_ne!(
-                                swarm.behaviour().record_filtering,
-                                KademliaStoreInserts::Unfiltered
-                            );
                             if !drop_records {
-                                // Accept the record
-                                swarm
-                                    .behaviour_mut()
-                                    .store_mut()
-                                    .put(record)
-                                    .expect("record is stored");
+                                if let Some(record) = record {
+                                    assert_eq!(
+                                        swarm.behaviour().record_filtering,
+                                        KademliaStoreInserts::FilterBoth
+                                    );
+                                    // Accept the record
+                                    swarm
+                                        .behaviour_mut()
+                                        .store_mut()
+                                        .put(record)
+                                        .expect("record is stored");
+                                } else {
+                                    assert_eq!(
+                                        swarm.behaviour().record_filtering,
+                                        KademliaStoreInserts::Unfiltered
+                                    );
+                                }
                             }
                         }
                         // Ignore any other event.
@@ -751,7 +761,7 @@ fn get_record() {
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0]
         .behaviour_mut()
-        .get_record(&record.key, Quorum::One);
+        .get_record(record.key.clone(), Quorum::One);
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -807,7 +817,9 @@ fn get_record_many() {
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
-    let qid = swarms[0].behaviour_mut().get_record(&record.key, quorum);
+    let qid = swarms[0]
+        .behaviour_mut()
+        .get_record(record.key.clone(), quorum);
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -1106,7 +1118,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
 
     // Have `alice` query the Dht for `key` with a quorum of 1.
-    alice.behaviour_mut().get_record(&key, Quorum::One);
+    alice.behaviour_mut().get_record(key, Quorum::One);
 
     // The default peer timeout is 10 seconds. Choosing 1 seconds here should
     // give enough head room to prevent connections to `bob` to time out.
@@ -1277,11 +1289,11 @@ fn network_behaviour_inject_address_change() {
 
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),
+        role_override: Endpoint::Dialer,
     };
 
     // Mimick a connection being established.
-    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint);
-    kademlia.inject_connected(&remote_peer_id);
+    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None, 0);
 
     // At this point the remote is not yet known to support the
     // configured protocol name, so the peer is not yet in the
@@ -1306,9 +1318,11 @@ fn network_behaviour_inject_address_change() {
         &connection_id,
         &ConnectedPoint::Dialer {
             address: old_address.clone(),
+            role_override: Endpoint::Dialer,
         },
         &ConnectedPoint::Dialer {
             address: new_address.clone(),
+            role_override: Endpoint::Dialer,
         },
     );
 

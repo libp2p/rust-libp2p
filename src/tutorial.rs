@@ -39,25 +39,29 @@
 //! 1. Creating a new crate: `cargo init rust-libp2p-tutorial`
 //!
 //! 2. Adding `libp2p` as well as `futures` as a dependency in the
-//!    `Cargo.toml` file:
+//!    `Cargo.toml` file. We will also include `async-std` with the
+//!    "attributes" feature to allow for an `async main`:
 //!
 //!    ```yaml
 //!    [package]
 //!        name = "rust-libp2p-tutorial"
 //!        version = "0.1.0"
 //!        authors = ["Max Inden <mail@max-inden.de>"]
-//!        edition = "2018"
+//!        edition = "2021"
+//!        rust-version = "1.56.1"
 //!
 //!    [dependencies]
 //!        libp2p = "<insert-current-version-here>"
 //!        futures = "<insert-current-version-here>"
+//!        async-std = { version = "<insert-current-version-here>", features = ["attributes"] }
 //!    ```
 //!
 //! ## Network identity
 //!
 //! With all the scaffolding in place, we can dive into the libp2p specifics. At
-//! first we need to create a network identity for our local node in `fn
-//! main()`. Identities in libp2p are handled via a public and private key pair.
+//! first we need to create a network identity for our local node in `async fn
+//! main()`, annotated with an attribute to allow `main` to be `async`.
+//! Identities in libp2p are handled via a public and private key pair.
 //! Nodes identify each other via their [`PeerId`](crate::PeerId) which is
 //! derived from the public key.
 //!
@@ -65,7 +69,8 @@
 //! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
@@ -97,16 +102,16 @@
 //! [`crate::core::muxing`] and [`yamux`](crate::yamux).
 //!
 //! ```rust
-//! use futures::executor::block_on;
 //! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(libp2p::development_transport(local_key))?;
+//!     let transport = libp2p::development_transport(local_key).await?;
 //!
 //!     Ok(())
 //! }
@@ -137,17 +142,17 @@
 //! [`Ping`](crate::ping::Ping) [`NetworkBehaviour`] at the end:
 //!
 //! ```rust
-//! use futures::executor::block_on;
 //! use libp2p::{identity, PeerId};
 //! use libp2p::ping::{Ping, PingConfig};
 //! use std::error::Error;
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(libp2p::development_transport(local_key))?;
+//!     let transport = libp2p::development_transport(local_key).await?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -170,18 +175,18 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use futures::executor::block_on;
 //! use libp2p::{identity, PeerId};
 //! use libp2p::ping::{Ping, PingConfig};
 //! use libp2p::swarm::Swarm;
 //! use std::error::Error;
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(libp2p::development_transport(local_key))?;
+//!     let transport = libp2p::development_transport(local_key).await?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -221,18 +226,18 @@
 //! remote peer.
 //!
 //! ```rust
-//! use futures::executor::block_on;
-//! use libp2p::{identity, PeerId};
+//! use libp2p::{identity, Multiaddr, PeerId};
 //! use libp2p::ping::{Ping, PingConfig};
-//! use libp2p::swarm::Swarm;
+//! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
 //! use std::error::Error;
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(libp2p::development_transport(local_key))?;
+//!     let transport = libp2p::development_transport(local_key).await?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -250,8 +255,8 @@
 //!     // Dial the peer identified by the multi-address given as the second
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
-//!         let remote = addr.parse()?;
-//!         swarm.dial_addr(remote)?;
+//!         let remote: Multiaddr = addr.parse()?;
+//!         swarm.dial(remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!
@@ -266,20 +271,19 @@
 //! outgoing connection in case we specify an address on the CLI.
 //!
 //! ```no_run
-//! use futures::executor::block_on;
 //! use futures::prelude::*;
 //! use libp2p::ping::{Ping, PingConfig};
-//! use libp2p::swarm::{Swarm, SwarmEvent};
-//! use libp2p::{identity, PeerId};
+//! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
+//! use libp2p::{identity, Multiaddr, PeerId};
 //! use std::error::Error;
-//! use std::task::Poll;
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!     println!("Local peer id: {:?}", local_peer_id);
 //!
-//!     let transport = block_on(libp2p::development_transport(local_key))?;
+//!     let transport = libp2p::development_transport(local_key).await?;
 //!
 //!     // Create a ping network behaviour.
 //!     //
@@ -297,24 +301,19 @@
 //!     // Dial the peer identified by the multi-address given as the second
 //!     // command-line argument, if any.
 //!     if let Some(addr) = std::env::args().nth(1) {
-//!         let remote = addr.parse()?;
-//!         swarm.dial_addr(remote)?;
+//!         let remote: Multiaddr = addr.parse()?;
+//!         swarm.dial(remote)?;
 //!         println!("Dialed {}", addr)
 //!     }
 //!
-//!     block_on(future::poll_fn(move |cx| loop {
-//!         match swarm.poll_next_unpin(cx) {
-//!             Poll::Ready(Some(event)) => match event {
-//!                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-//!                 SwarmEvent::Behaviour(event) => println!("{:?}", event),
-//!                 _ => {}
-//!             },
-//!             Poll::Ready(None) => return Poll::Ready(()),
-//!             Poll::Pending => return Poll::Pending
+//!     loop {
+//!         match swarm.select_next_some().await {
+//!             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+//!             SwarmEvent::Behaviour(event) => println!("{:?}", event),
+//!             _ => {}
 //!         }
-//!     }));
+//!     }
 //!
-//!     Ok(())
 //! }
 //! ```
 //!

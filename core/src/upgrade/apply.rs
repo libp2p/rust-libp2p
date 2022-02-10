@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError};
-use crate::{ConnectedPoint, Negotiated};
+use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
@@ -27,6 +27,7 @@ use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
 
+// TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
 pub fn apply<C, U>(
     conn: C,
@@ -38,10 +39,11 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
 {
-    if cp.is_listener() {
-        Either::Left(apply_inbound(conn, up))
-    } else {
-        Either::Right(apply_outbound(conn, up, v))
+    match cp {
+        ConnectedPoint::Dialer { role_override, .. } if role_override.is_dialer() => {
+            Either::Right(apply_outbound(conn, up, v))
+        }
+        _ => Either::Left(apply_inbound(conn, up)),
     }
 }
 

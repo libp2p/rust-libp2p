@@ -82,7 +82,7 @@ fn ping_pong() {
 
         let pid2 = peer2_id.clone();
         let peer2 = async move {
-            swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+            swarm2.dial(rx.next().await.unwrap()).unwrap();
 
             loop {
                 match swarm2.select_next_some().await {
@@ -156,7 +156,7 @@ fn max_failures() {
         };
 
         let peer2 = async move {
-            swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+            swarm2.dial(rx.next().await.unwrap()).unwrap();
 
             let mut count2: u8 = 0;
 
@@ -216,7 +216,7 @@ fn unsupported_doesnt_fail() {
     });
 
     let result = async_std::task::block_on(async move {
-        swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
+        swarm2.dial(rx.next().await.unwrap()).unwrap();
 
         loop {
             match swarm2.select_next_some().await {

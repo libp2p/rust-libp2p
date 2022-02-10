@@ -48,9 +48,9 @@ mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
+use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
-use wasm_timer::Instant;
 
 pub use dummy::DummyProtocolsHandler;
 pub use map_in::MapInEvent;
@@ -318,6 +318,13 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, T
     },
 
     /// Close the connection for the given reason.
+    ///
+    /// Note this will affect all [`ProtocolsHandler`]s handling this
+    /// connection, in other words it will close the connection for all
+    /// [`ProtocolsHandler`]s. To signal that one has no more need for the
+    /// connection, while allowing other [`ProtocolsHandler`]s to continue using
+    /// the connection, return [`KeepAlive::No`] in
+    /// [`ProtocolsHandler::connection_keep_alive`].
     Close(TErr),
 
     /// Other event.

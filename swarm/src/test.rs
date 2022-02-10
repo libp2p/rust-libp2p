@@ -91,7 +91,7 @@ where
 
 /// A `CallTraceBehaviour` is a `NetworkBehaviour` that tracks
 /// invocations of callback methods and their arguments, wrapping
-/// around an inner behaviour.
+/// around an inner behaviour. It ensures certain invariants are met.
 pub struct CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
@@ -99,17 +99,14 @@ where
     inner: TInner,
 
     pub addresses_of_peer: Vec<PeerId>,
-    pub inject_connected: Vec<PeerId>,
-    pub inject_disconnected: Vec<PeerId>,
-    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
-    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
+    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub inject_event: Vec<(
         PeerId,
         ConnectionId,
         <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     )>,
-    pub inject_addr_reach_failure: Vec<(Option<PeerId>, Multiaddr)>,
-    pub inject_dial_failure: Vec<PeerId>,
+    pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
     pub inject_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub inject_new_external_addr: Vec<Multiaddr>,
@@ -128,12 +125,9 @@ where
         Self {
             inner,
             addresses_of_peer: Vec::new(),
-            inject_connected: Vec::new(),
-            inject_disconnected: Vec::new(),
             inject_connection_established: Vec::new(),
             inject_connection_closed: Vec::new(),
             inject_event: Vec::new(),
-            inject_addr_reach_failure: Vec::new(),
             inject_dial_failure: Vec::new(),
             inject_new_listener: Vec::new(),
             inject_new_listen_addr: Vec::new(),
@@ -146,14 +140,12 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
-        self.inject_connected = Vec::new();
-        self.inject_disconnected = Vec::new();
         self.inject_connection_established = Vec::new();
         self.inject_connection_closed = Vec::new();
         self.inject_event = Vec::new();
-        self.inject_addr_reach_failure = Vec::new();
         self.inject_dial_failure = Vec::new();
         self.inject_new_listen_addr = Vec::new();
         self.inject_new_external_addr = Vec::new();
@@ -165,6 +157,54 @@ where
 
     pub fn inner(&mut self) -> &mut TInner {
         &mut self.inner
+    }
+
+    /// Checks that when the expected number of closed connection notifications are received, a
+    /// given number of expected disconnections have been received as well.
+    ///
+    /// Returns if the first condition is met.
+    pub fn assert_disconnected(
+        &self,
+        expected_closed_connections: usize,
+        expected_disconnections: usize,
+    ) -> bool {
+        if self.inject_connection_closed.len() == expected_closed_connections {
+            assert_eq!(
+                self.inject_connection_closed
+                    .iter()
+                    .filter(|(.., remaining_established)| { *remaining_established == 0 })
+                    .count(),
+                expected_disconnections
+            );
+            return true;
+        }
+
+        false
+    }
+
+    /// Checks that when the expected number of established connection notifications are received,
+    /// a given number of expected connections have been received as well.
+    ///
+    /// Returns if the first condition is met.
+    pub fn assert_connected(
+        &self,
+        expected_established_connections: usize,
+        expected_connections: usize,
+    ) -> bool {
+        if self.inject_connection_established.len() == expected_established_connections {
+            assert_eq!(
+                self.inject_connection_established
+                    .iter()
+                    .filter(|(.., reported_aditional_connections)| {
+                        *reported_aditional_connections == 0
+                    })
+                    .count(),
+                expected_connections
+            );
+            return true;
+        }
+
+        false
     }
 }
 
@@ -186,20 +226,49 @@ where
         self.inner.addresses_of_peer(p)
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        self.inject_connected.push(peer.clone());
-        self.inner.inject_connected(peer);
-    }
+    fn inject_connection_established(
+        &mut self,
+        p: &PeerId,
+        c: &ConnectionId,
+        e: &ConnectedPoint,
+        errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
+    ) {
+        let mut other_peer_connections = self
+            .inject_connection_established
+            .iter()
+            .rev() // take last to first
+            .filter_map(|(peer, .., other_established)| {
+                if p == peer {
+                    Some(other_established)
+                } else {
+                    None
+                }
+            })
+            .take(other_established);
 
-    fn inject_connection_established(&mut self, p: &PeerId, c: &ConnectionId, e: &ConnectedPoint) {
-        self.inject_connection_established
-            .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_established(p, c, e);
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inject_disconnected.push(peer.clone());
-        self.inner.inject_disconnected(peer);
+        // We are informed that there are `other_established` additional connections. Ensure that the
+        // number of previous connections is consistent with this
+        if let Some(&prev) = other_peer_connections.next() {
+            if prev < other_established {
+                assert_eq!(
+                    prev,
+                    other_established - 1,
+                    "Inconsistent connection reporting"
+                )
+            }
+            assert_eq!(other_peer_connections.count(), other_established - 1);
+        } else {
+            assert_eq!(other_established, 0)
+        }
+        self.inject_connection_established.push((
+            p.clone(),
+            c.clone(),
+            e.clone(),
+            other_established,
+        ));
+        self.inner
+            .inject_connection_established(p, c, e, errors, other_established);
     }
 
     fn inject_connection_closed(
@@ -208,10 +277,46 @@ where
         c: &ConnectionId,
         e: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
+        let mut other_closed_connections = self
+            .inject_connection_established
+            .iter()
+            .rev() // take last to first
+            .filter_map(|(peer, .., remaining_established)| {
+                if p == peer {
+                    Some(remaining_established)
+                } else {
+                    None
+                }
+            })
+            .take(remaining_established);
+
+        // We are informed that there are `other_established` additional connections. Ensure that the
+        // number of previous connections is consistent with this
+        if let Some(&prev) = other_closed_connections.next() {
+            if prev < remaining_established {
+                assert_eq!(
+                    prev,
+                    remaining_established - 1,
+                    "Inconsistent closed connection reporting"
+                )
+            }
+            assert_eq!(other_closed_connections.count(), remaining_established - 1);
+        } else {
+            assert_eq!(remaining_established, 0)
+        }
+        assert!(
+            self.inject_connection_established
+                .iter()
+                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint) == (p, c, e)),
+            "`inject_connection_closed` is called only for connections for \
+            which `inject_connection_established` was called first."
+        );
         self.inject_connection_closed
-            .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_closed(p, c, e, handler);
+            .push((*p, *c, e.clone(), remaining_established));
+        self.inner
+            .inject_connection_closed(p, c, e, handler, remaining_established);
     }
 
     fn inject_event(
@@ -220,27 +325,31 @@ where
         c: ConnectionId,
         e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     ) {
+        assert!(
+            self.inject_connection_established
+                .iter()
+                .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
+            "`inject_event` is called for reported connections."
+        );
+        assert!(
+            !self
+                .inject_connection_closed
+                .iter()
+                .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
+            "`inject_event` is never called for closed connections."
+        );
+
         self.inject_event.push((p.clone(), c.clone(), e.clone()));
         self.inner.inject_event(p, c, e);
     }
 
-    fn inject_addr_reach_failure(
-        &mut self,
-        p: Option<&PeerId>,
-        a: &Multiaddr,
-        e: &dyn std::error::Error,
-    ) {
-        self.inject_addr_reach_failure.push((p.cloned(), a.clone()));
-        self.inner.inject_addr_reach_failure(p, a, e);
-    }
-
     fn inject_dial_failure(
         &mut self,
-        p: &PeerId,
+        p: Option<PeerId>,
         handler: Self::ProtocolsHandler,
-        error: DialError,
+        error: &DialError,
     ) {
-        self.inject_dial_failure.push(p.clone());
+        self.inject_dial_failure.push(p);
         self.inner.inject_dial_failure(p, handler, error);
     }
 

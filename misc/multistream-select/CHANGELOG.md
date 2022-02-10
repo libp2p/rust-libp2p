@@ -1,4 +1,10 @@
-# 0.10.4 [unreleased]
+# 0.11.0 [2022-01-27]
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
+# 0.10.4 [2021-11-01]
 
 - Implement `From<io::Error> for ProtocolError` instead of `Into`.
   [PR 2169](https://github.com/libp2p/rust-libp2p/pull/2169)

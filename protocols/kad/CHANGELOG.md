@@ -1,4 +1,50 @@
-# 0.32.0 [unreleased]
+# 0.35.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Require owned key in `get_record()` method (see [PR 2477]).
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2477]: https://github.com/libp2p/rust-libp2p/pull/2477
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
+# 0.34.0 [2022-01-27]
+
+- Update dependencies.
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+- Derive `Clone` for `KademliaEvent` (see [PR 2411])
+
+- Derive `Serialize`, `Deserialize` for `store::record::Key` (see [PR 2408])
+
+- Add `get_closest_local_peers` to `Kademlia` (see [PR 2436])
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2411]: https://github.com/libp2p/rust-libp2p/pull/2411
+[PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2436]: https://github.com/libp2p/rust-libp2p/pull/2436
+
+# 0.33.0 [2021-11-16]
+
+- Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Rename `KademliaEvent::InboundRequestServed` to `KademliaEvent::InboundRequest` and move
+  `InboundPutRecordRequest` into `InboundRequest::PutRecord` and `InboundAddProviderRequest` into
+  `InboundRequest::AddProvider` (see [PR 2297]).
+
+- Populate the `key` field when converting `KadRequestMsg::PutValue` to `proto::Message` (see [PR 2309]).
+
+- Update dependencies.
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2297]: https://github.com/libp2p/rust-libp2p/pull/2297
+[PR 2309]: https://github.com/libp2p/rust-libp2p/pull/2309
+
+# 0.32.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)

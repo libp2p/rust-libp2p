@@ -1,4 +1,70 @@
-# 0.30.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Update to `multiaddr` `v0.14.0`.
+
+- Update to `multihash` `v0.16.0`.
+
+- Implement `Display` on `DialError`. See [PR 2456].
+
+- Validate PeerRecord signature matching peer ID. See [RUSTSEC-2022-0009].
+
+[PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
+[RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
+
+# 0.31.0 [2022-01-27]
+
+- Update dependencies.
+
+- Report concrete connection IDs in `NetworkEvent::ConnectionEstablished` and
+  `NetworkEvent::ConnectionClosed` (see [PR 2350]).
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+- Add support for ECDSA identities (see [PR 2352]).
+
+- Add `ConnectedPoint::is_relayed` (see [PR 2392]).
+
+- Enable overriding _dial concurrency factor_ per dial via
+  `DialOpts::override_dial_concurrency_factor`.
+
+  - Introduces `libp2p_core::DialOpts` mirroring `libp2p_swarm::DialOpts`.
+      Passed as an argument to `Network::dial`.
+  - Removes `Peer::dial` in favor of `Network::dial`.
+
+  See [PR 2404].
+
+- Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
+
+- Report negotiated and expected `PeerId` as well as remote address in
+  `DialError::WrongPeerId` (see [PR 2428]).
+
+- Allow overriding role when dialing. This option is needed for NAT and firewall
+  hole punching.
+
+    - Add `Transport::dial_as_listener`. As `Transport::dial` but
+      overrides the role of the local node on the connection . I.e. has the
+      local node act as a listener on the outgoing connection.
+
+    - Add `override_role` option to `DialOpts`.
+
+  See [PR 2363].
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
+[PR 2352]: https://github.com/libp2p/rust-libp2p/pull/2352
+[PR 2392]: https://github.com/libp2p/rust-libp2p/pull/2392
+[PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
+[PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
+[PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
+
+# 0.30.1 [2021-11-16]
+
+- Use `instant` instead of `wasm-timer` (see [PR 2245]).
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+
+# 0.30.0 [2021-11-01]
 
 - Add `ConnectionLimit::with_max_established` (see [PR 2137]).
 
@@ -36,6 +102,17 @@
 - Add `SignedEnvelope` and `PeerRecord` according to [RFC0002] and [RFC0003]
   (see [PR 2107]).
 
+- Report `ListenersEvent::Closed` when dropping a listener in `ListenersStream::remove_listener`,
+  return `bool` instead of `Result<(), ()>` (see [PR 2261]).
+
+- Concurrently dial address candidates within a single dial attempt (see [PR 2248]) configured
+  via `Network::with_dial_concurrency_factor`.
+
+  - On success of a single address, provide errors of the thus far failed dials via
+    `NetworkEvent::ConnectionEstablished::outgoing`.
+
+  - On failure of all addresses, provide the errors via `NetworkEvent::DialError`.
+
 [PR 2145]: https://github.com/libp2p/rust-libp2p/pull/2145
 [PR 2213]: https://github.com/libp2p/rust-libp2p/pull/2213
 [PR 2142]: https://github.com/libp2p/rust-libp2p/pull/2142
@@ -44,6 +121,8 @@
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
 [PR 2195]: https://github.com/libp2p/rust-libp2p/pull/2195
 [PR 2107]: https://github.com/libp2p/rust-libp2p/pull/2107
+[PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
 [RFC0002]: https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
 [RFC0003]: https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md
 
@@ -65,7 +144,7 @@
 
 # 0.28.3 [2021-04-26]
 
-- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
+- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057).
 
 # 0.28.2 [2021-04-13]
 

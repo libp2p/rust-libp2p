@@ -529,6 +529,25 @@ where
         }
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized,
+    {
+        use TransportError::*;
+        match self {
+            EitherTransport::Left(a) => match a.dial_as_listener(addr) {
+                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::A(err))),
+            },
+            EitherTransport::Right(b) => match b.dial_as_listener(addr) {
+                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::B(err))),
+            },
+        }
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         match self {
             EitherTransport::Left(a) => a.address_translation(server, observed),

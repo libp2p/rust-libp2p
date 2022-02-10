@@ -35,6 +35,9 @@
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
 
+#[cfg(feature = "serde")]
+extern crate _serde as serde;
+
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
 }
@@ -69,7 +72,7 @@ pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;
-pub use network::Network;
+pub use network::{DialOpts, Network};
 pub use peer_id::PeerId;
 pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;

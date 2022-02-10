@@ -1,4 +1,95 @@
-# 0.31.0 [unreleased]
+# 0.34.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+# 0.33.0 [2022-01-27]
+
+- Patch reporting on banned peers and their non-banned and banned connections (see [PR 2350]).
+
+- Update dependencies.
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+- Update `Connection::address` on `inject_address_change` (see [PR 2362]).
+
+- Move `swarm::Toggle` to `swarm::behaviour::Toggle` (see [PR 2375]).
+
+- Add `Swarm::connected_peers` (see [PR 2378]).
+
+- Implement `swarm::NetworkBehaviour` on `either::Either` (see [PR 2370]).
+
+- Allow overriding _dial concurrency factor_ per dial via
+  `DialOpts::override_dial_concurrency_factor`. See [PR 2404].
+
+- Report negotiated and expected `PeerId` as well as remote address in
+  `DialError::WrongPeerId` (see [PR 2428]).
+
+- Allow overriding role when dialing through `override_role` option on
+  `DialOpts`. This option is needed for NAT and firewall hole punching. See [PR
+  2363].
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
+[PR 2362]: https://github.com/libp2p/rust-libp2p/pull/2362
+[PR 2370]: https://github.com/libp2p/rust-libp2p/pull/2370
+[PR 2375]: https://github.com/libp2p/rust-libp2p/pull/2375
+[PR 2378]: https://github.com/libp2p/rust-libp2p/pull/2378
+[PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
+[PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
+# 0.32.0 [2021-11-16]
+
+- Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Enable advanced dialing requests both on `Swarm::dial` and via
+  `NetworkBehaviourAction::Dial`. Users can now trigger a dial with a specific
+  set of addresses, optionally extended via
+  `NetworkBehaviour::addresses_of_peer`.
+
+   Changes required to maintain status quo:
+
+  - Previously `swarm.dial(peer_id)`
+     now `swarm.dial(DialOpts::peer_id(peer_id).build())`
+     or `swarm.dial(peer_id)` given that `DialOpts` implements `From<PeerId>`.
+
+  - Previously `swarm.dial_addr(addr)`
+     now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
+     or `swarm.dial(addr)` given that `DialOpts` implements `From<Multiaddr>`.
+
+  - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
+     now
+
+     ```rust
+     NetworkBehaviourAction::Dial {
+       opts: DialOpts::peer_id(peer_id)
+         .condition(condition)
+         .build(),
+       handler,
+     }
+     ```
+
+  - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
+     now
+
+     ```rust
+     NetworkBehaviourAction::Dial {
+       opts: DialOpts::unknown_peer_id()
+         .address(address)
+         .build(),
+       handler,
+     }
+     ```
+
+   See [PR 2317].
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2317]: https://github.com/libp2p/rust-libp2p/pull/2317
+
+# 0.31.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
@@ -42,11 +133,33 @@
   parameters to `NetworkBehaviourAction<Self::OutEvent,
   Self::ProtocolsHandler>`. See [PR 2191].
 
+- Return `bool` instead of `Result<(), ()>` for `Swarm::remove_listener`(see
+  [PR 2261]).
+
+- Concurrently dial address candidates within a single dial attempt (see [PR 2248]) configured via
+  `Swarm::dial_concurrency_factor`.
+
+  - On success of a single address, report errors of the thus far failed dials via
+    `SwarmEvent::ConnectionEstablished::outgoing`.
+
+  - On failure of all addresses, report errors via the new `SwarmEvent::OutgoingConnectionError`.
+
+  - Remove `SwarmEvent::UnreachableAddr` and `SwarmEvent::UnknownPeerUnreachableAddr` event.
+
+  - In `NetworkBehaviour::inject_connection_established` provide errors of all thus far failed addresses.
+
+  - On unknown peer dial failures, call `NetworkBehaviour::inject_dial_failure` with a peer ID of `None`.
+
+  - Remove `NetworkBehaviour::inject_addr_reach_failure`. Information is now provided via
+    `NetworkBehaviour::inject_connection_established` and `NetworkBehaviour::inject_dial_failure`.
+
 [PR 2150]: https://github.com/libp2p/rust-libp2p/pull/2150
 [PR 2182]: https://github.com/libp2p/rust-libp2p/pull/2182
 [PR 2183]: https://github.com/libp2p/rust-libp2p/pull/2183
 [PR 2192]: https://github.com/libp2p/rust-libp2p/pull/2192
 [PR 2191]: https://github.com/libp2p/rust-libp2p/pull/2191
+[PR 2248]: https://github.com/libp2p/rust-libp2p/pull/2248
+[PR 2261]: https://github.com/libp2p/rust-libp2p/pull/2261
 
 # 0.30.0 [2021-07-12]
 

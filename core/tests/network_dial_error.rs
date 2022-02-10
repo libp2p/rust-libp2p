@@ -22,11 +22,12 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::multiaddr::multiaddr;
+use libp2p_core::DialOpts;
 use libp2p_core::{
     connection::PendingConnectionError,
     multiaddr::Protocol,
     network::{NetworkConfig, NetworkEvent},
-    PeerId,
+    ConnectedPoint, Endpoint, PeerId,
 };
 use rand::seq::SliceRandom;
 use std::{io, task::Poll};
@@ -39,11 +40,9 @@ fn deny_incoming_connec() {
     let mut swarm1 = test_network(NetworkConfig::default());
     let mut swarm2 = test_network(NetworkConfig::default());
 
-    swarm1
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
+    swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-    let address = async_std::task::block_on(future::poll_fn(|cx| match swarm1.poll(cx) {
+    let address = futures::executor::block_on(future::poll_fn(|cx| match swarm1.poll(cx) {
         Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
             Poll::Ready(listen_addr)
         }
@@ -52,11 +51,15 @@ fn deny_incoming_connec() {
     }));
 
     swarm2
-        .peer(swarm1.local_peer_id().clone())
-        .dial(address.clone(), Vec::new(), TestHandler())
+        .dial(
+            TestHandler(),
+            DialOpts::peer_id(*swarm1.local_peer_id())
+                .addresses(vec![address.clone()])
+                .build(),
+        )
         .unwrap();
 
-    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         match swarm1.poll(cx) {
             Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => drop(connection),
             Poll::Ready(_) => unreachable!(),
@@ -65,15 +68,13 @@ fn deny_incoming_connec() {
 
         match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
-                attempts_remaining,
                 peer_id,
-                multiaddr,
-                error: PendingConnectionError::Transport(_),
+                error: PendingConnectionError::Transport(errors),
+                handler: _,
             }) => {
-                assert_eq!(0u32, attempts_remaining.get_attempts());
                 assert_eq!(&peer_id, swarm1.local_peer_id());
                 assert_eq!(
-                    multiaddr,
+                    errors.get(0).expect("One error.").0,
                     address.clone().with(Protocol::P2p(peer_id.into()))
                 );
                 return Poll::Ready(Ok(()));
@@ -85,6 +86,58 @@ fn deny_incoming_connec() {
         Poll::Pending
     }))
     .unwrap();
+}
+
+#[test]
+fn invalid_peer_id() {
+    // Checks whether dialing an address containing the wrong peer id raises an error
+    // for the expected peer id instead of the obtained peer id.
+
+    let mut swarm1 = test_network(NetworkConfig::default());
+    let mut swarm2 = test_network(NetworkConfig::default());
+
+    swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
+
+    let address = futures::executor::block_on(future::poll_fn(|cx| match swarm1.poll(cx) {
+        Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
+            Poll::Ready(listen_addr)
+        }
+        Poll::Pending => Poll::Pending,
+        _ => panic!("Was expecting the listen address to be reported"),
+    }));
+
+    let other_id = PeerId::random();
+    let other_addr = address.with(Protocol::P2p(other_id.into()));
+
+    swarm2.dial(TestHandler(), other_addr.clone()).unwrap();
+
+    let (peer_id, error) = futures::executor::block_on(future::poll_fn(|cx| {
+        if let Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) = swarm1.poll(cx) {
+            swarm1.accept(connection, TestHandler()).unwrap();
+        }
+
+        match swarm2.poll(cx) {
+            Poll::Ready(NetworkEvent::DialError { peer_id, error, .. }) => {
+                Poll::Ready((peer_id, error))
+            }
+            Poll::Ready(x) => panic!("unexpected {:?}", x),
+            Poll::Pending => Poll::Pending,
+        }
+    }));
+    assert_eq!(peer_id, other_id);
+    match error {
+        PendingConnectionError::WrongPeerId { obtained, endpoint } => {
+            assert_eq!(obtained, *swarm1.local_peer_id());
+            assert_eq!(
+                endpoint,
+                ConnectedPoint::Dialer {
+                    address: other_addr,
+                    role_override: Endpoint::Dialer,
+                }
+            );
+        }
+        x => panic!("wrong error {:?}", x),
+    }
 }
 
 #[test]
@@ -100,11 +153,9 @@ fn dial_self() {
     // The last two can happen in any order.
 
     let mut swarm = test_network(NetworkConfig::default());
-    swarm
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
+    swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-    let local_address = async_std::task::block_on(future::poll_fn(|cx| match swarm.poll(cx) {
+    let local_address = futures::executor::block_on(future::poll_fn(|cx| match swarm.poll(cx) {
         Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
             Poll::Ready(listen_addr)
         }
@@ -112,20 +163,20 @@ fn dial_self() {
         _ => panic!("Was expecting the listen address to be reported"),
     }));
 
-    swarm.dial(&local_address, TestHandler()).unwrap();
+    swarm.dial(TestHandler(), local_address.clone()).unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
-    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
-                Poll::Ready(NetworkEvent::UnknownPeerDialError {
-                    multiaddr,
-                    error: PendingConnectionError::InvalidPeerId { .. },
+                Poll::Ready(NetworkEvent::DialError {
+                    peer_id,
+                    error: PendingConnectionError::WrongPeerId { .. },
                     ..
                 }) => {
+                    assert_eq!(&peer_id, swarm.local_peer_id());
                     assert!(!got_dial_err);
-                    assert_eq!(multiaddr, local_address);
                     got_dial_err = true;
                     if got_inc_err {
                         return Poll::Ready(Ok(()));
@@ -158,7 +209,7 @@ fn dial_self_by_id() {
     // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
     // place.
     let mut swarm = test_network(NetworkConfig::default());
-    let peer_id = swarm.local_peer_id().clone();
+    let peer_id = *swarm.local_peer_id();
     assert!(swarm.peer(peer_id).into_disconnected().is_none());
 }
 
@@ -179,34 +230,38 @@ fn multiple_addresses_err() {
     }
     addresses.shuffle(&mut rand::thread_rng());
 
-    let first = addresses[0].clone();
-    let rest = (&addresses[1..]).iter().cloned();
-
     swarm
-        .peer(target.clone())
-        .dial(first, rest, TestHandler())
+        .dial(
+            TestHandler(),
+            DialOpts::peer_id(target)
+                .addresses(addresses.clone())
+                .build(),
+        )
         .unwrap();
 
-    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::DialError {
-                    attempts_remaining,
                     peer_id,
-                    multiaddr,
-                    error: PendingConnectionError::Transport(_),
+                    // multiaddr,
+                    error: PendingConnectionError::Transport(errors),
+                    handler: _,
                 }) => {
                     assert_eq!(peer_id, target);
-                    let expected = addresses
-                        .remove(0)
-                        .with(Protocol::P2p(target.clone().into()));
-                    assert_eq!(multiaddr, expected);
-                    if addresses.is_empty() {
-                        assert_eq!(attempts_remaining.get_attempts(), 0);
-                        return Poll::Ready(Ok(()));
-                    } else {
-                        assert_eq!(attempts_remaining.get_attempts(), addresses.len() as u32);
-                    }
+
+                    let failed_addresses =
+                        errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
+                    assert_eq!(
+                        failed_addresses,
+                        addresses
+                            .clone()
+                            .into_iter()
+                            .map(|addr| addr.with(Protocol::P2p(target.into())))
+                            .collect::<Vec<_>>()
+                    );
+
+                    return Poll::Ready(Ok(()));
                 }
                 Poll::Ready(_) => unreachable!(),
                 Poll::Pending => break Poll::Pending,

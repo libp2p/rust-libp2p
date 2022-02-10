@@ -205,6 +205,10 @@ impl Transport for MemoryTransport {
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+        self.dial(addr)
+    }
+
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }
@@ -383,6 +387,22 @@ mod tests {
         assert_eq!(
             parse_memory_addr(&"/memory/1234567890".parse().unwrap()),
             Ok(1_234_567_890)
+        );
+        assert_eq!(
+            parse_memory_addr(
+                &"/memory/5/p2p/12D3KooWETLZBFBfkzvH3BQEtA1TJZPmjb4a18ss5TpwNU7DHDX6"
+                    .parse()
+                    .unwrap()
+            ),
+            Ok(5)
+        );
+        assert_eq!(
+            parse_memory_addr(
+                &"/memory/5/p2p/12D3KooWETLZBFBfkzvH3BQEtA1TJZPmjb4a18ss5TpwNU7DHDX6/p2p-circuit/p2p/12D3KooWLiQ7i8sY6LkPvHmEymncicEgzrdpXegbxEr3xgN8oxMU"
+                    .parse()
+                    .unwrap()
+            ),
+            Ok(5)
         );
     }
 

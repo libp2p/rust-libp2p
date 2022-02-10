@@ -23,6 +23,7 @@
 pub use crate::upgrade::Version;
 
 use crate::{
+    connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
         and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerEvent, Transport,
@@ -32,7 +33,7 @@ use crate::{
         self, apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
         OutboundUpgradeApply, UpgradeError,
     },
-    ConnectedPoint, Negotiated, PeerId,
+    Negotiated, PeerId,
 };
 use futures::{prelude::*, ready};
 use multiaddr::Multiaddr;
@@ -340,6 +341,10 @@ where
         self.0.dial(addr)
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial_as_listener(addr)
+    }
+
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.0.listen_on(addr)
     }
@@ -386,6 +391,17 @@ where
         let future = self
             .inner
             .dial(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
+        Ok(DialUpgradeFuture {
+            future: Box::pin(future),
+            upgrade: future::Either::Left(Some(self.upgrade)),
+        })
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self
+            .inner
+            .dial_as_listener(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),

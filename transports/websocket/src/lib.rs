@@ -25,15 +25,16 @@ pub mod framed;
 pub mod tls;
 
 use error::Error;
-use framed::Connection;
+use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
+    connection::ConnectedPoint,
     multiaddr::Multiaddr,
     transport::{
         map::{MapFuture, MapStream},
         ListenerEvent, TransportError,
     },
-    ConnectedPoint, Transport,
+    Transport,
 };
 use rw_stream_sink::RwStreamSink;
 use std::{
@@ -129,6 +130,12 @@ where
             .dial(addr)
     }
 
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport
+            .map(wrap_connection as WrapperFn<T::Output>)
+            .dial_as_listener(addr)
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }
@@ -166,8 +173,8 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(item) = ready!(self.0.try_poll_next_unpin(cx)?) {
-                if item.is_data() {
-                    return Poll::Ready(Some(Ok(item.into_bytes())));
+                if let Incoming::Data(payload) = item {
+                    return Poll::Ready(Some(Ok(payload.into_bytes())));
                 }
             } else {
                 return Poll::Ready(None);

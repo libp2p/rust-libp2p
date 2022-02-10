@@ -6,11 +6,11 @@ use libp2p_core::{
     identity,
     muxing::{StreamMuxer, StreamMuxerBox},
     network::{Network, NetworkConfig},
-    transport, upgrade, Multiaddr, PeerId, Transport,
+    transport::{self, memory::MemoryTransport},
+    upgrade, Multiaddr, PeerId, Transport,
 };
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;
-use libp2p_tcp as tcp;
 use std::{io, pin::Pin, task::Context, task::Poll};
 
 type TestNetwork = Network<TestTransport, TestHandler>;
@@ -23,7 +23,7 @@ pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&local_key)
         .unwrap();
-    let transport: TestTransport = tcp::TcpConfig::new()
+    let transport: TestTransport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
@@ -32,6 +32,7 @@ pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
     TestNetwork::new(transport, local_public_key.into(), cfg)
 }
 
+#[derive(Debug)]
 pub struct TestHandler();
 
 impl ConnectionHandler for TestHandler {

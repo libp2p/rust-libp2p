@@ -50,12 +50,13 @@
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
+use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::ping::{Ping, PingConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, PeerId, Swarm};
-use open_metrics_client::encoding::text::encode;
-use open_metrics_client::registry::Registry;
+use prometheus_client::encoding::text::encode;
+use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -74,8 +75,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     if let Some(addr) = std::env::args().nth(1) {
-        let remote = addr.parse()?;
-        swarm.dial_addr(remote)?;
+        let remote: Multiaddr = addr.parse()?;
+        swarm.dial(remote)?;
         tide::log::info!("Dialed {}", addr)
     }
 
@@ -106,7 +107,11 @@ pub async fn metrics_server(registry: Registry) -> std::result::Result<(), std::
         .get(|req: tide::Request<Arc<Mutex<Registry>>>| async move {
             let mut encoded = Vec::new();
             encode(&mut encoded, &req.state().lock().unwrap()).unwrap();
-            Ok(String::from_utf8(encoded).unwrap())
+            let response = tide::Response::builder(200)
+                .body(encoded)
+                .content_type("application/openmetrics-text; version=1.0.0; charset=utf-8")
+                .build();
+            Ok(response)
         });
 
     app.listen("0.0.0.0:0").await?;

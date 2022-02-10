@@ -23,12 +23,13 @@
 use crate::{
     connection::{
         Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionId,
-        EstablishedConnection, IntoConnectionHandler, ListenerId, PendingConnectionError,
+        EstablishedConnection, IntoConnectionHandler, ListenerId, PendingInboundConnectionError,
+        PendingOutboundConnectionError,
     },
-    transport::Transport,
+    transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
-use std::{fmt, num::NonZeroU32};
+use std::fmt;
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
@@ -91,7 +92,7 @@ where
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingInboundConnectionError<TTrans::Error>,
         handler: THandler,
     },
 
@@ -99,9 +100,14 @@ where
     ConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent>,
-        /// The total number of established connections to the same peer,
-        /// including the one that has just been opened.
-        num_established: NonZeroU32,
+        /// List of other connections to the same peer.
+        ///
+        /// Note: Does not include the connection reported through this event.
+        other_established_connection_ids: Vec<ConnectionId>,
+        /// [`Some`] when the new connection is an outgoing connection.
+        /// Addresses are dialed in parallel. Contains the addresses and errors
+        /// of dial attempts that failed before the one successful dial.
+        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
     },
 
     /// An established connection to a peer has been closed.
@@ -123,33 +129,27 @@ where
         connected: Connected,
         /// The error that occurred.
         error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
-        /// The remaining number of established connections to the same peer.
-        num_established: u32,
+        /// List of remaining established connections to the same peer.
+        remaining_established_connection_ids: Vec<ConnectionId>,
         handler: THandler::Handler,
     },
 
     /// A dialing attempt to an address of a peer failed.
     DialError {
         /// The number of remaining dialing attempts.
-        attempts_remaining: DialAttemptsRemaining<THandler>,
+        handler: THandler,
 
         /// Id of the peer we were trying to dial.
         peer_id: PeerId,
 
-        /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
-
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError<TTrans::Error>,
     },
 
     /// Failed to reach a peer that we were trying to dial.
     UnknownPeerDialError {
-        /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
-
         /// The error that happened.
-        error: PendingConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError<TTrans::Error>,
 
         handler: THandler,
     },
@@ -171,20 +171,6 @@ where
         /// Old endpoint of this connection.
         old_endpoint: ConnectedPoint,
     },
-}
-
-pub enum DialAttemptsRemaining<THandler> {
-    Some(NonZeroU32),
-    None(THandler),
-}
-
-impl<THandler> DialAttemptsRemaining<THandler> {
-    pub fn get_attempts(&self) -> u32 {
-        match self {
-            DialAttemptsRemaining::Some(attempts) => (*attempts).into(),
-            DialAttemptsRemaining::None(_) => 0,
-        }
-    }
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler> fmt::Debug
@@ -246,9 +232,14 @@ where
                 .field("send_back_addr", send_back_addr)
                 .field("error", error)
                 .finish(),
-            NetworkEvent::ConnectionEstablished { connection, .. } => f
-                .debug_struct("ConnectionEstablished")
+            NetworkEvent::ConnectionEstablished {
+                connection,
+                concurrent_dial_errors,
+                ..
+            } => f
+                .debug_struct("OutgoingConnectionEstablished")
                 .field("connection", connection)
+                .field("concurrent_dial_errors", concurrent_dial_errors)
                 .finish(),
             NetworkEvent::ConnectionClosed {
                 id,
@@ -262,22 +253,21 @@ where
                 .field("error", error)
                 .finish(),
             NetworkEvent::DialError {
-                attempts_remaining,
+                handler: _,
                 peer_id,
-                multiaddr,
                 error,
             } => f
                 .debug_struct("DialError")
-                .field("attempts_remaining", &attempts_remaining.get_attempts())
                 .field("peer_id", peer_id)
-                .field("multiaddr", multiaddr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::UnknownPeerDialError {
-                multiaddr, error, ..
+                // multiaddr,
+                error,
+                ..
             } => f
                 .debug_struct("UnknownPeerDialError")
-                .field("multiaddr", multiaddr)
+                // .field("multiaddr", multiaddr)
                 .field("error", error)
                 .finish(),
             NetworkEvent::ConnectionEvent { connection, event } => f

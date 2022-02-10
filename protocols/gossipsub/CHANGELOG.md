@@ -1,4 +1,59 @@
-# 0.33.0 [unreleased]
+# 0.36.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
+
+- Emit gossip of all non empty topics (see [PR 2481]).
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+[PR 2481]: https://github.com/libp2p/rust-libp2p/pull/2481
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
+# 0.35.0 [2022-01-27]
+
+- Update dependencies.
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+- Add metrics for network and configuration performance analysis (see [PR 2346]).
+
+- Improve bandwidth performance by tracking IWANTs and reducing duplicate sends
+  (see [PR 2327]).
+
+- Implement `Serialize` and `Deserialize` for `MessageId` and `FastMessageId` (see [PR 2408])
+
+- Fix `GossipsubConfigBuilder::build()` requiring `&self` to live for `'static` (see [PR 2409])
+
+- Implement Unsubscribe backoff as per [libp2p specs PR 383] (see [PR 2403]).
+
+[PR 2346]: https://github.com/libp2p/rust-libp2p/pull/2346
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2327]: https://github.com/libp2p/rust-libp2p/pull/2327
+[PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2409]: https://github.com/libp2p/rust-libp2p/pull/2409
+[PR 2403]: https://github.com/libp2p/rust-libp2p/pull/2403
+[libp2p specs PR 383]: https://github.com/libp2p/specs/pull/383
+
+# 0.34.0 [2021-11-16]
+
+- Add topic and mesh metrics (see [PR 2316]).
+
+- Fix bug in internal peer's topics tracking (see [PR 2325]).
+
+- Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+
+- Update dependencies.
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2325]: https://github.com/libp2p/rust-libp2p/pull/2325
+[PR 2316]: https://github.com/libp2p/rust-libp2p/pull/2316
+
+# 0.33.0 [2021-11-01]
 
 - Add an event to register peers that do not support the gossipsub protocol
   [PR 2241](https://github.com/libp2p/rust-libp2p/pull/2241)
@@ -13,6 +68,9 @@
 
 - Allow `message_id_fn`s to accept closures that capture variables.
   [PR 2103](https://github.com/libp2p/rust-libp2p/pull/2103)
+
+- Implement std::error::Error for error types.
+  [PR 2254](https://github.com/libp2p/rust-libp2p/pull/2254)
 
 # 0.32.0 [2021-07-12]
 

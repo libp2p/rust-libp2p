@@ -1,9 +1,41 @@
-# 0.31.0 [unreleased]
+# 0.34.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
+# 0.33.0 [2022-01-27]
+
+- Update dependencies.
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
+# 0.32.0 [2021-11-16]
+
+- Use `futures-timer` instead of `wasm-timer` (see [PR 2245]).
+- Filter invalid peers from cache used in `addresses_of_peer` – [PR 2338].
+
+- Update dependencies.
+
+[PR 2245]: https://github.com/libp2p/rust-libp2p/pull/2245
+[PR 2338]: https://github.com/libp2p/rust-libp2p/pull/2338
+
+# 0.31.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
 - Update dependencies.
+
+- Assist in peer discovery by optionally returning reported listen addresses
+  of other peers from `addresses_of_peer` (see [PR
+  2232](https://github.com/libp2p/rust-libp2p/pull/2232)), disabled by default.
 
 # 0.30.0 [2021-07-12]
 

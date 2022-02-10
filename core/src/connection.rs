@@ -23,22 +23,39 @@ pub(crate) mod handler;
 mod listeners;
 mod substream;
 
-pub(crate) mod manager;
 pub(crate) mod pool;
 
-pub use error::{ConnectionError, PendingConnectionError};
+pub use error::{
+    ConnectionError, PendingConnectionError, PendingInboundConnectionError,
+    PendingOutboundConnectionError,
+};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
 pub use listeners::{ListenerId, ListenersEvent, ListenersStream};
-pub use manager::ConnectionId;
 pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
 pub use substream::{Close, Substream, SubstreamEndpoint};
 
+use crate::multiaddr::{Multiaddr, Protocol};
 use crate::muxing::StreamMuxer;
-use crate::{Multiaddr, PeerId};
+use crate::PeerId;
 use std::hash::Hash;
 use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use substream::{Muxing, SubstreamEvent};
+
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(usize);
+
+impl ConnectionId {
+    /// Creates a `ConnectionId` from a non-negative integer.
+    ///
+    /// This is primarily useful for creating connection IDs
+    /// in test environments. There is in general no guarantee
+    /// that all connection IDs are based on non-negative integers.
+    pub fn new(id: usize) -> Self {
+        ConnectionId(id)
+    }
+}
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -72,19 +89,76 @@ impl Endpoint {
     }
 }
 
-/// The endpoint roles associated with a peer-to-peer connection.
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer {
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
+    },
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
+        }
+    }
+}
+
+/// The endpoint roles associated with an established peer-to-peer connection.
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum ConnectedPoint {
     /// We dialed the node.
     Dialer {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
+        /// Whether the role of the local node on the connection should be
+        /// overriden. I.e. whether the local node should act as a listener on
+        /// the outgoing connection.
+        ///
+        /// This option is needed for NAT and firewall hole punching.
+        ///
+        /// - [`Endpoint::Dialer`] represents the default non-overriding option.
+        ///
+        /// - [`Endpoint::Listener`] represents the overriding option.
+        ///   Realization depends on the transport protocol. E.g. in the case of
+        ///   TCP, both endpoints dial each other, resulting in a _simultaneous
+        ///   open_ TCP connection. On this new connection both endpoints assume
+        ///   to be the dialer of the connection. This is problematic during the
+        ///   connection upgrade process where an upgrade assumes one side to be
+        ///   the listener. With the help of this option, both peers can
+        ///   negotiate the roles (dialer and listener) for the new connection
+        ///   ahead of time, through some external channel, e.g. the DCUtR
+        ///   protocol, and thus have one peer dial the other and upgrade the
+        ///   connection as a dialer and one peer dial the other and upgrade the
+        ///   connection _as a listener_ overriding its role.
+        role_override: Endpoint,
     },
     /// We received the node.
     Listener {
         /// Local connection address.
         local_addr: Multiaddr,
-        /// Stack of protocols used to send back data to the remote.
+        /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
 }
@@ -126,6 +200,19 @@ impl ConnectedPoint {
         }
     }
 
+    /// Returns true if the connection is relayed.
+    pub fn is_relayed(&self) -> bool {
+        match self {
+            ConnectedPoint::Dialer {
+                address,
+                role_override: _,
+            } => address,
+            ConnectedPoint::Listener { local_addr, .. } => local_addr,
+        }
+        .iter()
+        .any(|p| p == Protocol::P2pCircuit)
+    }
+
     /// Returns the address of the remote stored in this struct.
     ///
     /// For `Dialer`, this returns `address`. For `Listener`, this returns `send_back_addr`.
@@ -134,7 +221,7 @@ impl ConnectedPoint {
     /// not be usable to establish new connections.
     pub fn get_remote_address(&self) -> &Multiaddr {
         match self {
-            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
         }
     }
@@ -144,7 +231,7 @@ impl ConnectedPoint {
     /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.
     pub fn set_remote_address(&mut self, new_address: Multiaddr) {
         match self {
-            ConnectedPoint::Dialer { address } => *address = new_address,
+            ConnectedPoint::Dialer { address, .. } => *address = new_address,
             ConnectedPoint::Listener { send_back_addr, .. } => *send_back_addr = new_address,
         }
     }
@@ -289,32 +376,23 @@ where
 pub struct IncomingInfo<'a> {
     /// Local connection address.
     pub local_addr: &'a Multiaddr,
-    /// Stack of protocols used to send back data to the remote.
+    /// Address used to send back data to the remote.
     pub send_back_addr: &'a Multiaddr,
 }
 
 impl<'a> IncomingInfo<'a> {
-    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
-    pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Listener {
+    /// Builds the [`PendingPoint`] corresponding to the incoming connection.
+    pub fn to_pending_point(&self) -> PendingPoint {
+        PendingPoint::Listener {
             local_addr: self.local_addr.clone(),
             send_back_addr: self.send_back_addr.clone(),
         }
     }
-}
-
-/// Borrowed information about an outgoing connection currently being negotiated.
-#[derive(Debug, Copy, Clone)]
-pub struct OutgoingInfo<'a> {
-    pub address: &'a Multiaddr,
-    pub peer_id: Option<&'a PeerId>,
-}
-
-impl<'a> OutgoingInfo<'a> {
-    /// Builds a `ConnectedPoint` corresponding to the outgoing connection.
+    /// Builds the [`ConnectedPoint`] corresponding to the incoming connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Dialer {
-            address: self.address.clone(),
+        ConnectedPoint::Listener {
+            local_addr: self.local_addr.clone(),
+            send_back_addr: self.send_back_addr.clone(),
         }
     }
 }

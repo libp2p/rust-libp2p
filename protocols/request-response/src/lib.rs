@@ -66,8 +66,9 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    DialError, DialPeerCondition, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::{self, DialOpts},
+    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -230,8 +231,6 @@ impl std::error::Error for InboundFailure {}
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
 pub struct ResponseChannel<TResponse> {
-    request_id: RequestId,
-    peer: PeerId,
     sender: oneshot::Sender<TResponse>,
 }
 
@@ -385,12 +384,12 @@ where
 
         if let Some(request) = self.try_send_request(peer, request) {
             let handler = self.new_handler();
-            self.pending_events
-                .push_back(NetworkBehaviourAction::DialPeer {
-                    peer_id: *peer,
-                    condition: DialPeerCondition::Disconnected,
-                    handler,
-                });
+            self.pending_events.push_back(NetworkBehaviourAction::Dial {
+                opts: DialOpts::peer_id(*peer)
+                    .condition(dial_opts::PeerCondition::Disconnected)
+                    .build(),
+                handler,
+            });
             self.pending_outbound_requests
                 .entry(*peer)
                 .or_default()
@@ -592,13 +591,27 @@ where
         addresses
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-            for request in pending {
-                let request = self.try_send_request(peer, request);
-                assert!(request.is_none());
-            }
-        }
+    fn inject_address_change(
+        &mut self,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        _old: &ConnectedPoint,
+        new: &ConnectedPoint,
+    ) {
+        let new_address = match new {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        let connections = self
+            .connected
+            .get_mut(peer)
+            .expect("Address change can only happen on an established connection.");
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| &c.id == conn)
+            .expect("Address change can only happen on an established connection.");
+        connection.address = new_address;
     }
 
     fn inject_connection_established(
@@ -606,15 +619,26 @@ where
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        _errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         let address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
             ConnectedPoint::Listener { .. } => None,
         };
         self.connected
             .entry(*peer)
             .or_default()
             .push(Connection::new(*conn, address));
+
+        if other_established == 0 {
+            if let Some(pending) = self.pending_outbound_requests.remove(peer) {
+                for request in pending {
+                    let request = self.try_send_request(peer, request);
+                    assert!(request.is_none());
+                }
+            }
+        }
     }
 
     fn inject_connection_closed(
@@ -623,6 +647,7 @@ where
         conn: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         let connections = self
             .connected
@@ -635,6 +660,7 @@ where
             .map(|p: usize| connections.remove(p))
             .expect("Expected connection to be established before closing.");
 
+        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
         if connections.is_empty() {
             self.connected.remove(peer_id);
         }
@@ -662,27 +688,30 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.connected.remove(peer);
-    }
-
-    fn inject_dial_failure(&mut self, peer: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
-        // If there are pending outgoing requests when a dial failure occurs,
-        // it is implied that we are not connected to the peer, since pending
-        // outgoing requests are drained when a connection is established and
-        // only created when a peer is not connected when a request is made.
-        // Thus these requests must be considered failed, even if there is
-        // another, concurrent dialing attempt ongoing.
-        if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-            for request in pending {
-                self.pending_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::OutboundFailure {
-                            peer: *peer,
-                            request_id: request.request_id,
-                            error: OutboundFailure::DialFailure,
-                        },
-                    ));
+    fn inject_dial_failure(
+        &mut self,
+        peer: Option<PeerId>,
+        _: Self::ProtocolsHandler,
+        _: &DialError,
+    ) {
+        if let Some(peer) = peer {
+            // If there are pending outgoing requests when a dial failure occurs,
+            // it is implied that we are not connected to the peer, since pending
+            // outgoing requests are drained when a connection is established and
+            // only created when a peer is not connected when a request is made.
+            // Thus these requests must be considered failed, even if there is
+            // another, concurrent dialing attempt ongoing.
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
+                for request in pending {
+                    self.pending_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            RequestResponseEvent::OutboundFailure {
+                                peer: peer,
+                                request_id: request.request_id,
+                                error: OutboundFailure::DialFailure,
+                            },
+                        ));
+                }
             }
         }
     }
@@ -718,11 +747,7 @@ where
                 request,
                 sender,
             } => {
-                let channel = ResponseChannel {
-                    request_id,
-                    peer,
-                    sender,
-                };
+                let channel = ResponseChannel { sender };
                 let message = RequestResponseMessage::Request {
                     request_id,
                     request,

@@ -21,15 +21,20 @@
 use crate::{error::Error, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use futures_rustls::{client, server, webpki};
+use futures_rustls::{client, rustls, server};
 use libp2p_core::{
+    connection::Endpoint,
     either::EitherOutput,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     Transport,
 };
 use log::{debug, trace};
-use soketto::{connection, extension::deflate::Deflate, handshake};
+use soketto::{
+    connection::{self, CloseReason},
+    extension::deflate::Deflate,
+    handshake,
+};
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -205,13 +210,13 @@ where
                                 .receive_request()
                                 .map_err(|e| Error::Handshake(Box::new(e)))
                                 .await?;
-                            request.into_key()
+                            request.key()
                         };
 
                         trace!("accepting websocket handshake request from {}", remote2);
 
                         let response = handshake::server::Response::Accept {
-                            key: &ws_key,
+                            key: ws_key,
                             protocol: None,
                         };
 
@@ -241,6 +246,32 @@ where
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Dialer)
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Listener)
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
+}
+
+impl<T> WsConfig<T>
+where
+    T: Transport + Send + Clone + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    fn do_dial(
+        self,
+        addr: Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
         let addr = match parse_ws_dial_addr(addr) {
             Ok(addr) => addr,
             Err(Error::InvalidMultiaddr(a)) => {
@@ -255,7 +286,7 @@ where
         let future = async move {
             loop {
                 let this = self.clone();
-                match this.dial_once(addr).await {
+                match this.dial_once(addr, role_override).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
                             debug!("Too many redirects (> {})", self.max_redirects);
@@ -272,25 +303,19 @@ where
 
         Ok(Box::pin(future))
     }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
-    }
-}
-
-impl<T> WsConfig<T>
-where
-    T: Transport,
-    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
     /// Attempts to dial the given address and perform a websocket handshake.
     async fn dial_once(
         self,
         addr: WsAddress,
+        role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("Dialing websocket address: {:?}", addr);
 
-        let dial = self.transport.dial(addr.tcp_addr).map_err(|e| match e {
+        let dial = match role_override {
+            Endpoint::Dialer => self.transport.dial(addr.tcp_addr),
+            Endpoint::Listener => self.transport.dial_as_listener(addr.tcp_addr),
+        }
+        .map_err(|e| match e {
             TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
             TransportError::Other(e) => Error::Transport(e),
         })?;
@@ -307,7 +332,7 @@ where
             let stream = self
                 .tls_config
                 .client
-                .connect(dns_name.as_ref(), stream)
+                .connect(dns_name.clone(), stream)
                 .map_err(|e| {
                     debug!("TLS handshake with {:?} failed: {}", dns_name, e);
                     Error::Tls(tls::Error::from(e))
@@ -360,7 +385,7 @@ where
 struct WsAddress {
     host_port: String,
     path: String,
-    dns_name: Option<webpki::DNSName>,
+    dns_name: Option<rustls::ServerName>,
     use_tls: bool,
     tcp_addr: Multiaddr,
 }
@@ -389,10 +414,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
-                break (
-                    format!("{}:{}", &h, port),
-                    Some(tls::dns_name_ref(&h)?.to_owned()),
-                )
+                break (format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?))
             }
             (Some(_), Some(p)) => {
                 ip = Some(p);
@@ -472,55 +494,68 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 
 /// The websocket connection.
 pub struct Connection<T> {
-    receiver: BoxStream<'static, Result<IncomingData, connection::Error>>,
+    receiver: BoxStream<'static, Result<Incoming, connection::Error>>,
     sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
     _marker: std::marker::PhantomData<T>,
 }
 
-/// Data received over the websocket connection.
+/// Data or control information received over the websocket connection.
 #[derive(Debug, Clone)]
-pub enum IncomingData {
-    /// Binary application data.
-    Binary(Vec<u8>),
-    /// UTF-8 encoded application data.
-    Text(Vec<u8>),
+pub enum Incoming {
+    /// Application data.
+    Data(Data),
     /// PONG control frame data.
     Pong(Vec<u8>),
+    /// Close reason.
+    Closed(CloseReason),
 }
 
-impl IncomingData {
+/// Application data received over the websocket connection
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Data {
+    /// UTF-8 encoded textual data.
+    Text(Vec<u8>),
+    /// Binary data.
+    Binary(Vec<u8>),
+}
+
+impl Data {
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Data::Text(d) => d,
+            Data::Binary(d) => d,
+        }
+    }
+}
+
+impl AsRef<[u8]> for Data {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Data::Text(d) => d,
+            Data::Binary(d) => d,
+        }
+    }
+}
+
+impl Incoming {
     pub fn is_data(&self) -> bool {
         self.is_binary() || self.is_text()
     }
 
     pub fn is_binary(&self) -> bool {
-        matches!(self, IncomingData::Binary(_))
+        matches!(self, Incoming::Data(Data::Binary(_)))
     }
 
     pub fn is_text(&self) -> bool {
-        matches!(self, IncomingData::Text(_))
+        matches!(self, Incoming::Data(Data::Text(_)))
     }
 
     pub fn is_pong(&self) -> bool {
-        matches!(self, IncomingData::Pong(_))
+        matches!(self, Incoming::Pong(_))
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
-        match self {
-            IncomingData::Binary(d) => d,
-            IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d,
-        }
-    }
-}
-
-impl AsRef<[u8]> for IncomingData {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            IncomingData::Binary(d) => d,
-            IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d,
-        }
+    pub fn is_close(&self) -> bool {
+        matches!(self, Incoming::Closed(_))
     }
 }
 
@@ -573,15 +608,18 @@ where
         let stream = stream::unfold((Vec::new(), receiver), |(mut data, mut receiver)| async {
             match receiver.receive(&mut data).await {
                 Ok(soketto::Incoming::Data(soketto::Data::Text(_))) => Some((
-                    Ok(IncomingData::Text(mem::take(&mut data))),
+                    Ok(Incoming::Data(Data::Text(mem::take(&mut data)))),
                     (data, receiver),
                 )),
                 Ok(soketto::Incoming::Data(soketto::Data::Binary(_))) => Some((
-                    Ok(IncomingData::Binary(mem::take(&mut data))),
+                    Ok(Incoming::Data(Data::Binary(mem::take(&mut data)))),
                     (data, receiver),
                 )),
                 Ok(soketto::Incoming::Pong(pong)) => {
-                    Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
+                    Some((Ok(Incoming::Pong(Vec::from(pong))), (data, receiver)))
+                }
+                Ok(soketto::Incoming::Closed(reason)) => {
+                    Some((Ok(Incoming::Closed(reason)), (data, receiver)))
                 }
                 Err(connection::Error::Closed) => None,
                 Err(e) => Some((Err(e), (data, receiver))),
@@ -614,7 +652,7 @@ impl<T> Stream for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Item = io::Result<IncomingData>;
+    type Item = io::Result<Incoming>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));

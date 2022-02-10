@@ -1,4 +1,16 @@
-# 0.30.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+# 0.31.0 [2022-01-27]
+
+- Update dependencies.
+
+- Migrate to Rust edition 2021 (see [PR 2339]).
+
+[PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+
+# 0.30.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)

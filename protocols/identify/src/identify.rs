@@ -23,17 +23,21 @@ use crate::protocol::{IdentifyInfo, ReplySubstream};
 use futures::prelude::*;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
+    multiaddr::Protocol,
     upgrade::UpgradeError,
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
-    AddressScore, DialError, DialPeerCondition, IntoProtocolsHandler, NegotiatedSubstream,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
+    dial_opts::{self, DialOpts},
+    AddressScore, DialError, IntoProtocolsHandler, NegotiatedSubstream, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
 };
+use lru::LruCache;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     io,
+    iter::FromIterator,
     pin::Pin,
     task::Context,
     task::Poll,
@@ -57,6 +61,8 @@ pub struct Identify {
     /// Peers to which an active push with current information about
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
+    /// The addresses of all peers that we have discovered.
+    discovered_peers: LruCache<PeerId, HashSet<Multiaddr>>,
 }
 
 /// A pending reply to an inbound identification request.
@@ -109,6 +115,12 @@ pub struct IdentifyConfig {
     ///
     /// Disabled by default.
     pub push_listen_addr_updates: bool,
+
+    /// How many entries of discovered peers to keep before we discard
+    /// the least-recently used one.
+    ///
+    /// Disabled by default.
+    pub cache_size: usize,
 }
 
 impl IdentifyConfig {
@@ -122,6 +134,7 @@ impl IdentifyConfig {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
+            cache_size: 0,
         }
     }
 
@@ -152,17 +165,29 @@ impl IdentifyConfig {
         self.push_listen_addr_updates = b;
         self
     }
+
+    /// Configures the size of the LRU cache, caching addresses of discovered peers.
+    ///
+    /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
+    ///  [`Identify::addresses_of_peer`].
+    pub fn with_cache_size(mut self, cache_size: usize) -> Self {
+        self.cache_size = cache_size;
+        self
+    }
 }
 
 impl Identify {
     /// Creates a new `Identify` network behaviour.
     pub fn new(config: IdentifyConfig) -> Self {
+        let discovered_peers = LruCache::new(config.cache_size);
+
         Identify {
             config,
             connected: HashMap::new(),
             pending_replies: VecDeque::new(),
             events: VecDeque::new(),
             pending_push: HashSet::new(),
+            discovered_peers,
         }
     }
 
@@ -175,9 +200,10 @@ impl Identify {
             if self.pending_push.insert(p) {
                 if !self.connected.contains_key(&p) {
                     let handler = self.new_handler();
-                    self.events.push_back(NetworkBehaviourAction::DialPeer {
-                        peer_id: p,
-                        condition: DialPeerCondition::Disconnected,
+                    self.events.push_back(NetworkBehaviourAction::Dial {
+                        opts: DialOpts::peer_id(p)
+                            .condition(dial_opts::PeerCondition::Disconnected)
+                            .build(),
                         handler,
                     });
                 }
@@ -199,9 +225,11 @@ impl NetworkBehaviour for Identify {
         peer_id: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
+        failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
     ) {
         let addr = match endpoint {
-            ConnectedPoint::Dialer { address } => address.clone(),
+            ConnectedPoint::Dialer { address, .. } => address.clone(),
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
         };
 
@@ -209,6 +237,16 @@ impl NetworkBehaviour for Identify {
             .entry(*peer_id)
             .or_default()
             .insert(*conn, addr);
+
+        if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
+            for addr in failed_addresses
+                .into_iter()
+                .map(|addresses| addresses.into_iter())
+                .flatten()
+            {
+                entry.remove(addr);
+            }
+        }
     }
 
     fn inject_connection_closed(
@@ -217,21 +255,35 @@ impl NetworkBehaviour for Identify {
         conn: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
-        if let Some(addrs) = self.connected.get_mut(peer_id) {
+        if remaining_established == 0 {
+            self.connected.remove(peer_id);
+            self.pending_push.remove(peer_id);
+        } else if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: &PeerId, _: Self::ProtocolsHandler, _: DialError) {
-        if !self.connected.contains_key(peer_id) {
-            self.pending_push.remove(peer_id);
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: Option<PeerId>,
+        _: Self::ProtocolsHandler,
+        error: &DialError,
+    ) {
+        if let Some(peer_id) = peer_id {
+            if !self.connected.contains_key(&peer_id) {
+                self.pending_push.remove(&peer_id);
+            }
         }
-    }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        self.connected.remove(peer_id);
-        self.pending_push.remove(peer_id);
+        if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
+            if let DialError::Transport(errors) = error {
+                for (addr, _error) in errors {
+                    entry.remove(addr);
+                }
+            }
+        }
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
@@ -253,7 +305,15 @@ impl NetworkBehaviour for Identify {
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            IdentifyHandlerEvent::Identified(info) => {
+            IdentifyHandlerEvent::Identified(mut info) => {
+                // Remove invalid multiaddrs.
+                info.listen_addrs
+                    .retain(|addr| multiaddr_matches_peer_id(addr, &peer_id));
+
+                // Replace existing addresses to prevent other peer from filling up our memory.
+                self.discovered_peers
+                    .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
+
                 let observed = info.observed_addr.clone();
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                     IdentifyEvent::Received { peer_id, info },
@@ -388,9 +448,18 @@ impl NetworkBehaviour for Identify {
 
         Poll::Pending
     }
+
+    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+        self.discovered_peers
+            .get(peer)
+            .cloned()
+            .map(|addr| Vec::from_iter(addr))
+            .unwrap_or_default()
+    }
 }
 
 /// Event emitted  by the `Identify` behaviour.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum IdentifyEvent {
     /// Identification information has been received from a peer.
@@ -434,6 +503,16 @@ fn listen_addrs(params: &impl PollParameters) -> Vec<Multiaddr> {
     let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
     listen_addrs.extend(params.listened_addresses());
     listen_addrs
+}
+
+/// If there is a given peer_id in the multiaddr, make sure it is the same as
+/// the given peer_id. If there is no peer_id for the peer in the mutiaddr, this returns true.
+fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
+    let last_component = addr.iter().last();
+    if let Some(Protocol::P2p(multi_addr_peer_id)) = last_component {
+        return multi_addr_peer_id == *peer_id.as_ref();
+    }
+    return true;
 }
 
 #[cfg(test)]
@@ -500,7 +579,7 @@ mod tests {
                 }
             }
         });
-        swarm2.dial_addr(listen_addr).unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
@@ -552,11 +631,7 @@ mod tests {
 
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(
-                IdentifyConfig::new("a".to_string(), pubkey.clone())
-                    // Delay identification requests so we can test the push protocol.
-                    .with_initial_delay(Duration::from_secs(u32::MAX as u64)),
-            );
+            let protocol = Identify::new(IdentifyConfig::new("a".to_string(), pubkey.clone()));
             let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
@@ -565,9 +640,7 @@ mod tests {
             let (pubkey, transport) = transport();
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
-                    .with_agent_version("b".to_string())
-                    // Delay identification requests so we can test the push protocol.
-                    .with_initial_delay(Duration::from_secs(u32::MAX as u64)),
+                    .with_agent_version("b".to_string()),
             );
             let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
@@ -586,7 +659,7 @@ mod tests {
             }
         });
 
-        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
+        swarm2.dial(listen_addr).unwrap();
 
         async_std::task::block_on(async move {
             loop {
@@ -625,5 +698,115 @@ mod tests {
                     .push(std::iter::once(pubkey1.to_peer_id()));
             }
         })
+    }
+
+    #[test]
+    fn discover_peer_after_disconnect() {
+        let _ = env_logger::try_init();
+
+        let mut swarm1 = {
+            let (pubkey, transport) = transport();
+            let protocol = Identify::new(IdentifyConfig::new("a".to_string(), pubkey.clone()));
+
+            Swarm::new(transport, protocol, pubkey.to_peer_id())
+        };
+
+        let mut swarm2 = {
+            let (pubkey, transport) = transport();
+            let protocol = Identify::new(
+                IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    .with_cache_size(100)
+                    .with_agent_version("b".to_string()),
+            );
+
+            Swarm::new(transport, protocol, pubkey.to_peer_id())
+        };
+
+        let swarm1_peer_id = *swarm1.local_peer_id();
+
+        let listener = swarm1
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
+
+        let listen_addr = async_std::task::block_on(async {
+            loop {
+                match swarm1.select_next_some().await {
+                    SwarmEvent::NewListenAddr {
+                        address,
+                        listener_id,
+                    } if listener_id == listener => return address,
+                    _ => {}
+                }
+            }
+        });
+
+        async_std::task::spawn(async move {
+            loop {
+                swarm1.next().await;
+            }
+        });
+
+        swarm2.dial(listen_addr).unwrap();
+
+        // Wait until we identified.
+        async_std::task::block_on(async {
+            loop {
+                if let SwarmEvent::Behaviour(IdentifyEvent::Received { .. }) =
+                    swarm2.select_next_some().await
+                {
+                    break;
+                }
+            }
+        });
+
+        swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
+
+        // Wait for connection to close.
+        async_std::task::block_on(async {
+            loop {
+                if let SwarmEvent::ConnectionClosed { peer_id, .. } =
+                    swarm2.select_next_some().await
+                {
+                    break peer_id;
+                }
+            }
+        });
+
+        // We should still be able to dial now!
+        swarm2.dial(swarm1_peer_id).unwrap();
+
+        let connected_peer = async_std::task::block_on(async {
+            loop {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
+                    swarm2.select_next_some().await
+                {
+                    break peer_id;
+                }
+            }
+        });
+
+        assert_eq!(connected_peer, swarm1_peer_id);
+    }
+
+    #[test]
+    fn check_multiaddr_matches_peer_id() {
+        let peer_id = PeerId::random();
+        let other_peer_id = PeerId::random();
+        let mut addr: Multiaddr = "/ip4/147.75.69.143/tcp/4001"
+            .parse()
+            .expect("failed to parse multiaddr");
+
+        let addr_without_peer_id: Multiaddr = addr.clone();
+        let mut addr_with_other_peer_id = addr.clone();
+
+        addr.push(Protocol::P2p(peer_id.clone().into()));
+        addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
+
+        assert!(multiaddr_matches_peer_id(&addr, &peer_id));
+        assert!(!multiaddr_matches_peer_id(
+            &addr_with_other_peer_id,
+            &peer_id
+        ));
+        assert!(multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id));
     }
 }
