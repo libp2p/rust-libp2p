@@ -33,6 +33,7 @@ instant = "0.1.11"
 serde = { version = "1", optional = true, features = ["derive"] }
 # Metrics dependencies
 prometheus-client = "0.15.0"
+wasm-timer = "0.2.5"
 
 [dev-dependencies]
 async-std = "1.6.3"
