@@ -121,11 +121,13 @@ pub(crate) fn get_address_proto(
     use Protocol::{Tls, Ws, Wss};
 
     let (last, next_last) = (addr.pop(), addr.into_iter().last());
+    let err = Err(format!("{} is not a websocket multiaddr", addr));
     match (last, next_last) {
         (Some(p1 @ Wss(_)), Some(p2)) if p2 != Tls => Ok((true, p1, addr)),
-        (Some(Ws(ref s)), Some(Tls)) => Ok((true, Protocol::Wss(s.clone()), addr)),
+        (Some(Ws(ref s)), Some(Tls)) => Ok((true, Wss(s.clone()), addr)),
         (Some(ref p @ Ws(_)), Some(_)) => Ok((false, p.clone(), addr)),
-        (Some(Wss(_)), Some(Tls)) | _ => Err(format!("{} is not a websocket multiaddr", addr)),
+        (Some(Wss(_)), Some(Tls)) => err,
+        _ => err,
     }
 }
 
