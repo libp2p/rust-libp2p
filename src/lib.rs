@@ -24,11 +24,10 @@
 //! [libp2p.io](https://libp2p.io/).
 //!
 //! To get started with this libp2p implementation in Rust, please take a look
-//! at the [`tutorial`](crate::tutorial). Further examples can be found in the
+//! at the [`tutorials`](crate::tutorials). Further examples can be found in the
 //! [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
-//! [ping tutorial]: https://github.com/libp2p/rust-libp2p/tree/master/examples/ping.rs
 
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
@@ -151,7 +150,7 @@ pub mod bandwidth;
 pub mod simple;
 
 #[cfg(doc)]
-pub mod tutorial;
+pub mod tutorials;
 
 pub use self::core::{
     identity,
