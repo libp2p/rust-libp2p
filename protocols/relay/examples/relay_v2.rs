@@ -21,14 +21,16 @@
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p::core::upgrade;
+use libp2p::core::{self, upgrade};
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
+use libp2p::relay::v2::client::{self, Client};
 use libp2p::relay::v2::relay::{self, Relay};
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::TcpConfig;
+use libp2p::yamux;
 use libp2p::Transport;
+use libp2p::{dns, tcp};
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use libp2p::{noise, Multiaddr};
 use std::error::Error;
@@ -46,25 +48,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let tcp_transport = TcpConfig::new();
+    let (relay_transport, client) = client::Client::new_transport_and_behaviour(local_peer_id);
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&local_key)
         .expect("Signing libp2p-noise static DH keypair failed.");
 
-    let transport = tcp_transport
+    let tcp = tcp::TcpConfig::new().nodelay(true).port_reuse(true);
+    let dns_tcp = block_on(dns::DnsConfig::system(tcp))?;
+
+    let transport = dns_tcp
+        .or_transport(relay_transport)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(yamux::YamuxConfig::default())
+        .timeout(std::time::Duration::from_secs(20))
         .boxed();
 
     let behaviour = Behaviour {
         relay: Relay::new(local_peer_id, Default::default()),
         ping: Ping::new(PingConfig::new()),
         identify: Identify::new(IdentifyConfig::new(
-            "/TODO/0.0.1".to_string(),
+            "/ipfs/0.1.0".to_string(),
             local_key.public(),
         )),
+        client,
     };
 
     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
@@ -78,6 +86,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::Tcp(opt.port));
     swarm.listen_on(listen_addr)?;
 
+    for addr in opt.dial {
+        let peer: Multiaddr = addr.parse().expect("peer address to be valid");
+        swarm.dial(peer).expect("to dial peer");
+    }
+
     block_on(async {
         loop {
             match swarm.next().await.expect("Infinite Stream.") {
@@ -87,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     println!("Listening on {:?}", address);
                 }
-                _ => {}
+                e => log::info!("{:?}", e),
             }
         }
     })
@@ -97,6 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[behaviour(out_event = "Event", event_process = false)]
 struct Behaviour {
     relay: Relay,
+    client: Client,
     ping: Ping,
     identify: Identify,
 }
@@ -106,6 +120,7 @@ enum Event {
     Ping(PingEvent),
     Identify(IdentifyEvent),
     Relay(relay::Event),
+    Client(client::Event),
 }
 
 impl From<PingEvent> for Event {
@@ -123,6 +138,12 @@ impl From<IdentifyEvent> for Event {
 impl From<relay::Event> for Event {
     fn from(e: relay::Event) -> Self {
         Event::Relay(e)
+    }
+}
+
+impl From<client::Event> for Event {
+    fn from(e: client::Event) -> Self {
+        Event::Client(e)
     }
 }
 
@@ -149,4 +170,8 @@ struct Opt {
     /// The port used to listen on all interfaces
     #[structopt(long)]
     port: u16,
+
+    /// Addresses to dial on init
+    #[structopt(long)]
+    dial: Vec<String>,
 }
