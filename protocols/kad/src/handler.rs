@@ -63,8 +63,8 @@ impl<T: Clone + fmt::Debug + Send + 'static> IntoProtocolsHandler for KademliaHa
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         match self.config.mode {
-            Mode::Client => upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade),
             Mode::Server => upgrade::EitherUpgrade::A(self.config.protocol_config.clone()),
+            Mode::Client => upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade),
         }
     }
 }
