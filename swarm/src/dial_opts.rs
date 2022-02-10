@@ -40,7 +40,7 @@ impl DialOpts {
     /// Dial a known peer.
     ///
     ///   ```
-    ///   # use crate::dial_opts::{DialOpts, PeerCondition};
+    ///   # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     ///   # use libp2p_core::PeerId;
     ///   DialOpts::peer_id(PeerId::random())
     ///      .condition(PeerCondition::Disconnected)
@@ -60,7 +60,7 @@ impl DialOpts {
     /// Dial an unknown peer.
     ///
     ///   ```
-    ///   # use crate::dial_opts::DialOpts;
+    ///   # use libp2p_swarm::dial_opts::DialOpts;
     ///   DialOpts::unknown_peer_id()
     ///      .address("/ip6/::1/tcp/12345".parse().unwrap())
     ///      .build();
@@ -248,7 +248,7 @@ impl WithoutPeerIdWithAddress {
 /// a known peer is initiated.
 ///
 /// ```
-/// # use crate::dial_opts::{DialOpts, PeerCondition};
+/// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
 /// # use libp2p_core::PeerId;
 /// #
 /// DialOpts::peer_id(PeerId::random())

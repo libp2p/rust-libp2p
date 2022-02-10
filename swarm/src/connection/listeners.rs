@@ -32,53 +32,15 @@ use std::{collections::VecDeque, fmt, mem, pin::Pin};
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
-/// To start using a `ListenersStream`, create one with `new` by passing an implementation of
-/// `Transport`. This `Transport` will be used to start listening, therefore you want to pass
-/// a `Transport` that supports the protocols you wish you listen on.
+/// To start using a [`ListenersStream`], create one with [`ListenersStream::new`] by passing an
+/// implementation of [`Transport`]. This [`Transport`] will be used to start listening, therefore
+/// you want to pass a [`Transport`] that supports the protocols you wish you listen on.
 ///
-/// Then, call `ListenerStream::listen_on` for all addresses you want to start listening on.
+/// Then, call [`ListenersStream::listen_on`] for all addresses you want to start listening on.
 ///
-/// The `ListenersStream` never ends and never produces errors. If a listener errors or closes,
-/// an event is generated on the stream and the listener is then dropped, but the `ListenersStream`
+/// The [`ListenersStream`] never ends and never produces errors. If a listener errors or closes, an
+/// event is generated on the stream and the listener is then dropped, but the [`ListenersStream`]
 /// itself continues.
-///
-/// # Example
-///
-/// ```no_run
-/// use futures::prelude::*;
-/// use libp2p_swarm::connection::{ListenersEvent, ListenersStream};
-///
-/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
-///
-/// // Ask the `listeners` to start listening on the given multiaddress.
-/// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-///
-/// // The `listeners` will now generate events when polled.
-/// futures::executor::block_on(async move {
-///     while let Some(event) = listeners.next().await {
-///         match event {
-///             ListenersEvent::NewAddress { listener_id, listen_addr } => {
-///                 println!("Listener {:?} is listening at address {}", listener_id, listen_addr);
-///             },
-///             ListenersEvent::AddressExpired { listener_id, listen_addr } => {
-///                 println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
-///             },
-///             ListenersEvent::Closed { listener_id, .. } => {
-///                 println!("Listener {:?} has been closed", listener_id);
-///             },
-///             ListenersEvent::Error { listener_id, error } => {
-///                 println!("Listener {:?} has experienced an error: {}", listener_id, error);
-///             },
-///             ListenersEvent::Incoming { listener_id, upgrade, local_addr, .. } => {
-///                 println!("Listener {:?} has a new connection on {}", listener_id, local_addr);
-///                 // We don't do anything with the newly-opened connection, but in a real-life
-///                 // program you probably want to use it!
-///                 drop(upgrade);
-///             },
-///         }
-///     }
-/// })
-/// ```
 pub struct ListenersStream<TTrans>
 where
     TTrans: Transport,
