@@ -24,7 +24,7 @@
 use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::PeerId;
 use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};

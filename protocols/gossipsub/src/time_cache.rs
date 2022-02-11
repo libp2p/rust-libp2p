@@ -21,7 +21,7 @@
 //! This implements a time-based LRU cache for checking gossipsub message duplicates.
 
 use fnv::FnvHashMap;
-use instant::Instant;
+use wasm_timer::Instant;
 use std::collections::hash_map::{
     self,
     Entry::{Occupied, Vacant},

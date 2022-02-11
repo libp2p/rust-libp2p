@@ -21,7 +21,7 @@
 use crate::error::ValidationError;
 use crate::peer_score::RejectReason;
 use crate::MessageId;
-use instant::Instant;
+use wasm_timer::Instant;
 use libp2p_core::PeerId;
 use log::debug;
 use std::collections::HashMap;
