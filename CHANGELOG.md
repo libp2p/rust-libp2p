@@ -69,7 +69,7 @@
   - Update to `libp2p-websocket` `v0.34.0`.
   - Update to `libp2p-yamux` `v0.36.0`.
 
-- Drop support for gossipsub in wasm targets (see [PR 2506]).
+- Drop support for gossipsub in the wasm32-unknown-unknown target (see [PR 2506]).
 
 [PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
 
