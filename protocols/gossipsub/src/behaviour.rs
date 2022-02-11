@@ -36,7 +36,6 @@ use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
-use wasm_timer::Instant;
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
@@ -45,6 +44,7 @@ use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
