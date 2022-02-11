@@ -62,6 +62,8 @@ pub use crate::query::QueryStats;
 /// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
 pub struct Kademlia<TStore> {
+    /// Is this a client or server?
+    mode: Mode,
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
@@ -463,6 +465,7 @@ where
             connection_idle_timeout: config.connection_idle_timeout,
             local_addrs: HashSet::new(),
             caching: config.caching,
+            mode: config.mode,
         }
     }
 
@@ -1809,7 +1812,7 @@ where
         KademliaHandlerProto::new(KademliaHandlerConfig {
             protocol_config: self.protocol_config.clone(),
             idle_timeout: self.connection_idle_timeout,
-            mode: Mode::default(),
+            mode: self.mode.clone(),
         })
     }
 

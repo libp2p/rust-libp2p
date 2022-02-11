@@ -25,7 +25,13 @@ use super::*;
 use crate::kbucket::Distance;
 use crate::record::{store::MemoryStore, Key};
 use crate::K_VALUE;
-use futures::{executor::block_on, future::poll_fn, prelude::*};
+use futures::task::Spawn;
+use futures::{
+    executor::{block_on, LocalPool},
+    future::poll_fn,
+    prelude::*,
+    select,
+};
 use futures_timer::Delay;
 use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
@@ -36,7 +42,7 @@ use libp2p_core::{
     upgrade, Endpoint, PeerId, Transport,
 };
 use libp2p_noise as noise;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{IntoProtocolsHandler, ProtocolsHandler, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -1332,118 +1338,265 @@ fn network_behaviour_inject_address_change() {
     );
 }
 
-#[futures_test::test]
-async fn client_mode_test() {
-    let mut addrs = Vec::new();
-    let mut peers = Vec::new();
+#[test]
+fn client_mode_test() {
+    let mut pool = LocalPool::new();
 
-    // Create server peers.
-    let server1 = build_node();
-    addrs.push(server1.0);
-    let mut server1 = server1.1;
+    let (bootstrap_server_addr, mut bootstrap_server) = build_node();
+    let bootstrap_server_id = *bootstrap_server.local_peer_id();
+    println!("bootstrap server: {:?}", bootstrap_server_id);
 
-    let server2 = build_node();
-    addrs.push(server2.0);
-    let mut server2 = server2.1;
+    let (server_addr, mut server) = build_node();
+    let server_id = *server.local_peer_id();
+    println!("server: {:?}", server_id);
 
-    // Create a client peer.
     let mut cfg = KademliaConfig::default();
-    cfg.set_mode(Mode::Server);
-    let client = build_node_with_config(cfg);
-    addrs.push(client.0);
-    let mut client = client.1;
+    cfg.set_mode(Mode::Client);
+    let (client_addr, mut client) = build_node_with_config(cfg);
+    let client_id = *client.local_peer_id();
+    println!("client: {:?}", client_id);
 
-    // Fitler out peer Ids.
-    peers.push(*server1.local_peer_id());
-    peers.push(*server2.local_peer_id());
-    peers.push(*client.local_peer_id());
+    // It's okay that the client is listening. We are seeing if our change
+    // prevents the server from adding the client to its routing table. because
+    // the client denied it not because the client can't respond.
+    pool.run_until(wait_for_new_listen_addr(&mut client, &client_addr));
+    pool.run_until(wait_for_new_listen_addr(&mut server, &server_addr));
 
-    // Connect server1 and server2.
-    server1
+    // Tell bootstrap server about the client. This way server discovers client while interacting with the DHT.
+    // Note this will mean that the client is on the server's routing table
+    // because we manually added it. That's ok in this test because we want to
+    // make sure the client doesn't end up in `server`'s routing table while it interacts with the DHT.
+    bootstrap_server
         .behaviour_mut()
-        .add_address(&peers[1], addrs[1].clone());
+        .add_address(client.local_peer_id(), client_addr.clone());
+    pool.spawner()
+        .spawn_obj(
+            bootstrap_server
+                // .map(|e| println!("Bootstrap event: {:?}", e))
+                .collect::<Vec<_>>()
+                .map(|_| ())
+                .boxed()
+                .into(),
+        )
+        .unwrap();
 
-    server2
+    client
         .behaviour_mut()
-        .add_address(&peers[0], addrs[0].clone());
+        .add_address(server.local_peer_id(), server_addr);
 
-    // Put a record from a server peer.
+    pool.run_until(wait_for_event(&mut client, |e| match e {
+        SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated { peer, .. }) if peer == server_id => {
+            true
+        }
+        e => panic!("Unexpected event: {:?}", e),
+    }));
+
+    // Bootstrap the server
+    server
+        .behaviour_mut()
+        .add_address(&bootstrap_server_id, bootstrap_server_addr);
+
+    // Ask the server to store a record with quorum == 1. It will store the record on server and bootstrap server.
     let key = Key::new(&"123".to_string());
     let record = Record::new(key.clone(), vec![4, 5, 6]);
-
-    let put_qid = server1
+    server
         .behaviour_mut()
         .put_record(record.clone(), Quorum::One)
         .unwrap();
 
+    pool.run_until(async {
+        select! {
+            _ = wait_for_event(&mut server, |e| match e {
+                SwarmEvent::IncomingConnection { .. }
+                | SwarmEvent::ConnectionEstablished { .. }
+                | SwarmEvent::Dialing(_) => false,
+                SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated { peer, .. })
+                    if peer == bootstrap_server_id =>
+                {
+                    false
+                }
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    result: QueryResult::PutRecord(Ok(_)),
+                    ..
+                }) => true,
+                e => panic!("Unexpected event: {:?}", e),
+            }).fuse() => {},
+            _ = wait_for_event(&mut client, |e| match e {
+                // This is here so the request doesn't get stuck in the memory transport.
+                SwarmEvent::IncomingConnection { .. }
+                | SwarmEvent::ConnectionEstablished { .. }
+                | SwarmEvent::Dialing(_) => false,
+                e => panic!("Unexpected event: {:?}", e),
+            }).fuse() => {},
+        }
+    });
+
+    // Have the client ask the DHT for the record.
+    let query_id = client
+        .behaviour_mut()
+        // Use quorum == 2 so we know that the server has been asked (as well as bootstrap server).
+        .get_record(key.clone(), Quorum::N(NonZeroUsize::new(2).unwrap()));
+
+    pool.run_until(async {
+        select! {
+        _ = wait_for_event(&mut client, |e| match e {
+            SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                result: QueryResult::GetRecord(Ok(_)),
+                id,
+                ..
+            }) if id == query_id => true,
+            SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated { .. })
+            | SwarmEvent::ConnectionEstablished { .. }
+            | SwarmEvent::Dialing(_) => false,
+            e => panic!("Unexpected event: {:?}", e),}).fuse() => {},
+        _ = wait_for_event(&mut server, |e| match e {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == client_id => false,
+            SwarmEvent::Behaviour(KademliaEvent::InboundRequest {
+                request: InboundRequest::GetRecord { .. },
+            }) => false,
+            SwarmEvent::IncomingConnection { .. } => false,
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == client_id => false,
+            e => panic!("Unexpected event: {:?}", e),}).fuse() => {},
+         }
+    });
+
+    // Ask the server to store a record with quorum == 2. This will fail because
+    // the client doesn't advertise kademlia and isn't in the server's routing
+    // table.
+    let key = Key::new(&"456".to_string());
+    let record = Record::new(key.clone(), vec![4, 5, 6]);
+    server
+        .behaviour_mut()
+        .put_record(record.clone(), Quorum::N(NonZeroUsize::new(2).unwrap()))
+        .unwrap();
+
+    pool.run_until(async {
+        select! {
+            _ = wait_for_event(&mut client, |e| match e {
+                e => panic!("Unexpected event: {:?}", e),
+            }).fuse() => {},
+            _ = wait_for_event(&mut server, |e| match e {
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    result: QueryResult::PutRecord(Ok(_)),
+                    ..
+                }) => {
+                    panic!("Outbound query should fail because the client does not accept inbound requests.")
+                },
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    result: QueryResult::PutRecord(Err(_)),
+                    ..
+                }) => true,
+                SwarmEvent::IncomingConnection { .. }
+                | SwarmEvent::ConnectionEstablished { .. }
+                | SwarmEvent::Dialing(_) => false,
+                e => panic!("Unexpected event: {:?}", e),
+            }).fuse() => {}
+        }
+    });
+
+    assert!(
+        client.behaviour_mut().remove_peer(&server_id).is_some(),
+        "Expected the server to be in the client's routing table"
+    );
+
+    assert!(
+        server
+            .behaviour_mut()
+            .remove_peer(&bootstrap_server_id)
+            .is_some(),
+        "Expected the bootstrap server to be in the server's routing table"
+    );
+
+    assert!(
+        server.behaviour_mut().remove_peer(&client_id).is_none(),
+        "Expected the client to *not* be in the server's routing table"
+    );
+}
+
+async fn wait_for_new_listen_addr<T>(client: &mut Swarm<T>, new_addr: &Multiaddr)
+where
+    T: NetworkBehaviour,
+    <T as libp2p_swarm::NetworkBehaviour>::OutEvent: std::fmt::Debug,
+{
+    match client.select_next_some().await {
+        SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
+        e => panic!("Unexpected Event{:?}", e),
+    }
+}
+
+async fn wait_for_connection_established<T>(client: &mut Swarm<T>, addr: Option<&Multiaddr>)
+where
+    T: NetworkBehaviour,
+    <T as libp2p_swarm::NetworkBehaviour>::OutEvent: std::fmt::Debug,
+{
     loop {
-        futures::select! {
-            event = server1.next() => if let Some(SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
-                result: QueryResult::PutRecord(result),
-                id: qid,
-                ..
-            })) = event {
-                assert_eq!(qid, put_qid);
-                match result {
-                    Ok(PutRecordOk { key: actual_key }) => {
-                        if actual_key == key {
-                            // Dial a server peer from the client peer.
-                            // client.dial_addr(addrs[1].clone());
-                            client
-                                .behaviour_mut()
-                                .add_address(&peers[1], addrs[1].clone());
-
-                            client.behaviour_mut().get_record(&key, Quorum::One);
-                        }
-                    },
-                    Err(e) => panic!("{:?}", e),
-                }
-            },
-            _event = server2.next() => {},
-            event = client.next() => if let Some(SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted{
-                result: QueryResult::GetRecord(result),
-                ..
-            })) = event {
-                match result {
-                    Ok(GetRecordOk { records: actual_record, .. }) => {
-                        assert_eq!(&record.key, &actual_record[0].record.key);
-
-                        let mut records = Vec::new();
-
-                        // Read the routing table.
-                        for bucket in client.behaviour_mut().kbuckets() {
-                            for record in bucket.iter() {
-                                records.push(*record.node.key.preimage());
-                            }
-                        }
-
-                        assert!(records.contains(&peers[1]));
-
-                        records.clear();
-                        for bucket in server1.behaviour_mut().kbuckets() {
-                            for record in bucket.iter() {
-                                records.push(*record.node.key.preimage());
-                            }
-                        }
-
-                        assert!(!records.contains(&peers[2]));
-
-                        records.clear();
-                        for bucket in server2.behaviour_mut().kbuckets() {
-                            for record in bucket.iter() {
-                                records.push(*record.node.key.preimage());
-                            }
-                        }
-
-                        assert!(!records.contains(&peers[2]));
-                        break;
-                    },
-                    Err(e) => panic!("{:?}", e),
-                }
+        match client.select_next_some().await {
+            SwarmEvent::IncomingConnection { .. } => {}
+            SwarmEvent::ConnectionEstablished { endpoint, .. }
+                if Some(endpoint.get_remote_address()) == addr || addr.is_none() =>
+            {
+                break
             }
+            SwarmEvent::Dialing(_) => {}
+            e => panic!("{:?}", e),
         }
     }
 }
+
+async fn wait_for_event<TStore>(
+    client: &mut Swarm<Kademlia<TStore>>,
+    f: impl Fn(
+        SwarmEvent<KademliaEvent, <<<Kademlia<TStore> as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error>,
+    ) -> bool,
+) where
+    for<'a> TStore: RecordStore<'a>,
+    TStore: Send + 'static,
+{
+    loop {
+        let event = client.select_next_some().await;
+        // println!("Event from {}: {:?}", client.local_peer_id(), event);
+        if f(event) {
+            break;
+        }
+    }
+}
+
+async fn wait_for_outbound_query_completed(client: &mut Swarm<Kademlia<MemoryStore>>) {
+    loop {
+        match client.select_next_some().await {
+            SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                result: QueryResult::PutRecord(Ok(_)),
+                id: _,
+                ..
+            }) => break,
+            // SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+            //     result: QueryResult::PutRecord(Err(_)),
+            //     id: _,
+            //     ..
+            // }) => {}
+            e => panic!("{:?}", e),
+        }
+    }
+}
+
+// async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
+//     loop {
+//         match client.select_next_some().await {
+//             SwarmEvent::IncomingConnection { .. } => {}
+//             SwarmEvent::ConnectionEstablished { endpoint, .. }
+//                 if endpoint.get_remote_address() == addr =>
+//             {
+//                 break
+//             }
+//             SwarmEvent::Dialing(_) => {}
+//             SwarmEvent::Behaviour(ClientEvent::Relay(
+//                 client::Event::OutboundCircuitEstablished { .. },
+//             )) => {}
+//             SwarmEvent::ConnectionEstablished { .. } => {}
+//             e => panic!("{:?}", e),
+//         }
+//     }
+// }
 
 #[test]
 fn get_providers() {
