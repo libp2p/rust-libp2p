@@ -58,12 +58,14 @@ use libp2p::{identity, PeerId, Swarm};
 use open_metrics_client::encoding::text::encode;
 use open_metrics_client::registry::Registry;
 use std::error::Error;
+use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use log::info;
-use hyper::{Body, Request, Response, Server};
 use hyper::service::{make_service_fn, service_fn};
-// type SharedMetricRegistry = Arc<Mutex<Registry>>;
+use hyper::{Body, Request, Response, Server};
+use http::{StatusCode}
+
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -86,10 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
-    let shared_metric_registry = Arc::new(Mutex::new(registry));
-
-    thread::spawn(move || 
-        block_on(metrics_server(shared_metric_registry.clone())));
+    thread::spawn(move || block_on(metrics_server(metric_registry)));
 
     block_on(async {
         loop {
@@ -107,9 +106,42 @@ fn main() -> Result<(), Box<dyn Error>> {
     })
 }
 
-pub async fn metrics_server(registry: Registry) 
-    -> std::result::Result<(), std::io::Error> {
 
-//content_type("application/openmetrics-text; version=1.0.0; charset=utf-8")
+pub async fn metrics_server(registry: Registry) -> std::result::Result<(), std::io::Error> {
+    let reg = Arc::new(Mutex::new(registry));
+    let make_svc = make_service_fn(|socket: &AddrStream| {
+        let reg_clone = &reg.clone();
+        async move{
+            Ok::<_, Infallible>(service_fn(async move |Req : Request<Body>| {
+                if (req.method() == & hyper::Method::GET && req.uri().path() == "/metrics") {
+                    //encode and serve meterics from registry
+                    let mut encoded = Vec::new();
+                    let mut body_text = encode(&mut encoded, &reg_clone.lock().unwrap()).unwrap();
+                    Ok::<_, Infallible>( Response::builder()
+                        .status(hyper::StatusCode::OK)
+                        .header(hyper::header::CONTENT_TYPE,
+                          "application/openmetrics-text; version=1.0.0; charset=utf-8")
+                        .body(encoded)
+                    )
+                }
+                else {
+                    // 404 /metrics not accessed by GET request
+                    Ok::<_, Infallible>(Response::builder()
+                        .status(html::StatusCode::NOT_FOUND)
+                        .body(format!("That URL can not be found. Try {}/metrics!",))
+                    )}
+            }
+        }
+    });
+    let addr = ([0, 0, 0, 0], 0).into();
+
+    let server = Server::bind(&addr).serve(make_svc);
+
+    println!("Listening on http://{}", addr);
+
+    server.await?;
+
+    Ok(())
 
 }
+
