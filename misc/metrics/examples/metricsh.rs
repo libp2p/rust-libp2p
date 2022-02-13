@@ -105,49 +105,52 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     })
 }
-
+type SharedRegistry = Arc<Mutex<Registry>>;
 
 pub async fn metrics_server(registry: Registry) ->
-  std::result::Result<(), std::io::Error> {
-    let metrics_type =
-      "application/openmetrics-text; version=1.0.0; charset=utf-8";
+    std::result::Result<(), std::io::Error> {
     let reg = Arc::new(Mutex::new(registry));
-    let make_svc = make_service_fn(|socket: &AddrStream| {
-        let reg_clone = &reg.clone();
-        async move{
-            Ok::<_, Infallible>(service_fn(
-                move |req : Request<Body>| {
-                if ((req.method() == & hyper::Method::GET) &&
-                  (req.uri().path() == "/metrics")) {
-                    //encode and serve meterics from registry
-                    let mut encoded = Vec::new();
-                    let mut body_text = encode(&mut encoded,
-                      &reg_clone.lock().unwrap()).unwrap();
-                    Ok::<_, Infallible>( Response::builder()
-                        .status(StatusCode::OK)
-                        .header(hyper::header::CONTENT_TYPE,metrics_type)
-                        .body(encoded)
-                    )
-                }
-                else {
-                    // 404 /metrics not accessed by GET request
-                    Ok::<_, Infallible>(Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body())
-                    }
-            }))
-        }
-    });
-    let addr = ([0, 0, 0, 0], 0).into();
+    let metric_svc =Ok::<_, Infallible>(
+         make_service_fn(move |_conn| async move {
+        let reg_clone = reg.clone();
+        Ok::<_, Infallible>(service_fn(move |req| async move { 
+            metrics_route(req,reg_clone) }))
+    }));
 
-    let server = Server::bind(&addr).serve(make_svc);
+    let addr = ([127, 0, 0, 1], 3000).into();
 
-    info!("Listening on http://{}", addr);
-    info!("{:?},server")
+    let server = Server::bind(&addr).serve(metric_svc);
 
-    server.await?;
+    if let Err(e) = server.await {
+        eprintln!("server error: {}", e);
+    }
 
     Ok(())
-
 }
 
+async fn metrics_route(req: Request<Body>, reg :SharedRegistry ) -> Response<Body>{
+    if (req.method() == & hyper::Method::GET) &&
+        (req.uri().path() == "/metrics") {
+        //encode and serve meterics from registry
+        respond_with_metrics(req,reg).await
+    }
+    else {
+        respond_with_404_not_found().await
+    }
+}
+async fn respond_with_metrics(req: Request<Body>, reg : SharedRegistry) -> Response<Body> {
+    let mut encoded = Vec::new();
+    encode(&mut encoded,&reg.lock().unwrap()).unwrap();
+    let metrics_type =
+      "application/openmetrics-text; version=1.0.0; charset=utf-8";
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(hyper::header::CONTENT_TYPE,metrics_type)
+        .body(Body::from(encoded)).unwrap()
+}
+
+async fn respond_with_404_not_found() -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::from("Not found try localhost:port/metrics")).unwrap()
+}
