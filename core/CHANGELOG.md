@@ -1,5 +1,9 @@
 # 0.32.0 [unreleased]
 
+- Remove `Network`. `libp2p-core` is from now on an auxiliary crate only. Users
+  that have previously used `Network` only, will need to use `Swarm` instead. See
+  [PR 2492].
+
 - Update to `multiaddr` `v0.14.0`.
 
 - Update to `multihash` `v0.16.0`.
@@ -10,6 +14,7 @@
 
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
 [RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
+[PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 
 # 0.31.0 [2022-01-27]
 

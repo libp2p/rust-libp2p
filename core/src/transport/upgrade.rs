@@ -46,7 +46,7 @@ use std::{
 };
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
-/// a [`Network`].
+/// a `Swarm`.
 ///
 /// The upgrade process is defined by the following stages:
 ///
@@ -61,11 +61,9 @@ use std::{
 ///      and [multiplexed](Authenticated::multiplex).
 ///   2. Authentication must precede the negotiation of a multiplexer.
 ///   3. Applying a multiplexer is the last step in the upgrade process.
-///   4. The [`Transport::Output`] conforms to the requirements of a [`Network`],
+///   4. The [`Transport::Output`] conforms to the requirements of a `Swarm`,
 ///      namely a tuple of a [`PeerId`] (from the authentication upgrade) and a
 ///      [`StreamMuxer`] (from the multiplexing upgrade).
-///
-/// [`Network`]: crate::Network
 #[derive(Clone)]
 pub struct Builder<T> {
     inner: T,
