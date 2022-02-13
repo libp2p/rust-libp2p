@@ -26,10 +26,9 @@ use crate::{
     connection::{
         self,
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        ConnectionError, ConnectionHandler, ConnectionId, IntoConnectionHandler,
-        PendingInboundConnectionError, PendingOutboundConnectionError, Substream,
+        ConnectionError, ConnectionHandler, IntoConnectionHandler, PendingInboundConnectionError,
+        PendingOutboundConnectionError, Substream,
     },
-    muxing::StreamMuxer,
     transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
@@ -38,6 +37,8 @@ use futures::{
     future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
 };
+use libp2p_core::connection::ConnectionId;
+use libp2p_core::muxing::StreamMuxer;
 use std::pin::Pin;
 use void::Void;
 
