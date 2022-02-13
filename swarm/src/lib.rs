@@ -1562,11 +1562,13 @@ mod tests {
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
     use futures::future::poll_fn;
+    use futures::future::Either;
     use futures::{executor, future, ready};
     use libp2p::core::{identity, multiaddr, transport, upgrade};
     use libp2p::plaintext;
     use libp2p::yamux;
     use libp2p_core::multiaddr::multiaddr;
+    use libp2p_core::transport::ListenerEvent;
     use libp2p_core::Endpoint;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
     use rand::prelude::SliceRandom;
@@ -1996,11 +1998,7 @@ mod tests {
 
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
-                let mut network_1 = new_test_swarm::<_, ()>(DummyProtocolsHandler {
-                    keep_alive: KeepAlive::Yes,
-                })
-                .build();
-                let mut network_2 = new_test_swarm::<_, ()>(DummyProtocolsHandler {
+                let mut swarm = new_test_swarm::<_, ()>(DummyProtocolsHandler {
                     keep_alive: KeepAlive::Yes,
                 })
                 .dial_concurrency_factor(concurrency_factor.0)
@@ -2010,61 +2008,51 @@ mod tests {
                 //
                 // `+ 2` to ensure a subset of addresses is dialed by network_2.
                 let num_listen_addrs = concurrency_factor.0.get() + 2;
-                let mut network_1_listen_addresses = Vec::new();
+                let mut listen_addresses = Vec::new();
+                let mut listeners = Vec::new();
                 for _ in 0..num_listen_addrs {
-                    network_1.listen_on("/memory/0".parse().unwrap()).unwrap();
+                    let mut listener = transport::MemoryTransport {}
+                        .listen_on("/memory/0".parse().unwrap())
+                        .unwrap();
 
-                    poll_fn(|cx| match ready!(network_1.poll_next_unpin(cx)).unwrap() {
-                        SwarmEvent::NewListenAddr { address, .. } => {
-                            network_1_listen_addresses.push(address);
-                            return Poll::Ready(());
+                    match listener.next().await.unwrap().unwrap() {
+                        ListenerEvent::NewAddress(address) => {
+                            listen_addresses.push(address);
                         }
                         _ => panic!("Expected `NewListenAddr` event."),
-                    })
-                    .await;
+                    }
+
+                    listeners.push(listener);
                 }
 
-                // Have network 2 dial network 1 and wait for network 1 to receive the incoming
+                // Have swarm dial each listener and wait for each listener to receive the incoming
                 // connections.
-                network_2
+                swarm
                     .dial(
-                        DialOpts::peer_id(*network_1.local_peer_id())
-                            .addresses(network_1_listen_addresses.clone().into())
+                        DialOpts::peer_id(PeerId::random())
+                            .addresses(listen_addresses.into())
                             .build(),
                     )
                     .unwrap();
-                for i in 0..concurrency_factor.0.get() {
-                    poll_fn(|cx| loop {
-                        let mut network_2_pending = false;
-                        match network_2.poll_next_unpin(cx) {
-                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {}
-                            Poll::Ready(e) => panic!("Unexpected event: {:?}", e),
-                            Poll::Pending => network_2_pending = true,
-                        }
-
-                        match network_1.poll_next_unpin(cx) {
-                            Poll::Ready(Some(SwarmEvent::IncomingConnection {
-                                local_addr,
-                                send_back_addr: _,
-                            })) => {
-                                assert_eq!(
-                                    local_addr, network_1_listen_addresses[i as usize],
-                                    "Expect network 2 to prioritize by address order."
-                                );
-
-                                return Poll::Ready(());
+                for mut listener in listeners.into_iter() {
+                    loop {
+                        match futures::future::select(listener.next(), swarm.next()).await {
+                            Either::Left((Some(Ok(ListenerEvent::Upgrade { .. })), _)) => {
+                                break;
                             }
-                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {}
-                            Poll::Ready(Some(SwarmEvent::ConnectionClosed { .. })) => {}
-                            Poll::Pending => {
-                                if network_2_pending {
-                                    return Poll::Pending;
-                                }
+                            Either::Left(_) => {
+                                panic!("Unexpected listener event.")
                             }
-                            e => panic!("Unexpected event {:?}", e),
+                            Either::Right((e, _)) => {
+                                panic!("Expect swarm to not emit any event {:?}", e)
+                            }
                         }
-                    })
-                    .await;
+                    }
+                }
+
+                match swarm.next().await.unwrap() {
+                    SwarmEvent::OutgoingConnectionError { .. } => {}
+                    e => panic!("Unexpected swarm event {:?}", e),
                 }
             })
         }
