@@ -189,6 +189,7 @@ async fn test_auto_probe() {
             other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
+        let mut has_received_response = false;
         // Expect inbound dial from server.
         loop {
             match client.select_next_some().await {
@@ -198,6 +199,15 @@ async fn test_auto_probe() {
                     assert_eq!(peer_id, server_id);
                     break;
                 }
+                SwarmEvent::Behaviour(Event::OutboundProbe(OutboundProbeEvent::Response {
+                    probe_id,
+                    peer,
+                    ..
+                })) => {
+                    assert_eq!(peer, server_id);
+                    assert_eq!(probe_id, id);
+                    has_received_response = true;
+                }
                 SwarmEvent::IncomingConnection { .. }
                 | SwarmEvent::NewListenAddr { .. }
                 | SwarmEvent::ExpiredListenAddr { .. } => {}
@@ -205,12 +215,18 @@ async fn test_auto_probe() {
             }
         }
 
-        match next_event(&mut client).await {
-            Event::OutboundProbe(OutboundProbeEvent::Response { probe_id, peer, .. }) => {
-                assert_eq!(peer, server_id);
-                assert_eq!(probe_id, id);
+        if !has_received_response {
+            match client.select_next_some().await {
+                SwarmEvent::Behaviour(Event::OutboundProbe(OutboundProbeEvent::Response {
+                    probe_id,
+                    peer,
+                    ..
+                })) => {
+                    assert_eq!(peer, server_id);
+                    assert_eq!(probe_id, id);
+                }
+                other => panic!("Unexpected swarm event: {:?}.", other),
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
         }
 
         // Expect to flip status to public
