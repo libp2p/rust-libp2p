@@ -2055,6 +2055,7 @@ mod tests {
                                 return Poll::Ready(());
                             }
                             Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {}
+                            Poll::Ready(Some(SwarmEvent::ConnectionClosed { .. })) => {}
                             Poll::Pending => {
                                 if network_2_pending {
                                     return Poll::Pending;
@@ -2068,7 +2069,7 @@ mod tests {
             })
         }
 
-        QuickCheck::new().quickcheck(prop as fn(_) -> _);
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _);
     }
 
     #[test]
