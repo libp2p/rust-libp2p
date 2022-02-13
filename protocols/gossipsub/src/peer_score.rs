@@ -644,9 +644,9 @@ impl PeerScore {
                 .entry(msg_id.clone())
                 .or_insert_with(DeliveryRecord::default);
 
-            // this should be the first delivery trace
+            // Multiple peers can now reject the same message as we track which peers send us the
+            // message. If we have already updated the status, return.
             if record.status != DeliveryStatus::Unknown {
-                warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
                 return;
             }
 

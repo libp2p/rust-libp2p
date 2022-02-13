@@ -163,40 +163,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
     };
 
-    // Build the list of statements to put in the body of `inject_connected()`.
-    let inject_connected_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_connected(peer_id); },
-                    None => quote! { self.#field_n.inject_connected(peer_id); },
-                })
-            })
-    };
-
-    // Build the list of statements to put in the body of `inject_disconnected()`.
-    let inject_disconnected_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_disconnected(peer_id); },
-                    None => quote! { self.#field_n.inject_disconnected(peer_id); },
-                })
-            })
-    };
-
     // Build the list of statements to put in the body of `inject_connection_established()`.
     let inject_connection_established_stmts = {
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
@@ -204,8 +170,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 return None;
             }
             Some(match field.ident {
-                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint, errors); },
-                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint, errors); },
+                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint, errors, other_established); },
+                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint, errors, other_established); },
             })
         })
     };
@@ -243,8 +209,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     }
                 };
                 let inject = match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_connection_closed(peer_id, connection_id, endpoint, handler) },
-                    None => quote!{ self.#enum_n.inject_connection_closed(peer_id, connection_id, endpoint, handler) },
+                    Some(ref i) => quote!{ self.#i.inject_connection_closed(peer_id, connection_id, endpoint, handler, remaining_established) },
+                    None => quote!{ self.#enum_n.inject_connection_closed(peer_id, connection_id, endpoint, handler, remaining_established) },
                 };
 
                 quote! {
@@ -649,15 +615,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 out
             }
 
-            fn inject_connected(&mut self, peer_id: &#peer_id) {
-                #(#inject_connected_stmts);*
-            }
-
-            fn inject_disconnected(&mut self, peer_id: &#peer_id) {
-                #(#inject_disconnected_stmts);*
-            }
-
-            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, errors: #dial_errors) {
+            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, errors: #dial_errors, other_established: usize) {
                 #(#inject_connection_established_stmts);*
             }
 
@@ -665,7 +623,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_address_change_stmts);*
             }
 
-            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ProtocolsHandler as #into_protocols_handler>::Handler) {
+            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ProtocolsHandler as #into_protocols_handler>::Handler, remaining_established: usize) {
                 #(#inject_connection_closed_stmts);*
             }
 

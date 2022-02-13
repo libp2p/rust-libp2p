@@ -185,7 +185,6 @@ mod tests {
         F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         let peer = PeerId::random();
-        //peers.push(peer.clone());
         gs.inject_connection_established(
             &peer,
             &ConnectionId::new(0),
@@ -201,8 +200,8 @@ mod tests {
                 }
             },
             None,
+            0, // first connection
         );
-        <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
             gs.inject_event(
                 peer.clone(),
@@ -227,6 +226,32 @@ mod tests {
             );
         }
         peer
+    }
+
+    fn disconnect_peer<D, F>(gs: &mut Gossipsub<D, F>, peer_id: &PeerId)
+    where
+        D: DataTransform + Default + Clone + Send + 'static,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
+    {
+        if let Some(peer_connections) = gs.connected_peers.get(peer_id) {
+            let fake_endpoint = ConnectedPoint::Dialer {
+                address: Multiaddr::empty(),
+                role_override: Endpoint::Dialer,
+            }; // this is not relevant
+               // peer_connections.connections should never be empty.
+            let mut active_connections = peer_connections.connections.len();
+            for conn_id in peer_connections.connections.clone() {
+                let handler = gs.new_handler();
+                active_connections = active_connections.checked_sub(1).unwrap();
+                gs.inject_connection_closed(
+                    peer_id,
+                    &conn_id,
+                    &fake_endpoint,
+                    handler,
+                    active_connections,
+                );
+            }
+        }
     }
 
     // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
@@ -541,8 +566,8 @@ mod tests {
                     role_override: Endpoint::Dialer,
                 },
                 None,
+                0,
             );
-            gs.inject_connected(&random_peer);
 
             // add the new peer to the fanout
             let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
@@ -1383,7 +1408,7 @@ mod tests {
         flush_events(&mut gs);
 
         //disconnect peer
-        gs.inject_disconnected(peer);
+        disconnect_peer(&mut gs, peer);
 
         gs.heartbeat();
 
@@ -4154,6 +4179,7 @@ mod tests {
                     role_override: Endpoint::Dialer,
                 },
                 None,
+                0,
             );
         }
 
@@ -4174,6 +4200,7 @@ mod tests {
                     role_override: Endpoint::Dialer,
                 },
                 None,
+                1,
             );
         }
 
@@ -4203,6 +4230,7 @@ mod tests {
                 role_override: Endpoint::Dialer,
             },
             None,
+            2,
         );
 
         //nothing changed
@@ -5333,7 +5361,7 @@ mod tests {
         gs.handle_graft(&peers[0], subscribe_topic_hash);
 
         // The node disconnects
-        gs.inject_disconnected(&peers[0]);
+        disconnect_peer(&mut gs, &peers[0]);
 
         // We unsubscribe from the topic.
         let _ = gs.unsubscribe(&Topic::new(topic));
