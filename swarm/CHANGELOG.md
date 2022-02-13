@@ -1,6 +1,10 @@
 # 0.34.0 [unreleased]
 
+- Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
+
 - Update to `libp2p-core` `v0.32.0`.
+
+[PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 
 # 0.33.0 [2022-01-27]
 
