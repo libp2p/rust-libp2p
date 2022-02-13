@@ -104,9 +104,7 @@ async fn spawn_client(
         let mut kill = kill.fuse();
         loop {
             futures::select! {
-                e = client.select_next_some() => {
-                    println!("[CLIENT {:?}]: {:?}", peer_id, e);
-                },
+                _ = client.select_next_some() => {},
                 _ = kill => return,
 
             }
@@ -119,10 +117,9 @@ async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::Behaviour(event) => {
-                println!("[SERVER] Behaviour event {:?}.", event);
                 break event;
             }
-            e => println!("[SERVER] Ignoring event {:?}.", e),
+            _ => {}
         }
     }
 }

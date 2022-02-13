@@ -105,8 +105,6 @@ where
 
     /// Receiver for events reported from established tasks.
     established_connection_events_rx: mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>,
-
-    i: usize,
 }
 
 #[derive(Debug)]
@@ -330,7 +328,6 @@ where
             pending_connection_events_rx,
             established_connection_events_tx,
             established_connection_events_rx,
-            i: rand::random(),
         }
     }
 
@@ -515,7 +512,6 @@ where
         if let Some(executor) = &mut self.executor {
             executor.exec(task);
         } else {
-            println!("[Pool {}] Spawned task.", self.i);
             self.local_spawns.push(task);
         }
     }
@@ -601,7 +597,6 @@ where
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
-        println!("[Pool {}] Add incoming.", self.i);
         let endpoint = info.to_connected_point();
 
         if let Err(limit) = self.counters.check_max_pending_incoming() {
@@ -618,7 +613,6 @@ where
                 future,
                 drop_receiver,
                 self.pending_connection_events_tx.clone(),
-                self.i,
             )
             .boxed(),
         );
@@ -652,7 +646,6 @@ where
         THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     {
-        println!("[Pool {}]: poll", self.i);
         // Poll for events of established connections.
         //
         // Note that established connections are polled before pending connections, thus
@@ -729,7 +722,6 @@ where
             }
         }
 
-        println!("[Pool {}] poll pending_connection_events_rx", self.i);
         // Poll for events of pending connections.
         loop {
             let event = match self.pending_connection_events_rx.poll_next_unpin(cx) {
@@ -957,8 +949,6 @@ where
                 }
             }
         }
-
-        println!("[Pool {}] poll local_spawns", self.i);
 
         // Advance the tasks in `local_spawns`.
         while let Poll::Ready(Some(())) = self.local_spawns.poll_next_unpin(cx) {}

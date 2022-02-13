@@ -226,6 +226,7 @@ async fn test_auto_probe() {
         assert_eq!(client.behaviour().confidence(), 0);
         assert!(client.behaviour().nat_status().is_public());
         assert!(client.behaviour().public_address().is_some());
+
         drop(_handle);
     };
 
@@ -441,7 +442,6 @@ async fn test_use_connected_as_server() {
 }
 
 #[async_std::test]
-#[ignore]
 async fn test_outbound_failure() {
     let test = async {
         let mut servers = Vec::new();
