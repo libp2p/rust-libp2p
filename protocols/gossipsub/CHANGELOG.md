@@ -8,14 +8,17 @@
 
 - Emit gossip of all non empty topics (see [PR 2481]).
 
-- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+- Merge NetworkBehaviour's inject_\* paired methods (see [PR 2445]).
 
 - Revert to wasm-timer (see [PR 2506]).
+
+- Do not overwrite msg's peers if put again into mcache (see [PR 2493]).
 
 [PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
 [PR 2481]: https://github.com/libp2p/rust-libp2p/pull/2481
 [PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
 [PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
+[PR 2493]: https://github.com/libp2p/rust-libp2p/pull/2493
 
 # 0.35.0 [2022-01-27]
 
