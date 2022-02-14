@@ -36,7 +36,6 @@ use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
-use instant::Instant;
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
@@ -45,7 +44,9 @@ use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+use wasm_timer::Instant;
 
+use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
@@ -63,9 +64,9 @@ use crate::types::{
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
-use crate::{backoff::BackoffStorage, interval::Interval};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
+use wasm_timer::Interval;
 
 #[cfg(test)]
 mod tests;
@@ -439,8 +440,8 @@ where
                 config.backoff_slack(),
             ),
             mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Interval::new_initial(
-                config.heartbeat_initial_delay(),
+            heartbeat: Interval::new_at(
+                Instant::now() + config.heartbeat_initial_delay(),
                 config.heartbeat_interval(),
             ),
             heartbeat_ticks: 0,

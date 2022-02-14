@@ -27,10 +27,9 @@ smallvec = "1.6.1"
 prost = "0.9"
 hex_fmt = "0.3.0"
 regex = "1.4.0"
-futures-timer = "3.0.2"
-pin-project = "1.0.8"
-instant = "0.1.11"
 serde = { version = "1", optional = true, features = ["derive"] }
+wasm-timer = "0.2.5"
+instant = "0.1.11"
 # Metrics dependencies
 prometheus-client = "0.15.0"
 
