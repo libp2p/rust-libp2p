@@ -1,4 +1,22 @@
-# 0.31.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Remove `Network`. `libp2p-core` is from now on an auxiliary crate only. Users
+  that have previously used `Network` only, will need to use `Swarm` instead. See
+  [PR 2492].
+
+- Update to `multiaddr` `v0.14.0`.
+
+- Update to `multihash` `v0.16.0`.
+
+- Implement `Display` on `DialError`. See [PR 2456].
+
+- Validate PeerRecord signature matching peer ID. See [RUSTSEC-2022-0009].
+
+[PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
+[RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
+[PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
+
+# 0.31.0 [2022-01-27]
 
 - Update dependencies.
 
@@ -9,9 +27,41 @@
 
 - Add support for ECDSA identities (see [PR 2352]).
 
+- Add `ConnectedPoint::is_relayed` (see [PR 2392]).
+
+- Enable overriding _dial concurrency factor_ per dial via
+  `DialOpts::override_dial_concurrency_factor`.
+
+  - Introduces `libp2p_core::DialOpts` mirroring `libp2p_swarm::DialOpts`.
+      Passed as an argument to `Network::dial`.
+  - Removes `Peer::dial` in favor of `Network::dial`.
+
+  See [PR 2404].
+
+- Implement `Serialize` and `Deserialize` for `PeerId` (see [PR 2408])
+
+- Report negotiated and expected `PeerId` as well as remote address in
+  `DialError::WrongPeerId` (see [PR 2428]).
+
+- Allow overriding role when dialing. This option is needed for NAT and firewall
+  hole punching.
+
+    - Add `Transport::dial_as_listener`. As `Transport::dial` but
+      overrides the role of the local node on the connection . I.e. has the
+      local node act as a listener on the outgoing connection.
+
+    - Add `override_role` option to `DialOpts`.
+
+  See [PR 2363].
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2352]: https://github.com/libp2p/rust-libp2p/pull/2352
+[PR 2392]: https://github.com/libp2p/rust-libp2p/pull/2392
+[PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
+[PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
+[PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
 
 # 0.30.1 [2021-11-16]
 
@@ -99,7 +149,7 @@
 
 # 0.28.3 [2021-04-26]
 
-- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057].
+- Fix build with secp256k1 disabled [PR 2057](https://github.com/libp2p/rust-libp2p/pull/2057).
 
 # 0.28.2 [2021-04-13]
 

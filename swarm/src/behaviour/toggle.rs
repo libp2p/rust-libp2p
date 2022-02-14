@@ -86,27 +86,22 @@ where
             .unwrap_or_else(Vec::new)
     }
 
-    fn inject_connected(&mut self, peer_id: &PeerId) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connected(peer_id)
-        }
-    }
-
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_disconnected(peer_id)
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_established(peer_id, connection, endpoint, errors)
+            inner.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            )
         }
     }
 
@@ -116,10 +111,17 @@ where
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             if let Some(handler) = handler.inner {
-                inner.inject_connection_closed(peer_id, connection, endpoint, handler)
+                inner.inject_connection_closed(
+                    peer_id,
+                    connection,
+                    endpoint,
+                    handler,
+                    remaining_established,
+                )
             }
         }
     }

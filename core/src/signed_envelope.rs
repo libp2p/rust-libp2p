@@ -10,7 +10,7 @@ use unsigned_varint::encode::usize_buffer;
 /// For more details see libp2p RFC0002: <https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md>
 #[derive(Debug, Clone, PartialEq)]
 pub struct SignedEnvelope {
-    key: PublicKey,
+    pub(crate) key: PublicKey,
     payload_type: Vec<u8>,
     payload: Vec<u8>,
     signature: Vec<u8>,
@@ -201,3 +201,31 @@ impl fmt::Display for ReadPayloadError {
 }
 
 impl std::error::Error for ReadPayloadError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn test_roundtrip() {
+        let kp = Keypair::generate_ed25519();
+        let payload = "some payload".as_bytes();
+        let domain_separation = "domain separation".to_string();
+        let payload_type: Vec<u8> = "payload type".into();
+
+        let env = SignedEnvelope::new(
+            kp.clone(),
+            domain_separation.clone(),
+            payload_type.clone(),
+            payload.into(),
+        )
+        .expect("Failed to create envelope");
+
+        let actual_payload = env
+            .payload(domain_separation, &payload_type)
+            .expect("Failed to extract payload and public key");
+
+        assert_eq!(actual_payload, payload);
+        assert_eq!(env.key, kp.public());
+    }
+}

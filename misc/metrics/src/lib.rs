@@ -25,7 +25,10 @@
 //!
 //! See `examples` directory for more.
 
+#[cfg(feature = "dcutr")]
+mod dcutr;
 #[cfg(feature = "gossipsub")]
+#[cfg(not(target_os = "unknown"))]
 mod gossipsub;
 #[cfg(feature = "identify")]
 mod identify;
@@ -33,13 +36,18 @@ mod identify;
 mod kad;
 #[cfg(feature = "ping")]
 mod ping;
+#[cfg(feature = "relay")]
+mod relay;
 mod swarm;
 
-use open_metrics_client::registry::Registry;
+use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {
+    #[cfg(feature = "dcutr")]
+    dcutr: dcutr::Metrics,
     #[cfg(feature = "gossipsub")]
+    #[cfg(not(target_os = "unknown"))]
     gossipsub: gossipsub::Metrics,
     #[cfg(feature = "identify")]
     identify: identify::Metrics,
@@ -47,6 +55,8 @@ pub struct Metrics {
     kad: kad::Metrics,
     #[cfg(feature = "ping")]
     ping: ping::Metrics,
+    #[cfg(feature = "relay")]
+    relay: relay::Metrics,
     swarm: swarm::Metrics,
 }
 
@@ -54,7 +64,7 @@ impl Metrics {
     /// Create a new set of Swarm and protocol [`Metrics`].
     ///
     /// ```
-    /// use open_metrics_client::registry::Registry;
+    /// use prometheus_client::registry::Registry;
     /// use libp2p_metrics::Metrics;
     /// let mut registry = Registry::default();
     /// let metrics = Metrics::new(&mut registry);
@@ -62,7 +72,10 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("libp2p");
         Self {
+            #[cfg(feature = "dcutr")]
+            dcutr: dcutr::Metrics::new(sub_registry),
             #[cfg(feature = "gossipsub")]
+            #[cfg(not(target_os = "unknown"))]
             gossipsub: gossipsub::Metrics::new(sub_registry),
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),
@@ -70,6 +83,8 @@ impl Metrics {
             kad: kad::Metrics::new(sub_registry),
             #[cfg(feature = "ping")]
             ping: ping::Metrics::new(sub_registry),
+            #[cfg(feature = "relay")]
+            relay: relay::Metrics::new(sub_registry),
             swarm: swarm::Metrics::new(sub_registry),
         }
     }

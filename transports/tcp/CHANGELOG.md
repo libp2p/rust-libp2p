@@ -1,9 +1,20 @@
-# 0.31.0 [unreleased]
+# 0.32.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+# 0.31.1 [2022-02-02]
+
+- Call `TcpSocket::take_error` to report connection establishment errors early.
+
+# 0.31.0 [2022-01-27]
 
 - Update dependencies.
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
+- When using PortReuse::Enabled, bind to INADDR_ANY to avoid picking the wrong IP (see [PR 2382]).
+
+[PR 2382]: https://github.com/libp2p/rust-libp2p/pull/2382
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
 # 0.30.0 [2021-11-01]

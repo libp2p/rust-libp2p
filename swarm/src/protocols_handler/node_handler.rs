@@ -18,6 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::{
+    Connected, ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, Substream,
+    SubstreamEndpoint,
+};
 use crate::protocols_handler::{
     IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr,
@@ -29,13 +33,9 @@ use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
-    connection::{
-        ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, Substream,
-        SubstreamEndpoint,
-    },
     muxing::StreamMuxerBox,
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
-    Connected, Multiaddr,
+    Multiaddr,
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
