@@ -624,12 +624,14 @@ where
     /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
     /// [`ProtocolsHandlerEvent::Close`].
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
-        if self.pool.is_connected(peer_id) {
-            self.pool.disconnect(peer_id);
-            return Ok(());
-        }
+        let was_connected = self.pool.is_connected(peer_id);
+        self.pool.disconnect(peer_id);
 
-        Err(())
+        if was_connected {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     /// Checks whether there is an established connection to a peer.
