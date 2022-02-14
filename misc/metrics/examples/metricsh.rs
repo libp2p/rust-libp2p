@@ -108,17 +108,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 type SharedRegistry = Arc<Mutex<Registry>>;
 
 pub async fn metrics_server(registry: Registry) ->
-    std::result::Result<(), std::io::Error> {
+    std::result::Result<(), hyper::error::Error> {
     let reg = Arc::new(Mutex::new(registry));
-    let metric_svc =Ok::<_, Infallible>(
-         make_service_fn(move |_conn| async move {
-        let reg_clone = reg.clone();
-        Ok::<_, Infallible>(service_fn(move |req| async move { 
-            metrics_route(req,reg_clone) }))
-    }));
-
+    
+        let metric_svc = make_service_fn(
+            move |conn| async move {
+                let reg_clone = reg.clone();
+            async move {
+                Ok::<_, Infallible>(service_fn(move |req| async move { 
+                    Ok::<_, Infallible>(metrics_route(req,reg_clone))
+                }
+            ))
+        }
+    });
+}
+    //TODO: Change to a variable port for multiple instances
     let addr = ([127, 0, 0, 1], 3000).into();
-
+    //TODO: Solve type problems
     let server = Server::bind(&addr).serve(metric_svc);
 
     if let Err(e) = server.await {
@@ -128,7 +134,8 @@ pub async fn metrics_server(registry: Registry) ->
     Ok(())
 }
 
-async fn metrics_route(req: Request<Body>, reg :SharedRegistry ) -> Response<Body>{
+async fn metrics_route(req: Request<Body>, reg :SharedRegistry )
+  -> Response<Body>{
     if (req.method() == & hyper::Method::GET) &&
         (req.uri().path() == "/metrics") {
         //encode and serve meterics from registry
@@ -138,7 +145,8 @@ async fn metrics_route(req: Request<Body>, reg :SharedRegistry ) -> Response<Bod
         respond_with_404_not_found().await
     }
 }
-async fn respond_with_metrics(req: Request<Body>, reg : SharedRegistry) -> Response<Body> {
+async fn respond_with_metrics(req: Request<Body>, reg : SharedRegistry)
+  -> Response<Body> {
     let mut encoded = Vec::new();
     encode(&mut encoded,&reg.lock().unwrap()).unwrap();
     let metrics_type =
@@ -152,5 +160,5 @@ async fn respond_with_metrics(req: Request<Body>, reg : SharedRegistry) -> Respo
 async fn respond_with_404_not_found() -> Response<Body> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
-        .body(Body::from("Not found try localhost:port/metrics")).unwrap()
+        .body(Body::from("Not found try localhost:[port]/metrics")).unwrap()
 }
