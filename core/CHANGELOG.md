@@ -12,9 +12,12 @@
 
 - Validate PeerRecord signature matching peer ID. See [RUSTSEC-2022-0009].
 
+- Don't take ownership of key in `PeerRecord::new` and `SignedEnvelope::new`. See [PR 2516].
+
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
 [RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
+[PR 2516]: https://github.com/libp2p/rust-libp2p/pull/2516
 
 # 0.31.0 [2022-01-27]
 
