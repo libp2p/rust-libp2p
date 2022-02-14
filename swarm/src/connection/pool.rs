@@ -22,12 +22,10 @@
 use crate::{
     connection::{
         handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint,
-        IncomingInfo, IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
-        PendingOutboundConnectionError, PendingPoint, Substream,
+        Connected, ConnectionError, ConnectionHandler, ConnectionLimit, IncomingInfo,
+        IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
+        PendingOutboundConnectionError, Substream,
     },
-    muxing::StreamMuxer,
-    network::DialError,
     transport::{Transport, TransportError},
     ConnectedPoint, Executor, Multiaddr, PeerId,
 };
@@ -40,12 +38,13 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
-use smallvec::SmallVec;
+use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
+use libp2p_core::muxing::StreamMuxer;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
     fmt,
-    num::NonZeroU8,
+    num::{NonZeroU8, NonZeroUsize},
     pin::Pin,
     task::Context,
     task::Poll,
@@ -319,7 +318,7 @@ where
             counters: ConnectionCounters::new(limits),
             established: Default::default(),
             pending: Default::default(),
-            next_connection_id: ConnectionId(0),
+            next_connection_id: ConnectionId::new(0),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
             executor: config.executor,
@@ -368,22 +367,11 @@ where
         }
     }
 
-    /// Gets a pending outgoing connection by ID.
-    pub fn get_outgoing(&mut self, id: ConnectionId) -> Option<PendingConnection<'_, THandler>> {
-        match self.pending.entry(id) {
-            hash_map::Entry::Occupied(entry) => Some(PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }),
-            hash_map::Entry::Vacant(_) => None,
-        }
-    }
-
     /// Returns true if we are connected to the given peer.
     ///
     /// This will return true only after a `NodeReached` event has been produced by `poll()`.
-    pub fn is_connected(&self, id: &PeerId) -> bool {
-        self.established.contains_key(id)
+    pub fn is_connected(&self, id: PeerId) -> bool {
+        self.established.contains_key(&id)
     }
 
     /// Returns the number of connected peers, i.e. those with at least one
@@ -397,8 +385,8 @@ where
     /// All connections to the peer, whether pending or established are
     /// closed asap and no more events from these connections are emitted
     /// by the pool effective immediately.
-    pub fn disconnect(&mut self, peer: &PeerId) {
-        if let Some(conns) = self.established.get_mut(peer) {
+    pub fn disconnect(&mut self, peer: PeerId) {
+        if let Some(conns) = self.established.get_mut(&peer) {
             for (_, conn) in conns.iter_mut() {
                 conn.start_close();
             }
@@ -408,7 +396,7 @@ where
         let pending_connections = self
             .pending
             .iter()
-            .filter(|(_, PendingConnectionInfo { peer_id, .. })| peer_id.as_ref() == Some(peer))
+            .filter(|(_, PendingConnectionInfo { peer_id, .. })| peer_id.as_ref() == Some(&peer))
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
 
@@ -426,56 +414,13 @@ where
         }
     }
 
-    /// Counts the number of established connections to the given peer.
-    pub fn num_peer_established(&self, peer: PeerId) -> u32 {
-        num_peer_established(&self.established, peer)
-    }
-
     /// Returns an iterator over all established connections of `peer`.
-    pub fn iter_peer_established<'a>(
-        &'a mut self,
+    pub fn iter_established_connections_of_peer(
+        &mut self,
         peer: &PeerId,
-    ) -> EstablishedConnectionIter<'a, impl Iterator<Item = ConnectionId>, THandlerInEvent<THandler>>
-    {
-        let ids = self
-            .iter_peer_established_info(peer)
-            .map(|(id, _endpoint)| *id)
-            .collect::<SmallVec<[ConnectionId; 10]>>()
-            .into_iter();
-
-        EstablishedConnectionIter {
-            connections: self.established.get_mut(peer),
-            ids,
-        }
-    }
-
-    /// Returns an iterator for information on all pending incoming connections.
-    pub fn iter_pending_incoming(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
-        self.iter_pending_info()
-            .filter_map(|(_, ref endpoint, _)| match endpoint {
-                PendingPoint::Listener {
-                    local_addr,
-                    send_back_addr,
-                } => Some(IncomingInfo {
-                    local_addr,
-                    send_back_addr,
-                }),
-                PendingPoint::Dialer { .. } => None,
-            })
-    }
-
-    /// Returns an iterator over all connection IDs and associated endpoints
-    /// of established connections to `peer` known to the pool.
-    pub fn iter_peer_established_info(
-        &self,
-        peer: &PeerId,
-    ) -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint)> {
+    ) -> impl Iterator<Item = ConnectionId> + '_ {
         match self.established.get(peer) {
-            Some(conns) => either::Either::Left(
-                conns
-                    .iter()
-                    .map(|(id, EstablishedConnectionInfo { endpoint, .. })| (id, endpoint)),
-            ),
+            Some(conns) => either::Either::Left(conns.iter().map(|(id, _)| *id)),
             None => either::Either::Right(std::iter::empty()),
         }
     }
@@ -503,7 +448,7 @@ where
 
     fn next_connection_id(&mut self) -> ConnectionId {
         let connection_id = self.next_connection_id;
-        self.next_connection_id.0 += 1;
+        self.next_connection_id = self.next_connection_id + 1;
 
         connection_id
     }
@@ -537,13 +482,13 @@ where
         handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, DialError<THandler>>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TTrans: Clone + Send,
         TTrans::Dial: Send + 'static,
     {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err(DialError::ConnectionLimit { limit, handler });
+            return Err((limit, handler));
         };
 
         let dial = ConcurrentDial::new(
@@ -970,21 +915,6 @@ pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
 }
 
 impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
-    /// Returns the local connection ID.
-    pub fn id(&self) -> ConnectionId {
-        *self.entry.key()
-    }
-
-    /// Returns the (expected) identity of the remote peer, if known.
-    pub fn peer_id(&self) -> &Option<PeerId> {
-        &self.entry.get().peer_id
-    }
-
-    /// Returns information about this endpoint of the connection.
-    pub fn endpoint(&self) -> &PendingPoint {
-        &self.entry.get().endpoint
-    }
-
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(self) {
         self.counters.dec_pending(&self.entry.get().endpoint);
@@ -1061,55 +991,6 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     /// Has no effect if the connection is already closing.
     pub fn start_close(mut self) {
         self.entry.get_mut().start_close()
-    }
-}
-
-/// An iterator over established connections in a pool.
-pub struct EstablishedConnectionIter<'a, I, TInEvent> {
-    connections: Option<&'a mut FnvHashMap<ConnectionId, EstablishedConnectionInfo<TInEvent>>>,
-    ids: I,
-}
-
-// Note: Ideally this would be an implementation of `Iterator`, but that
-// requires GATs (cf. https://github.com/rust-lang/rust/issues/44265) and
-// a different definition of `Iterator`.
-impl<'a, I, TInEvent> EstablishedConnectionIter<'a, I, TInEvent>
-where
-    I: Iterator<Item = ConnectionId>,
-{
-    /// Obtains the next connection, if any.
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>> {
-        if let (Some(id), Some(connections)) = (self.ids.next(), self.connections.as_mut()) {
-            Some(EstablishedConnection {
-                entry: connections
-                    .entry(id)
-                    .expect_occupied("Established entry not found in pool."),
-            })
-        } else {
-            None
-        }
-    }
-
-    /// Turns the iterator into an iterator over just the connection IDs.
-    pub fn into_ids(self) -> impl Iterator<Item = ConnectionId> {
-        self.ids
-    }
-
-    /// Returns the first connection, if any, consuming the iterator.
-    pub fn into_first<'b>(mut self) -> Option<EstablishedConnection<'b, TInEvent>>
-    where
-        'a: 'b,
-    {
-        if let (Some(id), Some(connections)) = (self.ids.next(), self.connections) {
-            Some(EstablishedConnection {
-                entry: connections
-                    .entry(id)
-                    .expect_occupied("Established entry not found in pool."),
-            })
-        } else {
-            None
-        }
     }
 }
 
@@ -1363,6 +1244,53 @@ impl Default for PoolConfig {
     }
 }
 
+impl PoolConfig {
+    /// Configures the executor to use for spawning connection background tasks.
+    pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
+        self.executor = Some(e);
+        self
+    }
+
+    /// Configures the executor to use for spawning connection background tasks,
+    /// only if no executor has already been configured.
+    pub fn or_else_with_executor<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce() -> Option<Box<dyn Executor + Send>>,
+    {
+        self.executor = self.executor.or_else(f);
+        self
+    }
+
+    /// Sets the maximum number of events sent to a connection's background task
+    /// that may be buffered, if the task cannot keep up with their consumption and
+    /// delivery to the connection handler.
+    ///
+    /// When the buffer for a particular connection is full, `notify_handler` will no
+    /// longer be able to deliver events to the associated `ConnectionHandler`,
+    /// thus exerting back-pressure on the connection and peer API.
+    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+        self.task_command_buffer_size = n.get() - 1;
+        self
+    }
+
+    /// Sets the maximum number of buffered connection events (beyond a guaranteed
+    /// buffer of 1 event per connection).
+    ///
+    /// When the buffer is full, the background tasks of all connections will stall.
+    /// In this way, the consumers of network events exert back-pressure on
+    /// the network connection I/O.
+    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.task_event_buffer_size = n;
+        self
+    }
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor = factor;
+        self
+    }
+}
+
 trait EntryExt<'a, K, V> {
     fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V>;
 }
@@ -1373,5 +1301,26 @@ impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
             hash_map::Entry::Occupied(entry) => entry,
             hash_map::Entry::Vacant(_) => panic!("{}", msg),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::future::Future;
+
+    struct Dummy;
+
+    impl Executor for Dummy {
+        fn exec(&self, _: Pin<Box<dyn Future<Output = ()> + Send>>) {}
+    }
+
+    #[test]
+    fn set_executor() {
+        PoolConfig::default()
+            .with_executor(Box::new(Dummy))
+            .with_executor(Box::new(|f| {
+                async_std::task::spawn(f);
+            }));
     }
 }

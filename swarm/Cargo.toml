@@ -12,16 +12,23 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 either = "1.6.0"
+fnv = "1.0"
 futures = "0.3.1"
-libp2p-core = { version = "0.32.0", path = "../core", default-features = false }
-log = "0.4"
-rand = "0.7"
-smallvec = "1.6.1"
-void = "1"
 futures-timer = "3.0.2"
 instant = "0.1.11"
+libp2p-core = { version = "0.32.0", path = "../core", default-features = false }
+log = "0.4"
+pin-project = "1.0.0"
+rand = "0.7"
+smallvec = "1.6.1"
+thiserror = "1.0"
+void = "1"
 
 [dev-dependencies]
+async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p = { path = "../", default-features = false, features = ["identify", "ping", "plaintext", "yamux"] }
+libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-noise = { path = "../transports/noise" }
+libp2p-tcp = { path = "../transports/tcp" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
