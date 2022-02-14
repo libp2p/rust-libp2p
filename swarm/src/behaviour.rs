@@ -31,8 +31,11 @@ use libp2p_core::{
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ProtocolsHandler`].
-type THandlerInEvent<THandler> =
+pub(crate) type THandlerInEvent<THandler> =
     <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent;
+
+pub(crate) type THandlerOutEvent<THandler> =
+    <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent;
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
 ///
