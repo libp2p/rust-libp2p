@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::muxing::{substream_from_ref, StreamMuxer, StreamMuxerEvent, SubstreamRef};
 use futures::prelude::*;
-use multiaddr::Multiaddr;
+use libp2p_core::multiaddr::Multiaddr;
+use libp2p_core::muxing::{substream_from_ref, StreamMuxer, StreamMuxerEvent, SubstreamRef};
 use smallvec::SmallVec;
 use std::sync::Arc;
 use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
@@ -30,24 +30,6 @@ use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
 pub enum SubstreamEndpoint<TDialInfo> {
     Dialer(TDialInfo),
     Listener,
-}
-
-impl<TDialInfo> SubstreamEndpoint<TDialInfo> {
-    /// Returns true for `Dialer`.
-    pub fn is_dialer(&self) -> bool {
-        match self {
-            SubstreamEndpoint::Dialer(_) => true,
-            SubstreamEndpoint::Listener => false,
-        }
-    }
-
-    /// Returns true for `Listener`.
-    pub fn is_listener(&self) -> bool {
-        match self {
-            SubstreamEndpoint::Dialer(_) => false,
-            SubstreamEndpoint::Listener => true,
-        }
-    }
 }
 
 /// Implementation of `Stream` that handles substream multiplexing.

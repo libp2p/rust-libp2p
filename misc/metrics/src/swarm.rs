@@ -316,29 +316,27 @@ enum PendingInboundConnectionError {
     ConnectionLimit,
 }
 
-impl<TTransErr> From<&libp2p_core::connection::PendingInboundConnectionError<TTransErr>>
+impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
     for PendingInboundConnectionError
 {
-    fn from(error: &libp2p_core::connection::PendingInboundConnectionError<TTransErr>) -> Self {
+    fn from(error: &libp2p_swarm::PendingInboundConnectionError<TTransErr>) -> Self {
         match error {
-            libp2p_core::connection::PendingInboundConnectionError::WrongPeerId { .. } => {
+            libp2p_swarm::PendingInboundConnectionError::WrongPeerId { .. } => {
                 PendingInboundConnectionError::WrongPeerId
             }
-            libp2p_core::connection::PendingInboundConnectionError::ConnectionLimit(_) => {
+            libp2p_swarm::PendingInboundConnectionError::ConnectionLimit(_) => {
                 PendingInboundConnectionError::ConnectionLimit
             }
-            libp2p_core::connection::PendingInboundConnectionError::Transport(
+            libp2p_swarm::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
             ) => PendingInboundConnectionError::TransportErrorMultiaddrNotSupported,
-            libp2p_core::connection::PendingInboundConnectionError::Transport(
+            libp2p_swarm::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::Other(_),
             ) => PendingInboundConnectionError::TransportErrorOther,
-            libp2p_core::connection::PendingInboundConnectionError::Aborted => {
+            libp2p_swarm::PendingInboundConnectionError::Aborted => {
                 PendingInboundConnectionError::Aborted
             }
-            libp2p_core::connection::PendingInboundConnectionError::IO(_) => {
-                PendingInboundConnectionError::Io
-            }
+            libp2p_swarm::PendingInboundConnectionError::IO(_) => PendingInboundConnectionError::Io,
         }
     }
 }
