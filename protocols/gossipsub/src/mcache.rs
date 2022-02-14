@@ -22,6 +22,7 @@ use crate::topic::TopicHash;
 use crate::types::{MessageId, RawGossipsubMessage};
 use libp2p_core::PeerId;
 use log::{debug, trace};
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::{
     collections::{HashMap, HashSet},
@@ -73,22 +74,22 @@ impl MessageCache {
     ///
     /// Returns true if the message didn't already exist in the cache.
     pub fn put(&mut self, message_id: &MessageId, msg: RawGossipsubMessage) -> bool {
-        trace!("Put message {:?} in mcache", message_id);
-        let cache_entry = CacheEntry {
-            mid: message_id.clone(),
-            topic: msg.topic.clone(),
-        };
+        match self.msgs.entry(message_id.clone()) {
+            Entry::Occupied(_) => {
+                // Don't add duplicate entries to the cache.
+                false
+            }
+            Entry::Vacant(entry) => {
+                let cache_entry = CacheEntry {
+                    mid: message_id.clone(),
+                    topic: msg.topic.clone(),
+                };
+                entry.insert((msg, HashSet::default()));
+                self.history[0].push(cache_entry);
 
-        if self
-            .msgs
-            .insert(message_id.clone(), (msg, HashSet::new()))
-            .is_none()
-        {
-            // Don't add duplicate entries to the cache.
-            self.history[0].push(cache_entry);
-            return true;
-        } else {
-            return false;
+                trace!("Put message {:?} in mcache", message_id);
+                true
+            }
         }
     }
 
