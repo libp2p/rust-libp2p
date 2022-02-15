@@ -30,8 +30,16 @@ use std::{fmt, sync::Arc};
 use zeroize::Zeroize;
 
 /// An RSA keypair.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Keypair(Arc<RsaKeyPair>);
+
+impl std::fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Keypair")
+            .field("public", self.0.public_key())
+            .finish()
+    }
+}
 
 impl Keypair {
     /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
