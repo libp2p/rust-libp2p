@@ -15,7 +15,7 @@ jobs:
         args: [
           "--no-default-features",
           "--all-features",
-          "--benches --all-features",
+          "--benches --all-features"
         ]
     steps:
 
@@ -30,7 +30,21 @@ jobs:
       with:
         key: ${{ matrix.args }}
 
+    # bench harnesses do not satisfy https://github.com/nextest-rs/nextest/blob/0ae6ef92d9619b1ffb42baecc08d6150181d22bd/site/src/book/custom-test-harnesses.md
+    - if: ${{ !contains(matrix.args, '--benches') }}
+      uses: baptiste0928/cargo-install@40656ea54f7fb235999e7df2ba13f374f188952a # v1.1.0
+      with:
+        crate: cargo-nextest
+        version: 0.9.3
+
+    - run: cargo nextest run --workspace ${{ matrix.args }}
+      if: ${{ !contains(matrix.args, '--benches') }}
+    # cargo-nextest does not support doc tests https://github.com/nextest-rs/nextest/issues/16
+    - run: cargo test --doc --workspace ${{ matrix.args }}
+      if: ${{ !contains(matrix.args, '--benches') }}
+
     - run: cargo test --workspace ${{ matrix.args }}
+      if: contains(matrix.args, '--benches')
 
   test-wasm:
     name: Build on WASM
