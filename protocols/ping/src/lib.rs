@@ -107,7 +107,7 @@ impl NetworkBehaviour for Behaviour {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        Handler::new(self.config)
+        Handler::new(self.config.clone())
     }
 
     fn inject_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {

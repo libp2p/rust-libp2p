@@ -150,7 +150,7 @@ impl NetworkBehaviour for Mdns {
                         continue;
                     }
                     if let Entry::Vacant(e) = self.iface_states.entry(addr) {
-                        match InterfaceState::new(addr, self.config) {
+                        match InterfaceState::new(addr, self.config.clone()) {
                             Ok(iface_state) => {
                                 e.insert(iface_state);
                             }

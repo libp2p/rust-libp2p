@@ -38,7 +38,7 @@ use std::{
 use void::Void;
 
 /// The configuration for outbound pings.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// The timeout of an outbound ping.
     timeout: Duration,

@@ -37,7 +37,7 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RelayHandlerConfig {
     pub connection_idle_timeout: Duration,
 }

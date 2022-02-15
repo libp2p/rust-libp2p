@@ -49,7 +49,7 @@ lazy_static! {
 }
 
 /// Configuration for mDNS.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct MdnsConfig {
     /// TTL to use for mdns records.
     pub ttl: Duration,
