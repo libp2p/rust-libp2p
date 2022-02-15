@@ -55,6 +55,7 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
 use std::{borrow::Cow, time::Duration};
+use thiserror::Error;
 
 pub use crate::query::QueryStats;
 
@@ -666,17 +667,25 @@ where
         self.queries.add_iter_closest(target.clone(), peers, inner)
     }
 
+    /// Returns closest peers to the given key; takes peers from local routing table only.
+    pub fn get_closest_local_peers<'a, K: Clone>(
+        &'a mut self,
+        key: &'a kbucket::Key<K>,
+    ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 'a {
+        self.kbuckets.closest_keys(key)
+    }
+
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) -> QueryId {
+    pub fn get_record(&mut self, key: record::Key, quorum: Quorum) -> QueryId {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
 
-        if let Some(record) = self.store.get(key) {
+        if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
-                self.store.remove(key)
+                self.store.remove(&key)
             } else {
                 records.push(PeerRecord {
                     peer: None,
@@ -688,7 +697,7 @@ where
         let done = records.len() >= quorum.get();
         let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord {
-            key: key.clone(),
+            key,
             records,
             quorum,
             cache_candidates: BTreeMap::new(),
@@ -1222,7 +1231,7 @@ where
 
                 if let Some(target) = remaining.next() {
                     let info = QueryInfo::Bootstrap {
-                        peer: target.clone().into_preimage(),
+                        peer: *target.preimage(),
                         remaining: Some(remaining),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
@@ -1814,6 +1823,7 @@ where
         _: &ConnectionId,
         _: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         for addr in errors.map(|a| a.into_iter()).into_iter().flatten() {
             self.address_failed(*peer_id, addr);
@@ -1823,27 +1833,28 @@ where
         // remote supports the configured protocol name. Only once a connection
         // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
         // update the local routing table.
-    }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        // Queue events for sending pending RPCs to the connected peer.
-        // There can be only one pending RPC for a particular peer and query per definition.
-        for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-            q.inner
-                .pending_rpcs
-                .iter()
-                .position(|(p, _)| p == peer)
-                .map(|p| q.inner.pending_rpcs.remove(p))
-        }) {
-            self.queued_events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    event,
-                    handler: NotifyHandler::Any,
-                });
+        // Peer's first connection.
+        if other_established == 0 {
+            // Queue events for sending pending RPCs to the connected peer.
+            // There can be only one pending RPC for a particular peer and query per definition.
+            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+                q.inner
+                    .pending_rpcs
+                    .iter()
+                    .position(|(p, _)| p == peer_id)
+                    .map(|p| q.inner.pending_rpcs.remove(p))
+            }) {
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        event,
+                        handler: NotifyHandler::Any,
+                    });
+            }
+
+            self.connected_peers.insert(*peer_id);
         }
-
-        self.connected_peers.insert(*peer);
     }
 
     fn inject_address_change(
@@ -1918,7 +1929,8 @@ where
             DialError::Banned
             | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId
-            | DialError::InvalidPeerId
+            | DialError::InvalidPeerId { .. }
+            | DialError::WrongPeerId { .. }
             | DialError::Aborted
             | DialError::ConnectionIo(_)
             | DialError::Transport(_)
@@ -1945,12 +1957,21 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId) {
-        for query in self.queries.iter_mut() {
-            query.on_failure(id);
+    fn inject_connection_closed(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: <Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
+    ) {
+        if remaining_established == 0 {
+            for query in self.queries.iter_mut() {
+                query.on_failure(id);
+            }
+            self.connection_updated(*id, None, NodeStatus::Disconnected);
+            self.connected_peers.remove(id);
         }
-        self.connection_updated(*id, None, NodeStatus::Disconnected);
-        self.connected_peers.remove(id);
     }
 
     fn inject_event(
@@ -1967,7 +1988,7 @@ where
                 // since the remote address on an inbound connection may be specific
                 // to that connection (e.g. typically the TCP port numbers).
                 let address = match endpoint {
-                    ConnectedPoint::Dialer { address } => Some(address),
+                    ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
                 self.connection_updated(source, address, NodeStatus::Connected);
@@ -2382,7 +2403,7 @@ pub struct PeerRecord {
 /// The events produced by the `Kademlia` behaviour.
 ///
 /// See [`NetworkBehaviour::poll`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum KademliaEvent {
     /// An inbound request has been received and handled.
     //
@@ -2453,7 +2474,7 @@ pub enum KademliaEvent {
 }
 
 /// Information about a received and handled inbound request.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InboundRequest {
     /// Request for the list of nodes whose IDs are the closest to `key`.
     FindNode { num_closer_peers: usize },
@@ -2486,7 +2507,7 @@ pub enum InboundRequest {
 }
 
 /// The results of Kademlia queries.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum QueryResult {
     /// The result of [`Kademlia::bootstrap`].
     Bootstrap(BootstrapResult),
@@ -2583,14 +2604,16 @@ pub struct PutRecordOk {
 }
 
 /// The error result of [`Kademlia::put_record`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Error)]
 pub enum PutRecordError {
+    #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
         key: record::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize,
     },
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
@@ -2629,8 +2652,9 @@ pub struct BootstrapOk {
 }
 
 /// The error result of [`Kademlia::bootstrap`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum BootstrapError {
+    #[error("the request timed out")]
     Timeout {
         peer: PeerId,
         num_remaining: Option<u32>,
@@ -2648,8 +2672,9 @@ pub struct GetClosestPeersOk {
 }
 
 /// The error result of [`Kademlia::get_closest_peers`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
+    #[error("the request timed out")]
     Timeout { key: Vec<u8>, peers: Vec<PeerId> },
 }
 
@@ -2682,8 +2707,9 @@ pub struct GetProvidersOk {
 }
 
 /// The error result of [`Kademlia::get_providers`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetProvidersError {
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         providers: HashSet<PeerId>,
@@ -2718,9 +2744,9 @@ pub struct AddProviderOk {
 }
 
 /// The possible errors when publishing a provider record.
-#[derive(Debug)]
+#[derive(Debug, Clone, Error)]
 pub enum AddProviderError {
-    /// The query timed out.
+    #[error("the request timed out")]
     Timeout { key: record::Key },
 }
 

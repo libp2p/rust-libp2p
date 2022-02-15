@@ -1,4 +1,17 @@
-# 0.33.0 [unreleased]
+# 0.34.0 [unreleased]
+
+- Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Disconnect pending connections with `Swarm::disconnect`. See [PR 2517].
+
+- Report aborted connections via `SwarmEvent::OutgoingConnectionError`. See [PR 2517].
+
+[PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
+[PR 2517]: https://github.com/libp2p/rust-libp2p/pull/2517
+
+# 0.33.0 [2022-01-27]
 
 - Patch reporting on banned peers and their non-banned and banned connections (see [PR 2350]).
 
@@ -10,13 +23,32 @@
 
 - Move `swarm::Toggle` to `swarm::behaviour::Toggle` (see [PR 2375]).
 
+- Add `Swarm::connected_peers` (see [PR 2378]).
+
 - Implement `swarm::NetworkBehaviour` on `either::Either` (see [PR 2370]).
+
+- Allow overriding _dial concurrency factor_ per dial via
+  `DialOpts::override_dial_concurrency_factor`. See [PR 2404].
+
+- Report negotiated and expected `PeerId` as well as remote address in
+  `DialError::WrongPeerId` (see [PR 2428]).
+
+- Allow overriding role when dialing through `override_role` option on
+  `DialOpts`. This option is needed for NAT and firewall hole punching. See [PR
+  2363].
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 [PR 2350]: https://github.com/libp2p/rust-libp2p/pull/2350
 [PR 2362]: https://github.com/libp2p/rust-libp2p/pull/2362
 [PR 2370]: https://github.com/libp2p/rust-libp2p/pull/2370
 [PR 2375]: https://github.com/libp2p/rust-libp2p/pull/2375
+[PR 2378]: https://github.com/libp2p/rust-libp2p/pull/2378
+[PR 2404]: https://github.com/libp2p/rust-libp2p/pull/2404
+[PR 2428]: https://github.com/libp2p/rust-libp2p/pull/2428
+[PR 2363]: https://github.com/libp2p/rust-libp2p/pull/2363
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
 
 # 0.32.0 [2021-11-16]
 
@@ -29,16 +61,17 @@
 
    Changes required to maintain status quo:
 
-   - Previously `swarm.dial(peer_id)`
+  - Previously `swarm.dial(peer_id)`
      now `swarm.dial(DialOpts::peer_id(peer_id).build())`
      or `swarm.dial(peer_id)` given that `DialOpts` implements `From<PeerId>`.
 
-   - Previously `swarm.dial_addr(addr)`
+  - Previously `swarm.dial_addr(addr)`
      now `swarm.dial(DialOpts::unknown_peer_id().address(addr).build())`
      or `swarm.dial(addr)` given that `DialOpts` implements `From<Multiaddr>`.
 
-   - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
+  - Previously `NetworkBehaviourAction::DialPeer { peer_id, condition, handler }`
      now
+
      ```rust
      NetworkBehaviourAction::Dial {
        opts: DialOpts::peer_id(peer_id)
@@ -48,8 +81,9 @@
      }
      ```
 
-   - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
+  - Previously `NetworkBehaviourAction::DialAddress { address, handler }`
      now
+
      ```rust
      NetworkBehaviourAction::Dial {
        opts: DialOpts::unknown_peer_id()

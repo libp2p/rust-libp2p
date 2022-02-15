@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    connection::{ConnectedPoint, Endpoint},
     either::EitherError,
     transport::{ListenerEvent, Transport, TransportError},
-    ConnectedPoint,
 };
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
@@ -76,7 +76,32 @@ where
             .map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
-            args: Some((self.fun, ConnectedPoint::Dialer { address: addr })),
+            args: Some((
+                self.fun,
+                ConnectedPoint::Dialer {
+                    address: addr,
+                    role_override: Endpoint::Dialer,
+                },
+            )),
+            _marker: PhantomPinned,
+        };
+        Ok(future)
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dialed_fut = self
+            .transport
+            .dial_as_listener(addr.clone())
+            .map_err(|err| err.map(EitherError::A))?;
+        let future = AndThenFuture {
+            inner: Either::Left(Box::pin(dialed_fut)),
+            args: Some((
+                self.fun,
+                ConnectedPoint::Dialer {
+                    address: addr,
+                    role_override: Endpoint::Listener,
+                },
+            )),
             _marker: PhantomPinned,
         };
         Ok(future)

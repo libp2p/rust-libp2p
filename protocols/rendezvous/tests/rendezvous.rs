@@ -26,7 +26,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
 use libp2p_rendezvous as rendezvous;
-use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm, SwarmEvent};
+use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use std::convert::TryInto;
 use std::time::Duration;
 

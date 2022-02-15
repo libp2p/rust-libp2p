@@ -28,12 +28,13 @@ use error::Error;
 use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
+    connection::ConnectedPoint,
     multiaddr::Multiaddr,
     transport::{
         map::{MapFuture, MapStream},
         ListenerEvent, TransportError,
     },
-    ConnectedPoint, Transport,
+    Transport,
 };
 use rw_stream_sink::RwStreamSink;
 use std::{
@@ -127,6 +128,12 @@ where
         self.transport
             .map(wrap_connection as WrapperFn<T::Output>)
             .dial(addr)
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport
+            .map(wrap_connection as WrapperFn<T::Output>)
+            .dial_as_listener(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

@@ -58,6 +58,7 @@
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
+    connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     Transport,
@@ -211,6 +212,31 @@ where
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Dialer)
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Listener)
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
+    }
+}
+
+impl<T, C, P> GenDnsConfig<T, C, P>
+where
+    T: Transport + Clone + Send + 'static,
+    T::Error: Send,
+    T::Dial: Send,
+    C: DnsHandle<Error = ResolveError>,
+    P: ConnectionProvider<Conn = C>,
+{
+    fn do_dial(
+        self,
+        addr: Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
         // Asynchronlously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         Ok(async move {
@@ -293,7 +319,11 @@ where
                     log::debug!("Dialing {}", addr);
 
                     let transport = inner.clone();
-                    let result = match transport.dial(addr) {
+                    let dial = match role_override {
+                        Endpoint::Dialer => transport.dial(addr),
+                        Endpoint::Listener => transport.dial_as_listener(addr),
+                    };
+                    let result = match dial {
                         Ok(out) => {
                             // We only count attempts that the inner transport
                             // actually accepted, i.e. for which it produced
@@ -337,10 +367,6 @@ where
         }
         .boxed()
         .right_future())
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
     }
 }
 
@@ -577,6 +603,13 @@ mod tests {
                     _ => false,
                 }));
                 Ok(Box::pin(future::ready(Ok(()))))
+            }
+
+            fn dial_as_listener(
+                self,
+                addr: Multiaddr,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
+                self.dial(addr)
             }
 
             fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
