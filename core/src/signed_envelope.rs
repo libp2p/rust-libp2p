@@ -19,7 +19,7 @@ pub struct SignedEnvelope {
 impl SignedEnvelope {
     /// Constructs a new [`SignedEnvelope`].
     pub fn new(
-        key: Keypair,
+        key: &Keypair,
         domain_separation: String,
         payload_type: Vec<u8>,
         payload: Vec<u8>,
@@ -214,7 +214,7 @@ mod tests {
         let payload_type: Vec<u8> = "payload type".into();
 
         let env = SignedEnvelope::new(
-            kp.clone(),
+            &kp,
             domain_separation.clone(),
             payload_type.clone(),
             payload.into(),
