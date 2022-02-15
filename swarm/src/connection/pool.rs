@@ -136,7 +136,7 @@ struct PendingConnectionInfo<THandler> {
     handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    _drop_notifier: oneshot::Sender<Void>,
+    abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
@@ -340,10 +340,7 @@ where
     /// Returns `None` if the pool has no connection with the given ID.
     pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, THandler>> {
         if let hash_map::Entry::Occupied(entry) = self.pending.entry(id) {
-            Some(PoolConnection::Pending(PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }))
+            Some(PoolConnection::Pending(PendingConnection { entry }))
         } else {
             self.established
                 .iter_mut()
@@ -406,11 +403,7 @@ where
                 .entry(pending_connection)
                 .expect_occupied("Iterating pending connections");
 
-            PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }
-            .abort();
+            PendingConnection { entry }.abort();
         }
     }
 
@@ -501,13 +494,13 @@ where
 
         let connection_id = self.next_connection_id();
 
-        let (drop_notifier, drop_receiver) = oneshot::channel();
+        let (abort_notifier, abort_receiver) = oneshot::channel();
 
         self.spawn(
             task::new_for_pending_outgoing_connection(
                 connection_id,
                 dial,
-                drop_receiver,
+                abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
             .boxed(),
@@ -521,8 +514,8 @@ where
             PendingConnectionInfo {
                 peer_id: peer,
                 handler,
-                endpoint: endpoint,
-                _drop_notifier: drop_notifier,
+                endpoint,
+                abort_notifier: Some(abort_notifier),
             },
         );
         Ok(connection_id)
@@ -550,13 +543,13 @@ where
 
         let connection_id = self.next_connection_id();
 
-        let (drop_notifier, drop_receiver) = oneshot::channel();
+        let (abort_notifier, abort_receiver) = oneshot::channel();
 
         self.spawn(
             task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
-                drop_receiver,
+                abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
             .boxed(),
@@ -569,7 +562,7 @@ where
                 peer_id: None,
                 handler,
                 endpoint: endpoint.into(),
-                _drop_notifier: drop_notifier,
+                abort_notifier: Some(abort_notifier),
             },
         );
         Ok(connection_id)
@@ -685,7 +678,7 @@ where
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
-                        _drop_notifier,
+                        abort_notifier: _,
                     } = self
                         .pending
                         .remove(&id)
@@ -854,7 +847,7 @@ where
                         peer_id,
                         handler,
                         endpoint,
-                        _drop_notifier,
+                        abort_notifier: _,
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
@@ -911,14 +904,14 @@ pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
 /// A pending connection in a pool.
 pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
     entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
-    counters: &'a mut ConnectionCounters,
 }
 
 impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
-    pub fn abort(self) {
-        self.counters.dec_pending(&self.entry.get().endpoint);
-        self.entry.remove();
+    pub fn abort(mut self) {
+        if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
+            drop(notifier);
+        }
     }
 }
 
