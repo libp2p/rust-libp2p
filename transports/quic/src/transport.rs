@@ -22,19 +22,20 @@
 //!
 //! Combines all the objects in the other modules to implement the trait.
 
-use crate::{endpoint::Endpoint, muxer::QuicMuxer, upgrade::Upgrade};
+use crate::{endpoint::Endpoint, in_addr::InAddr, muxer::QuicMuxer, upgrade::Upgrade};
 
 use futures::prelude::*;
+use futures::stream::StreamExt;
+
+use if_watch::IfEvent;
+
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     PeerId, Transport,
 };
-use std::{net::{SocketAddr, IpAddr}, pin::Pin, sync::Arc};
-use std::task::{Poll, Context};
-use if_watch::{IfEvent, IfWatcher};
-use futures::future::BoxFuture;
-use futures::lock::Mutex;
+use std::task::{Context, Poll};
+use std::{net::SocketAddr, pin::Pin, sync::Arc};
 
 // We reexport the errors that are exposed in the API.
 // All of these types use one another.
@@ -61,41 +62,9 @@ pub struct QuicTransport {
 
 impl QuicTransport {
     pub fn new(endpoint: Arc<Endpoint>) -> Self {
-        let in_addr = if endpoint.local_addr.ip().is_unspecified() {
-            let watcher = IfWatch::Pending(IfWatcher::new().boxed());
-            InAddr::Any { if_watch: Arc::new(Mutex::new(watcher)) }
-        } else {
-            InAddr::One { ip: Some(endpoint.local_addr.ip()) }
-        };
+        let in_addr = InAddr::new(endpoint.local_addr.ip());
         Self { endpoint, in_addr }
     }
-}
-
-enum IfWatch {
-    Pending(BoxFuture<'static, std::io::Result<IfWatcher>>),
-    Ready(IfWatcher),
-}
-
-impl std::fmt::Debug for IfWatch {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match *self {
-            IfWatch::Pending(_) => write!(f, "Pending"),
-            IfWatch::Ready(_) => write!(f, "Ready"),
-        }
-    }
-}
-
-/// The listening addresses of a `UdpSocket`.
-#[derive(Clone, Debug)]
-enum InAddr {
-    /// The socket accepts connections on a single interface.
-    One {
-        ip: Option<IpAddr>,
-    },
-    /// The socket accepts connections on all interfaces.
-    Any {
-        if_watch: Arc<Mutex<IfWatch>>,
-    },
 }
 
 /// Error that can happen on the transport.
@@ -128,19 +97,18 @@ impl Transport for QuicTransport {
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
         Ok(self)
     }
-    
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-      panic!("not implemented")
+        panic!("not implemented")
     }
 
     #[tracing::instrument]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            // FIXME IfWatcher
-            // if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            //     tracing::error!("multiaddr not supported");
-            //     return Err(TransportError::MultiaddrNotSupported(addr));
-            // }
+            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+                tracing::error!("multiaddr not supported");
+                return Err(TransportError::MultiaddrNotSupported(addr));
+            }
             socket_addr
         } else {
             tracing::error!("multiaddr not supported");
@@ -148,14 +116,17 @@ impl Transport for QuicTransport {
         };
 
         Ok(async move {
-            let connection = self.endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
+            let connection = self
+                .endpoint
+                .dial(socket_addr)
+                .await
+                .map_err(Error::Reach)?;
             let final_connec = Upgrade::from_connection(connection).await?;
             Ok(final_connec)
         }
         .boxed())
     }
 }
-
 
 impl Stream for QuicTransport {
     type Item = Result<ListenerEvent<Upgrade, Error>, Error>;
@@ -165,83 +136,45 @@ impl Stream for QuicTransport {
         let me = Pin::into_inner(self);
         let endpoint = me.endpoint.as_ref();
 
-        loop {
-            match &mut me.in_addr {
-                // If the listener is bound to a single interface, make sure the
-                // address is reported once.
-                InAddr::One { ip } => {
-                    if let Some(ip) = ip.take() {
-                        let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr);
-                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
-                    }
-                },
-                InAddr::Any { if_watch } => {
-                    let mut ifwatch_lock = if_watch.lock();
-                    let mut ifwatch = futures::ready!(ifwatch_lock.poll_unpin(cx)); // TODO continue
-                    match &mut *ifwatch {
-                        // If we listen on all interfaces, wait for `if-watch` to be ready.
-                        IfWatch::Pending(f) => {
-                            // let mut f_lock = f.lock();
-                            // let mut f = futures::ready!(f_lock.poll_unpin(cx));
-                            match futures::ready!(f.poll_unpin(cx)) {
-                                Ok(w) => {
-                                    *ifwatch = IfWatch::Ready(w);
-                                    continue;
-                                }
-                                Err(err) => {
-                                    tracing::debug! {
-                                        "Failed to begin observing interfaces: {:?}. Scheduling retry.",
-                                        err
-                                    };
-                                    *ifwatch = IfWatch::Pending(IfWatcher::new().boxed());
-                                    //me.pause = Some(Delay::new(me.sleep_on_error));
-                                    return Poll::Ready(Some(Ok(ListenerEvent::Error(Error::IfWatcher(err)))));
-                                }
-                            }
-                        },
-                        // Consume all events for up/down interface changes.
-                        IfWatch::Ready(watch) => {
-                            while let Poll::Ready(ev) = watch.poll_unpin(cx) {
-                                match ev {
-                                    Ok(IfEvent::Up(inet)) => {
-                                        let ip = inet.addr();
-                                        if endpoint.local_addr.is_ipv4() == ip.is_ipv4()
-                                        {
-                                            let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
-                                            let ma = socketaddr_to_multiaddr(&socket_addr);
-                                            tracing::debug!("New listen address: {}", ma);
-                                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
-                                                ma,
-                                            ))));
-                                        }
-                                    }
-                                    Ok(IfEvent::Down(inet)) => {
-                                        let ip = inet.addr();
-                                        if endpoint.local_addr.is_ipv4() == ip.is_ipv4()
-                                        {
-                                            let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
-                                            let ma = socketaddr_to_multiaddr(&socket_addr);
-                                            tracing::debug!("Expired listen address: {}", ma);
-                                            return Poll::Ready(Some(Ok(
-                                                ListenerEvent::AddressExpired(ma),
-                                            )));
-                                        }
-                                    }
-                                    Err(err) => {
-                                        tracing::debug! {
-                                            "Failure polling interfaces: {:?}. Scheduling retry.",
-                                            err
-                                        };
-                                        return Poll::Ready(Some(Ok(ListenerEvent::Error(Error::IfWatcher(err)))));
-                                    }
-                                }
+        // Poll for a next IfEvent
+        match me.in_addr.poll_next_unpin(cx) {
+            Poll::Ready(mut item) => {
+                if let Some(item) = item.take() {
+                    // Consume all events for up/down interface changes.
+                    match item {
+                        Ok(IfEvent::Up(inet)) => {
+                            let ip = inet.addr();
+                            if endpoint.local_addr.is_ipv4() == ip.is_ipv4() {
+                                let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                                let ma = socketaddr_to_multiaddr(&socket_addr);
+                                tracing::debug!("New listen address: {}", ma);
+                                return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
                             }
                         }
+                        Ok(IfEvent::Down(inet)) => {
+                            let ip = inet.addr();
+                            if endpoint.local_addr.is_ipv4() == ip.is_ipv4() {
+                                let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                                let ma = socketaddr_to_multiaddr(&socket_addr);
+                                tracing::debug!("Expired listen address: {}", ma);
+                                return Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(ma))));
+                            }
+                        }
+                        Err(err) => {
+                            tracing::debug! {
+                                "Failure polling interfaces: {:?}.",
+                                err
+                            };
+                            return Poll::Ready(Some(Ok(ListenerEvent::Error(Error::IfWatcher(
+                                err,
+                            )))));
+                        }
                     }
-                },
+                }
             }
-            break;
+            Poll::Pending => {
+                // continue polling endpoint
+            }
         }
 
         let connection = match endpoint.poll_incoming(cx) {
