@@ -624,12 +624,14 @@ where
     /// with [`ProtocolsHandler::connection_keep_alive`] or directly with
     /// [`ProtocolsHandlerEvent::Close`].
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
-        if self.pool.is_connected(peer_id) {
-            self.pool.disconnect(peer_id);
-            return Ok(());
-        }
+        let was_connected = self.pool.is_connected(peer_id);
+        self.pool.disconnect(peer_id);
 
-        Err(())
+        if was_connected {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     /// Checks whether there is an established connection to a peer.
@@ -2421,5 +2423,40 @@ mod tests {
             }
         }))
         .unwrap();
+    }
+
+    #[test]
+    fn aborting_pending_connection_surfaces_error() {
+        let _ = env_logger::try_init();
+
+        let mut dialer = new_test_swarm::<_, ()>(DummyProtocolsHandler::default()).build();
+        let mut listener = new_test_swarm::<_, ()>(DummyProtocolsHandler::default()).build();
+
+        let listener_peer_id = *listener.local_peer_id();
+        listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
+        let listener_address = match block_on(listener.next()).unwrap() {
+            SwarmEvent::NewListenAddr { address, .. } => address,
+            e => panic!("Unexpected network event: {:?}", e),
+        };
+
+        dialer
+            .dial(
+                DialOpts::peer_id(listener_peer_id)
+                    .addresses(vec![listener_address])
+                    .build(),
+            )
+            .unwrap();
+
+        dialer
+            .disconnect_peer_id(listener_peer_id)
+            .expect_err("Expect peer to not yet be connected.");
+
+        match block_on(dialer.next()).unwrap() {
+            SwarmEvent::OutgoingConnectionError {
+                error: DialError::Aborted,
+                ..
+            } => {}
+            e => panic!("Unexpected swarm event {:?}.", e),
+        }
     }
 }

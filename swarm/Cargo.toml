@@ -26,6 +26,7 @@ void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
+env_logger = "0.9"
 libp2p = { path = "../", default-features = false, features = ["identify", "ping", "plaintext", "yamux"] }
 libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }

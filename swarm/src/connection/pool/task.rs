@@ -42,7 +42,7 @@ use libp2p_core::muxing::StreamMuxer;
 use std::pin::Pin;
 use void::Void;
 
-/// Commands that can be sent to a task.
+/// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]
 pub enum Command<T> {
     /// Notify the connection handler of an event.
@@ -104,12 +104,12 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
 pub async fn new_for_pending_outgoing_connection<TTrans>(
     connection_id: ConnectionId,
     dial: ConcurrentDial<TTrans>,
-    drop_receiver: oneshot::Receiver<Void>,
+    abort_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
 ) where
     TTrans: Transport,
 {
-    match futures::future::select(drop_receiver, Box::pin(dial)).await {
+    match futures::future::select(abort_receiver, Box::pin(dial)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
@@ -142,13 +142,13 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
 pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
     connection_id: ConnectionId,
     future: TFut,
-    drop_receiver: oneshot::Receiver<Void>,
+    abort_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
 ) where
     TTrans: Transport,
     TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
 {
-    match futures::future::select(drop_receiver, Box::pin(future)).await {
+    match futures::future::select(abort_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::PendingFailed {
