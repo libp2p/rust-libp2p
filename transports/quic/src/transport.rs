@@ -30,8 +30,11 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     PeerId, Transport,
 };
-use std::{net::SocketAddr, pin::Pin, sync::Arc};
+use std::{net::{SocketAddr, IpAddr}, pin::Pin, sync::Arc};
 use std::task::{Poll, Context};
+use if_watch::{IfEvent, IfWatcher};
+use futures::future::BoxFuture;
+use futures::lock::Mutex;
 
 // We reexport the errors that are exposed in the API.
 // All of these types use one another.
@@ -46,12 +49,53 @@ pub use quinn_proto::{
 /// > **Note**: This type is necessary because Rust unfortunately forbids implementing the
 /// >           `Transport` trait directly on `Arc<Endpoint>`.
 #[derive(Debug, Clone)]
-pub struct QuicTransport(pub Arc<Endpoint>, /* addr reported */ bool); // FIXME IfWatcher
+pub struct QuicTransport {
+    endpoint: Arc<Endpoint>,
+    /// The IP addresses of network interfaces on which the listening socket
+    /// is accepting connections.
+    ///
+    /// If the listen socket listens on all interfaces, these may change over
+    /// time as interfaces become available or unavailable.
+    in_addr: InAddr,
+}
 
 impl QuicTransport {
     pub fn new(endpoint: Arc<Endpoint>) -> Self {
-        Self(endpoint, false)
+        let in_addr = if endpoint.local_addr.ip().is_unspecified() {
+            let watcher = IfWatch::Pending(IfWatcher::new().boxed());
+            InAddr::Any { if_watch: Arc::new(Mutex::new(watcher)) }
+        } else {
+            InAddr::One { ip: Some(endpoint.local_addr.ip()) }
+        };
+        Self { endpoint, in_addr }
     }
+}
+
+enum IfWatch {
+    Pending(BoxFuture<'static, std::io::Result<IfWatcher>>),
+    Ready(IfWatcher),
+}
+
+impl std::fmt::Debug for IfWatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            IfWatch::Pending(_) => write!(f, "Pending"),
+            IfWatch::Ready(_) => write!(f, "Ready"),
+        }
+    }
+}
+
+/// The listening addresses of a `UdpSocket`.
+#[derive(Clone, Debug)]
+enum InAddr {
+    /// The socket accepts connections on a single interface.
+    One {
+        ip: Option<IpAddr>,
+    },
+    /// The socket accepts connections on all interfaces.
+    Any {
+        if_watch: Arc<Mutex<IfWatch>>,
+    },
 }
 
 /// Error that can happen on the transport.
@@ -63,6 +107,9 @@ pub enum Error {
     /// Error after the remote has been reached.
     #[error("{0}")]
     Established(Libp2pQuicConnectionError),
+    /// Error while working with IfWatcher.
+    #[error("{0}")]
+    IfWatcher(std::io::Error),
 }
 
 impl Transport for QuicTransport {
@@ -77,26 +124,9 @@ impl Transport for QuicTransport {
 
     #[tracing::instrument]
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        multiaddr_to_socketaddr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
         Ok(self)
-        // // TODO: check address correctness
-
-        // // TODO: report the locally opened addresses
-
-        // Ok(stream::unfold((), move |()| {
-        //     let endpoint = self.0.clone();
-        //     let addr = addr.clone();
-        //     async move {
-        //         let connec = endpoint.next_incoming().await;
-        //         let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
-        //         let event = Ok(ListenerEvent::Upgrade {
-        //             upgrade: Upgrade::from_connection(connec),
-        //             local_addr: addr.clone(), // TODO: hack
-        //             remote_addr,
-        //         });
-        //         Some((event, ()))
-        //     }
-        // })
-        // .boxed())
     }
     
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -118,7 +148,7 @@ impl Transport for QuicTransport {
         };
 
         Ok(async move {
-            let connection = self.0.dial(socket_addr).await.map_err(Error::Reach)?;
+            let connection = self.endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
             let final_connec = Upgrade::from_connection(connection).await?;
             Ok(final_connec)
         }
@@ -131,35 +161,102 @@ impl Stream for QuicTransport {
     type Item = Result<ListenerEvent<Upgrade, Error>, Error>;
 
     #[tracing::instrument(skip_all)]
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        tracing::trace!("QuicTransport::poll_next");
-        let endpoint = self.0.clone();
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let me = Pin::into_inner(self);
+        let endpoint = me.endpoint.as_ref();
 
-        if !self.1 { // FIXME IfWatcher
-            self.1 = true;
-            let addr = socketaddr_to_multiaddr(&endpoint.local_addr);
-            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(addr))));
+        loop {
+            match &mut me.in_addr {
+                // If the listener is bound to a single interface, make sure the
+                // address is reported once.
+                InAddr::One { ip } => {
+                    if let Some(ip) = ip.take() {
+                        let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
+                    }
+                },
+                InAddr::Any { if_watch } => {
+                    let mut ifwatch_lock = if_watch.lock();
+                    let mut ifwatch = futures::ready!(ifwatch_lock.poll_unpin(cx)); // TODO continue
+                    match &mut *ifwatch {
+                        // If we listen on all interfaces, wait for `if-watch` to be ready.
+                        IfWatch::Pending(f) => {
+                            // let mut f_lock = f.lock();
+                            // let mut f = futures::ready!(f_lock.poll_unpin(cx));
+                            match futures::ready!(f.poll_unpin(cx)) {
+                                Ok(w) => {
+                                    *ifwatch = IfWatch::Ready(w);
+                                    continue;
+                                }
+                                Err(err) => {
+                                    tracing::debug! {
+                                        "Failed to begin observing interfaces: {:?}. Scheduling retry.",
+                                        err
+                                    };
+                                    *ifwatch = IfWatch::Pending(IfWatcher::new().boxed());
+                                    //me.pause = Some(Delay::new(me.sleep_on_error));
+                                    return Poll::Ready(Some(Ok(ListenerEvent::Error(Error::IfWatcher(err)))));
+                                }
+                            }
+                        },
+                        // Consume all events for up/down interface changes.
+                        IfWatch::Ready(watch) => {
+                            while let Poll::Ready(ev) = watch.poll_unpin(cx) {
+                                match ev {
+                                    Ok(IfEvent::Up(inet)) => {
+                                        let ip = inet.addr();
+                                        if endpoint.local_addr.is_ipv4() == ip.is_ipv4()
+                                        {
+                                            let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                                            let ma = socketaddr_to_multiaddr(&socket_addr);
+                                            tracing::debug!("New listen address: {}", ma);
+                                            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
+                                                ma,
+                                            ))));
+                                        }
+                                    }
+                                    Ok(IfEvent::Down(inet)) => {
+                                        let ip = inet.addr();
+                                        if endpoint.local_addr.is_ipv4() == ip.is_ipv4()
+                                        {
+                                            let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                                            let ma = socketaddr_to_multiaddr(&socket_addr);
+                                            tracing::debug!("Expired listen address: {}", ma);
+                                            return Poll::Ready(Some(Ok(
+                                                ListenerEvent::AddressExpired(ma),
+                                            )));
+                                        }
+                                    }
+                                    Err(err) => {
+                                        tracing::debug! {
+                                            "Failure polling interfaces: {:?}. Scheduling retry.",
+                                            err
+                                        };
+                                        return Poll::Ready(Some(Ok(ListenerEvent::Error(Error::IfWatcher(err)))));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+            break;
         }
 
-
-        //let addr = addr.clone();
-
-            let connec = match endpoint.poll_incoming(cx) {
-                Poll::Ready(Some(conn)) => conn,
-                Poll::Ready(None) => return Poll::Ready(None),
-                Poll::Pending => return Poll::Pending,
-            };
-            let local_addr = socketaddr_to_multiaddr(&connec.local_addr());
-            let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
-            let event = ListenerEvent::Upgrade {
-                upgrade: Upgrade::from_connection(connec),
-                local_addr,
-                remote_addr,
-            };
-            Poll::Ready(Some(Ok(event)))
-            //Some((event, ()))
-    
-        //Poll::Pending
+        let connection = match endpoint.poll_incoming(cx) {
+            Poll::Ready(Some(conn)) => conn,
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Pending => return Poll::Pending,
+        };
+        let local_addr = socketaddr_to_multiaddr(&connection.local_addr());
+        let remote_addr = socketaddr_to_multiaddr(&connection.remote_addr());
+        let event = ListenerEvent::Upgrade {
+            upgrade: Upgrade::from_connection(connection),
+            local_addr,
+            remote_addr,
+        };
+        Poll::Ready(Some(Ok(event)))
     }
 }
 

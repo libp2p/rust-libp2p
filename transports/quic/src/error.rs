@@ -36,8 +36,8 @@ pub enum Error {
     #[error("Peer stopped receiving data: code {0}")]
     Stopped(quinn_proto::VarInt),
     /// Connection was prematurely closed
-    #[error("Connection was prematurely closed")]
-    ConnectionLost,
+    #[error("Connection was prematurely closed: {0}")]
+    ConnectionLost(crate::connection::Error),
     /// Error making the connection.
     #[error("Connection failure: {0}")]
     ConnectError(#[from] quinn_proto::ConnectError),
@@ -79,7 +79,7 @@ impl From<Error> for io::Error {
             e @ Error::NetworkFailure
             | e @ Error::ConnectionClosing
             | e @ Error::ConnectError(_) => io::Error::new(ErrorKind::Other, e),
-            e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
+            e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost(_) => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }
             e @ Error::ExpiredStream => io::Error::new(ErrorKind::BrokenPipe, e),
