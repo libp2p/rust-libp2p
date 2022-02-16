@@ -24,13 +24,11 @@
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
     connection::{
-        self,
-        handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        ConnectionError, ConnectionHandler, IntoConnectionHandler, PendingInboundConnectionError,
-        PendingOutboundConnectionError, Substream,
+        self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
     },
+    protocols_handler::{NodeHandlerWrapper, NodeHandlerWrapperError},
     transport::{Transport, TransportError},
-    Multiaddr, PeerId,
+    Multiaddr, PeerId, ProtocolsHandler,
 };
 use futures::{
     channel::{mpsc, oneshot},
@@ -38,7 +36,6 @@ use futures::{
     SinkExt, StreamExt,
 };
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::muxing::StreamMuxer;
 use std::pin::Pin;
 use void::Void;
 
@@ -76,7 +73,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
+pub enum EstablishedConnectionEvent<THandler: ProtocolsHandler> {
     /// A node we are connected to has changed its address.
     AddressChange {
         id: ConnectionId,
@@ -87,7 +84,7 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
     Notify {
         id: ConnectionId,
         peer_id: PeerId,
-        event: THandlerOutEvent<THandler>,
+        event: THandler::OutEvent,
     },
     /// A connection closed, possibly due to an error.
     ///
@@ -96,8 +93,8 @@ pub enum EstablishedConnectionEvent<THandler: IntoConnectionHandler> {
     Closed {
         id: ConnectionId,
         peer_id: PeerId,
-        error: Option<ConnectionError<THandlerError<THandler>>>,
-        handler: THandler::Handler,
+        error: Option<ConnectionError<NodeHandlerWrapperError<THandler::Error>>>,
+        handler: NodeHandlerWrapper<THandler>,
     },
 }
 
@@ -180,16 +177,14 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
     }
 }
 
-pub async fn new_for_established_connection<TMuxer, THandler>(
+pub async fn new_for_established_connection<THandler>(
     connection_id: ConnectionId,
     peer_id: PeerId,
-    mut connection: crate::connection::Connection<TMuxer, THandler::Handler>,
-    mut command_receiver: mpsc::Receiver<Command<THandlerInEvent<THandler>>>,
+    mut connection: crate::connection::Connection<THandler>,
+    mut command_receiver: mpsc::Receiver<Command<THandler::InEvent>>,
     mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
 ) where
-    TMuxer: StreamMuxer,
-    THandler: IntoConnectionHandler,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>>,
+    THandler: ProtocolsHandler,
 {
     loop {
         match futures::future::select(

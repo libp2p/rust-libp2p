@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::{
-    Connected, ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, Substream,
-    SubstreamEndpoint,
-};
+use crate::connection::{Connected, Substream, SubstreamEndpoint};
 use crate::protocols_handler::{
     IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr,
@@ -72,15 +69,12 @@ where
     }
 }
 
-impl<TIntoProtoHandler, TProtoHandler> IntoConnectionHandler
-    for NodeHandlerWrapperBuilder<TIntoProtoHandler>
+impl<TIntoProtoHandler, TProtoHandler> NodeHandlerWrapperBuilder<TIntoProtoHandler>
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
     TProtoHandler: ProtocolsHandler,
 {
-    type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
-
-    fn into_handler(self, connected: &Connected) -> Self::Handler {
+    pub fn into_handler(self, connected: &Connected) -> NodeHandlerWrapper<TProtoHandler> {
         NodeHandlerWrapper {
             handler: self
                 .handler
@@ -95,8 +89,12 @@ where
     }
 }
 
-// A `ConnectionHandler` for an underlying `ProtocolsHandler`.
-/// Wraps around an implementation of `ProtocolsHandler`, and implements `NodeHandler`.
+/// A wrapper for an underlying [`ProtocolsHandler`].
+///
+/// It extends [`ProtocolsHandler`] with:
+/// - Enforced substream upgrade timeouts
+/// - Driving substream upgrades
+/// - Handling connection timeout
 // TODO: add a caching system for protocols that are supported or not
 pub struct NodeHandlerWrapper<TProtoHandler>
 where
@@ -133,6 +131,21 @@ where
     shutdown: Shutdown,
     /// The substream upgrade protocol override, if any.
     substream_upgrade_protocol_override: Option<upgrade::Version>,
+}
+
+impl<TProtoHandler: ProtocolsHandler> std::fmt::Debug for NodeHandlerWrapper<TProtoHandler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NodeHandlerWrapper")
+            .field("negotiating_in", &self.negotiating_in)
+            .field("negotiating_out", &self.negotiating_out)
+            .field("unique_dial_upgrade_id", &self.unique_dial_upgrade_id)
+            .field("shutdown", &self.shutdown)
+            .field(
+                "substream_upgrade_protocol_override",
+                &self.substream_upgrade_protocol_override,
+            )
+            .finish()
+    }
 }
 
 impl<TProtoHandler: ProtocolsHandler> NodeHandlerWrapper<TProtoHandler> {
@@ -199,6 +212,7 @@ where
 /// A planned shutdown is always postponed for as long as there are ingoing
 /// or outgoing substreams being negotiated, i.e. it is a graceful, "idle"
 /// shutdown.
+#[derive(Debug)]
 enum Shutdown {
     /// No shutdown is planned.
     None,
@@ -249,22 +263,22 @@ where
     }
 }
 
-impl<TProtoHandler> ConnectionHandler for NodeHandlerWrapper<TProtoHandler>
+pub type NodeHandlerWrapperOutboundOpenInfo<TProtoHandler> = (
+    u64,
+    <TProtoHandler as ProtocolsHandler>::OutboundOpenInfo,
+    Duration,
+);
+
+impl<TProtoHandler> NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
 {
-    type InEvent = TProtoHandler::InEvent;
-    type OutEvent = TProtoHandler::OutEvent;
-    type Error = NodeHandlerWrapperError<TProtoHandler::Error>;
-    type Substream = Substream<StreamMuxerBox>;
-    // The first element of the tuple is the unique upgrade identifier
-    // (see `unique_dial_upgrade_id`).
-    type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo, Duration);
-
-    fn inject_substream(
+    pub fn inject_substream(
         &mut self,
-        substream: Self::Substream,
-        endpoint: SubstreamEndpoint<Self::OutboundOpenInfo>,
+        substream: Substream<StreamMuxerBox>,
+        // The first element of the tuple is the unique upgrade identifier
+        // (see `unique_dial_upgrade_id`).
+        endpoint: SubstreamEndpoint<NodeHandlerWrapperOutboundOpenInfo<TProtoHandler>>,
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
@@ -315,19 +329,26 @@ where
         }
     }
 
-    fn inject_event(&mut self, event: Self::InEvent) {
+    pub fn inject_event(&mut self, event: TProtoHandler::InEvent) {
         self.handler.inject_event(event);
     }
 
-    fn inject_address_change(&mut self, new_address: &Multiaddr) {
+    pub fn inject_address_change(&mut self, new_address: &Multiaddr) {
         self.handler.inject_address_change(new_address);
     }
 
-    fn poll(
+    pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
-    {
+    ) -> Poll<
+        Result<
+            NodeHandlerWrapperEvent<
+                NodeHandlerWrapperOutboundOpenInfo<TProtoHandler>,
+                TProtoHandler::OutEvent,
+            >,
+            NodeHandlerWrapperError<TProtoHandler::Error>,
+        >,
+    > {
         while let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
             match res {
                 Ok(upgrade) => self
@@ -372,7 +393,7 @@ where
 
         match poll_result {
             Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                return Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event)));
+                return Poll::Ready(Ok(NodeHandlerWrapperEvent::Custom(event)));
             }
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 let id = self.unique_dial_upgrade_id;
@@ -380,7 +401,7 @@ where
                 self.unique_dial_upgrade_id += 1;
                 let (upgrade, info) = protocol.into_upgrade();
                 self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
-                return Poll::Ready(Ok(ConnectionHandlerEvent::OutboundSubstreamRequest((
+                return Poll::Ready(Ok(NodeHandlerWrapperEvent::OutboundSubstreamRequest((
                     id, info, timeout,
                 ))));
             }
@@ -407,4 +428,14 @@ where
 
         Poll::Pending
     }
+}
+
+/// Event produced by a [`NodeHandlerWrapper`].
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum NodeHandlerWrapperEvent<TOutboundOpenInfo, TCustom> {
+    /// Require a new outbound substream to be opened with the remote.
+    OutboundSubstreamRequest(TOutboundOpenInfo),
+
+    /// Other event.
+    Custom(TCustom),
 }

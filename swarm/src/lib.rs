@@ -79,8 +79,8 @@ use crate::connection::IncomingInfo;
 use crate::connection::{pool::PoolEvent, ListenersEvent, ListenersStream};
 use connection::pool::{ConnectionCounters, ConnectionLimits, Pool, PoolConfig};
 use connection::{
-    ConnectionError, ConnectionHandler, ConnectionLimit, EstablishedConnection,
-    IntoConnectionHandler, PendingOutboundConnectionError, Substream,
+    ConnectionError, ConnectionLimit, EstablishedConnection, PendingOutboundConnectionError,
+    Substream,
 };
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
@@ -95,7 +95,7 @@ use libp2p_core::{
     upgrade::ProtocolName,
     Executor, Multiaddr, Negotiated, PeerId, Transport,
 };
-use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
+use protocols_handler::NodeHandlerWrapperError;
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::HashSet;
@@ -264,10 +264,7 @@ where
     listeners: ListenersStream<transport::Boxed<(PeerId, StreamMuxerBox)>>,
 
     /// The nodes currently active.
-    pool: Pool<
-        NodeHandlerWrapperBuilder<THandler<TBehaviour>>,
-        transport::Boxed<(PeerId, StreamMuxerBox)>,
-    >,
+    pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
 
     /// The local peer ID.
     local_peer_id: PeerId,
@@ -1147,8 +1144,8 @@ where
     TTrans: Transport,
     TTrans::Error: Send + 'static,
     TBehaviour: NetworkBehaviour,
-    THandler: IntoConnectionHandler,
-    THandler::Handler: ConnectionHandler<
+    THandler: IntoProtocolsHandler,
+    THandler::Handler: ProtocolsHandler<
         InEvent = THandlerInEvent<TBehaviour>,
         OutEvent = THandlerOutEvent<TBehaviour>,
     >,
