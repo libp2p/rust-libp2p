@@ -28,6 +28,7 @@
 #[cfg(feature = "dcutr")]
 mod dcutr;
 #[cfg(feature = "gossipsub")]
+#[cfg(not(target_os = "unknown"))]
 mod gossipsub;
 #[cfg(feature = "identify")]
 mod identify;
@@ -46,6 +47,7 @@ pub struct Metrics {
     #[cfg(feature = "dcutr")]
     dcutr: dcutr::Metrics,
     #[cfg(feature = "gossipsub")]
+    #[cfg(not(target_os = "unknown"))]
     gossipsub: gossipsub::Metrics,
     #[cfg(feature = "identify")]
     identify: identify::Metrics,
@@ -73,6 +75,7 @@ impl Metrics {
             #[cfg(feature = "dcutr")]
             dcutr: dcutr::Metrics::new(sub_registry),
             #[cfg(feature = "gossipsub")]
+            #[cfg(not(target_os = "unknown"))]
             gossipsub: gossipsub::Metrics::new(sub_registry),
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),

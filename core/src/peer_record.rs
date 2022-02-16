@@ -59,7 +59,7 @@ impl PeerRecord {
     /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key.
     ///
     /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
-    pub fn new(key: Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
+    pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
         use prost::Message;
 
         let seq = SystemTime::now()
@@ -88,7 +88,7 @@ impl PeerRecord {
         };
 
         let envelope = SignedEnvelope::new(
-            key,
+            &key,
             String::from(DOMAIN_SEP),
             PAYLOAD_TYPE.as_bytes().to_vec(),
             payload,
@@ -200,8 +200,9 @@ mod tests {
 
     #[test]
     fn roundtrip_envelope() {
-        let record =
-            PeerRecord::new(Keypair::generate_ed25519(), vec![HOME.parse().unwrap()]).unwrap();
+        let key = Keypair::generate_ed25519();
+
+        let record = PeerRecord::new(&key, vec![HOME.parse().unwrap()]).unwrap();
 
         let envelope = record.to_signed_envelope();
         let reconstructed = PeerRecord::from_signed_envelope(envelope).unwrap();
@@ -236,7 +237,7 @@ mod tests {
             };
 
             SignedEnvelope::new(
-                identity_b,
+                &identity_b,
                 String::from(DOMAIN_SEP),
                 PAYLOAD_TYPE.as_bytes().to_vec(),
                 payload,

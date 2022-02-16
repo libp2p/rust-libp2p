@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    connection::Endpoint,
     transport::{Transport, TransportError},
     Multiaddr, PeerId,
 };
@@ -28,6 +27,8 @@ use futures::{
     ready,
     stream::{FuturesUnordered, StreamExt},
 };
+use libp2p_core::connection::Endpoint;
+use libp2p_core::multiaddr::Protocol;
 use std::{
     num::NonZeroU8,
     pin::Pin,
@@ -153,12 +154,12 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
         None => return Ok(addr),
     };
 
-    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
+    if let Some(Protocol::P2p(hash)) = addr.iter().last() {
         if &hash != peer.as_ref() {
             return Err(addr);
         }
         Ok(addr)
     } else {
-        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
+        Ok(addr.with(Protocol::P2p(peer.into())))
     }
 }
