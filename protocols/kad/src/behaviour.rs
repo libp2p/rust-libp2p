@@ -214,7 +214,6 @@ impl Default for KademliaConfig {
             connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: KademliaBucketInserts::OnConnected,
             caching: KademliaCaching::Enabled { max_peers: 1 },
-            // By default, a peer will not be in client mode.
             mode: Mode::default(),
         }
     }
