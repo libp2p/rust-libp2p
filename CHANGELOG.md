@@ -71,6 +71,9 @@
 
 - Update to `parking_lot` `v0.12.0`. See [PR 2463].
 
+- Drop support for gossipsub in the wasm32-unknown-unknown target (see [PR 2506]).
+
+[PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
 [PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
 
 ## Version 0.42.1 [2022-02-02]

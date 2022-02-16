@@ -614,21 +614,13 @@ where
         connection.address = new_address;
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-            for request in pending {
-                let request = self.try_send_request(peer, request);
-                assert!(request.is_none());
-            }
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         _errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         let address = match endpoint {
             ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
@@ -638,6 +630,15 @@ where
             .entry(*peer)
             .or_default()
             .push(Connection::new(*conn, address));
+
+        if other_established == 0 {
+            if let Some(pending) = self.pending_outbound_requests.remove(peer) {
+                for request in pending {
+                    let request = self.try_send_request(peer, request);
+                    assert!(request.is_none());
+                }
+            }
+        }
     }
 
     fn inject_connection_closed(
@@ -646,6 +647,7 @@ where
         conn: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         let connections = self
             .connected
@@ -658,6 +660,7 @@ where
             .map(|p: usize| connections.remove(p))
             .expect("Expected connection to be established before closing.");
 
+        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
         if connections.is_empty() {
             self.connected.remove(peer_id);
         }
@@ -683,10 +686,6 @@ where
                     },
                 ));
         }
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.connected.remove(peer);
     }
 
     fn inject_dial_failure(

@@ -4,6 +4,10 @@
 
 - Update to `libp2p-swarm` `v0.34.0`.
 
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
 # 0.6.1 [2022-02-02]
 
 - Remove empty peer entries in `reservations` `HashMap`. See [PR 2464].

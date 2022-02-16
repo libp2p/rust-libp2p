@@ -730,7 +730,7 @@ mod tests {
     ) -> NewRegistration {
         NewRegistration::new(
             Namespace::from_static(namespace),
-            PeerRecord::new(identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
+            PeerRecord::new(&identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
             ttl,
         )
     }

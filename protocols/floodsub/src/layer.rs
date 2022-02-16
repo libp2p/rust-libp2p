@@ -27,6 +27,7 @@ use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler, PollParameters,
@@ -287,7 +288,19 @@ impl NetworkBehaviour for Floodsub {
         Default::default()
     }
 
-    fn inject_connected(&mut self, id: &PeerId) {
+    fn inject_connection_established(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
+        other_established: usize,
+    ) {
+        if other_established > 0 {
+            // We only care about the first time a peer connects.
+            return;
+        }
+
         // We need to send our subscriptions to the newly-connected node.
         if self.target_peers.contains(id) {
             for topic in self.subscribed_topics.iter().cloned() {
@@ -309,7 +322,19 @@ impl NetworkBehaviour for Floodsub {
         self.connected_peers.insert(*id, SmallVec::new());
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId) {
+    fn inject_connection_closed(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: Self::ProtocolsHandler,
+        remaining_established: usize,
+    ) {
+        if remaining_established > 0 {
+            // we only care about peer disconnections
+            return;
+        }
+
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in.is_some());
 

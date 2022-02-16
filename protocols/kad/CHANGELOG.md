@@ -4,6 +4,13 @@
 
 - Update to `libp2p-swarm` `v0.34.0`.
 
+- Require owned key in `get_record()` method (see [PR 2477]).
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2477]: https://github.com/libp2p/rust-libp2p/pull/2477
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
 # 0.34.0 [2022-01-27]
 
 - Update dependencies.

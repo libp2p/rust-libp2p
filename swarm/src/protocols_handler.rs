@@ -55,7 +55,10 @@ use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 pub use dummy::DummyProtocolsHandler;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
-pub use node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
+pub use node_handler::{
+    NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError,
+    NodeHandlerWrapperEvent, NodeHandlerWrapperOutboundOpenInfo,
+};
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
