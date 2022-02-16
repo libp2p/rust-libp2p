@@ -52,7 +52,7 @@ impl SignedEnvelope {
     /// It is the caller's responsibility to check that the signing key is what
     /// is expected. For example, checking that the signing key is from a
     /// certain peer.
-    pub fn payload(
+    pub fn payload_and_signing_key(
         &self,
         domain_separation: String,
         expected_payload_type: &[u8],
@@ -226,7 +226,7 @@ mod tests {
         .expect("Failed to create envelope");
 
         let (actual_payload, signing_key) = env
-            .payload(domain_separation, &payload_type)
+            .payload_and_signing_key(domain_separation, &payload_type)
             .expect("Failed to extract payload and public key");
 
         assert_eq!(actual_payload, payload);

@@ -33,7 +33,7 @@ impl PeerRecord {
         use prost::Message;
 
         let (payload, signing_key) =
-            envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
         let record = peer_record_proto::PeerRecord::decode(payload)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
