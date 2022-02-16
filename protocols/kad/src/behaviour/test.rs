@@ -1513,6 +1513,99 @@ fn client_mode_test() {
     );
 }
 
+#[test]
+fn server_mode_is_added_to_routing_table_test() {
+    // This test is similar to the above client_mode_test, but checks that a
+    // server is added to the routing table
+    let mut pool = LocalPool::new();
+
+    let (bootstrap_server_addr, mut bootstrap_server) = build_node();
+    let bootstrap_server_id = *bootstrap_server.local_peer_id();
+    println!("bootstrap server: {:?}", bootstrap_server_id);
+
+    let (server_addr, mut server) = build_node();
+    let server_id = *server.local_peer_id();
+    println!("server: {:?}", server_id);
+
+    let mut cfg = KademliaConfig::default();
+    cfg.set_mode(Mode::Server);
+    let (server_2_addr, mut server_2) = build_node_with_config(cfg);
+    let server_2_id = *server_2.local_peer_id();
+    println!("server_2: {:?}", server_2_id);
+
+    pool.run_until(wait_for_new_listen_addr(&mut server_2, &server_2_addr));
+    pool.run_until(wait_for_new_listen_addr(&mut server, &server_addr));
+
+    // bootstrap server knows about server_2, we are testing if server_2 is added to server's routing table.
+    bootstrap_server
+        .behaviour_mut()
+        .add_address(server_2.local_peer_id(), server_2_addr.clone());
+
+    pool.spawner()
+        .spawn_obj(
+            bootstrap_server
+                // .map(|e| println!("Bootstrap event: {:?}", e))
+                .collect::<Vec<_>>()
+                .map(|_| ())
+                .boxed()
+                .into(),
+        )
+        .unwrap();
+
+    server_2
+        .behaviour_mut()
+        .add_address(&bootstrap_server_id, bootstrap_server_addr.clone());
+
+    pool.run_until(wait_for_event(&mut server_2, |e| match e {
+        SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated { peer, .. })
+            if peer == bootstrap_server_id =>
+        {
+            true
+        }
+        e => panic!("Unexpected event: {:?}", e),
+    }));
+
+    // Bootstrap the server
+    server
+        .behaviour_mut()
+        .add_address(&bootstrap_server_id, bootstrap_server_addr);
+
+    // Ask the server to store a record with quorum == 2. It will store the record on server_2 and bootstrap server.
+    let key = Key::new(&"123".to_string());
+    let record = Record::new(key.clone(), vec![4, 5, 6]);
+    server
+        .behaviour_mut()
+        .put_record(record.clone(), Quorum::N(NonZeroUsize::new(2).unwrap()))
+        .unwrap();
+
+    pool.run_until(async {
+        select! {
+            _ = wait_for_event(&mut server, |e| match e {
+                SwarmEvent::IncomingConnection { .. }
+                | SwarmEvent::ConnectionEstablished { .. }
+                | SwarmEvent::Dialing(_) => false,
+                SwarmEvent::Behaviour(KademliaEvent::RoutingUpdated { .. }) => false,
+                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+                    result: QueryResult::PutRecord(Ok(_)),
+                    ..
+                }) => true,
+                e => panic!("Unexpected event: {:?}", e),
+            }).fuse() => {},
+            _ = wait_for_event(&mut server_2, |e| match e {
+                SwarmEvent::Behaviour(KademliaEvent::InboundRequest { .. }) => false,
+                SwarmEvent::IncomingConnection { .. }
+                | SwarmEvent::ConnectionEstablished { .. }
+                | SwarmEvent::Dialing(_) => false,
+                e => panic!("Unexpected event: {:?}", e),
+            }).fuse() => {},
+        }
+    });
+    assert!(
+        server.behaviour_mut().remove_peer(&server_2_id).is_some(),
+        "Expected server_2 to be in the server's routing table"
+    );
+}
+
 async fn wait_for_new_listen_addr<T>(swarm: &mut Swarm<T>, new_addr: &Multiaddr)
 where
     T: NetworkBehaviour,
