@@ -42,7 +42,6 @@ pub mod either;
 mod map_in;
 mod map_out;
 pub mod multi;
-mod node_handler;
 mod one_shot;
 mod select;
 
@@ -55,10 +54,6 @@ use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 pub use dummy::DummyProtocolsHandler;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
-pub use node_handler::{
-    NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError,
-    NodeHandlerWrapperEvent, NodeHandlerWrapperOutboundOpenInfo,
-};
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
@@ -221,17 +216,6 @@ pub trait ProtocolsHandler: Send + 'static {
         Self: Sized,
     {
         ProtocolsHandlerSelect::new(self, other)
-    }
-
-    /// Creates a builder that allows creating a `NodeHandler` that handles this protocol
-    /// exclusively.
-    ///
-    /// > **Note**: This method should not be redefined in a custom `ProtocolsHandler`.
-    fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
-    where
-        Self: Sized,
-    {
-        IntoProtocolsHandler::into_node_handler_builder(self)
     }
 }
 
@@ -492,15 +476,6 @@ pub trait IntoProtocolsHandler: Send + 'static {
         Self: Sized,
     {
         IntoProtocolsHandlerSelect::new(self, other)
-    }
-
-    /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
-    /// exclusively.
-    fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
-    where
-        Self: Sized,
-    {
-        NodeHandlerWrapperBuilder::new(self)
     }
 }
 
