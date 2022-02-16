@@ -82,7 +82,7 @@ enum Reply {
 
 /// Configuration for the [`Identify`] [`NetworkBehaviour`].
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IdentifyConfig {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
