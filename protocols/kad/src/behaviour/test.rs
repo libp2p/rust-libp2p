@@ -1513,38 +1513,19 @@ fn client_mode_test() {
     );
 }
 
-async fn wait_for_new_listen_addr<T>(client: &mut Swarm<T>, new_addr: &Multiaddr)
+async fn wait_for_new_listen_addr<T>(swarm: &mut Swarm<T>, new_addr: &Multiaddr)
 where
     T: NetworkBehaviour,
     <T as libp2p_swarm::NetworkBehaviour>::OutEvent: std::fmt::Debug,
 {
-    match client.select_next_some().await {
+    match swarm.select_next_some().await {
         SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
         e => panic!("Unexpected Event{:?}", e),
     }
 }
 
-async fn wait_for_connection_established<T>(client: &mut Swarm<T>, addr: Option<&Multiaddr>)
-where
-    T: NetworkBehaviour,
-    <T as libp2p_swarm::NetworkBehaviour>::OutEvent: std::fmt::Debug,
-{
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::IncomingConnection { .. } => {}
-            SwarmEvent::ConnectionEstablished { endpoint, .. }
-                if Some(endpoint.get_remote_address()) == addr || addr.is_none() =>
-            {
-                break
-            }
-            SwarmEvent::Dialing(_) => {}
-            e => panic!("{:?}", e),
-        }
-    }
-}
-
 async fn wait_for_event<TStore>(
-    client: &mut Swarm<Kademlia<TStore>>,
+    swarm: &mut Swarm<Kademlia<TStore>>,
     f: impl Fn(
         SwarmEvent<KademliaEvent, <<<Kademlia<TStore> as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error>,
     ) -> bool,
@@ -1553,50 +1534,12 @@ async fn wait_for_event<TStore>(
     TStore: Send + 'static,
 {
     loop {
-        let event = client.select_next_some().await;
-        // println!("Event from {}: {:?}", client.local_peer_id(), event);
+        let event = swarm.select_next_some().await;
         if f(event) {
             break;
         }
     }
 }
-
-async fn wait_for_outbound_query_completed(client: &mut Swarm<Kademlia<MemoryStore>>) {
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
-                result: QueryResult::PutRecord(Ok(_)),
-                id: _,
-                ..
-            }) => break,
-            // SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
-            //     result: QueryResult::PutRecord(Err(_)),
-            //     id: _,
-            //     ..
-            // }) => {}
-            e => panic!("{:?}", e),
-        }
-    }
-}
-
-// async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
-//     loop {
-//         match client.select_next_some().await {
-//             SwarmEvent::IncomingConnection { .. } => {}
-//             SwarmEvent::ConnectionEstablished { endpoint, .. }
-//                 if endpoint.get_remote_address() == addr =>
-//             {
-//                 break
-//             }
-//             SwarmEvent::Dialing(_) => {}
-//             SwarmEvent::Behaviour(ClientEvent::Relay(
-//                 client::Event::OutboundCircuitEstablished { .. },
-//             )) => {}
-//             SwarmEvent::ConnectionEstablished { .. } => {}
-//             e => panic!("{:?}", e),
-//         }
-//     }
-// }
 
 #[test]
 fn get_providers() {
