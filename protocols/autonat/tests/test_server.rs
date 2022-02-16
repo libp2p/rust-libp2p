@@ -71,9 +71,8 @@ async fn spawn_client(
     let (tx, rx) = oneshot::channel();
     async_std::task::spawn(async move {
         let mut client = init_swarm(Config {
-            boot_delay: Duration::from_millis(100),
-            refresh_interval: Duration::from_millis(100),
-            retry_interval: Duration::from_millis(200),
+            boot_delay: Duration::from_secs(1),
+            retry_interval: Duration::from_secs(1),
             throttle_server_period: Duration::ZERO,
             ..Default::default()
         })
@@ -98,7 +97,7 @@ async fn spawn_client(
             }
         }
         if add_dummy_external_addr {
-            let dummy_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
+            let dummy_addr: Multiaddr = "/ip4/127.0.0.1/tcp/12345".parse().unwrap();
             client.add_external_address(dummy_addr, AddressScore::Infinite);
         }
         tx.send((peer_id, addr)).unwrap();

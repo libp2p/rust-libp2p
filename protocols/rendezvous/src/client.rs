@@ -234,7 +234,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
 
-            let action = match PeerRecord::new(self.keypair.clone(), external_addresses) {
+            let action = match PeerRecord::new(&self.keypair, external_addresses) {
                 Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
                     peer_id: rendezvous_node,
                     event: handler::OutboundInEvent::NewSubstream {

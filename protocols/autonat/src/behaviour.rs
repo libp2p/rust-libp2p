@@ -303,9 +303,15 @@ impl NetworkBehaviour for Behaviour {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         failed_addresses: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
-        self.inner
-            .inject_connection_established(peer, conn, endpoint, failed_addresses);
+        self.inner.inject_connection_established(
+            peer,
+            conn,
+            endpoint,
+            failed_addresses,
+            other_established,
+        );
         let connections = self.connected.entry(*peer).or_default();
         let addr = if endpoint.is_relayed() {
             None
@@ -342,11 +348,16 @@ impl NetworkBehaviour for Behaviour {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         self.inner
-            .inject_connection_closed(peer, conn, endpoint, handler);
-        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
-        connections.remove(conn);
+            .inject_connection_closed(peer, conn, endpoint, handler, remaining_established);
+        if remaining_established == 0 {
+            self.connected.remove(peer);
+        } else {
+            let connections = self.connected.get_mut(peer).expect("Peer is connected.");
+            connections.remove(conn);
+        }
     }
 
     fn inject_dial_failure(
@@ -360,11 +371,6 @@ impl NetworkBehaviour for Behaviour {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
         }
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inner.inject_disconnected(peer);
-        self.connected.remove(peer);
     }
 
     fn inject_address_change(
@@ -459,10 +465,6 @@ impl NetworkBehaviour for Behaviour {
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.inner.addresses_of_peer(peer)
-    }
-
-    fn inject_connected(&mut self, peer: &PeerId) {
-        self.inner.inject_connected(peer)
     }
 
     fn inject_event(

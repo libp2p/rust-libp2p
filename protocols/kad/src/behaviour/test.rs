@@ -1293,8 +1293,7 @@ fn network_behaviour_inject_address_change() {
     };
 
     // Mimick a connection being established.
-    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None);
-    kademlia.inject_connected(&remote_peer_id);
+    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None, 0);
 
     // At this point the remote is not yet known to support the
     // configured protocol name, so the peer is not yet in the

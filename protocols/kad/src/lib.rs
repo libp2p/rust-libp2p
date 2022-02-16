@@ -19,6 +19,21 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the libp2p-specific Kademlia protocol.
+//!
+//! See [specification](https://github.com/libp2p/specs/blob/master/kad-dht/README.md) for details.
+//!
+//! # Important Discrepancies
+//!
+//! - **Peer Discovery with Identify** In other libp2p implementations, the
+//! [Identify](https://github.com/libp2p/specs/tree/master/identify) protocol might be seen as a core protocol. Rust-libp2p
+//! tries to stay as generic as possible, and does not make this assumption.
+//! This means that the Identify protocol must be manually hooked up to Kademlia through calls
+//! to [`Kademlia::add_address`].
+//! If you choose not to use the Identify protocol, and do not provide an alternative peer
+//! discovery mechanism, a Kademlia node will not discover nodes beyond the network's
+//! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node). Without the Identify protocol,
+//! existing nodes in the kademlia network cannot obtain the listen addresses
+//! of nodes querying them, and thus will not be able to add them to their routing table.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store

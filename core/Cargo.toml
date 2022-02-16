@@ -26,7 +26,7 @@ multiaddr = { version = "0.14.0" }
 multihash = { version = "0.16", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
 multistream-select = { version = "0.11", path = "../misc/multistream-select" }
 p256 = { version = "0.10.0", default-features = false, features = ["ecdsa"], optional = true }
-parking_lot = "0.11.0"
+parking_lot = "0.12.0"
 pin-project = "1.0.0"
 prost = "0.9"
 rand = "0.8"
@@ -49,11 +49,11 @@ criterion = "0.3"
 libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }
 libp2p-tcp = { path = "../transports/tcp" }
-serde_json = "1.0"
-rmp-serde = "1.0"
 multihash = { version = "0.16", default-features = false, features = ["arb"] }
 quickcheck = "0.9.0"
 rand07 = { package = "rand", version = "0.7" }
+rmp-serde = "1.0"
+serde_json = "1.0"
 
 [build-dependencies]
 prost-build = "0.9"
