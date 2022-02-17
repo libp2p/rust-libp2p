@@ -50,22 +50,21 @@
 
 use futures::executor::block_on;
 use futures::stream::StreamExt;
+use hyper::http::StatusCode;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Request, Response, Server};
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::ping::{Ping, PingConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, PeerId, Swarm};
+use log::info;
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
-use std::error::Error;
 use std::convert::Infallible;
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use log::info;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
-use hyper::http::{StatusCode};
-
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -109,16 +108,14 @@ type SharedRegistry = Arc<Mutex<Registry>>;
 
 pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     let reg = Arc::new(Mutex::new(registry));
-        let metric_svc = make_service_fn(
-            move |conn| async move {
-                let reg_clone = reg.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req| async move { 
-                    Ok::<_, Infallible>(metrics_route(req, reg_clone))
-                }
-            ))}
-        
-        });
+    let metric_svc = make_service_fn(move |conn| async move {
+        let reg_clone = reg.clone();
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req| async move {
+                Ok::<_, Infallible>(metrics_route(req, reg_clone))
+            }))
+        }
+    });
     //TODO: Change to a variable port for multiple instances
     let addr = ([127, 0, 0, 1], 3000).into();
     //TODO: Solve type problems
@@ -131,31 +128,28 @@ pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-async fn metrics_route(req: Request<Body>, reg :SharedRegistry )
-  -> Response<Body>{
-    if (req.method() == & hyper::Method::GET) &&
-        (req.uri().path() == "/metrics") {
+async fn metrics_route(req: Request<Body>, reg: SharedRegistry) -> Response<Body> {
+    if (req.method() == &hyper::Method::GET) && (req.uri().path() == "/metrics") {
         //encode and serve meterics from registry
-        respond_with_metrics(req,reg).await
-    }
-    else {
+        respond_with_metrics(req, reg).await
+    } else {
         respond_with_404_not_found().await
     }
 }
-async fn respond_with_metrics(req: Request<Body>, reg : SharedRegistry)
-  -> Response<Body> {
-    let mut encoded : Vec<u8> = Vec::new();
-    encode(&mut encoded,&reg.lock().unwrap()).unwrap();
-    let metrics_content_type =
-      "application/openmetrics-text; version=1.0.0; charset=utf-8";
+async fn respond_with_metrics(req: Request<Body>, reg: SharedRegistry) -> Response<Body> {
+    let mut encoded: Vec<u8> = Vec::new();
+    encode(&mut encoded, &reg.lock().unwrap()).unwrap();
+    let metrics_content_type = "application/openmetrics-text; version=1.0.0; charset=utf-8";
     Response::builder()
         .status(StatusCode::OK)
-        .header(hyper::header::CONTENT_TYPE,metrics_content_type)
-        .body(Body::from(encoded)).unwrap()
+        .header(hyper::header::CONTENT_TYPE, metrics_content_type)
+        .body(Body::from(encoded))
+        .unwrap()
 }
 
 async fn respond_with_404_not_found() -> Response<Body> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
-        .body(Body::from("Not found try localhost:[port]/metrics")).unwrap()
+        .body(Body::from("Not found try localhost:[port]/metrics"))
+        .unwrap()
 }

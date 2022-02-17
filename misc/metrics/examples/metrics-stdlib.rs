@@ -57,22 +57,12 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, PeerId, Swarm};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
-
+use std::error::Error;
 use std::sync::{Arc, Mutex};
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-//use std::thread;
-use log::{error,info,debug};
-use hyper::service::Service;
-use hyper::{Body, Request, Response, Server};
-use hyper::http::{StatusCode};
+use std::thread;
+use log::info;
 
-
-//fn main() -> Result<(), Box<dyn Error>> {
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let local_key = identity::Keypair::generate_ed25519();
@@ -84,7 +74,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ping::new(PingConfig::new().with_keep_alive(true)),
         local_peer_id,
     );
-
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
@@ -94,10 +83,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
-    if let Err(e) = metrics_server(metric_registry).await{
-        error!("metrics server error: {}",e)
-    } 
-    block_on( async{
+    thread::spawn(move || block_on(metrics_server(metric_registry)));
+
+    block_on(async {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(ping_event) => {
@@ -110,98 +98,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
             }
         }
-    });
+    })
+}
+
+pub async fn metrics_server(registry: Registry) -> std::result::Result<(), std::io::Error> {
+    let mut app = tide::with_state(Arc::new(Mutex::new(registry)));
+
+    app.at("/metrics")
+        .get(|req: tide::Request<Arc<Mutex<Registry>>>| async move {
+            let mut encoded = Vec::new();
+            encode(&mut encoded, &req.state().lock().unwrap()).unwrap();
+            let response = tide::Response::builder(200)
+                .body(encoded)
+                .content_type("application/openmetrics-text; version=1.0.0; charset=utf-8")
+                .build();
+            Ok(response)
+        });
+
+    app.listen("0.0.0.0:0").await?;
+
     Ok(())
-}
-pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
-    //TODO: Change to a variable port for multiple instances
-    debug!("entered  Metrics server line 116");
-    let addr = ([127, 0, 0, 1], 3001).into();
-    //TODO: Solve type problems
-    let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-    info!("Metrics server on http://{}", addr);
-    if let Err(e) = server.await {
-        error!("server error: {}", e);
-    }
-
-    Ok(())
-}
-
-struct MetricService{
-    reg: Arc<Mutex<Registry>>,
-}
-
-type SharedRegistry = Arc<Mutex<Registry>>;
-
-impl MetricService {
-    //HUM: Directly reference instead?
-    fn get_reg(&mut self)  -> SharedRegistry{
-         Arc::clone(&self.reg)
-    }
-    fn respond_with_metrics(&mut self)
-        -> Response<Body> {
-        let mut encoded : Vec<u8> = Vec::new();
-        let reg = self.get_reg();
-        encode(&mut encoded, &reg.lock().unwrap()).unwrap();
-        let metrics_content_type =
-          "application/openmetrics-text; version=1.0.0; charset=utf-8";
-        Response::builder()
-            .status(StatusCode::OK)
-            .header(hyper::header::CONTENT_TYPE,metrics_content_type)
-            .body(Body::from(encoded)).unwrap()
-    }
-    fn respond_with_404_not_found(&mut self) -> Response<Body> {
-        Response::builder()
-          .status(StatusCode::NOT_FOUND)
-          .body(Body::from("Not found try localhost:[port]/metrics")).unwrap()
-    }
-}
-
-impl Service<Request<Body>> for MetricService {
-    type Response = Response<Body>;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let resp = 
-        if (req.method() == & hyper::Method::GET) &&
-            (req.uri().path() == "/metrics") {
-            //encode and serve meterics from registry
-            self.respond_with_metrics()
-        }
-        else {
-            self.respond_with_404_not_found()
-        };
-        Box::pin(async { Ok(resp)})
-    }
-}
-struct MakeMetricService {
-    reg: SharedRegistry,
-}
-impl MakeMetricService{
-    pub fn new(registry:Registry) -> MakeMetricService{
-        MakeMetricService{
-            reg:Arc::new(Mutex::new(registry)),
-        }
-    }
-}
-
-impl<T> Service<T> for MakeMetricService {
-    type Response = MetricService;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _: T) -> Self::Future {
-        let reg = self.reg.clone();
-        let fut = async move { Ok(MetricService { reg }) };
-        Box::pin(fut)
-    }
 }

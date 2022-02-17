@@ -57,12 +57,12 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, PeerId, Swarm};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
-
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-//use std::thread;
+use std::thread;
 use log::{error,info,debug};
 use hyper::service::Service;
 use hyper::{Body, Request, Response, Server};
@@ -86,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
@@ -94,29 +95,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
-    if let Err(e) = metrics_server(metric_registry).await{
-        error!("metrics server error: {}",e)
-    } 
-    block_on( async{
-        loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(ping_event) => {
-                    info!("{:?}", ping_event);
-                    metrics.record(&ping_event);
-                }
-                swarm_event => {
-                    info!("{:?}", swarm_event);
-                    metrics.record(&swarm_event);
+    metrics_server(metric_registry).await;
+    thread::spawn(move || {
+        block_on( async move{
+            loop {
+                match swarm.select_next_some().await {
+                    SwarmEvent::Behaviour(ping_event) => {
+                        info!("{:?}", ping_event);
+                        metrics.record(&ping_event);
+                    }
+                    swarm_event => {
+                        info!("{:?}", swarm_event);
+                        metrics.record(&swarm_event);
+                    }
                 }
             }
-        }
+        })
     });
     Ok(())
 }
 pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     //TODO: Change to a variable port for multiple instances
     debug!("entered  Metrics server line 116");
-    let addr = ([127, 0, 0, 1], 3001).into();
+    let addr = ([127, 0, 0, 1], 3002).into();
     //TODO: Solve type problems
     let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
     info!("Metrics server on http://{}", addr);
@@ -134,7 +135,15 @@ struct MetricService{
 type SharedRegistry = Arc<Mutex<Registry>>;
 
 impl MetricService {
-    //HUM: Directly reference instead?
+    //note that this ususally handled by MakeMetricsService
+    //by cloning the Arc stored in that struct
+    //thus all intances have Arc pointers to the same registry
+    // fn new(registry: Registry)->MetricService {
+    //     MetricService {
+    //         reg: Arc::new(Mutex::new(registry)),
+    //     }
+    // }
+    //HUM: Directly reference or use get and clone?
     fn get_reg(&mut self)  -> SharedRegistry{
          Arc::clone(&self.reg)
     }
@@ -162,7 +171,7 @@ impl Service<Request<Body>> for MetricService {
     type Error = hyper::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
