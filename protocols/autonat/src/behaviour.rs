@@ -52,6 +52,9 @@ pub struct Config {
     /// Timeout for requests.
     pub timeout: Duration,
 
+    /// Whether to consider only global IP addresses for NAT.
+    pub use_only_global_ips: bool,
+
     // Client Config
     /// Delay on init before starting the fist probe.
     pub boot_delay: Duration,
@@ -83,6 +86,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             timeout: Duration::from_secs(30),
+            use_only_global_ips: false,
             boot_delay: Duration::from_secs(15),
             retry_interval: Duration::from_secs(90),
             refresh_interval: Duration::from_secs(15 * 60),
@@ -509,4 +513,19 @@ trait HandleInnerEvent {
         params: &mut impl PollParameters,
         event: RequestResponseEvent<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>);
+}
+
+// Test for global IP address implemented on MultiAddr
+trait GlobalAddress {
+    fn contains_global_address(&self) -> bool;
+}
+
+impl GlobalAddress for Multiaddr {
+    fn contains_global_address(&self) -> bool {
+        self.into_iter().any(|proto| match proto {
+            libp2p_core::multiaddr::Protocol::Ip4(addr) => addr.is_global(),
+            libp2p_core::multiaddr::Protocol::Ip6(addr) => addr.is_global(),
+            _ => false,
+        })
+    }
 }

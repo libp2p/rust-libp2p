@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the AutoNAT protocol.
+#![feature(ip)]
 mod behaviour;
 mod protocol;
 

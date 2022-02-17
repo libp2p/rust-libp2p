@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
-    ResponseError,
+    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, GlobalAddress,
+    HandleInnerEvent, ProbeId, ResponseError,
 };
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
@@ -114,12 +114,21 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
             } => {
                 let probe_id = self.probe_id.next();
                 match self.resolve_inbound_request(peer, request) {
-                    Ok(addrs) => {
+                    Ok(mut addrs) => {
                         log::debug!(
                             "Inbound dial request from Peer {} with dial-back addresses {:?}.",
                             peer,
                             addrs
                         );
+
+                        if self.config.use_only_global_ips {
+                            addrs = addrs
+                                .into_iter()
+                                .filter(|a| {
+                                    !self.config.use_only_global_ips || a.contains_global_address()
+                                })
+                                .collect();
+                        }
 
                         self.ongoing_inbound
                             .insert(peer, (probe_id, request_id, addrs.clone(), channel));

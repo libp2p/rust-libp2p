@@ -21,8 +21,8 @@
 use crate::ResponseError;
 
 use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
-    ProbeId,
+    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, GlobalAddress,
+    HandleInnerEvent, NatStatus, ProbeId,
 };
 use futures::FutureExt;
 use futures_timer::Delay;
@@ -201,6 +201,12 @@ impl<'a> AsClient<'a> {
 
                 let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
                 addresses.extend(params.listened_addresses());
+                if self.config.use_only_global_ips {
+                    addresses = addresses
+                        .into_iter()
+                        .filter(|a| a.contains_global_address())
+                        .collect::<Vec<_>>();
+                };
 
                 let probe_id = self.probe_id.next();
                 let event = match self.do_probe(probe_id, addresses) {
