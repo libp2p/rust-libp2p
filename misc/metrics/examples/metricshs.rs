@@ -58,16 +58,21 @@ use libp2p::{identity, PeerId, Swarm};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::error::Error;
-use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::thread;
-use log::info;
-use hyper::service::{make_service_fn, service_fn};
+use log::{error,info,debug};
+use hyper::service::Service;
 use hyper::{Body, Request, Response, Server};
 use hyper::http::{StatusCode};
 
 
-fn main() -> Result<(), Box<dyn Error>> {
+//fn main() -> Result<(), Box<dyn Error>> {
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::init();
 
     let local_key = identity::Keypair::generate_ed25519();
@@ -79,6 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ping::new(PingConfig::new().with_keep_alive(true)),
         local_peer_id,
     );
+
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
@@ -105,57 +111,103 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     })
 }
-type SharedRegistry = Arc<Mutex<Registry>>;
-
 pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
-    let reg = Arc::new(Mutex::new(registry));
-        let metric_svc = make_service_fn(
-            move |conn| async move {
-                let reg_clone = reg.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req| async move { 
-                    Ok::<_, Infallible>(metrics_route(req, reg_clone))
-                }
-            ))}
-        
-        });
     //TODO: Change to a variable port for multiple instances
-    let addr = ([127, 0, 0, 1], 3000).into();
+    debug!("entered  Metrics server line 116");
+    let addr = ([127, 0, 0, 1], 3001).into();
     //TODO: Solve type problems
-    let server = Server::bind(&addr).serve(metric_svc);
-
+    let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
+    info!("Metrics server on http://{}", addr);
     if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+        error!("server error: {}", e);
     }
 
     Ok(())
 }
 
-async fn metrics_route(req: Request<Body>, reg :SharedRegistry )
-  -> Response<Body>{
-    if (req.method() == & hyper::Method::GET) &&
-        (req.uri().path() == "/metrics") {
-        //encode and serve meterics from registry
-        respond_with_metrics(req,reg).await
-    }
-    else {
-        respond_with_404_not_found().await
-    }
-}
-async fn respond_with_metrics(req: Request<Body>, reg : SharedRegistry)
-  -> Response<Body> {
-    let mut encoded : Vec<u8> = Vec::new();
-    encode(&mut encoded,&reg.lock().unwrap()).unwrap();
-    let metrics_content_type =
-      "application/openmetrics-text; version=1.0.0; charset=utf-8";
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(hyper::header::CONTENT_TYPE,metrics_content_type)
-        .body(Body::from(encoded)).unwrap()
+struct MetricService{
+    reg: Arc<Mutex<Registry>>,
 }
 
-async fn respond_with_404_not_found() -> Response<Body> {
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(Body::from("Not found try localhost:[port]/metrics")).unwrap()
+type SharedRegistry = Arc<Mutex<Registry>>;
+
+impl MetricService {
+    //note that this ususally handled by MakeMetricsService
+    //by cloning the Arc stored in that struct
+    //thus all intances have Arc pointers to the same registry
+    // fn new(registry: Registry)->MetricService {
+    //     MetricService {
+    //         reg: Arc::new(Mutex::new(registry)),
+    //     }
+    // }
+    //HUM: Directly reference or use get and clone?
+    fn get_reg(&mut self)  -> SharedRegistry{
+         Arc::clone(&self.reg)
+    }
+    fn respond_with_metrics(&mut self, req: Request<Body>)
+        -> Response<Body> {
+        let mut encoded : Vec<u8> = Vec::new();
+        let reg = self.get_reg();
+        encode(&mut encoded, &reg.lock().unwrap()).unwrap();
+        let metrics_content_type =
+          "application/openmetrics-text; version=1.0.0; charset=utf-8";
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE,metrics_content_type)
+            .body(Body::from(encoded)).unwrap()
+    }
+    fn respond_with_404_not_found(&mut self) -> Response<Body> {
+        Response::builder()
+          .status(StatusCode::NOT_FOUND)
+          .body(Body::from("Not found try localhost:[port]/metrics")).unwrap()
+    }
+}
+
+impl Service<Request<Body>> for MetricService {
+    type Response = Response<Body>;
+    type Error = hyper::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let resp = 
+        if (req.method() == & hyper::Method::GET) &&
+            (req.uri().path() == "/metrics") {
+            //encode and serve meterics from registry
+            self.respond_with_metrics(req)
+        }
+        else {
+            self.respond_with_404_not_found()
+        };
+        Box::pin(async { Ok(resp)})
+    }
+}
+struct MakeMetricService {
+    reg: SharedRegistry,
+}
+impl MakeMetricService{
+    pub fn new(registry:Registry) -> MakeMetricService{
+        MakeMetricService{
+            reg:Arc::new(Mutex::new(registry)),
+        }
+    }
+}
+
+impl<T> Service<T> for MakeMetricService {
+    type Response = MetricService;
+    type Error = hyper::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _: T) -> Self::Future {
+        let reg = self.reg.clone();
+        let fut = async move { Ok(MetricService { reg }) };
+        Box::pin(fut)
+    }
 }
