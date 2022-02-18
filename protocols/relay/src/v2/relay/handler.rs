@@ -44,6 +44,7 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+#[derive(Debug, Clone)]
 pub struct Config {
     pub reservation_duration: Duration,
     pub max_circuit_duration: Duration,

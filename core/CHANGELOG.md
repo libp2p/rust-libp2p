@@ -10,6 +10,8 @@
 
 - Implement `Display` on `DialError`. See [PR 2456].
 
+- Update to `parking_lot` `v0.12.0`. See [PR 2463].
+
 - Validate PeerRecord signature matching peer ID. See [RUSTSEC-2022-0009].
 
 - Don't take ownership of key in `PeerRecord::new` and `SignedEnvelope::new`. See [PR 2516].
@@ -18,6 +20,7 @@
 [RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 [PR 2516]: https://github.com/libp2p/rust-libp2p/pull/2516
+[PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
 
 # 0.31.0 [2022-01-27]
 
