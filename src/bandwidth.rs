@@ -75,22 +75,28 @@ where
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .listen_on(addr)
             .map(move |inner| BandwidthListener { inner, sinks })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial_as_listener(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })

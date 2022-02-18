@@ -101,6 +101,7 @@ enum PortReuse {
     Enabled {
         /// The addresses and ports of the listening sockets
         /// registered as eligible for port reuse when dialing.
+        // TODO: Still needed?
         listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
     },
 }
@@ -339,33 +340,12 @@ where
         Ok(socket)
     }
 
-    fn do_listen(self, socket_addr: SocketAddr) -> io::Result<TcpListenStream<T>> {
+    fn do_listen(&mut self, socket_addr: SocketAddr) -> io::Result<TcpListenStream<T>> {
         let socket = self.create_socket(&socket_addr)?;
         socket.bind(&socket_addr.into())?;
         socket.listen(self.backlog as _)?;
         socket.set_nonblocking(true)?;
-        TcpListenStream::<T>::new(socket.into(), self.port_reuse)
-    }
-
-    async fn do_dial(self, socket_addr: SocketAddr) -> Result<T::Stream, io::Error> {
-        let socket = self.create_socket(&socket_addr)?;
-
-        if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
-            log::trace!("Binding dial socket to listen socket {}", addr);
-            socket.bind(&addr.into())?;
-        }
-
-        socket.set_nonblocking(true)?;
-
-        match socket.connect(&socket_addr.into()) {
-            Ok(()) => {}
-            Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => {}
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err),
-        };
-
-        let stream = T::new_stream(socket.into()).await?;
-        Ok(stream)
+        TcpListenStream::<T>::new(socket.into(), self.port_reuse.clone())
     }
 }
 
@@ -382,7 +362,10 @@ where
     type Listener = TcpListenStream<T>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(addr.clone()) {
             sa
         } else {
@@ -392,7 +375,7 @@ where
         self.do_listen(socket_addr).map_err(TransportError::Other)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 return Err(TransportError::MultiaddrNotSupported(addr));
@@ -402,10 +385,41 @@ where
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
         log::debug!("dialing {}", socket_addr);
-        Ok(Box::pin(self.do_dial(socket_addr)))
+
+        let socket = self
+            .create_socket(&socket_addr)
+            // TODO: Would a `From` impl on `TransportError` do as well?
+            .map_err(TransportError::Other)?;
+
+        if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
+            log::trace!("Binding dial socket to listen socket {}", addr);
+            socket.bind(&addr.into()).map_err(TransportError::Other)?;
+        }
+
+        socket
+            .set_nonblocking(true)
+            .map_err(TransportError::Other)?;
+
+        Ok(async move {
+            // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
+            // do the `connect` call within the [`Future`].
+            match socket.connect(&socket_addr.into()) {
+                Ok(()) => {}
+                Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => {}
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
+            };
+
+            let stream = T::new_stream(socket.into()).await?;
+            Ok(stream)
+        }
+        .boxed())
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.dial(addr)
     }
 

@@ -71,6 +71,7 @@ pub use connection::{
     ConnectionCounters, ConnectionError, ConnectionLimit, ConnectionLimits, PendingConnectionError,
     PendingInboundConnectionError, PendingOutboundConnectionError,
 };
+use libp2p_core::Endpoint;
 pub use protocols_handler::{
     IntoProtocolsHandler, IntoProtocolsHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerSelect,
@@ -502,9 +503,65 @@ where
                 }
             };
 
+        /// Ensures a given `Multiaddr` is a `/p2p/...` address for the given peer.
+        ///
+        /// If the given address is already a `p2p` address for the given peer,
+        /// i.e. the last encapsulated protocol is `/p2p/<peer-id>`, this is a no-op.
+        ///
+        /// If the given address is already a `p2p` address for a different peer
+        /// than the one given, the given `Multiaddr` is returned as an `Err`.
+        ///
+        /// If the given address is not yet a `p2p` address for the given peer,
+        /// the `/p2p/<peer-id>` protocol is appended to the returned address.
+        fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+            let peer = match peer {
+                Some(p) => p,
+                None => return Ok(addr),
+            };
+
+            if let Some(Protocol::P2p(hash)) = addr.iter().last() {
+                if &hash != peer.as_ref() {
+                    return Err(addr);
+                }
+                Ok(addr)
+            } else {
+                Ok(addr.with(Protocol::P2p(peer.into())))
+            }
+        }
+
+        let dials = addresses
+            .into_iter()
+            .map(|a| {
+                match p2p_addr(peer_id, a) {
+                    Ok(address) => {
+                        let dial = match role_override {
+                            Endpoint::Dialer => {
+                                self.listeners.transport_mut().dial(address.clone())
+                            }
+                            Endpoint::Listener => self
+                                .listeners
+                                .transport_mut()
+                                .dial_as_listener(address.clone()),
+                        };
+                        match dial {
+                            Ok(fut) => fut
+                                .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
+                                .boxed(),
+                            Err(err) => futures::future::ready((address, Err(err))).boxed(),
+                        }
+                    }
+                    Err(address) => futures::future::ready((
+                        address.clone(),
+                        // TODO: Would it be possible to surface this earlier?
+                        Err(TransportError::MultiaddrNotSupported(address)),
+                    ))
+                    .boxed(),
+                }
+            })
+            .collect();
+
         match self.pool.add_outgoing(
-            self.listeners.transport().clone(),
-            addresses,
+            dials,
             peer_id,
             handler,
             role_override,

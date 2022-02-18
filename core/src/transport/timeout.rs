@@ -84,7 +84,10 @@ where
     type ListenerUpgrade = Timeout<InnerTrans::ListenerUpgrade>;
     type Dial = Timeout<InnerTrans::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let listener = self
             .inner
             .listen_on(addr)
@@ -98,7 +101,7 @@ where
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
             .dial(addr)
@@ -109,7 +112,10 @@ where
         })
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
             .dial_as_listener(addr)
