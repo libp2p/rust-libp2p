@@ -37,7 +37,7 @@ use libp2p_request_response::{
     RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -294,7 +294,7 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
+    type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
 
     fn inject_connection_established(
@@ -347,7 +347,7 @@ impl NetworkBehaviour for Behaviour {
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         self.inner
@@ -363,7 +363,7 @@ impl NetworkBehaviour for Behaviour {
     fn inject_dial_failure(
         &mut self,
         peer: Option<PeerId>,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
         error: &DialError,
     ) {
         self.inner.inject_dial_failure(peer, handler, error);
@@ -459,7 +459,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         self.inner.new_handler()
     }
 
@@ -480,7 +480,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         local_addr: &Multiaddr,
         send_back_addr: &Multiaddr,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
     ) {
         self.inner
             .inject_listen_failure(local_addr, send_back_addr, handler)
@@ -501,7 +501,7 @@ impl NetworkBehaviour for Behaviour {
 
 type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::OutEvent,
-    <Behaviour as NetworkBehaviour>::ProtocolsHandler,
+    <Behaviour as NetworkBehaviour>::ConnectionHandler,
 >;
 
 // Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.

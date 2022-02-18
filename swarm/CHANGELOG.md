@@ -1,5 +1,7 @@
 # 0.34.0 [unreleased]
 
+- Rename `ProtocolsHandler` to `ConnectionHandler`.
+
 - Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
 
 - Update to `libp2p-core` `v0.32.0`.

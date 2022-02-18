@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
+use crate::handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use crate::NegotiatedSubstream;
 use libp2p_core::{
@@ -29,21 +30,21 @@ use libp2p_core::{
 use std::task::{Context, Poll};
 use void::Void;
 
-/// Implementation of `ProtocolsHandler` that doesn't handle anything.
+/// Implementation of [`ConnectionHandler`] that doesn't handle anything.
 #[derive(Clone, Debug)]
-pub struct DummyProtocolsHandler {
+pub struct DummyConnectionHandler {
     pub keep_alive: KeepAlive,
 }
 
-impl Default for DummyProtocolsHandler {
+impl Default for DummyConnectionHandler {
     fn default() -> Self {
-        DummyProtocolsHandler {
+        DummyConnectionHandler {
             keep_alive: KeepAlive::No,
         }
     }
 }
 
-impl ProtocolsHandler for DummyProtocolsHandler {
+impl ConnectionHandler for DummyConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;
@@ -81,7 +82,7 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
+        _: ConnectionHandlerUpgrErr<
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
@@ -90,7 +91,7 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
+        _: ConnectionHandlerUpgrErr<
             <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
@@ -104,7 +105,7 @@ impl ProtocolsHandler for DummyProtocolsHandler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,

@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    ProtocolsHandler,
+    ConnectionHandler, DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
@@ -35,7 +35,7 @@ use std::task::{Context, Poll};
 /// any further state.
 pub struct MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler,
+    THandler: ConnectionHandler,
 {
     /// The prototype protocols handler that is cloned for every
     /// invocation of `new_handler`.
@@ -50,7 +50,7 @@ where
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler,
+    THandler: ConnectionHandler,
 {
     pub fn new(handler_proto: THandler) -> Self {
         MockBehaviour {
@@ -63,14 +63,14 @@ where
 
 impl<THandler, TOutEvent> NetworkBehaviour for MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler + Clone,
+    THandler: ConnectionHandler + Clone,
     THandler::OutEvent: Clone,
     TOutEvent: Send + 'static,
 {
-    type ProtocolsHandler = THandler;
+    type ConnectionHandler = THandler;
     type OutEvent = TOutEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         self.handler_proto.clone()
     }
 
@@ -84,7 +84,7 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 }
@@ -104,7 +104,7 @@ where
     pub inject_event: Vec<(
         PeerId,
         ConnectionId,
-        <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     )>,
     pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
@@ -211,13 +211,13 @@ where
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent:
+    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
         Clone,
 {
-    type ProtocolsHandler = TInner::ProtocolsHandler;
+    type ConnectionHandler = TInner::ConnectionHandler;
     type OutEvent = TInner::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         self.inner.new_handler()
     }
 
@@ -276,7 +276,7 @@ where
         p: &PeerId,
         c: &ConnectionId,
         e: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         let mut other_closed_connections = self
@@ -323,7 +323,7 @@ where
         &mut self,
         p: PeerId,
         c: ConnectionId,
-        e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        e: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         assert!(
             self.inject_connection_established
@@ -346,7 +346,7 @@ where
     fn inject_dial_failure(
         &mut self,
         p: Option<PeerId>,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
         error: &DialError,
     ) {
         self.inject_dial_failure.push(p);
@@ -392,7 +392,7 @@ where
         &mut self,
         cx: &mut Context,
         args: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

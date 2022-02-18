@@ -20,7 +20,7 @@
 
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler::inbound;
-use crate::substream_handler::{InboundSubstreamId, SubstreamProtocolsHandler};
+use crate::substream_handler::{InboundSubstreamId, SubstreamConnectionHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
@@ -40,7 +40,7 @@ use void::Void;
 
 pub struct Behaviour {
     events: VecDeque<
-        NetworkBehaviourAction<Event, SubstreamProtocolsHandler<inbound::Stream, Void, ()>>,
+        NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>,
     >,
     registrations: Registrations,
 }
@@ -109,13 +109,13 @@ pub enum Event {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ProtocolsHandler = SubstreamProtocolsHandler<inbound::Stream, Void, ()>;
+    type ConnectionHandler = SubstreamConnectionHandler<inbound::Stream, Void, ()>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         let initial_keep_alive = Duration::from_secs(30);
 
-        SubstreamProtocolsHandler::new_inbound_only(initial_keep_alive)
+        SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)
     }
 
     fn inject_event(
@@ -147,7 +147,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                 Event::RegistrationExpired(registration),
@@ -168,7 +168,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, SubstreamProtocolsHandler<inbound::Stream, Void, ()>>> {
+) -> Vec<NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

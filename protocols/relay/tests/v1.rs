@@ -34,7 +34,7 @@ use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay::v1::{new_transport_and_behaviour, Relay, RelayConfig};
-use libp2p_swarm::protocols_handler::KeepAlive;
+use libp2p_swarm::handler::KeepAlive;
 use libp2p_swarm::{
     DialError, DummyBehaviour, NetworkBehaviour, NetworkBehaviourAction,
     NetworkBehaviourEventProcess, PollParameters, Swarm, SwarmEvent,
@@ -1162,7 +1162,7 @@ impl CombinedBehaviour {
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<CombinedEvent, <Self as NetworkBehaviour>::ProtocolsHandler>>
+    ) -> Poll<NetworkBehaviourAction<CombinedEvent, <Self as NetworkBehaviour>::ConnectionHandler>>
     {
         if !self.events.is_empty() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(self.events.remove(0)));

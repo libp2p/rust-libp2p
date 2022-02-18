@@ -28,8 +28,8 @@ use libp2p_core::upgrade::{
     EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade, UpgradeError,
 };
 use libp2p_swarm::{
-    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use smallvec::SmallVec;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
@@ -42,7 +42,7 @@ use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 pub struct IdentifyHandler {
     /// Pending events to yield.
     events: SmallVec<
-        [ProtocolsHandlerEvent<
+        [ConnectionHandlerEvent<
             EitherUpgrade<IdentifyProtocol, IdentifyPushProtocol<OutboundPush>>,
             (),
             IdentifyHandlerEvent,
@@ -70,7 +70,7 @@ pub enum IdentifyHandlerEvent {
     /// We received a request for identification.
     Identify(ReplySubstream<NegotiatedSubstream>),
     /// Failed to identify the remote.
-    IdentificationError(ProtocolsHandlerUpgrErr<io::Error>),
+    IdentificationError(ConnectionHandlerUpgrErr<io::Error>),
 }
 
 /// Identifying information of the local node that is pushed to a remote.
@@ -89,7 +89,7 @@ impl IdentifyHandler {
     }
 }
 
-impl ProtocolsHandler for IdentifyHandler {
+impl ConnectionHandler for IdentifyHandler {
     type InEvent = IdentifyPush;
     type OutEvent = IdentifyHandlerEvent;
     type Error = io::Error;
@@ -111,10 +111,10 @@ impl ProtocolsHandler for IdentifyHandler {
         _: Self::InboundOpenInfo,
     ) {
         match output {
-            EitherOutput::First(substream) => self.events.push(ProtocolsHandlerEvent::Custom(
+            EitherOutput::First(substream) => self.events.push(ConnectionHandlerEvent::Custom(
                 IdentifyHandlerEvent::Identify(substream),
             )),
-            EitherOutput::Second(info) => self.events.push(ProtocolsHandlerEvent::Custom(
+            EitherOutput::Second(info) => self.events.push(ConnectionHandlerEvent::Custom(
                 IdentifyHandlerEvent::Identified(info),
             )),
         }
@@ -127,12 +127,12 @@ impl ProtocolsHandler for IdentifyHandler {
     ) {
         match output {
             EitherOutput::First(remote_info) => {
-                self.events.push(ProtocolsHandlerEvent::Custom(
+                self.events.push(ConnectionHandlerEvent::Custom(
                     IdentifyHandlerEvent::Identified(remote_info),
                 ));
                 self.keep_alive = KeepAlive::No;
             }
-            EitherOutput::Second(()) => self.events.push(ProtocolsHandlerEvent::Custom(
+            EitherOutput::Second(()) => self.events.push(ConnectionHandlerEvent::Custom(
                 IdentifyHandlerEvent::IdentificationPushed,
             )),
         }
@@ -140,7 +140,7 @@ impl ProtocolsHandler for IdentifyHandler {
 
     fn inject_event(&mut self, IdentifyPush(push): Self::InEvent) {
         self.events
-            .push(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     EitherUpgrade::B(IdentifyPushProtocol::outbound(push)),
                     (),
@@ -151,7 +151,7 @@ impl ProtocolsHandler for IdentifyHandler {
     fn inject_dial_upgrade_error(
         &mut self,
         _info: Self::OutboundOpenInfo,
-        err: ProtocolsHandlerUpgrErr<
+        err: ConnectionHandlerUpgrErr<
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
@@ -160,7 +160,7 @@ impl ProtocolsHandler for IdentifyHandler {
             UpgradeError::Apply(EitherError::A(ioe)) => UpgradeError::Apply(ioe),
             UpgradeError::Apply(EitherError::B(ioe)) => UpgradeError::Apply(ioe),
         });
-        self.events.push(ProtocolsHandlerEvent::Custom(
+        self.events.push(ConnectionHandlerEvent::Custom(
             IdentifyHandlerEvent::IdentificationError(err),
         ));
         self.keep_alive = KeepAlive::No;
@@ -175,7 +175,7 @@ impl ProtocolsHandler for IdentifyHandler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             IdentifyHandlerEvent,
@@ -191,7 +191,7 @@ impl ProtocolsHandler for IdentifyHandler {
             Poll::Pending => Poll::Pending,
             Poll::Ready(()) => {
                 self.next_id.reset(self.interval);
-                let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: SubstreamProtocol::new(EitherUpgrade::A(IdentifyProtocol), ()),
                 };
                 Poll::Ready(ev)

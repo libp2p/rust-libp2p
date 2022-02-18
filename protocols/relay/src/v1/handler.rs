@@ -29,8 +29,8 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use std::fmt;
@@ -46,7 +46,7 @@ pub struct RelayHandlerProto {
     pub config: RelayHandlerConfig,
 }
 
-impl IntoProtocolsHandler for RelayHandlerProto {
+impl IntoConnectionHandler for RelayHandlerProto {
     type Handler = RelayHandler;
 
     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
@@ -57,7 +57,7 @@ impl IntoProtocolsHandler for RelayHandlerProto {
         )
     }
 
-    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         protocol::RelayListen::new()
     }
 }
@@ -118,7 +118,7 @@ pub struct RelayHandler {
     keep_alive: KeepAlive,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
-        ProtocolsHandlerUpgrErr<
+        ConnectionHandlerUpgrErr<
             EitherError<
                 protocol::RelayListenError,
                 EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
@@ -347,10 +347,10 @@ impl RelayHandler {
     }
 }
 
-impl ProtocolsHandler for RelayHandler {
+impl ConnectionHandler for RelayHandler {
     type InEvent = RelayHandlerIn;
     type OutEvent = RelayHandlerEvent;
-    type Error = ProtocolsHandlerUpgrErr<
+    type Error = ConnectionHandlerUpgrErr<
         EitherError<
             protocol::RelayListenError,
             EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
@@ -478,22 +478,22 @@ impl ProtocolsHandler for RelayHandler {
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<protocol::RelayListenError>,
+        error: ConnectionHandlerUpgrErr<protocol::RelayListenError>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+            ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {}
+            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )) => {}
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
             )) => {
-                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
                 ));
             }
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
-                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Apply(EitherError::A(error)),
                 ))
             }
@@ -503,7 +503,7 @@ impl ProtocolsHandler for RelayHandler {
     fn inject_dial_upgrade_error(
         &mut self,
         open_info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<
+        error: ConnectionHandlerUpgrErr<
             EitherError<protocol::OutgoingRelayReqError, protocol::OutgoingDstReqError>,
         >,
     ) {
@@ -513,20 +513,20 @@ impl ProtocolsHandler for RelayHandler {
                 request_id,
             } => {
                 match error {
-                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {}
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {}
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )) => {}
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::ProtocolError(e),
                     )) => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                             upgrade::UpgradeError::Select(
                                 upgrade::NegotiationError::ProtocolError(e),
                             ),
                         ));
                     }
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                         EitherError::A(error),
                     )) => match error {
                         protocol::OutgoingRelayReqError::Decode(_)
@@ -536,7 +536,7 @@ impl ProtocolsHandler for RelayHandler {
                         | protocol::OutgoingRelayReqError::UnexpectedSrcPeerWithStatusType
                         | protocol::OutgoingRelayReqError::UnexpectedDstPeerWithStatusType
                         | protocol::OutgoingRelayReqError::ExpectedStatusType(_) => {
-                            self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                            self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                                 upgrade::UpgradeError::Apply(EitherError::B(EitherError::A(error))),
                             ));
                         }
@@ -550,7 +550,7 @@ impl ProtocolsHandler for RelayHandler {
                                 circuit_relay::Status::HopSrcAddrTooLong
                                 | circuit_relay::Status::HopSrcMultiaddrInvalid
                                 | circuit_relay::Status::MalformedMessage => {
-                                    self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                    self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                                         upgrade::UpgradeError::Apply(EitherError::B(
                                             EitherError::A(error),
                                         )),
@@ -574,7 +574,7 @@ impl ProtocolsHandler for RelayHandler {
                             }
                         }
                     },
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                         EitherError::B(_),
                     )) => {
                         unreachable!("Can not receive an OutgoingDstReqError when dialing a relay.")
@@ -593,28 +593,28 @@ impl ProtocolsHandler for RelayHandler {
                 ..
             } => {
                 let err_code = match error {
-                    ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
+                    ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
                         circuit_relay::Status::HopCantOpenDstStream
                     }
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )) => circuit_relay::Status::HopCantSpeakRelay,
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::ProtocolError(e),
                     )) => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                             upgrade::UpgradeError::Select(
                                 upgrade::NegotiationError::ProtocolError(e),
                             ),
                         ));
                         circuit_relay::Status::HopCantSpeakRelay
                     }
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                         EitherError::A(_),
                     )) => unreachable!(
                         "Can not receive an OutgoingRelayReqError when dialing a destination."
                     ),
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                         EitherError::B(error),
                     )) => {
                         match error {
@@ -625,7 +625,7 @@ impl ProtocolsHandler for RelayHandler {
                             | protocol::OutgoingDstReqError::UnexpectedSrcPeerWithStatusType
                             | protocol::OutgoingDstReqError::UnexpectedDstPeerWithStatusType
                             | protocol::OutgoingDstReqError::ExpectedStatusType(_) => {
-                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(EitherError::B(
                                         error,
                                     ))),
@@ -651,7 +651,7 @@ impl ProtocolsHandler for RelayHandler {
                                     | circuit_relay::Status::HopSrcAddrTooLong
                                     | circuit_relay::Status::HopSrcMultiaddrInvalid => {
                                         self.pending_error =
-                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                            Some(ConnectionHandlerUpgrErr::Upgrade(
                                                 upgrade::UpgradeError::Apply(EitherError::B(
                                                     EitherError::B(error),
                                                 )),
@@ -663,7 +663,7 @@ impl ProtocolsHandler for RelayHandler {
                                     | circuit_relay::Status::StopDstMultiaddrInvalid
                                     | circuit_relay::Status::MalformedMessage => {
                                         self.pending_error =
-                                            Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                            Some(ConnectionHandlerUpgrErr::Upgrade(
                                                 upgrade::UpgradeError::Apply(EitherError::B(
                                                     EitherError::B(error),
                                                 )),
@@ -699,7 +699,7 @@ impl ProtocolsHandler for RelayHandler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -709,7 +709,7 @@ impl ProtocolsHandler for RelayHandler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
         // Request the remote to act as a relay.
@@ -721,7 +721,7 @@ impl ProtocolsHandler for RelayHandler {
                 dst_addr,
             } = self.outgoing_relay_reqs.remove(0);
             self.outgoing_relay_reqs.shrink_to_fit();
-            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::A(protocol::OutgoingRelayReq::new(
                         src_peer_id,
@@ -746,7 +746,7 @@ impl ProtocolsHandler for RelayHandler {
                 incoming_relay_req,
             } = self.outgoing_dst_reqs.remove(0);
             self.outgoing_dst_reqs.shrink_to_fit();
-            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     upgrade::EitherUpgrade::B(protocol::OutgoingDstReq::new(
                         src_peer_id,
@@ -772,7 +772,7 @@ impl ProtocolsHandler for RelayHandler {
                     relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_address.clone(),
                 };
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(event));
             }
             Poll::Ready(Some(Err(e))) => {
                 log::debug!("Failed to accept destination future: {:?}", e);
@@ -796,7 +796,7 @@ impl ProtocolsHandler for RelayHandler {
         // Report the queued events.
         if !self.queued_events.is_empty() {
             let event = self.queued_events.remove(0);
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         }
 
         while let Poll::Ready(Some(Err(Canceled))) =

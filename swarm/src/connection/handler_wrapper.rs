@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::connection::{Substream, SubstreamEndpoint};
-use crate::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
+use crate::handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
 };
 use crate::upgrade::SendWrapper;
 
@@ -35,16 +35,16 @@ use libp2p_core::{
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
-/// A wrapper for an underlying [`ProtocolsHandler`].
+/// A wrapper for an underlying [`ConnectionHandler`].
 ///
-/// It extends [`ProtocolsHandler`] with:
+/// It extends [`ConnectionHandler`] with:
 /// - Enforced substream upgrade timeouts
 /// - Driving substream upgrades
 /// - Handling connection timeout
 // TODO: add a caching system for protocols that are supported or not
 pub struct HandlerWrapper<TProtoHandler>
 where
-    TProtoHandler: ProtocolsHandler,
+    TProtoHandler: ConnectionHandler,
 {
     /// The underlying handler.
     handler: TProtoHandler,
@@ -79,7 +79,7 @@ where
     substream_upgrade_protocol_override: Option<upgrade::Version>,
 }
 
-impl<TProtoHandler: ProtocolsHandler> std::fmt::Debug for HandlerWrapper<TProtoHandler> {
+impl<TProtoHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TProtoHandler> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerWrapper")
             .field("negotiating_in", &self.negotiating_in)
@@ -94,7 +94,7 @@ impl<TProtoHandler: ProtocolsHandler> std::fmt::Debug for HandlerWrapper<TProtoH
     }
 }
 
-impl<TProtoHandler: ProtocolsHandler> HandlerWrapper<TProtoHandler> {
+impl<TProtoHandler: ConnectionHandler> HandlerWrapper<TProtoHandler> {
     pub(crate) fn new(
         handler: TProtoHandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
@@ -129,7 +129,7 @@ where
 {
     type Output = (
         UserData,
-        Result<UpgradeOutput, ProtocolsHandlerUpgrErr<TUpgradeError>>,
+        Result<UpgradeOutput, ConnectionHandlerUpgrErr<TUpgradeError>>,
     );
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -139,7 +139,7 @@ where
                     self.user_data
                         .take()
                         .expect("Future not to be polled again once ready."),
-                    Err(ProtocolsHandlerUpgrErr::Timeout),
+                    Err(ConnectionHandlerUpgrErr::Timeout),
                 ))
             }
 
@@ -157,7 +157,7 @@ where
                 self.user_data
                     .take()
                     .expect("Future not to be polled again once ready."),
-                Err(ProtocolsHandlerUpgrErr::Upgrade(err)),
+                Err(ConnectionHandlerUpgrErr::Upgrade(err)),
             )),
             Poll::Pending => Poll::Pending,
         }
@@ -167,8 +167,8 @@ where
 /// The options for a planned connection & handler shutdown.
 ///
 /// A shutdown is planned anew based on the the return value of
-/// [`ProtocolsHandler::connection_keep_alive`] of the underlying handler
-/// after every invocation of [`ProtocolsHandler::poll`].
+/// [`ConnectionHandler::connection_keep_alive`] of the underlying handler
+/// after every invocation of [`ConnectionHandler::poll`].
 ///
 /// A planned shutdown is always postponed for as long as there are ingoing
 /// or outgoing substreams being negotiated, i.e. it is a graceful, "idle"
@@ -226,13 +226,13 @@ where
 
 pub type OutboundOpenInfo<TProtoHandler> = (
     u64,
-    <TProtoHandler as ProtocolsHandler>::OutboundOpenInfo,
+    <TProtoHandler as ConnectionHandler>::OutboundOpenInfo,
     Duration,
 );
 
 impl<TProtoHandler> HandlerWrapper<TProtoHandler>
 where
-    TProtoHandler: ProtocolsHandler,
+    TProtoHandler: ConnectionHandler,
 {
     pub fn inject_substream(
         &mut self,
@@ -350,10 +350,10 @@ where
         };
 
         match poll_result {
-            Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
                 return Poll::Ready(Ok(Event::Custom(event)));
             }
-            Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
+            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 let id = self.unique_dial_upgrade_id;
                 let timeout = *protocol.timeout();
                 self.unique_dial_upgrade_id += 1;
@@ -361,7 +361,7 @@ where
                 self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
                 return Poll::Ready(Ok(Event::OutboundSubstreamRequest((id, info, timeout))));
             }
-            Poll::Ready(ProtocolsHandlerEvent::Close(err)) => return Poll::Ready(Err(err.into())),
+            Poll::Ready(ConnectionHandlerEvent::Close(err)) => return Poll::Ready(Err(err.into())),
             Poll::Pending => (),
         };
 

@@ -29,9 +29,7 @@ use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUn
 use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::{
-    protocols_handler::{
-        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
-    },
+    handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
@@ -65,7 +63,7 @@ where
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
     /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<ProtocolsHandlerUpgrErr<io::Error>>,
+    pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<RequestResponseHandlerEvent<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -192,13 +190,13 @@ impl<TCodec: RequestResponseCodec> fmt::Debug for RequestResponseHandlerEvent<TC
     }
 }
 
-impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
+impl<TCodec> ConnectionHandler for RequestResponseHandler<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
     type InEvent = RequestProtocol<TCodec>;
     type OutEvent = RequestResponseHandlerEvent<TCodec>;
-    type Error = ProtocolsHandlerUpgrErr<io::Error>;
+    type Error = ConnectionHandlerUpgrErr<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;
@@ -268,14 +266,14 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         info: RequestId,
-        error: ProtocolsHandlerUpgrErr<io::Error>,
+        error: ConnectionHandlerUpgrErr<io::Error>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timeout => {
+            ConnectionHandlerUpgrErr::Timeout => {
                 self.pending_events
                     .push_back(RequestResponseHandlerEvent::OutboundTimeout(info));
             }
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The remote merely doesn't support the protocol(s) we requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -296,13 +294,13 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         info: RequestId,
-        error: ProtocolsHandlerUpgrErr<io::Error>,
+        error: ConnectionHandlerUpgrErr<io::Error>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timeout => self
+            ConnectionHandlerUpgrErr::Timeout => self
                 .pending_events
                 .push_back(RequestResponseHandlerEvent::InboundTimeout(info)),
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The local peer merely doesn't support the protocol(s) requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -327,17 +325,17 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
+    ) -> Poll<ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
     {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
         // Drain pending events.
         if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.pending_events.shrink_to_fit();
         }
@@ -348,7 +346,7 @@ where
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
                     self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(
                         RequestResponseHandlerEvent::Request {
                             request_id: id,
                             request: rq,
@@ -367,7 +365,7 @@ where
         // Emit outbound requests.
         if let Some(request) = self.outbound.pop_front() {
             let info = request.request_id;
-            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(request, info)
                     .with_timeout(self.substream_timeout),
             });

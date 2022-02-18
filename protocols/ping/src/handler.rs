@@ -24,8 +24,8 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::{
-    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -108,7 +108,7 @@ impl Config {
     /// is determined by other protocol handlers.
     ///
     /// If the maximum number of allowed ping failures is reached, the
-    /// connection is always terminated as a result of [`ProtocolsHandler::poll`]
+    /// connection is always terminated as a result of [`ConnectionHandler::poll`]
     /// returning an error, regardless of the keep-alive setting.
     pub fn with_keep_alive(mut self, b: bool) -> Self {
         self.keep_alive = b;
@@ -215,7 +215,7 @@ impl Handler {
     }
 }
 
-impl ProtocolsHandler for Handler {
+impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = crate::Result;
     type Error = Failure;
@@ -239,18 +239,18 @@ impl ProtocolsHandler for Handler {
 
     fn inject_event(&mut self, _: Void) {}
 
-    fn inject_dial_upgrade_error(&mut self, _info: (), error: ProtocolsHandlerUpgrErr<Void>) {
+    fn inject_dial_upgrade_error(&mut self, _info: (), error: ConnectionHandlerUpgrErr<Void>) {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 debug_assert_eq!(self.state, State::Active);
 
                 self.state = State::Inactive { reported: false };
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            ProtocolsHandlerUpgrErr::Timeout => Failure::Timeout,
+            ConnectionHandlerUpgrErr::Timeout => Failure::Timeout,
             e => Failure::Other { error: Box::new(e) },
         };
 
@@ -268,14 +268,14 @@ impl ProtocolsHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), crate::Result, Self::Error>> {
+    ) -> Poll<ConnectionHandlerEvent<protocol::Ping, (), crate::Result, Self::Error>> {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(Failure::Unsupported)));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(Err(Failure::Unsupported)));
             }
             State::Active => {}
         }
@@ -291,7 +291,7 @@ impl ProtocolsHandler for Handler {
                 Poll::Ready(Ok(stream)) => {
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Ok(Success::Pong)));
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Pong)));
                 }
             }
         }
@@ -313,10 +313,10 @@ impl ProtocolsHandler for Handler {
                 if self.failures > 1 || self.config.max_failures.get() > 1 {
                     if self.failures >= self.config.max_failures.get() {
                         log::debug!("Too many failures ({}). Closing connection.", self.failures);
-                        return Poll::Ready(ProtocolsHandlerEvent::Close(error));
+                        return Poll::Ready(ConnectionHandlerEvent::Close(error));
                     }
 
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(error)));
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
                 }
             }
 
@@ -335,7 +335,7 @@ impl ProtocolsHandler for Handler {
                         self.failures = 0;
                         self.timer.reset(self.config.interval);
                         self.outbound = Some(PingState::Idle(stream));
-                        return Poll::Ready(ProtocolsHandlerEvent::Custom(Ok(Success::Ping {
+                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
                             rtt,
                         })));
                     }
@@ -362,7 +362,7 @@ impl ProtocolsHandler for Handler {
                     self.outbound = Some(PingState::OpenStream);
                     let protocol = SubstreamProtocol::new(protocol::Ping, ())
                         .with_timeout(self.config.timeout);
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol,
                     });
                 }

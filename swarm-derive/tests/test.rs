@@ -160,7 +160,7 @@ fn custom_polling() {
         ) -> std::task::Poll<
             libp2p::swarm::NetworkBehaviourAction<
                 <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ProtocolsHandler,
+                <Self as NetworkBehaviour>::ConnectionHandler,
             >,
         > {
             std::task::Poll::Pending
@@ -223,7 +223,7 @@ fn custom_event_and_polling() {
         ) -> std::task::Poll<
             libp2p::swarm::NetworkBehaviourAction<
                 <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ProtocolsHandler,
+                <Self as NetworkBehaviour>::ConnectionHandler,
             >,
         > {
             std::task::Poll::Pending

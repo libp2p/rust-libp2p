@@ -26,7 +26,7 @@ use crate::{
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
-    ConnectedPoint, Executor, IntoProtocolsHandler, Multiaddr, PeerId, ProtocolsHandler,
+    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -54,7 +54,7 @@ mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoProtocolsHandler, TTrans>
+pub struct Pool<THandler: IntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -68,7 +68,7 @@ where
         PeerId,
         FnvHashMap<
             ConnectionId,
-            EstablishedConnectionInfo<<THandler::Handler as ProtocolsHandler>::InEvent>,
+            EstablishedConnectionInfo<<THandler::Handler as ConnectionHandler>::InEvent>,
         >,
     >,
 
@@ -146,7 +146,7 @@ struct PendingConnectionInfo<THandler> {
     abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
-impl<THandler: IntoProtocolsHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
+impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -155,13 +155,13 @@ impl<THandler: IntoProtocolsHandler, TTrans: Transport> fmt::Debug for Pool<THan
 }
 
 /// Event that can happen on the `Pool`.
-pub enum PoolEvent<'a, THandler: IntoProtocolsHandler, TTrans>
+pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
     /// A new connection has been established.
     ConnectionEstablished {
-        connection: EstablishedConnection<'a, <THandler::Handler as ProtocolsHandler>::InEvent>,
+        connection: EstablishedConnection<'a, <THandler::Handler as ConnectionHandler>::InEvent>,
         /// List of other connections to the same peer.
         ///
         /// Note: Does not include the connection reported through this event.
@@ -189,7 +189,7 @@ where
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<<THandler::Handler as ProtocolsHandler>::Error>>,
+        error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<THandler, TTrans>,
         /// The remaining established connections to the same peer.
@@ -242,7 +242,7 @@ where
     },
 }
 
-impl<'a, THandler: IntoProtocolsHandler, TTrans> fmt::Debug for PoolEvent<'a, THandler, TTrans>
+impl<'a, THandler: IntoConnectionHandler, TTrans> fmt::Debug for PoolEvent<'a, THandler, TTrans>
 where
     TTrans: Transport,
     TTrans::Error: fmt::Debug,
@@ -311,7 +311,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoProtocolsHandler,
+    THandler: IntoConnectionHandler,
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
@@ -465,7 +465,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoProtocolsHandler,
+    THandler: IntoConnectionHandler,
     TTrans: Transport + 'static,
     TTrans::Output: Send + 'static,
     TTrans::Error: Send + 'static,
@@ -582,9 +582,9 @@ where
     pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<'a, THandler, TTrans>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
-        THandler: IntoProtocolsHandler + 'static,
-        THandler::Handler: ProtocolsHandler + Send,
-        <THandler::Handler as ProtocolsHandler>::OutboundOpenInfo: Send,
+        THandler: IntoConnectionHandler + 'static,
+        THandler::Handler: ConnectionHandler + Send,
+        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     {
         // Poll for events of established connections.
         //
@@ -896,17 +896,17 @@ where
 }
 
 /// A connection in a [`Pool`].
-pub enum PoolConnection<'a, THandler: IntoProtocolsHandler> {
+pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
     Pending(PendingConnection<'a, THandler>),
     Established(EstablishedConnection<'a, THandlerInEvent<THandler>>),
 }
 
 /// A pending connection in a pool.
-pub struct PendingConnection<'a, THandler: IntoProtocolsHandler> {
+pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
     entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
 }
 
-impl<THandler: IntoProtocolsHandler> PendingConnection<'_, THandler> {
+impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(mut self) {
         if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
