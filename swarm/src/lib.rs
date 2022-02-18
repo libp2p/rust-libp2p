@@ -93,7 +93,6 @@ use libp2p_core::{
     upgrade::ProtocolName,
     Executor, Multiaddr, Negotiated, PeerId, Transport,
 };
-use protocols_handler::NodeHandlerWrapperError;
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::HashSet;
@@ -163,7 +162,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         num_established: u32,
         /// Reason for the disconnection, if it was not a successful
         /// active close.
-        cause: Option<ConnectionError<NodeHandlerWrapperError<THandlerErr>>>,
+        cause: Option<ConnectionError<THandlerErr>>,
     },
     /// A new connection arrived on a listener and is in the process of protocol negotiation.
     ///
@@ -294,9 +293,6 @@ where
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
     pending_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
-
-    /// The configured override for substream protocol upgrades, if any.
-    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
@@ -506,10 +502,6 @@ where
                 }
             };
 
-        let handler = handler
-            .into_node_handler_builder()
-            .with_substream_upgrade_protocol_override(self.substream_upgrade_protocol_override);
-
         match self.pool.add_outgoing(
             self.listeners.transport().clone(),
             addresses,
@@ -521,8 +513,7 @@ where
             Ok(_connection_id) => Ok(()),
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
-                self.behaviour
-                    .inject_dial_failure(None, handler.into_protocols_handler(), &error);
+                self.behaviour.inject_dial_failure(None, handler, &error);
                 return Err(error);
             }
         }
@@ -675,13 +666,7 @@ where
                     local_addr,
                     send_back_addr,
                 }) => {
-                    let handler = this
-                        .behaviour
-                        .new_handler()
-                        .into_node_handler_builder()
-                        .with_substream_upgrade_protocol_override(
-                            this.substream_upgrade_protocol_override,
-                        );
+                    let handler = this.behaviour.new_handler();
                     match this.pool.add_incoming(
                         upgrade,
                         handler,
@@ -700,7 +685,7 @@ where
                             this.behaviour.inject_listen_failure(
                                 &local_addr,
                                 &send_back_addr,
-                                handler.into_protocols_handler(),
+                                handler,
                             );
                             log::warn!("Incoming connection rejected: {:?}", connection_limit);
                         }
@@ -828,11 +813,7 @@ where
                 }) => {
                     let error = error.into();
 
-                    this.behaviour.inject_dial_failure(
-                        peer,
-                        handler.into_protocols_handler(),
-                        &error,
-                    );
+                    this.behaviour.inject_dial_failure(peer, handler, &error);
 
                     if let Some(peer) = peer {
                         log::debug!("Connection attempt to {:?} failed with {:?}.", peer, error,);
@@ -853,11 +834,8 @@ where
                     handler,
                 }) => {
                     log::debug!("Incoming connection failed: {:?}", error);
-                    this.behaviour.inject_listen_failure(
-                        &local_addr,
-                        &send_back_addr,
-                        handler.into_protocols_handler(),
-                    );
+                    this.behaviour
+                        .inject_listen_failure(&local_addr, &send_back_addr, handler);
                     return Poll::Ready(SwarmEvent::IncomingConnectionError {
                         local_addr,
                         send_back_addr,
@@ -900,7 +878,7 @@ where
                             &peer_id,
                             &id,
                             &endpoint,
-                            handler.into_protocols_handler(),
+                            handler,
                             remaining_non_banned,
                         );
                     }
@@ -1242,7 +1220,6 @@ pub struct SwarmBuilder<TBehaviour> {
     behaviour: TBehaviour,
     pool_config: PoolConfig,
     connection_limits: ConnectionLimits,
-    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
@@ -1263,7 +1240,6 @@ where
             behaviour,
             pool_config: Default::default(),
             connection_limits: Default::default(),
-            substream_upgrade_protocol_override: None,
         }
     }
 
@@ -1341,7 +1317,7 @@ where
     /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
     /// > are ignored.
     pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
-        self.substream_upgrade_protocol_override = Some(v);
+        self.pool_config = self.pool_config.with_substream_upgrade_protocol_override(v);
         self
     }
 
@@ -1382,7 +1358,6 @@ where
             banned_peers: HashSet::new(),
             banned_peer_connections: HashSet::new(),
             pending_event: None,
-            substream_upgrade_protocol_override: self.substream_upgrade_protocol_override,
         }
     }
 }

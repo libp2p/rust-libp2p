@@ -26,7 +26,6 @@ use crate::{
     connection::{
         self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    protocols_handler::{NodeHandlerWrapper, NodeHandlerWrapperError},
     transport::{Transport, TransportError},
     Multiaddr, PeerId, ProtocolsHandler,
 };
@@ -93,8 +92,8 @@ pub enum EstablishedConnectionEvent<THandler: ProtocolsHandler> {
     Closed {
         id: ConnectionId,
         peer_id: PeerId,
-        error: Option<ConnectionError<NodeHandlerWrapperError<THandler::Error>>>,
-        handler: NodeHandlerWrapper<THandler>,
+        error: Option<ConnectionError<THandler::Error>>,
+        handler: THandler,
     },
 }
 

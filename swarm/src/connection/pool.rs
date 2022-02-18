@@ -25,7 +25,6 @@ use crate::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    protocols_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError},
     transport::{Transport, TransportError},
     ConnectedPoint, Executor, IntoProtocolsHandler, Multiaddr, PeerId, ProtocolsHandler,
 };
@@ -85,6 +84,9 @@ where
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     dial_concurrency_factor: NonZeroU8,
 
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
+
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
     /// current thread when the [`Pool`] is polled for new events.
@@ -138,7 +140,7 @@ struct PendingConnectionInfo<THandler> {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
     /// Handler to handle connection once no longer pending but established.
-    handler: NodeHandlerWrapperBuilder<THandler>,
+    handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
@@ -187,16 +189,12 @@ where
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<
-            ConnectionError<
-                NodeHandlerWrapperError<<THandler::Handler as ProtocolsHandler>::Error>,
-            >,
-        >,
+        error: Option<ConnectionError<<THandler::Handler as ProtocolsHandler>::Error>>,
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<THandler, TTrans>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
-        handler: NodeHandlerWrapper<THandler::Handler>,
+        handler: THandler::Handler,
     },
 
     /// An outbound connection attempt failed.
@@ -206,7 +204,7 @@ where
         /// The error that occurred.
         error: PendingOutboundConnectionError<TTrans::Error>,
         /// The handler that was supposed to handle the connection.
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
     },
@@ -222,7 +220,7 @@ where
         /// The error that occurred.
         error: PendingInboundConnectionError<TTrans::Error>,
         /// The handler that was supposed to handle the connection.
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
     },
 
     /// A node has produced an event.
@@ -330,6 +328,7 @@ where
             next_connection_id: ConnectionId::new(0),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
+            substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -481,10 +480,10 @@ where
         transport: TTrans,
         addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
         peer: Option<PeerId>,
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, (ConnectionLimit, NodeHandlerWrapperBuilder<THandler>)>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TTrans: Clone + Send,
         TTrans::Dial: Send + 'static,
@@ -538,9 +537,9 @@ where
     pub fn add_incoming<TFut>(
         &mut self,
         future: TFut,
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
         info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, (ConnectionLimit, NodeHandlerWrapperBuilder<THandler>)>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
@@ -816,13 +815,11 @@ where
                         },
                     );
 
-                    let connected = Connected {
-                        peer_id: obtained_peer_id,
-                        endpoint,
-                    };
-
-                    let connection =
-                        super::Connection::new(muxer, handler.into_handler(&connected));
+                    let connection = super::Connection::new(
+                        muxer,
+                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        self.substream_upgrade_protocol_override,
+                    );
                     self.spawn(
                         task::new_for_established_connection(
                             id,
@@ -1226,6 +1223,9 @@ pub struct PoolConfig {
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl Default for PoolConfig {
@@ -1236,6 +1236,7 @@ impl Default for PoolConfig {
             task_command_buffer_size: 7,
             // By default, addresses of a single connection attempt are dialed in sequence.
             dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
+            substream_upgrade_protocol_override: None,
         }
     }
 }
@@ -1283,6 +1284,15 @@ impl PoolConfig {
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
+        self
+    }
+
+    /// Configures an override for the substream upgrade protocol to use.
+    pub fn with_substream_upgrade_protocol_override(
+        mut self,
+        v: libp2p_core::upgrade::Version,
+    ) -> Self {
+        self.substream_upgrade_protocol_override = Some(v);
         self
     }
 }
