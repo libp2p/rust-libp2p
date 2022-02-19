@@ -48,102 +48,40 @@
 //! You should see a long list of metrics printed to the terminal. Check the
 //! `libp2p_ping` metrics, they should be `>0`.
 
-use futures::executor::block_on;
-use futures::stream::StreamExt;
-use libp2p::core::Multiaddr;
-use libp2p::metrics::{Metrics, Recorder};
-use libp2p::ping::{Ping, PingConfig};
-use libp2p::swarm::SwarmEvent;
-use libp2p::{identity, PeerId, Swarm};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::thread;
-use log::{error,info,debug};
+use log::{error,info};
 use hyper::service::Service;
 use hyper::{Body, Request, Response, Server};
 use hyper::http::{StatusCode};
 
-
-//fn main() -> Result<(), Box<dyn Error>> {
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    env_logger::init();
-
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
-
-    let mut swarm = Swarm::new(
-        block_on(libp2p::development_transport(local_key))?,
-        Ping::new(PingConfig::new().with_keep_alive(true)),
-        local_peer_id,
-    );
-
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-
-    if let Some(addr) = std::env::args().nth(1) {
-        let remote: Multiaddr = addr.parse()?;
-        swarm.dial(remote)?;
-        info!("Dialed {}", addr)
-    }
-
-    let mut metric_registry = Registry::default();
-    let metrics = Metrics::new(&mut metric_registry);
-    metrics_server(metric_registry).await;
-    thread::spawn(move || {
-        block_on( async move{
-            loop {
-                match swarm.select_next_some().await {
-                    SwarmEvent::Behaviour(ping_event) => {
-                        info!("{:?}", ping_event);
-                        metrics.record(&ping_event);
-                    }
-                    swarm_event => {
-                        info!("{:?}", swarm_event);
-                        metrics.record(&swarm_event);
-                    }
-                }
-            }
-        })
-    });
-    Ok(())
-}
 pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
-    //TODO: Change to a variable port for multiple instances
-    debug!("entered  Metrics server line 116");
-    let addr = ([127, 0, 0, 1], 3002).into();
-    //TODO: Solve type problems
-    let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-    info!("Metrics server on http://{}", addr);
-    if let Err(e) = server.await {
-        error!("server error: {}", e);
-    }
-
-    Ok(())
+    //serve on localhost
+    let addr = ([127, 0, 0, 1], 0).into();
+    
+    // Use the tokio runtime to run the hyper server
+    let rt  = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
+        info!("Metrics server on http://{}/metrics", server.local_addr());
+        if let Err(e) = server.await {
+            error!("server error: {}", e);
+        }
+        Ok(())
+    })
 }
 
-struct MetricService{
+pub struct MetricService{
     reg: Arc<Mutex<Registry>>,
 }
 
 type SharedRegistry = Arc<Mutex<Registry>>;
 
 impl MetricService {
-    //note that this ususally handled by MakeMetricsService
-    //by cloning the Arc stored in that struct
-    //thus all intances have Arc pointers to the same registry
-    // fn new(registry: Registry)->MetricService {
-    //     MetricService {
-    //         reg: Arc::new(Mutex::new(registry)),
-    //     }
-    // }
-    //HUM: Directly reference or use get and clone?
     fn get_reg(&mut self)  -> SharedRegistry{
          Arc::clone(&self.reg)
     }
@@ -171,7 +109,7 @@ impl Service<Request<Body>> for MetricService {
     type Error = hyper::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
@@ -188,9 +126,11 @@ impl Service<Request<Body>> for MetricService {
         Box::pin(async { Ok(resp)})
     }
 }
-struct MakeMetricService {
+
+pub struct MakeMetricService {
     reg: SharedRegistry,
 }
+
 impl MakeMetricService{
     pub fn new(registry:Registry) -> MakeMetricService{
         MakeMetricService{
