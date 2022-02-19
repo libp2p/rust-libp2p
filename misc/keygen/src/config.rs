@@ -1,8 +1,11 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
-#[derive(Clone, Deserialize)]
+use libp2p::identity::Keypair;
+use libp2p::PeerId;
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Config {
     pub identity: Identity,
@@ -12,9 +15,17 @@ impl Config {
     pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
         Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
     }
+
+    pub fn from_key_material(peer_id: PeerId, keypair: &Keypair) -> Result<Self, Box<dyn Error>> {
+        let priv_key = base64::encode(keypair.to_protobuf_encoding()?);
+        let peer_id = peer_id.to_base58();
+        Ok(Self {
+            identity: Identity { peer_id, priv_key },
+        })
+    }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Identity {
     #[serde(rename = "PeerID")]

@@ -2,18 +2,17 @@
 name = "keygen"
 version = "0.1.0"
 edition = "2021"
-authors = ["demfabris demfabris@gmail.com"]
+authors = ["demfabris <demfabris@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-argh = "0.1.7"
-directories = "4.0.1"
+structopt = "0.3.26"
 zeroize = "1.5.2"
 serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.78"
-libp2p = { version = "0.42.1", default-features = false }
+serde_json = "1.0.79"
+libp2p = { version = "0.42.2", default-features = false }
 base64 = "0.13.0"
 num_cpus = "1.13.1"

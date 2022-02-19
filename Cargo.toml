@@ -125,7 +125,6 @@ members = [
     "core",
     "misc/metrics",
     "misc/multistream-select",
-    "misc/peer-id-generator",
     "misc/keygen",
     "muxers/mplex",
     "muxers/yamux",
