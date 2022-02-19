@@ -1,4 +1,4 @@
-// Copyright 2021 Protocol Labs.
+// Copyright 2022 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,35 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Example demonstrating `libp2p-metrics`.
-//!
-//! In one terminal run:
-//!
-//! ```
-//! RUST_LOG=info cargo run --example metrics
-//! ```
-//!
-//! In a second terminal run:
-//!
-//! ```
-//! RUST_LOG=info cargo run --example metrics -- <listen-addr-of-first-node>
-//! ```
-//!
-//! Where `<listen-addr-of-first-node>` is replaced by the listen address of the
-//! first node reported in the first terminal. Look for `NewListenAddr`.
-//!
-//! In a third terminal run:
-//!
-//! ```
-//! curl localhost:<metrics-port-of-first-or-second-node>/metrics
-//! ```
-//!
-//! Where `<metrics-port-of-first-or-second-node>` is replaced by the listen
-//! port of the metrics server of the first or the second node. Look for
-//! `tide::server Server listening on`.
-//!
-//! You should see a long list of metrics printed to the terminal. Check the
-//! `libp2p_ping` metrics, they should be `>0`.
 
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
