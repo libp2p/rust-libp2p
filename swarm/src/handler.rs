@@ -21,12 +21,12 @@
 //! Once a connection to a remote peer is established, a [`ConnectionHandler`] negotiates
 //! and handles one or more specific protocols on the connection.
 //!
-//! Protocols are negotiated and used on individual substreams of the connection.
-//! Thus a [`ConnectionHandler`] defines the inbound and outbound upgrades to apply
-//! when creating a new inbound or outbound substream, respectively, and is notified
-//! by a [`Swarm`] when these upgrades have been successfully applied, including the
-//! final output of the upgrade. A [`ConnectionHandler`] can then continue communicating
-//! with the peer over the substream using the negotiated protocol(s).
+//! Protocols are negotiated and used on individual substreams of the connection. Thus a
+//! [`ConnectionHandler`] defines the inbound and outbound upgrades to apply when creating a new
+//! inbound or outbound substream, respectively, and is notified by a [`Swarm`](crate::Swarm) when
+//! these upgrades have been successfully applied, including the final output of the upgrade. A
+//! [`ConnectionHandler`] can then continue communicating with the peer over the substream using the
+//! negotiated protocol(s).
 //!
 //! Two [`ConnectionHandler`]s can be composed with [`ConnectionHandler::select()`]
 //! in order to build a new handler supporting the combined set of protocols,
@@ -35,7 +35,8 @@
 //!
 //! > **Note**: A [`ConnectionHandler`] handles one or more protocols in the context of a single
 //! >           connection with a remote. In order to handle a protocol that requires knowledge of
-//! >           the network as a whole, see the [`NetworkBehaviour`] trait.
+//! >           the network as a whole, see the
+//! >           [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
 
 mod dummy;
 pub mod either;
