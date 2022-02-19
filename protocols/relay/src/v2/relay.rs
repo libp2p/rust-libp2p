@@ -61,6 +61,28 @@ pub struct Config {
     pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 }
 
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("max_reservations", &self.max_reservations)
+            .field("max_reservations_per_peer", &self.max_reservations_per_peer)
+            .field("reservation_duration", &self.reservation_duration)
+            .field(
+                "reservation_rate_limiters",
+                &format!("[{} rate limiters]", self.reservation_rate_limiters.len()),
+            )
+            .field("max_circuits", &self.max_circuits)
+            .field("max_circuits_per_peer", &self.max_circuits_per_peer)
+            .field("max_circuit_duration", &self.max_circuit_duration)
+            .field("max_circuit_bytes", &self.max_circuit_bytes)
+            .field(
+                "circuit_src_rate_limiters",
+                &format!("[{} rate limiters]", self.circuit_src_rate_limiters.len()),
+            )
+            .finish()
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         let reservation_rate_limiters = vec![

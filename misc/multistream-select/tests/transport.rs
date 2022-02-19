@@ -20,24 +20,19 @@
 
 use futures::{channel::oneshot, prelude::*, ready};
 use libp2p_core::{
-    connection::{ConnectionHandler, ConnectionHandlerEvent, Substream, SubstreamEndpoint},
     identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,
-    network::{NetworkConfig, NetworkEvent},
     transport::{self, MemoryTransport},
-    upgrade, Multiaddr, Network, PeerId, Transport,
+    upgrade, Multiaddr, PeerId, Transport,
 };
 use libp2p_mplex::MplexConfig;
 use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::{DummyBehaviour, Swarm, SwarmEvent};
 use rand::random;
-use std::{
-    io,
-    task::{Context, Poll},
-};
+use std::task::Poll;
 
 type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
-type TestNetwork = Network<TestTransport, TestHandler>;
 
 fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
     let keys = identity::Keypair::generate_ed25519();
@@ -66,19 +61,18 @@ fn transport_upgrade() {
 
         let listen_addr = Multiaddr::from(Protocol::Memory(random::<u64>()));
 
-        let mut dialer = TestNetwork::new(dialer_transport, dialer_id, NetworkConfig::default());
-        let mut listener =
-            TestNetwork::new(listener_transport, listener_id, NetworkConfig::default());
+        let mut dialer = Swarm::new(dialer_transport, DummyBehaviour::default(), dialer_id);
+        let mut listener = Swarm::new(listener_transport, DummyBehaviour::default(), listener_id);
 
         listener.listen_on(listen_addr).unwrap();
         let (addr_sender, addr_receiver) = oneshot::channel();
 
         let client = async move {
             let addr = addr_receiver.await.unwrap();
-            dialer.dial(TestHandler(), addr).unwrap();
+            dialer.dial(addr).unwrap();
             futures::future::poll_fn(move |cx| loop {
-                match ready!(dialer.poll(cx)) {
-                    NetworkEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
+                match ready!(dialer.poll_next_unpin(cx)).unwrap() {
+                    SwarmEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
                     _ => {}
                 }
             })
@@ -87,14 +81,12 @@ fn transport_upgrade() {
 
         let mut addr_sender = Some(addr_sender);
         let server = futures::future::poll_fn(move |cx| loop {
-            match ready!(listener.poll(cx)) {
-                NetworkEvent::NewListenerAddress { listen_addr, .. } => {
-                    addr_sender.take().unwrap().send(listen_addr).unwrap();
+            match ready!(listener.poll_next_unpin(cx)).unwrap() {
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    addr_sender.take().unwrap().send(address).unwrap();
                 }
-                NetworkEvent::IncomingConnection { connection, .. } => {
-                    listener.accept(connection, TestHandler()).unwrap();
-                }
-                NetworkEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
+                SwarmEvent::IncomingConnection { .. } => {}
+                SwarmEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
                 _ => {}
             }
         });
@@ -104,34 +96,4 @@ fn transport_upgrade() {
 
     run(upgrade::Version::V1);
     run(upgrade::Version::V1Lazy);
-}
-
-#[derive(Debug)]
-struct TestHandler();
-
-impl ConnectionHandler for TestHandler {
-    type InEvent = ();
-    type OutEvent = ();
-    type Error = io::Error;
-    type Substream = Substream<StreamMuxerBox>;
-    type OutboundOpenInfo = ();
-
-    fn inject_substream(
-        &mut self,
-        _: Self::Substream,
-        _: SubstreamEndpoint<Self::OutboundOpenInfo>,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
-    {
-        Poll::Pending
-    }
 }

@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::{Substream, SubstreamEndpoint};
 use crate::protocols_handler::{
-    IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr,
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
 };
 use crate::upgrade::SendWrapper;
 
@@ -29,76 +29,20 @@ use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
-    connection::{
-        ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, Substream,
-        SubstreamEndpoint,
-    },
     muxing::StreamMuxerBox,
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
-    Connected, Multiaddr,
+    Multiaddr,
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
-/// Prototype for a `NodeHandlerWrapper`.
-pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
-    /// The underlying handler.
-    handler: TIntoProtoHandler,
-    /// The substream upgrade protocol override, if any.
-    substream_upgrade_protocol_override: Option<upgrade::Version>,
-}
-
-impl<TIntoProtoHandler> NodeHandlerWrapperBuilder<TIntoProtoHandler>
-where
-    TIntoProtoHandler: IntoProtocolsHandler,
-{
-    /// Builds a `NodeHandlerWrapperBuilder`.
-    pub(crate) fn new(handler: TIntoProtoHandler) -> Self {
-        NodeHandlerWrapperBuilder {
-            handler,
-            substream_upgrade_protocol_override: None,
-        }
-    }
-
-    pub(crate) fn with_substream_upgrade_protocol_override(
-        mut self,
-        version: Option<upgrade::Version>,
-    ) -> Self {
-        self.substream_upgrade_protocol_override = version;
-        self
-    }
-
-    pub(crate) fn into_protocols_handler(self) -> TIntoProtoHandler {
-        self.handler
-    }
-}
-
-impl<TIntoProtoHandler, TProtoHandler> IntoConnectionHandler
-    for NodeHandlerWrapperBuilder<TIntoProtoHandler>
-where
-    TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
-    TProtoHandler: ProtocolsHandler,
-{
-    type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
-
-    fn into_handler(self, connected: &Connected) -> Self::Handler {
-        NodeHandlerWrapper {
-            handler: self
-                .handler
-                .into_handler(&connected.peer_id, &connected.endpoint),
-            negotiating_in: Default::default(),
-            negotiating_out: Default::default(),
-            queued_dial_upgrades: Vec::new(),
-            unique_dial_upgrade_id: 0,
-            shutdown: Shutdown::None,
-            substream_upgrade_protocol_override: self.substream_upgrade_protocol_override,
-        }
-    }
-}
-
-// A `ConnectionHandler` for an underlying `ProtocolsHandler`.
-/// Wraps around an implementation of `ProtocolsHandler`, and implements `NodeHandler`.
+/// A wrapper for an underlying [`ProtocolsHandler`].
+///
+/// It extends [`ProtocolsHandler`] with:
+/// - Enforced substream upgrade timeouts
+/// - Driving substream upgrades
+/// - Handling connection timeout
 // TODO: add a caching system for protocols that are supported or not
-pub struct NodeHandlerWrapper<TProtoHandler>
+pub struct HandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
 {
@@ -135,7 +79,37 @@ where
     substream_upgrade_protocol_override: Option<upgrade::Version>,
 }
 
-impl<TProtoHandler: ProtocolsHandler> NodeHandlerWrapper<TProtoHandler> {
+impl<TProtoHandler: ProtocolsHandler> std::fmt::Debug for HandlerWrapper<TProtoHandler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HandlerWrapper")
+            .field("negotiating_in", &self.negotiating_in)
+            .field("negotiating_out", &self.negotiating_out)
+            .field("unique_dial_upgrade_id", &self.unique_dial_upgrade_id)
+            .field("shutdown", &self.shutdown)
+            .field(
+                "substream_upgrade_protocol_override",
+                &self.substream_upgrade_protocol_override,
+            )
+            .finish()
+    }
+}
+
+impl<TProtoHandler: ProtocolsHandler> HandlerWrapper<TProtoHandler> {
+    pub(crate) fn new(
+        handler: TProtoHandler,
+        substream_upgrade_protocol_override: Option<upgrade::Version>,
+    ) -> Self {
+        Self {
+            handler,
+            negotiating_in: Default::default(),
+            negotiating_out: Default::default(),
+            queued_dial_upgrades: Vec::new(),
+            unique_dial_upgrade_id: 0,
+            shutdown: Shutdown::None,
+            substream_upgrade_protocol_override,
+        }
+    }
+
     pub(crate) fn into_protocols_handler(self) -> TProtoHandler {
         self.handler
     }
@@ -199,6 +173,7 @@ where
 /// A planned shutdown is always postponed for as long as there are ingoing
 /// or outgoing substreams being negotiated, i.e. it is a graceful, "idle"
 /// shutdown.
+#[derive(Debug)]
 enum Shutdown {
     /// No shutdown is planned.
     None,
@@ -208,63 +183,63 @@ enum Shutdown {
     Later(Delay, Instant),
 }
 
-/// Error generated by the `NodeHandlerWrapper`.
+/// Error generated by the [`HandlerWrapper`].
 #[derive(Debug)]
-pub enum NodeHandlerWrapperError<TErr> {
+pub enum Error<TErr> {
     /// The connection handler encountered an error.
     Handler(TErr),
     /// The connection keep-alive timeout expired.
     KeepAliveTimeout,
 }
 
-impl<TErr> From<TErr> for NodeHandlerWrapperError<TErr> {
-    fn from(err: TErr) -> NodeHandlerWrapperError<TErr> {
-        NodeHandlerWrapperError::Handler(err)
+impl<TErr> From<TErr> for Error<TErr> {
+    fn from(err: TErr) -> Error<TErr> {
+        Error::Handler(err)
     }
 }
 
-impl<TErr> fmt::Display for NodeHandlerWrapperError<TErr>
+impl<TErr> fmt::Display for Error<TErr>
 where
     TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NodeHandlerWrapperError::Handler(err) => write!(f, "{}", err),
-            NodeHandlerWrapperError::KeepAliveTimeout => {
+            Error::Handler(err) => write!(f, "{}", err),
+            Error::KeepAliveTimeout => {
                 write!(f, "Connection closed due to expired keep-alive timeout.")
             }
         }
     }
 }
 
-impl<TErr> error::Error for NodeHandlerWrapperError<TErr>
+impl<TErr> error::Error for Error<TErr>
 where
     TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            NodeHandlerWrapperError::Handler(err) => Some(err),
-            NodeHandlerWrapperError::KeepAliveTimeout => None,
+            Error::Handler(err) => Some(err),
+            Error::KeepAliveTimeout => None,
         }
     }
 }
 
-impl<TProtoHandler> ConnectionHandler for NodeHandlerWrapper<TProtoHandler>
+pub type OutboundOpenInfo<TProtoHandler> = (
+    u64,
+    <TProtoHandler as ProtocolsHandler>::OutboundOpenInfo,
+    Duration,
+);
+
+impl<TProtoHandler> HandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
 {
-    type InEvent = TProtoHandler::InEvent;
-    type OutEvent = TProtoHandler::OutEvent;
-    type Error = NodeHandlerWrapperError<TProtoHandler::Error>;
-    type Substream = Substream<StreamMuxerBox>;
-    // The first element of the tuple is the unique upgrade identifier
-    // (see `unique_dial_upgrade_id`).
-    type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo, Duration);
-
-    fn inject_substream(
+    pub fn inject_substream(
         &mut self,
-        substream: Self::Substream,
-        endpoint: SubstreamEndpoint<Self::OutboundOpenInfo>,
+        substream: Substream<StreamMuxerBox>,
+        // The first element of the tuple is the unique upgrade identifier
+        // (see `unique_dial_upgrade_id`).
+        endpoint: SubstreamEndpoint<OutboundOpenInfo<TProtoHandler>>,
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
@@ -315,19 +290,23 @@ where
         }
     }
 
-    fn inject_event(&mut self, event: Self::InEvent) {
+    pub fn inject_event(&mut self, event: TProtoHandler::InEvent) {
         self.handler.inject_event(event);
     }
 
-    fn inject_address_change(&mut self, new_address: &Multiaddr) {
+    pub fn inject_address_change(&mut self, new_address: &Multiaddr) {
         self.handler.inject_address_change(new_address);
     }
 
-    fn poll(
+    pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
-    {
+    ) -> Poll<
+        Result<
+            Event<OutboundOpenInfo<TProtoHandler>, TProtoHandler::OutEvent>,
+            Error<TProtoHandler::Error>,
+        >,
+    > {
         while let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
             match res {
                 Ok(upgrade) => self
@@ -372,7 +351,7 @@ where
 
         match poll_result {
             Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                return Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event)));
+                return Poll::Ready(Ok(Event::Custom(event)));
             }
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 let id = self.unique_dial_upgrade_id;
@@ -380,9 +359,7 @@ where
                 self.unique_dial_upgrade_id += 1;
                 let (upgrade, info) = protocol.into_upgrade();
                 self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
-                return Poll::Ready(Ok(ConnectionHandlerEvent::OutboundSubstreamRequest((
-                    id, info, timeout,
-                ))));
+                return Poll::Ready(Ok(Event::OutboundSubstreamRequest((id, info, timeout))));
             }
             Poll::Ready(ProtocolsHandlerEvent::Close(err)) => return Poll::Ready(Err(err.into())),
             Poll::Pending => (),
@@ -393,13 +370,9 @@ where
         if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
             match self.shutdown {
                 Shutdown::None => {}
-                Shutdown::Asap => {
-                    return Poll::Ready(Err(NodeHandlerWrapperError::KeepAliveTimeout))
-                }
+                Shutdown::Asap => return Poll::Ready(Err(Error::KeepAliveTimeout)),
                 Shutdown::Later(ref mut delay, _) => match Future::poll(Pin::new(delay), cx) {
-                    Poll::Ready(_) => {
-                        return Poll::Ready(Err(NodeHandlerWrapperError::KeepAliveTimeout))
-                    }
+                    Poll::Ready(_) => return Poll::Ready(Err(Error::KeepAliveTimeout)),
                     Poll::Pending => {}
                 },
             }
@@ -407,4 +380,14 @@ where
 
         Poll::Pending
     }
+}
+
+/// Event produced by a [`HandlerWrapper`].
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Event<TOutboundOpenInfo, TCustom> {
+    /// Require a new outbound substream to be opened with the remote.
+    OutboundSubstreamRequest(TOutboundOpenInfo),
+
+    /// Other event.
+    Custom(TCustom),
 }

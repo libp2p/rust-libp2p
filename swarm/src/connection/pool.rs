@@ -20,16 +20,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
-        handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionId, ConnectionLimit, Endpoint,
-        IncomingInfo, IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
-        PendingOutboundConnectionError, PendingPoint, Substream,
+        Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
+        PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    muxing::StreamMuxer,
-    network::DialError,
     transport::{Transport, TransportError},
-    ConnectedPoint, Executor, Multiaddr, PeerId,
+    ConnectedPoint, Executor, IntoProtocolsHandler, Multiaddr, PeerId, ProtocolsHandler,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -40,12 +37,13 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
-use smallvec::SmallVec;
+use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
     fmt,
-    num::NonZeroU8,
+    num::{NonZeroU8, NonZeroUsize},
     pin::Pin,
     task::Context,
     task::Poll,
@@ -56,7 +54,7 @@ mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoConnectionHandler, TTrans>
+pub struct Pool<THandler: IntoProtocolsHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -68,7 +66,10 @@ where
     /// The managed connections of each peer that are currently considered established.
     established: FnvHashMap<
         PeerId,
-        FnvHashMap<ConnectionId, EstablishedConnectionInfo<THandlerInEvent<THandler>>>,
+        FnvHashMap<
+            ConnectionId,
+            EstablishedConnectionInfo<<THandler::Handler as ProtocolsHandler>::InEvent>,
+        >,
     >,
 
     /// The pending connections that are currently being negotiated.
@@ -82,6 +83,9 @@ where
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
@@ -101,10 +105,12 @@ where
 
     /// Sender distributed to established tasks for reporting events back
     /// to the pool.
-    established_connection_events_tx: mpsc::Sender<task::EstablishedConnectionEvent<THandler>>,
+    established_connection_events_tx:
+        mpsc::Sender<task::EstablishedConnectionEvent<THandler::Handler>>,
 
     /// Receiver for events reported from established tasks.
-    established_connection_events_rx: mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>,
+    established_connection_events_rx:
+        mpsc::Receiver<task::EstablishedConnectionEvent<THandler::Handler>>,
 }
 
 #[derive(Debug)]
@@ -137,10 +143,10 @@ struct PendingConnectionInfo<THandler> {
     handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    _drop_notifier: oneshot::Sender<Void>,
+    abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
-impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
+impl<THandler: IntoProtocolsHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -149,13 +155,13 @@ impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THa
 }
 
 /// Event that can happen on the `Pool`.
-pub enum PoolEvent<'a, THandler: IntoConnectionHandler, TTrans>
+pub enum PoolEvent<'a, THandler: IntoProtocolsHandler, TTrans>
 where
     TTrans: Transport,
 {
     /// A new connection has been established.
     ConnectionEstablished {
-        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
+        connection: EstablishedConnection<'a, <THandler::Handler as ProtocolsHandler>::InEvent>,
         /// List of other connections to the same peer.
         ///
         /// Note: Does not include the connection reported through this event.
@@ -183,7 +189,7 @@ where
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<THandlerError<THandler>>>,
+        error: Option<ConnectionError<<THandler::Handler as ProtocolsHandler>::Error>>,
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<THandler, TTrans>,
         /// The remaining established connections to the same peer.
@@ -236,7 +242,7 @@ where
     },
 }
 
-impl<'a, THandler: IntoConnectionHandler, TTrans> fmt::Debug for PoolEvent<'a, THandler, TTrans>
+impl<'a, THandler: IntoProtocolsHandler, TTrans> fmt::Debug for PoolEvent<'a, THandler, TTrans>
 where
     TTrans: Transport,
     TTrans::Error: fmt::Debug,
@@ -305,7 +311,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoConnectionHandler,
+    THandler: IntoProtocolsHandler,
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
@@ -319,9 +325,10 @@ where
             counters: ConnectionCounters::new(limits),
             established: Default::default(),
             pending: Default::default(),
-            next_connection_id: ConnectionId(0),
+            next_connection_id: ConnectionId::new(0),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
+            substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -341,10 +348,7 @@ where
     /// Returns `None` if the pool has no connection with the given ID.
     pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, THandler>> {
         if let hash_map::Entry::Occupied(entry) = self.pending.entry(id) {
-            Some(PoolConnection::Pending(PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }))
+            Some(PoolConnection::Pending(PendingConnection { entry }))
         } else {
             self.established
                 .iter_mut()
@@ -368,22 +372,11 @@ where
         }
     }
 
-    /// Gets a pending outgoing connection by ID.
-    pub fn get_outgoing(&mut self, id: ConnectionId) -> Option<PendingConnection<'_, THandler>> {
-        match self.pending.entry(id) {
-            hash_map::Entry::Occupied(entry) => Some(PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }),
-            hash_map::Entry::Vacant(_) => None,
-        }
-    }
-
     /// Returns true if we are connected to the given peer.
     ///
     /// This will return true only after a `NodeReached` event has been produced by `poll()`.
-    pub fn is_connected(&self, id: &PeerId) -> bool {
-        self.established.contains_key(id)
+    pub fn is_connected(&self, id: PeerId) -> bool {
+        self.established.contains_key(&id)
     }
 
     /// Returns the number of connected peers, i.e. those with at least one
@@ -397,8 +390,8 @@ where
     /// All connections to the peer, whether pending or established are
     /// closed asap and no more events from these connections are emitted
     /// by the pool effective immediately.
-    pub fn disconnect(&mut self, peer: &PeerId) {
-        if let Some(conns) = self.established.get_mut(peer) {
+    pub fn disconnect(&mut self, peer: PeerId) {
+        if let Some(conns) = self.established.get_mut(&peer) {
             for (_, conn) in conns.iter_mut() {
                 conn.start_close();
             }
@@ -408,7 +401,7 @@ where
         let pending_connections = self
             .pending
             .iter()
-            .filter(|(_, PendingConnectionInfo { peer_id, .. })| peer_id.as_ref() == Some(peer))
+            .filter(|(_, PendingConnectionInfo { peer_id, .. })| peer_id.as_ref() == Some(&peer))
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
 
@@ -418,64 +411,17 @@ where
                 .entry(pending_connection)
                 .expect_occupied("Iterating pending connections");
 
-            PendingConnection {
-                entry,
-                counters: &mut self.counters,
-            }
-            .abort();
+            PendingConnection { entry }.abort();
         }
-    }
-
-    /// Counts the number of established connections to the given peer.
-    pub fn num_peer_established(&self, peer: PeerId) -> u32 {
-        num_peer_established(&self.established, peer)
     }
 
     /// Returns an iterator over all established connections of `peer`.
-    pub fn iter_peer_established<'a>(
-        &'a mut self,
+    pub fn iter_established_connections_of_peer(
+        &mut self,
         peer: &PeerId,
-    ) -> EstablishedConnectionIter<'a, impl Iterator<Item = ConnectionId>, THandlerInEvent<THandler>>
-    {
-        let ids = self
-            .iter_peer_established_info(peer)
-            .map(|(id, _endpoint)| *id)
-            .collect::<SmallVec<[ConnectionId; 10]>>()
-            .into_iter();
-
-        EstablishedConnectionIter {
-            connections: self.established.get_mut(peer),
-            ids,
-        }
-    }
-
-    /// Returns an iterator for information on all pending incoming connections.
-    pub fn iter_pending_incoming(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
-        self.iter_pending_info()
-            .filter_map(|(_, ref endpoint, _)| match endpoint {
-                PendingPoint::Listener {
-                    local_addr,
-                    send_back_addr,
-                } => Some(IncomingInfo {
-                    local_addr,
-                    send_back_addr,
-                }),
-                PendingPoint::Dialer { .. } => None,
-            })
-    }
-
-    /// Returns an iterator over all connection IDs and associated endpoints
-    /// of established connections to `peer` known to the pool.
-    pub fn iter_peer_established_info(
-        &self,
-        peer: &PeerId,
-    ) -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint)> {
+    ) -> impl Iterator<Item = ConnectionId> + '_ {
         match self.established.get(peer) {
-            Some(conns) => either::Either::Left(
-                conns
-                    .iter()
-                    .map(|(id, EstablishedConnectionInfo { endpoint, .. })| (id, endpoint)),
-            ),
+            Some(conns) => either::Either::Left(conns.iter().map(|(id, _)| *id)),
             None => either::Either::Right(std::iter::empty()),
         }
     }
@@ -503,7 +449,7 @@ where
 
     fn next_connection_id(&mut self) -> ConnectionId {
         let connection_id = self.next_connection_id;
-        self.next_connection_id.0 += 1;
+        self.next_connection_id = self.next_connection_id + 1;
 
         connection_id
     }
@@ -519,7 +465,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoConnectionHandler,
+    THandler: IntoProtocolsHandler,
     TTrans: Transport + 'static,
     TTrans::Output: Send + 'static,
     TTrans::Error: Send + 'static,
@@ -537,13 +483,13 @@ where
         handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, DialError<THandler>>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TTrans: Clone + Send,
         TTrans::Dial: Send + 'static,
     {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err(DialError::ConnectionLimit { limit, handler });
+            return Err((limit, handler));
         };
 
         let dial = ConcurrentDial::new(
@@ -556,13 +502,13 @@ where
 
         let connection_id = self.next_connection_id();
 
-        let (drop_notifier, drop_receiver) = oneshot::channel();
+        let (abort_notifier, abort_receiver) = oneshot::channel();
 
         self.spawn(
             task::new_for_pending_outgoing_connection(
                 connection_id,
                 dial,
-                drop_receiver,
+                abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
             .boxed(),
@@ -576,8 +522,8 @@ where
             PendingConnectionInfo {
                 peer_id: peer,
                 handler,
-                endpoint: endpoint,
-                _drop_notifier: drop_notifier,
+                endpoint,
+                abort_notifier: Some(abort_notifier),
             },
         );
         Ok(connection_id)
@@ -605,13 +551,13 @@ where
 
         let connection_id = self.next_connection_id();
 
-        let (drop_notifier, drop_receiver) = oneshot::channel();
+        let (abort_notifier, abort_receiver) = oneshot::channel();
 
         self.spawn(
             task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
-                drop_receiver,
+                abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
             .boxed(),
@@ -624,7 +570,7 @@ where
                 peer_id: None,
                 handler,
                 endpoint: endpoint.into(),
-                _drop_notifier: drop_notifier,
+                abort_notifier: Some(abort_notifier),
             },
         );
         Ok(connection_id)
@@ -633,18 +579,12 @@ where
     ///
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a, TMuxer>(
-        &'a mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<PoolEvent<'a, THandler, TTrans>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<'a, THandler, TTrans>>
     where
-        TTrans: Transport<Output = (PeerId, TMuxer)>,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::Error: std::fmt::Debug,
-        TMuxer::OutboundSubstream: Send,
-        THandler: IntoConnectionHandler + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
+        TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
+        THandler: IntoProtocolsHandler + 'static,
+        THandler::Handler: ProtocolsHandler + Send,
+        <THandler::Handler as ProtocolsHandler>::OutboundOpenInfo: Send,
     {
         // Poll for events of established connections.
         //
@@ -740,7 +680,7 @@ where
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
-                        _drop_notifier,
+                        abort_notifier: _,
                     } = self
                         .pending
                         .remove(&id)
@@ -875,13 +815,11 @@ where
                         },
                     );
 
-                    let connected = Connected {
-                        peer_id: obtained_peer_id,
-                        endpoint,
-                    };
-
-                    let connection =
-                        super::Connection::new(muxer, handler.into_handler(&connected));
+                    let connection = super::Connection::new(
+                        muxer,
+                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        self.substream_upgrade_protocol_override,
+                    );
                     self.spawn(
                         task::new_for_established_connection(
                             id,
@@ -909,7 +847,7 @@ where
                         peer_id,
                         handler,
                         endpoint,
-                        _drop_notifier,
+                        abort_notifier: _,
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
@@ -958,37 +896,22 @@ where
 }
 
 /// A connection in a [`Pool`].
-pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
+pub enum PoolConnection<'a, THandler: IntoProtocolsHandler> {
     Pending(PendingConnection<'a, THandler>),
     Established(EstablishedConnection<'a, THandlerInEvent<THandler>>),
 }
 
 /// A pending connection in a pool.
-pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
+pub struct PendingConnection<'a, THandler: IntoProtocolsHandler> {
     entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
-    counters: &'a mut ConnectionCounters,
 }
 
-impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
-    /// Returns the local connection ID.
-    pub fn id(&self) -> ConnectionId {
-        *self.entry.key()
-    }
-
-    /// Returns the (expected) identity of the remote peer, if known.
-    pub fn peer_id(&self) -> &Option<PeerId> {
-        &self.entry.get().peer_id
-    }
-
-    /// Returns information about this endpoint of the connection.
-    pub fn endpoint(&self) -> &PendingPoint {
-        &self.entry.get().endpoint
-    }
-
+impl<THandler: IntoProtocolsHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
-    pub fn abort(self) {
-        self.counters.dec_pending(&self.entry.get().endpoint);
-        self.entry.remove();
+    pub fn abort(mut self) {
+        if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
+            drop(notifier);
+        }
     }
 }
 
@@ -1061,55 +984,6 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     /// Has no effect if the connection is already closing.
     pub fn start_close(mut self) {
         self.entry.get_mut().start_close()
-    }
-}
-
-/// An iterator over established connections in a pool.
-pub struct EstablishedConnectionIter<'a, I, TInEvent> {
-    connections: Option<&'a mut FnvHashMap<ConnectionId, EstablishedConnectionInfo<TInEvent>>>,
-    ids: I,
-}
-
-// Note: Ideally this would be an implementation of `Iterator`, but that
-// requires GATs (cf. https://github.com/rust-lang/rust/issues/44265) and
-// a different definition of `Iterator`.
-impl<'a, I, TInEvent> EstablishedConnectionIter<'a, I, TInEvent>
-where
-    I: Iterator<Item = ConnectionId>,
-{
-    /// Obtains the next connection, if any.
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>> {
-        if let (Some(id), Some(connections)) = (self.ids.next(), self.connections.as_mut()) {
-            Some(EstablishedConnection {
-                entry: connections
-                    .entry(id)
-                    .expect_occupied("Established entry not found in pool."),
-            })
-        } else {
-            None
-        }
-    }
-
-    /// Turns the iterator into an iterator over just the connection IDs.
-    pub fn into_ids(self) -> impl Iterator<Item = ConnectionId> {
-        self.ids
-    }
-
-    /// Returns the first connection, if any, consuming the iterator.
-    pub fn into_first<'b>(mut self) -> Option<EstablishedConnection<'b, TInEvent>>
-    where
-        'a: 'b,
-    {
-        if let (Some(id), Some(connections)) = (self.ids.next(), self.connections) {
-            Some(EstablishedConnection {
-                entry: connections
-                    .entry(id)
-                    .expect_occupied("Established entry not found in pool."),
-            })
-        } else {
-            None
-        }
     }
 }
 
@@ -1349,6 +1223,9 @@ pub struct PoolConfig {
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl Default for PoolConfig {
@@ -1359,7 +1236,64 @@ impl Default for PoolConfig {
             task_command_buffer_size: 7,
             // By default, addresses of a single connection attempt are dialed in sequence.
             dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
+            substream_upgrade_protocol_override: None,
         }
+    }
+}
+
+impl PoolConfig {
+    /// Configures the executor to use for spawning connection background tasks.
+    pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
+        self.executor = Some(e);
+        self
+    }
+
+    /// Configures the executor to use for spawning connection background tasks,
+    /// only if no executor has already been configured.
+    pub fn or_else_with_executor<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce() -> Option<Box<dyn Executor + Send>>,
+    {
+        self.executor = self.executor.or_else(f);
+        self
+    }
+
+    /// Sets the maximum number of events sent to a connection's background task
+    /// that may be buffered, if the task cannot keep up with their consumption and
+    /// delivery to the connection handler.
+    ///
+    /// When the buffer for a particular connection is full, `notify_handler` will no
+    /// longer be able to deliver events to the associated [`Connection`](super::Connection),
+    /// thus exerting back-pressure on the connection and peer API.
+    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+        self.task_command_buffer_size = n.get() - 1;
+        self
+    }
+
+    /// Sets the maximum number of buffered connection events (beyond a guaranteed
+    /// buffer of 1 event per connection).
+    ///
+    /// When the buffer is full, the background tasks of all connections will stall.
+    /// In this way, the consumers of network events exert back-pressure on
+    /// the network connection I/O.
+    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.task_event_buffer_size = n;
+        self
+    }
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.dial_concurrency_factor = factor;
+        self
+    }
+
+    /// Configures an override for the substream upgrade protocol to use.
+    pub fn with_substream_upgrade_protocol_override(
+        mut self,
+        v: libp2p_core::upgrade::Version,
+    ) -> Self {
+        self.substream_upgrade_protocol_override = Some(v);
+        self
     }
 }
 
@@ -1373,5 +1307,26 @@ impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
             hash_map::Entry::Occupied(entry) => entry,
             hash_map::Entry::Vacant(_) => panic!("{}", msg),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::future::Future;
+
+    struct Dummy;
+
+    impl Executor for Dummy {
+        fn exec(&self, _: Pin<Box<dyn Future<Output = ()> + Send>>) {}
+    }
+
+    #[test]
+    fn set_executor() {
+        PoolConfig::default()
+            .with_executor(Box::new(Dummy))
+            .with_executor(Box::new(|f| {
+                async_std::task::spawn(f);
+            }));
     }
 }

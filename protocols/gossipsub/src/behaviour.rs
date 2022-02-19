@@ -36,7 +36,6 @@ use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
-use instant::Instant;
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
@@ -45,7 +44,9 @@ use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+use wasm_timer::Instant;
 
+use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
@@ -63,9 +64,9 @@ use crate::types::{
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
-use crate::{backoff::BackoffStorage, interval::Interval};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
+use wasm_timer::Interval;
 
 #[cfg(test)]
 mod tests;
@@ -148,6 +149,7 @@ pub enum GossipsubEvent {
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
 enum PublishConfig {
     Signing {
         keypair: Keypair,
@@ -439,8 +441,8 @@ where
                 config.backoff_slack(),
             ),
             mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Interval::new_initial(
-                config.heartbeat_initial_delay(),
+            heartbeat: Interval::new_at(
+                Instant::now() + config.heartbeat_initial_delay(),
                 config.heartbeat_interval(),
             ),
             heartbeat_ticks: 0,
@@ -786,6 +788,9 @@ where
                             "Message not in cache. Ignoring forwarding. Message Id: {}",
                             msg_id
                         );
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.memcache_miss();
+                        }
                         return Ok(false);
                     }
                 };
@@ -1213,8 +1218,7 @@ where
 
         trace!("Handling IHAVE for peer: {:?}", peer_id);
 
-        // use a hashmap to avoid duplicates efficiently
-        let mut iwant_ids = HashMap::new();
+        let mut iwant_ids = HashSet::new();
 
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
@@ -1235,7 +1239,12 @@ where
                         .unwrap_or(true)
                     {
                         // have not seen this message and are not currently requesting it
-                        iwant_ids.insert(id, topic.clone());
+                        if iwant_ids.insert(id) {
+                            // Register the IWANT metric
+                            if let Some(metrics) = self.metrics.as_mut() {
+                                metrics.register_iwant(&topic);
+                            }
+                        }
                     }
                 }
             }
@@ -1257,37 +1266,37 @@ where
             );
 
             // Ask in random order
-            let mut iwant_ids_vec: Vec<_> = iwant_ids.keys().collect();
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
             let mut rng = thread_rng();
             iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
 
             iwant_ids_vec.truncate(iask as usize);
             *iasked += iask;
 
-            let mut message_ids = Vec::new();
-            for message_id in iwant_ids_vec {
+            for message_id in &iwant_ids_vec {
                 // Add all messages to the pending list
                 self.pending_iwant_msgs.insert(message_id.clone());
-                message_ids.push(message_id.clone());
             }
 
             if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
                 gossip_promises.add_promise(
                     *peer_id,
-                    &message_ids,
+                    &iwant_ids_vec,
                     Instant::now() + self.config.iwant_followup_time(),
                 );
             }
             trace!(
                 "IHAVE: Asking for the following messages from {}: {:?}",
                 peer_id,
-                message_ids
+                iwant_ids_vec
             );
 
             Self::control_pool_add(
                 &mut self.control_pool,
                 *peer_id,
-                GossipsubControlAction::IWant { message_ids },
+                GossipsubControlAction::IWant {
+                    message_ids: iwant_ids_vec,
+                },
             );
         }
         trace!("Completed IHAVE handling for peer: {:?}", peer_id);

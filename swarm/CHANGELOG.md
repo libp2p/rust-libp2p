@@ -1,6 +1,15 @@
 # 0.34.0 [unreleased]
 
+- Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
+
 - Update to `libp2p-core` `v0.32.0`.
+
+- Disconnect pending connections with `Swarm::disconnect`. See [PR 2517].
+
+- Report aborted connections via `SwarmEvent::OutgoingConnectionError`. See [PR 2517].
+
+[PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
+[PR 2517]: https://github.com/libp2p/rust-libp2p/pull/2517
 
 # 0.33.0 [2022-01-27]
 
