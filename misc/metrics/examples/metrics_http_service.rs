@@ -62,7 +62,7 @@ impl MetricService {
         let reg = self.get_reg();
         encode(&mut encoded, &reg.lock().unwrap()).unwrap();
         let metrics_content_type =
-          "application/openmetrics-text; version=1.0.0; charset=utf-8";
+          "application/openmetrics-text;charset=utf-8;version=1.0.0";
         Response::builder()
             .status(StatusCode::OK)
             .header(hyper::header::CONTENT_TYPE,metrics_content_type)

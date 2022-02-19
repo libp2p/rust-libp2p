@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         local_peer_id,
     );
 
-    swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
