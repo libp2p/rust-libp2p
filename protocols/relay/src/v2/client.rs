@@ -35,10 +35,10 @@ use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::DialOpts;
-use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
+use libp2p_swarm::handler::DummyConnectionHandler;
 use libp2p_swarm::{
-    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    ProtocolsHandlerUpgrErr,
+    ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, IoSlice};
@@ -60,7 +60,7 @@ pub enum Event {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
-        error: ProtocolsHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
+        error: ConnectionHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
     },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
@@ -68,7 +68,7 @@ pub enum Event {
     },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: ProtocolsHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
+        error: ConnectionHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
@@ -77,7 +77,7 @@ pub enum Event {
     },
     InboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: ProtocolsHandlerUpgrErr<void::Void>,
+        error: ConnectionHandlerUpgrErr<void::Void>,
     },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
@@ -116,10 +116,10 @@ impl Client {
 }
 
 impl NetworkBehaviour for Client {
-    type ProtocolsHandler = handler::Prototype;
+    type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype::new(self.local_peer_id, None)
     }
 
@@ -144,7 +144,7 @@ impl NetworkBehaviour for Client {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
-        _handler: Either<handler::Handler, DummyProtocolsHandler>,
+        _handler: Either<handler::Handler, DummyConnectionHandler>,
         _remaining_established: usize,
     ) {
         if !endpoint.is_relayed() {
@@ -231,7 +231,7 @@ impl NetworkBehaviour for Client {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.queued_actions.pop_front() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }

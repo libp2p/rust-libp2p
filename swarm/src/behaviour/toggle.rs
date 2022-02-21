@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{
-    IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+use crate::handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{
@@ -70,10 +70,10 @@ impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    type ProtocolsHandler = ToggleIntoProtoHandler<TBehaviour::ProtocolsHandler>;
+    type ConnectionHandler = ToggleIntoProtoHandler<TBehaviour::ConnectionHandler>;
     type OutEvent = TBehaviour::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         ToggleIntoProtoHandler {
             inner: self.inner.as_mut().map(|i| i.new_handler()),
         }
@@ -110,7 +110,7 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
@@ -142,7 +142,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_event(peer_id, connection, event);
@@ -152,7 +152,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
         error: &DialError,
     ) {
         if let Some(inner) = self.inner.as_mut() {
@@ -166,7 +166,7 @@ where
         &mut self,
         local_addr: &Multiaddr,
         send_back_addr: &Multiaddr,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             if let Some(handler) = handler.inner {
@@ -221,7 +221,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(inner) = self.inner.as_mut() {
             inner
                 .poll(cx, params)
@@ -243,14 +243,14 @@ where
     }
 }
 
-/// Implementation of `IntoProtocolsHandler` that can be in the disabled state.
+/// Implementation of `IntoConnectionHandler` that can be in the disabled state.
 pub struct ToggleIntoProtoHandler<TInner> {
     inner: Option<TInner>,
 }
 
-impl<TInner> IntoProtocolsHandler for ToggleIntoProtoHandler<TInner>
+impl<TInner> IntoConnectionHandler for ToggleIntoProtoHandler<TInner>
 where
-    TInner: IntoProtocolsHandler,
+    TInner: IntoConnectionHandler,
 {
     type Handler = ToggleProtoHandler<TInner::Handler>;
 
@@ -266,7 +266,7 @@ where
         }
     }
 
-    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         if let Some(inner) = self.inner.as_ref() {
             EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
         } else {
@@ -275,14 +275,14 @@ where
     }
 }
 
-/// Implementation of `ProtocolsHandler` that can be in the disabled state.
+/// Implementation of [`ConnectionHandler`] that can be in the disabled state.
 pub struct ToggleProtoHandler<TInner> {
     inner: Option<TInner>,
 }
 
-impl<TInner> ProtocolsHandler for ToggleProtoHandler<TInner>
+impl<TInner> ConnectionHandler for ToggleProtoHandler<TInner>
 where
-    TInner: ProtocolsHandler,
+    TInner: ConnectionHandler,
 {
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
@@ -354,7 +354,7 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
-        err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        err: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         self.inner
             .as_mut()
@@ -365,7 +365,7 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         info: Self::InboundOpenInfo,
-        err: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        err: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
         let (inner, info) = match (self.inner.as_mut(), info) {
             (Some(inner), Either::Left(info)) => (inner, info),
@@ -382,10 +382,10 @@ where
         };
 
         let err = match err {
-            ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
-            ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
-            ProtocolsHandlerUpgrErr::Upgrade(err) => {
-                ProtocolsHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
+            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
+            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
+            ConnectionHandlerUpgrErr::Upgrade(err) => {
+                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
                     EitherError::A(e) => e,
                     EitherError::B(v) => void::unreachable(v),
                 }))
@@ -406,7 +406,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -424,7 +424,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocols_handler::DummyProtocolsHandler;
+    use crate::handler::DummyConnectionHandler;
 
     /// A disabled [`ToggleProtoHandler`] can receive listen upgrade errors in
     /// the following two cases:
@@ -432,18 +432,18 @@ mod tests {
     /// 1. Protocol negotiation on an incoming stream failed with no protocol
     ///    being agreed on.
     ///
-    /// 2. When combining [`ProtocolsHandler`] implementations a single
-    ///    [`ProtocolsHandler`] might be notified of an inbound upgrade error
+    /// 2. When combining [`ConnectionHandler`] implementations a single
+    ///    [`ConnectionHandler`] might be notified of an inbound upgrade error
     ///    unrelated to its own upgrade logic. For example when nesting a
     ///    [`ToggleProtoHandler`] in a
-    ///    [`ProtocolsHandlerSelect`](crate::protocols_handler::ProtocolsHandlerSelect)
+    ///    [`ConnectionHandlerSelect`](crate::protocols_handler::ConnectionHandlerSelect)
     ///    the former might receive an inbound upgrade error even when disabled.
     ///
     /// [`ToggleProtoHandler`] should ignore the error in both of these cases.
     #[test]
     fn ignore_listen_upgrade_error_when_disabled() {
-        let mut handler = ToggleProtoHandler::<DummyProtocolsHandler> { inner: None };
+        let mut handler = ToggleProtoHandler::<DummyConnectionHandler> { inner: None };
 
-        handler.inject_listen_upgrade_error(Either::Right(()), ProtocolsHandlerUpgrErr::Timeout);
+        handler.inject_listen_upgrade_error(Either::Right(()), ConnectionHandlerUpgrErr::Timeout);
     }
 }

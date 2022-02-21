@@ -30,10 +30,10 @@ use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
-use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
+use libp2p_swarm::handler::DummyConnectionHandler;
 use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    ProtocolsHandlerUpgrErr,
+    ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -151,7 +151,7 @@ pub enum Event {
     ReservationTimedOut { src_peer_id: PeerId },
     CircuitReqReceiveFailed {
         src_peer_id: PeerId,
-        error: ProtocolsHandlerUpgrErr<void::Void>,
+        error: ConnectionHandlerUpgrErr<void::Void>,
     },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
@@ -173,7 +173,7 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: ProtocolsHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
@@ -216,10 +216,10 @@ impl Relay {
 }
 
 impl NetworkBehaviour for Relay {
-    type ProtocolsHandler = handler::Prototype;
+    type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype {
             config: handler::Config {
                 reservation_duration: self.config.reservation_duration,
@@ -234,7 +234,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
-        _handler: Either<handler::Handler, DummyProtocolsHandler>,
+        _handler: Either<handler::Handler, DummyConnectionHandler>,
         _remaining_established: usize,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
@@ -283,7 +283,7 @@ impl NetworkBehaviour for Relay {
 
                 assert!(
                     !endpoint.is_relayed(),
-                    "`DummyProtocolsHandler` handles relayed connections. It \
+                    "`DummyConnectionHandler` handles relayed connections. It \
                      denies all inbound substreams."
                 );
 
@@ -410,7 +410,7 @@ impl NetworkBehaviour for Relay {
 
                 assert!(
                     !endpoint.is_relayed(),
-                    "`DummyProtocolsHandler` handles relayed connections. It \
+                    "`DummyConnectionHandler` handles relayed connections. It \
                      denies all inbound substreams."
                 );
 
@@ -622,7 +622,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(poll_parameters));
         }
