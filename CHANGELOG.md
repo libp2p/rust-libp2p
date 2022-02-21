@@ -42,7 +42,7 @@
 
 # `libp2p` facade crate
 
-## Version 0.43.0 [unreleased]
+## Version 0.43.0 [2022-02-21]
 
 - Update individual crates.
   - Update to `libp2p-autonat` `v0.2.0`.
