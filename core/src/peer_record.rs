@@ -32,12 +32,13 @@ impl PeerRecord {
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
         use prost::Message;
 
-        let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+        let (payload, signing_key) =
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
         let record = peer_record_proto::PeerRecord::decode(payload)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
-        if peer_id != envelope.key.to_peer_id() {
+        if peer_id != signing_key.to_peer_id() {
             return Err(FromEnvelopeError::MismatchedSignature);
         }
 

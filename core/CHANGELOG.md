@@ -16,11 +16,16 @@
 
 - Don't take ownership of key in `PeerRecord::new` and `SignedEnvelope::new`. See [PR 2516].
 
+- Remove `SignedEnvelope::payload` in favor of
+  `SignedEnvelope::payload_and_signing_key`. The caller is expected to check
+  that the returned signing key makes sense in the payload's context. See [PR 2522].
+
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
 [RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 [PR 2516]: https://github.com/libp2p/rust-libp2p/pull/2516
 [PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
+[PR 2522]: https://github.com/libp2p/rust-libp2p/pull/2522
 
 # 0.31.0 [2022-01-27]
 
