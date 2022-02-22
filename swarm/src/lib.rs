@@ -1839,10 +1839,13 @@ mod tests {
             let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
             match state {
                 State::Connecting => {
+                    println!("Connecting.");
                     if swarms_connected(&swarm1, &swarm2, num_connections) {
                         if reconnected {
+                            println!("Swarms reconnected.");
                             return Poll::Ready(());
                         }
+                        println!("Swarms connected.");
                         swarm2.behaviour.inner().next_action.replace(
                             NetworkBehaviourAction::CloseConnection {
                                 peer_id: swarm1_id,
@@ -1850,10 +1853,13 @@ mod tests {
                             },
                         );
                         state = State::Disconnecting;
+                        continue;
                     }
                 }
                 State::Disconnecting => {
+                    println!("Disconnecting.");
                     if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                        println!("Swarms disconnected.");
                         if reconnected {
                             return Poll::Ready(());
                         }
@@ -1862,6 +1868,7 @@ mod tests {
                             swarm2.dial(addr1.clone()).unwrap();
                         }
                         state = State::Connecting;
+                        continue;
                     }
                 }
             }

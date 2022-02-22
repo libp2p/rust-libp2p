@@ -14,8 +14,8 @@ jobs:
       matrix:
         args: [
           "--no-default-features",
-          "--all-features",
-          "--benches --all-features",
+          # "--all-features",
+          # "--benches --all-features",
         ]
     steps:
 
@@ -30,140 +30,140 @@ jobs:
       with:
         key: ${{ matrix.args }}
 
-    - run: cargo test --workspace ${{ matrix.args }}
+    - run: while cargo test --workspace ${{ matrix.args }} -- --nocapture; do :; done
 
-  test-wasm:
-    name: Build on WASM
-    runs-on: ubuntu-18.04
-    strategy:
-      matrix:
-        toolchain: [
-          wasm32-unknown-emscripten,
-          wasm32-wasi
-        ]
-        include:
-          - toolchain: wasm32-unknown-unknown
-            args: "--features wasm-bindgen"
-    env:
-      CC: clang-11
-    defaults:
-      run:
-        shell: bash
-    steps:
+  # test-wasm:
+  #   name: Build on WASM
+  #   runs-on: ubuntu-18.04
+  #   strategy:
+  #     matrix:
+  #       toolchain: [
+  #         wasm32-unknown-emscripten,
+  #         wasm32-wasi
+  #       ]
+  #       include:
+  #         - toolchain: wasm32-unknown-unknown
+  #           args: "--features wasm-bindgen"
+  #   env:
+  #     CC: clang-11
+  #   defaults:
+  #     run:
+  #       shell: bash
+  #   steps:
 
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
-      with:
-        access_token: ${{ github.token }}
+  #   - name: Cancel Previous Runs
+  #     uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+  #     with:
+  #       access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+  #   - uses: actions/checkout@v2.4.0
 
-    - name: Install Rust ${{ matrix.toolchain }}
-      uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
-        target: ${{ matrix.toolchain }}
-        override: true
+  #   - name: Install Rust ${{ matrix.toolchain }}
+  #     uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+  #     with:
+  #       toolchain: stable
+  #       target: ${{ matrix.toolchain }}
+  #       override: true
 
-    - name: Install a recent version of clang
-      run: |
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main"
-        sudo apt-get update
-        sudo apt-get install -y clang-11
+  #   - name: Install a recent version of clang
+  #     run: |
+  #       wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+  #       sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main"
+  #       sudo apt-get update
+  #       sudo apt-get install -y clang-11
 
-    - name: Install CMake
-      run: sudo apt-get install -y cmake
+  #   - name: Install CMake
+  #     run: sudo apt-get install -y cmake
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
-      with:
-        key: ${{ matrix.toolchain }}
+  #   - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+  #     with:
+  #       key: ${{ matrix.toolchain }}
 
-    - name: Build on ${{ matrix.toolchain }}
-      # TODO: also run `cargo test`
-      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=${{ matrix.toolchain }} ${{ matrix.args }}
+  #   - name: Build on ${{ matrix.toolchain }}
+  #     # TODO: also run `cargo test`
+  #     # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
+  #     run: cargo build --target=${{ matrix.toolchain }} ${{ matrix.args }}
 
-  check-rustdoc-links:
-    name: Check rustdoc intra-doc links
-    runs-on: ubuntu-18.04
-    container:
-      image: rust
-    steps:
+  # check-rustdoc-links:
+  #   name: Check rustdoc intra-doc links
+  #   runs-on: ubuntu-18.04
+  #   container:
+  #     image: rust
+  #   steps:
 
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
-      with:
-        access_token: ${{ github.token }}
+  #   - name: Cancel Previous Runs
+  #     uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+  #     with:
+  #       access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+  #   - uses: actions/checkout@v2.4.0
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+  #   - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
-    - name: Check rustdoc links
-      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
+  #   - name: Check rustdoc links
+  #     run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
 
-  check-clippy:
-    runs-on: ubuntu-18.04
-    steps:
+  # check-clippy:
+  #   runs-on: ubuntu-18.04
+  #   steps:
 
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
-      with:
-        access_token: ${{ github.token }}
+  #   - name: Cancel Previous Runs
+  #     uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+  #     with:
+  #       access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+  #   - uses: actions/checkout@v2.4.0
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: clippy
+  #   - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+  #     with:
+  #       profile: minimal
+  #       toolchain: stable
+  #       override: true
+  #       components: clippy
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+  #   - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
-    - name: Run cargo clippy
-      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-      with:
-        command: custom-clippy # cargo alias to allow reuse of config locally
+  #   - name: Run cargo clippy
+  #     uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
+  #     with:
+  #       command: custom-clippy # cargo alias to allow reuse of config locally
 
-  integration-test:
-    name: Integration tests
-    runs-on: ubuntu-18.04
-    container:
-      image: rust
-    steps:
+  # integration-test:
+  #   name: Integration tests
+  #   runs-on: ubuntu-18.04
+  #   container:
+  #     image: rust
+  #   steps:
 
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
-      with:
-        access_token: ${{ github.token }}
+  #   - name: Cancel Previous Runs
+  #     uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+  #     with:
+  #       access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+  #   - uses: actions/checkout@v2.4.0
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+  #   - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
-    - name: Run ipfs-kad example
-      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+  #   - name: Run ipfs-kad example
+  #     run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
 
-  rustfmt:
-    runs-on: ubuntu-18.04
-    steps:
+  # rustfmt:
+  #   runs-on: ubuntu-18.04
+  #   steps:
 
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
-      with:
-        access_token: ${{ github.token }}
+  #   - name: Cancel Previous Runs
+  #     uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+  #     with:
+  #       access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+  #   - uses: actions/checkout@v2.4.0
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt
+  #   - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+  #     with:
+  #       profile: minimal
+  #       toolchain: stable
+  #       override: true
+  #       components: rustfmt
 
-    - name: Check formatting
-      run: cargo fmt -- --check
+  #   - name: Check formatting
+  #     run: cargo fmt -- --check
