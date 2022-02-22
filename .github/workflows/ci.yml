@@ -30,7 +30,7 @@ jobs:
       with:
         key: ${{ matrix.args }}
 
-    - run: while cargo test --workspace ${{ matrix.args }} -- --nocapture; do :; done
+    - run: while cargo test --workspace ${{ matrix.args }} test_behaviour_disconnect_all -- --nocapture; do :; done
 
   # test-wasm:
   #   name: Build on WASM
