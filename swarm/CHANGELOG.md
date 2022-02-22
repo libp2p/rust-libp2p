@@ -1,4 +1,4 @@
-# 0.34.0 [unreleased]
+# 0.34.0 [2022-02-22]
 
 - Rename `ProtocolsHandler` to `ConnectionHandler`. Upgrade should be as simple as renaming all
   occurences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool

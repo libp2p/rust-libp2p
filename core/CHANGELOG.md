@@ -1,4 +1,4 @@
-# 0.32.0 [unreleased]
+# 0.32.0 [2022-02-22]
 
 - Remove `Network`. `libp2p-core` is from now on an auxiliary crate only. Users
   that have previously used `Network` only, will need to use `Swarm` instead. See

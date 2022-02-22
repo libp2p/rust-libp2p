@@ -1,3 +1,7 @@
+# 0.27.0 [2022-02-22]
+
+- Adjust to latest changes in `libp2p-swarm`.
+
 # 0.26.1 [2022-01-27]
 
 - Remove unnecessary clone of error in `inject_dial_failure` (see [PR 2349]).
