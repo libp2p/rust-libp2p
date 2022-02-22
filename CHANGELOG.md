@@ -63,6 +63,7 @@
   - Update to `libp2p-rendezvous` [`v0.4.0`](protocols/rendezvous/CHANGELOG.md#040-2022-02-22).
   - Update to `libp2p-request-response` [`v0.16.0`](protocols/request-response/CHANGELOG.md#0160-2022-02-22).
   - Update to `libp2p-swarm` [`v0.34.0`](swarm/CHANGELOG.md#0340-2022-02-22).
+  - Update to `libp2p-derive` [`v0.27.0`](swarm-derive/CHANGELOG.md#0270-2022-02-22).
   - Update to `libp2p-tcp` [`v0.32.0`](transports/tcp/CHANGELOG.md#0320-2022-02-22).
   - Update to `libp2p-uds` [`v0.32.0`](transports/uds/CHANGELOG.md#0320-2022-02-22).
   - Update to `libp2p-wasm-ext` [`v0.32.0`](transports/wasm-ext/CHANGELOG.md#0320-2022-02-22).
