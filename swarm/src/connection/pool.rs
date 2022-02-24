@@ -33,12 +33,11 @@ use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
-    ready,
+    future::{BoxFuture, Either},
     stream::FuturesUnordered,
 };
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+use libp2p_core::muxing::StreamMuxerBox;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -98,10 +97,12 @@ where
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
-    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent<TTrans>>,
+    pending_connection_events_tx:
+        mpsc::Sender<task::PendingConnectionEvent<TTrans, THandler::Handler>>,
 
     /// Receiver for events reported from pending tasks.
-    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent<TTrans>>,
+    pending_connection_events_rx:
+        mpsc::Receiver<task::PendingConnectionEvent<TTrans, THandler::Handler>>,
 
     /// Sender distributed to established tasks for reporting events back
     /// to the pool.
@@ -485,7 +486,7 @@ where
         dial_concurrency_factor_override: Option<NonZeroU8>,
     ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
-        TTrans: Clone + Send,
+        TTrans: Transport<Output = (PeerId, StreamMuxerBox)> + Clone + Send,
         TTrans::Dial: Send + 'static,
     {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
@@ -541,6 +542,7 @@ where
         info: IncomingInfo<'_>,
     ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
+        TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
         let endpoint = info.to_connected_point();
@@ -673,7 +675,9 @@ where
             match event {
                 task::PendingConnectionEvent::ConnectionEstablished {
                     id,
-                    output: (obtained_peer_id, muxer),
+                    // output: (obtained_peer_id, muxer),
+                    obtained_peer_id,
+                    response,
                     outgoing,
                 } => {
                     let PendingConnectionInfo {
@@ -759,20 +763,8 @@ where
                         });
 
                     if let Err(error) = error {
-                        self.spawn(
-                            poll_fn(move |cx| {
-                                if let Err(e) = ready!(muxer.close(cx)) {
-                                    log::debug!(
-                                        "Failed to close connection {:?} to peer {}: {:?}",
-                                        id,
-                                        obtained_peer_id,
-                                        e
-                                    );
-                                }
-                                Poll::Ready(())
-                            })
-                            .boxed(),
-                        );
+                        // send message to PendingConnection
+                        let _ = response.send(task::PendingCommand::Close);
 
                         match endpoint {
                             ConnectedPoint::Dialer { .. } => {
@@ -815,21 +807,22 @@ where
                         },
                     );
 
-                    let connection = super::Connection::new(
-                        muxer,
-                        handler.into_handler(&obtained_peer_id, &endpoint),
-                        self.substream_upgrade_protocol_override,
-                    );
-                    self.spawn(
-                        task::new_for_established_connection(
+                    // Send message to upgrade pending connection to upgrade to a full connection
+                    let cmd = task::PendingCommand::Upgrade {
+                        handler: handler.into_handler(&obtained_peer_id, &endpoint),
+                        substream_upgrade_protocol_override: self
+                            .substream_upgrade_protocol_override,
+                        command_receiver,
+                        events: self.established_connection_events_tx.clone(),
+                    };
+                    if response.send(cmd).is_err() {
+                        // TODO: what else do we want to do if the task is gone?
+                        log::debug!(
+                            "Failed to upgrade connection {:?} to peer {}: Task is gone",
                             id,
                             obtained_peer_id,
-                            connection,
-                            command_receiver,
-                            self.established_connection_events_tx.clone(),
-                        )
-                        .boxed(),
-                    );
+                        );
+                    }
 
                     match self.get(id) {
                         Some(PoolConnection::Established(connection)) => {

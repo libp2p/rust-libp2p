@@ -24,7 +24,8 @@
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
     connection::{
-        self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
+        self, Connection, ConnectionError, PendingInboundConnectionError,
+        PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
     ConnectionHandler, Multiaddr, PeerId,
@@ -34,7 +35,7 @@ use futures::{
     future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
 };
-use libp2p_core::connection::ConnectionId;
+use libp2p_core::{connection::ConnectionId, muxing::StreamMuxerBox, upgrade, StreamMuxer};
 use std::pin::Pin;
 use void::Void;
 
@@ -48,14 +49,30 @@ pub enum Command<T> {
     Close,
 }
 
+/// Commands that can be sent to a task driving a pending connection.
 #[derive(Debug)]
-pub enum PendingConnectionEvent<TTrans>
+pub enum PendingCommand<THandler: ConnectionHandler> {
+    /// Upgrade from pending to established connection.
+    Upgrade {
+        handler: THandler,
+        substream_upgrade_protocol_override: Option<upgrade::Version>,
+        command_receiver: mpsc::Receiver<Command<THandler::InEvent>>,
+        events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
+    },
+    /// Close the connection, due to an error, and terminate the task.
+    Close,
+}
+
+#[derive(Debug)]
+pub enum PendingConnectionEvent<TTrans, THandler>
 where
     TTrans: Transport,
+    THandler: ConnectionHandler,
 {
     ConnectionEstablished {
         id: ConnectionId,
-        output: TTrans::Output,
+        obtained_peer_id: PeerId,
+        response: oneshot::Sender<PendingCommand<THandler>>,
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
@@ -97,13 +114,14 @@ pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     },
 }
 
-pub async fn new_for_pending_outgoing_connection<TTrans>(
+pub async fn new_for_pending_outgoing_connection<TTrans, THandler>(
     connection_id: ConnectionId,
     dial: ConcurrentDial<TTrans>,
     abort_receiver: oneshot::Receiver<Void>,
-    mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
+    mut events: mpsc::Sender<PendingConnectionEvent<TTrans, THandler>>,
 ) where
-    TTrans: Transport,
+    TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
+    THandler: ConnectionHandler,
 {
     match futures::future::select(abort_receiver, Box::pin(dial)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
@@ -115,14 +133,50 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
                 .await;
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
-        Either::Right((Ok((address, output, errors)), _)) => {
+        Either::Right((Ok((address, (obtained_peer_id, muxer), errors)), _)) => {
+            let (response, receiver) = oneshot::channel();
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
-                    output,
+                    obtained_peer_id,
+                    response,
                     outgoing: Some((address, errors)),
                 })
                 .await;
+
+            match receiver.await {
+                Ok(PendingCommand::Upgrade {
+                    handler,
+                    substream_upgrade_protocol_override,
+                    command_receiver,
+                    events,
+                }) => {
+                    // Upgrade to Connection
+                    let connection =
+                        Connection::new(muxer, handler, substream_upgrade_protocol_override);
+                    new_for_established_connection(
+                        connection_id,
+                        obtained_peer_id,
+                        connection,
+                        command_receiver,
+                        events,
+                    )
+                    .await
+                }
+                Ok(PendingCommand::Close) => {
+                    if let Err(e) = poll_fn(move |cx| muxer.close(cx)).await {
+                        log::debug!(
+                            "Failed to close connection {:?} to peer {}: {:?}",
+                            connection_id,
+                            obtained_peer_id,
+                            e
+                        );
+                    }
+                }
+                Err(_) => {
+                    // Shutting down, nothing we can do about this.
+                }
+            }
         }
         Either::Right((Err(e), _)) => {
             let _ = events
@@ -135,14 +189,15 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
     }
 }
 
-pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
+pub async fn new_for_pending_incoming_connection<TFut, TTrans, THandler>(
     connection_id: ConnectionId,
     future: TFut,
     abort_receiver: oneshot::Receiver<Void>,
-    mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
+    mut events: mpsc::Sender<PendingConnectionEvent<TTrans, THandler>>,
 ) where
-    TTrans: Transport,
+    TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
     TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
+    THandler: ConnectionHandler,
 {
     match futures::future::select(abort_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
@@ -154,14 +209,50 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
                 .await;
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
-        Either::Right((Ok(output), _)) => {
+        Either::Right((Ok((obtained_peer_id, muxer)), _)) => {
+            let (response, receiver) = oneshot::channel();
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
-                    output,
+                    obtained_peer_id,
+                    response,
                     outgoing: None,
                 })
                 .await;
+
+            match receiver.await {
+                Ok(PendingCommand::Upgrade {
+                    handler,
+                    substream_upgrade_protocol_override,
+                    command_receiver,
+                    events,
+                }) => {
+                    // Upgrade to Connection
+                    let connection =
+                        Connection::new(muxer, handler, substream_upgrade_protocol_override);
+                    new_for_established_connection(
+                        connection_id,
+                        obtained_peer_id,
+                        connection,
+                        command_receiver,
+                        events,
+                    )
+                    .await
+                }
+                Ok(PendingCommand::Close) => {
+                    if let Err(e) = poll_fn(move |cx| muxer.close(cx)).await {
+                        log::debug!(
+                            "Failed to close connection {:?} to peer {}: {:?}",
+                            connection_id,
+                            obtained_peer_id,
+                            e
+                        );
+                    }
+                }
+                Err(_) => {
+                    // Shutting down, nothing we can do about this.
+                }
+            }
         }
         Either::Right((Err(e), _)) => {
             let _ = events
@@ -176,10 +267,10 @@ pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
     }
 }
 
-pub async fn new_for_established_connection<THandler>(
+async fn new_for_established_connection<THandler>(
     connection_id: ConnectionId,
     peer_id: PeerId,
-    mut connection: crate::connection::Connection<THandler>,
+    mut connection: Connection<THandler>,
     mut command_receiver: mpsc::Receiver<Command<THandler::InEvent>>,
     mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
 ) where
