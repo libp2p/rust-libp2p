@@ -1,3 +1,8 @@
+
+# Unreleased
+
+- Remove `Send` bound from `NetworkBehaviour`.
+
 # 0.34.0 [2022-02-22]
 
 - Rename `ProtocolsHandler` to `ConnectionHandler`. Upgrade should be as simple as renaming all
