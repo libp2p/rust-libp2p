@@ -1,4 +1,4 @@
-# 0.34.1 [unreleased]
+# 0.35.0 [unreleased]
 
 - Remove `Send` bound from `NetworkBehaviour`. See [PR 2535].
 
