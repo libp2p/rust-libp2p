@@ -42,6 +42,11 @@
 
 # `libp2p` facade crate
 
+## Version 0.43.1 [unreleased]
+
+- Update individual crates.
+  - Update to `libp2p-swarm` [`v0.34.1`](swarm/CHANGELOG.md#0341-unreleased).
+
 ## Version 0.43.0 [2022-02-22]
 
 - Update individual crates.
