@@ -56,7 +56,9 @@ impl Future for Upgrade {
         let connection = self.connection.as_mut()
             .expect("Future polled after it has completed");
 
-        match Connection::poll_event(connection, cx) {
+        let event = Connection::poll_event(connection, cx);
+        tracing::info!(?event);
+        match event {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(ConnectionEvent::Connected) => {
                 let peer_id = connection.remote_peer_id();

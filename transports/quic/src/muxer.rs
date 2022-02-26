@@ -93,12 +93,21 @@ impl StreamMuxer for QuicMuxer {
     type Error = Error;
 
     // TODO: what if called multiple times? register all wakers?
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     fn poll_event(&self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+        //tracing::info!("here");
         // We use `poll_inbound` to perform the background processing of the entire connection.
         let mut inner = self.inner.lock();
 
+        let span = if inner.connection.connection.side().is_client() {
+            tracing::info_span!("client")
+        } else {
+            tracing::info_span!("server")
+        };
+        let _enter = span.entered();
+
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
+            tracing::info!(?event);
             match event {
                 ConnectionEvent::Connected => {
                     tracing::error!("Unexpected Connected event on established QUIC connection");
@@ -149,21 +158,26 @@ impl StreamMuxer for QuicMuxer {
                     }
                 }
                 ConnectionEvent::StreamAvailable => {
+                    tracing::info!("StreamAvailable");
                     // Handled below.
                 }
             }
         }
 
         if let Some(substream) = inner.connection.pop_incoming_substream() {
+            tracing::info!("pop_incoming_substream");
             inner.substreams.insert(substream, Default::default());
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream)))
         } else {
+            tracing::info!("set poll_event_waker");
             inner.poll_event_waker = Some(cx.waker().clone());
             Poll::Pending
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn open_outbound(&self) -> Self::OutboundSubstream {
+        tracing::info!("open_outbound");
         ()
     }
 
@@ -177,9 +191,10 @@ impl StreamMuxer for QuicMuxer {
         // Note: this implementation makes it possible to poll the same `Self::OutboundSubstream`
         // over and over again and get new substreams. Using the API this way is invalid and would
         // normally result in a panic, but we decide to just ignore this problem.
-
+        tracing::info!("poll_outbound");
         let mut inner = self.inner.lock();
         if let Some(substream) = inner.connection.pop_outgoing_substream() {
+            tracing::info!(?inner.poll_substream_opened_waker, "poll_outbound substream");
             inner.substreams.insert(substream, Default::default());
             return Poll::Ready(Ok(substream));
         }
@@ -190,6 +205,7 @@ impl StreamMuxer for QuicMuxer {
             .as_ref()
             .map_or(false, |w| w.will_wake(cx.waker()))
         {
+            tracing::info!("set poll_substream_opened_waker");
             inner.poll_substream_opened_waker = Some(cx.waker().clone());
         }
 
@@ -208,6 +224,10 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::{WriteError};
 
         let mut inner = self.inner.lock();
+
+        let side = inner.connection.connection.side();
+        tracing::info!(?side, ?substream, "write_substream");
+
         let id = substream;
 
         match inner.connection.connection.send_stream(*id).write(buf) {
@@ -300,6 +320,8 @@ impl StreamMuxer for QuicMuxer {
         let id = *substream;
 
         let mut inner = self.inner.lock();
+        let side = inner.connection.connection.side();
+        tracing::info!(?side, ?id, "read_substream");
         let mut stream = inner.connection.connection.recv_stream(id);
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
@@ -356,6 +378,7 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner.lock();
         let inner = &mut *inner;
+        tracing::info!(?inner.connection.connection, "shutdown_substream");
 
         let mut substream_state = inner.substreams.get_mut(substream)
             .expect("invalid StreamMuxer::shutdown_substream API usage");
