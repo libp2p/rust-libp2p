@@ -88,7 +88,7 @@ impl Service<Request<Body>> for MetricService {
         let resp = 
         if (req.method() == & hyper::Method::GET) &&
             (req.uri().path() == "/metrics") {
-            //encode and serve meterics from registry
+            // Encode and serve metrics from registry.
             self.respond_with_metrics()
         }
         else {
