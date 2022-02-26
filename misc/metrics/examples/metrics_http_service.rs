@@ -31,7 +31,7 @@ use hyper::{Body, Request, Response, Server};
 use hyper::http::{StatusCode};
 
 pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
-    //serve on localhost
+    // Serve on localhost.
     let addr = ([127, 0, 0, 1], 0).into();
     
     // Use the tokio runtime to run the hyper server
