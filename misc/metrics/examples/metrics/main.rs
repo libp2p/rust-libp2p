@@ -61,7 +61,7 @@ use std::thread;
 
 use env_logger::Env;
 use log::{info};
-mod metrics_http_service;
+mod http_service;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -87,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
     thread::spawn(move || block_on(
-        metrics_http_service::metrics_server(metric_registry)));
+        http_service::metrics_server(metric_registry)));
 
     block_on( async{
         loop {
