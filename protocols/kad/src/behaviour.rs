@@ -1783,10 +1783,10 @@ where
     for<'a> TStore: RecordStore<'a>,
     TStore: Send + 'static,
 {
-    type ProtocolsHandler = KademliaHandlerProto<QueryId>;
+    type ConnectionHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         KademliaHandlerProto::new(KademliaHandlerConfig {
             protocol_config: self.protocol_config.clone(),
             allow_listening: true,
@@ -1916,7 +1916,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         error: &DialError,
     ) {
         let peer_id = match peer_id {
@@ -1962,7 +1962,7 @@ where
         id: &PeerId,
         _: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as libp2p_swarm::IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         if remaining_established == 0 {
@@ -2243,7 +2243,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.

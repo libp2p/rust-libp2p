@@ -43,7 +43,7 @@ The main components of this repository are structured as follows:
     Multiplexing protocols are (mandatory) `Transport` upgrades.
 
   * `swarm/`: The implementation of `libp2p-swarm` building on `libp2p-core`
-    with the central interfaces `NetworkBehaviour` and `ProtocolsHandler` used
+    with the central interfaces `NetworkBehaviour` and `ConnectionHandler` used
     to implement application protocols (see `protocols/`).
 
   * `protocols/`: Implementations of application protocols based on the

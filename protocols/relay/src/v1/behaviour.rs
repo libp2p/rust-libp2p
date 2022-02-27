@@ -31,7 +31,7 @@ use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::PeerId;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
 };
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
@@ -154,10 +154,10 @@ impl Relay {
 }
 
 impl NetworkBehaviour for Relay {
-    type ProtocolsHandler = RelayHandlerProto;
+    type ConnectionHandler = RelayHandlerProto;
     type OutEvent = ();
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         RelayHandlerProto {
             config: RelayHandlerConfig {
                 connection_idle_timeout: self.config.connection_idle_timeout,
@@ -301,7 +301,7 @@ impl NetworkBehaviour for Relay {
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         error: &DialError,
     ) {
         if let DialError::DialPeerConditionFalse(
@@ -352,7 +352,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         // Remove connection from the set of connections for the given peer. In case the set is
@@ -570,7 +570,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if !self.outbox_to_listeners.is_empty() {
             let relay_peer_id = self.outbox_to_listeners[0].0;
 

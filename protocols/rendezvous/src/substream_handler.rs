@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A generic [`ProtocolsHandler`] that delegates the handling of substreams to [`SubstreamHandler`]s.
+//! A generic [`ConnectionHandler`] that delegates the handling of substreams to [`SubstreamHandler`]s.
 //!
 //! This module is an attempt to simplify the implementation of protocols by freeing implementations from dealing with aspects such as concurrent substreams.
 //! Particularly for outbound substreams, it greatly simplifies the definition of protocols through the [`FutureSubstream`] helper.
@@ -29,10 +29,10 @@ use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
 use instant::Instant;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
+use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
-    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -172,8 +172,8 @@ impl<C: Send + 'static> OutboundUpgrade<C> for PassthroughProtocol {
     }
 }
 
-/// An implementation of [`ProtocolsHandler`] that delegates to individual [`SubstreamHandler`]s.
-pub struct SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo> {
+/// An implementation of [`ConnectionHandler`] that delegates to individual [`SubstreamHandler`]s.
+pub struct SubstreamConnectionHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo> {
     inbound_substreams: HashMap<InboundSubstreamId, TInboundSubstream>,
     outbound_substreams: HashMap<OutboundSubstreamId, TOutboundSubstream>,
     next_inbound_substream_id: InboundSubstreamId,
@@ -185,7 +185,7 @@ pub struct SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOut
 }
 
 impl<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
-    SubstreamProtocolsHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
+    SubstreamConnectionHandler<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
 {
     pub fn new(initial_keep_alive: Duration) -> Self {
         Self {
@@ -200,7 +200,7 @@ impl<TInboundSubstream, TOutboundSubstream, TOutboundOpenInfo>
 }
 
 impl<TOutboundSubstream, TOutboundOpenInfo>
-    SubstreamProtocolsHandler<void::Void, TOutboundSubstream, TOutboundOpenInfo>
+    SubstreamConnectionHandler<void::Void, TOutboundSubstream, TOutboundOpenInfo>
 {
     pub fn new_outbound_only(initial_keep_alive: Duration) -> Self {
         Self {
@@ -215,7 +215,7 @@ impl<TOutboundSubstream, TOutboundOpenInfo>
 }
 
 impl<TInboundSubstream, TOutboundOpenInfo>
-    SubstreamProtocolsHandler<TInboundSubstream, void::Void, TOutboundOpenInfo>
+    SubstreamConnectionHandler<TInboundSubstream, void::Void, TOutboundOpenInfo>
 {
     pub fn new_inbound_only(initial_keep_alive: Duration) -> Self {
         Self {
@@ -231,7 +231,7 @@ impl<TInboundSubstream, TOutboundOpenInfo>
 
 /// Poll all substreams within the given HashMap.
 ///
-/// This is defined as a separate function because we call it with two different fields stored within [`SubstreamProtocolsHandler`].
+/// This is defined as a separate function because we call it with two different fields stored within [`SubstreamConnectionHandler`].
 fn poll_substreams<TId, TSubstream, TError, TOutEvent>(
     substreams: &mut HashMap<TId, TSubstream>,
     cx: &mut Context<'_>,
@@ -273,7 +273,7 @@ where
     Poll::Pending
 }
 
-/// Event sent from the [`libp2p_swarm::NetworkBehaviour`] to the [`SubstreamProtocolsHandler`].
+/// Event sent from the [`libp2p_swarm::NetworkBehaviour`] to the [`SubstreamConnectionHandler`].
 #[derive(Debug)]
 pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     /// Open a new substream using the provided `open_info`.
@@ -290,7 +290,7 @@ pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     },
 }
 
-/// Event produced by the [`SubstreamProtocolsHandler`] for the corresponding [`libp2p_swarm::NetworkBehaviour`].
+/// Event produced by the [`SubstreamConnectionHandler`] for the corresponding [`libp2p_swarm::NetworkBehaviour`].
 #[derive(Debug)]
 pub enum OutEvent<TInbound, TOutbound, TInboundError, TOutboundError> {
     /// An inbound substream produced an event.
@@ -325,8 +325,8 @@ impl<
         TOutboundError,
         TInboundSubstreamHandler,
         TOutboundSubstreamHandler,
-    > ProtocolsHandler
-    for SubstreamProtocolsHandler<
+    > ConnectionHandler
+    for SubstreamConnectionHandler<
         TInboundSubstreamHandler,
         TOutboundSubstreamHandler,
         TOutboundOpenInfo,
@@ -421,7 +421,7 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<Void>,
+        _: ConnectionHandlerUpgrErr<Void>,
     ) {
         // TODO: Handle upgrade errors properly
     }
@@ -447,7 +447,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -455,20 +455,20 @@ where
         >,
     > {
         if let Some(open_info) = self.new_substreams.pop_front() {
-            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: TOutboundSubstreamHandler::upgrade(open_info),
             });
         }
 
         match poll_substreams(&mut self.inbound_substreams, cx) {
             Poll::Ready(Ok((id, message))) => {
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(OutEvent::InboundEvent {
+                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundEvent {
                     id,
                     message,
                 }))
             }
             Poll::Ready(Err((id, error))) => {
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(OutEvent::InboundError {
+                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundError {
                     id,
                     error,
                 }))
@@ -478,13 +478,13 @@ where
 
         match poll_substreams(&mut self.outbound_substreams, cx) {
             Poll::Ready(Ok((id, message))) => {
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(OutEvent::OutboundEvent {
+                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundEvent {
                     id,
                     message,
                 }))
             }
             Poll::Ready(Err((id, error))) => {
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(OutEvent::OutboundError {
+                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundError {
                     id,
                     error,
                 }))

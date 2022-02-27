@@ -27,7 +27,7 @@ use crate::{
         self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
-    Multiaddr, PeerId, ProtocolsHandler,
+    ConnectionHandler, Multiaddr, PeerId,
 };
 use futures::{
     channel::{mpsc, oneshot},
@@ -72,7 +72,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum EstablishedConnectionEvent<THandler: ProtocolsHandler> {
+pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     /// A node we are connected to has changed its address.
     AddressChange {
         id: ConnectionId,
@@ -183,7 +183,7 @@ pub async fn new_for_established_connection<THandler>(
     mut command_receiver: mpsc::Receiver<Command<THandler::InEvent>>,
     mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
 ) where
-    THandler: ProtocolsHandler,
+    THandler: ConnectionHandler,
 {
     loop {
         match futures::future::select(
