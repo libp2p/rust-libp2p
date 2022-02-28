@@ -175,7 +175,7 @@ impl From<dcutr::behaviour::Event> for ClientEvent {
     }
 }
 
-fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, swarm: Swarm<B>) {
+fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, swarm: Swarm<B>) {
     pool.spawner()
         .spawn_obj(swarm.collect::<Vec<_>>().map(|_| ()).boxed().into())
         .unwrap();

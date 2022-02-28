@@ -189,12 +189,11 @@ impl NetworkBehaviour for Relay {
                     .get(remote_peer_id)
                     .into_iter()
                     .flatten()
-                    .map(
+                    .flat_map(
                         |IncomingRelayReq::DialingDst {
                              incoming_relay_req, ..
                          }| incoming_relay_req.dst_peer().addrs.clone(),
-                    )
-                    .flatten(),
+                    ),
             )
             .collect()
     }

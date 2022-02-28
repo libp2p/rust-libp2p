@@ -1369,7 +1369,7 @@ fn build_keep_alive_only_swarm() -> Swarm<DummyBehaviour> {
     )
 }
 
-fn spawn_swarm_on_pool<B: NetworkBehaviour>(pool: &LocalPool, mut swarm: Swarm<B>) {
+fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, mut swarm: Swarm<B>) {
     pool.spawner()
         .spawn_obj(
             async move {
