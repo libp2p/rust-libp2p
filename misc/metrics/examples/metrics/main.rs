@@ -60,11 +60,12 @@ use std::error::Error;
 use std::thread;
 
 use env_logger::Env;
-use log::{info};
+use log::info;
 mod http_service;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .init();
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
@@ -86,10 +87,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
-    thread::spawn(move || block_on(
-        http_service::metrics_server(metric_registry)));
+    thread::spawn(move || {
+        block_on(http_service::metrics_server(metric_registry))
+    });
 
-    block_on( async{
+    block_on(async {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(ping_event) => {
@@ -103,5 +105,5 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     });
-   Ok(())
+    Ok(())
 }
