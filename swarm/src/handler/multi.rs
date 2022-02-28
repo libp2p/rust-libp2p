@@ -452,8 +452,7 @@ where
         self.upgrades
             .iter()
             .enumerate()
-            .map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info()))
-            .flatten()
+            .flat_map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info()))
             .map(|(i, h)| IndexedProtoName(i, h))
             .collect::<Vec<_>>()
             .into_iter()
