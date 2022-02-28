@@ -1,7 +1,8 @@
+# 0.35.0 [unreleased]
 
-# Unreleased
+- Remove `Send` bound from `NetworkBehaviour`. See [PR 2535].
 
-- Remove `Send` bound from `NetworkBehaviour`.
+[PR 2535]: https://github.com/libp2p/rust-libp2p/pull/2535/
 
 # 0.34.0 [2022-02-22]
 
