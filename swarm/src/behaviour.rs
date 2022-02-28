@@ -165,7 +165,7 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// Optionally one can provide a custom `poll` function through the `#[behaviour(poll_method =
 /// "poll")]` attribute. This function must have the same signature as the [`NetworkBehaviour#poll`]
 /// function and will be called last within the generated [`NetworkBehaviour`] implementation.
-pub trait NetworkBehaviour: Send + 'static {
+pub trait NetworkBehaviour: 'static {
     /// Handler for all the protocols the network behaviour supports.
     type ConnectionHandler: IntoConnectionHandler;
 
