@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
         swarm.dial(addr)?;
-        println!("Dialed {:?}", to_dial)
+        println!("Dialed {:?}", to_dial);
     }
 
     // Read full lines from stdin
