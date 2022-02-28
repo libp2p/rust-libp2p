@@ -240,8 +240,7 @@ impl NetworkBehaviour for Identify {
         if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
             for addr in failed_addresses
                 .into_iter()
-                .map(|addresses| addresses.into_iter())
-                .flatten()
+                .flat_map(|addresses| addresses.into_iter())
             {
                 entry.remove(addr);
             }
