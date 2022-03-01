@@ -437,8 +437,7 @@ impl NetworkBehaviour for Relay {
                 } else if let Some(dst_conn) = self
                     .reservations
                     .get(&inbound_circuit_req.dst())
-                    .map(|cs| cs.iter().next())
-                    .flatten()
+                    .and_then(|cs| cs.iter().next())
                 {
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {

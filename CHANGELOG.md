@@ -42,6 +42,21 @@
 
 # `libp2p` facade crate
 
+## 0.44.0 [unreleased]
+
+- Update individual crates.
+    - Update to [`libp2p-dcutr` `v0.2.0`](protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-rendezvous` `v0.5.0`](protocols/rendezvous/CHANGELOG.md).
+    - Update to [`libp2p-ping` `v0.35.0`](protocols/ping/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.35.0`](protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-floodsub` `v0.35.0`](protocols/floodsub/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.8.0`](protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-metrics` `v0.5.0`](misc/metrics/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.36.0`](protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-autonat` `v0.3.0`](protocols/autonat/CHANGELOG.md).
+    - Update to [`libp2p-request-response` `v0.17.0`](protocols/request-response/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.35.0`](swarm/CHANGELOG.md).
+
 ## Version 0.43.0 [2022-02-22]
 
 - Update individual crates.
