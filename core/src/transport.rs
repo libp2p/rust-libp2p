@@ -393,7 +393,7 @@ where
             TransportError::MultiaddrNotSupported(addr) => {
                 write!(f, "Multiaddr is not supported: {}", addr)
             }
-            TransportError::Other(err) => write!(f, "{}", err),
+            TransportError::Other(_) => Ok(()),
         }
     }
 }
