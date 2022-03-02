@@ -46,6 +46,7 @@
 
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.2.0`](protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-dns` `v0.32.1`](transports/dns/CHANGELOG.md).
     - Update to [`libp2p-rendezvous` `v0.5.0`](protocols/rendezvous/CHANGELOG.md).
     - Update to [`libp2p-ping` `v0.35.0`](protocols/ping/CHANGELOG.md).
     - Update to [`libp2p-identify` `v0.35.0`](protocols/identify/CHANGELOG.md).

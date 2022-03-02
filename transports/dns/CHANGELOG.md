@@ -1,3 +1,9 @@
+# 0.32.1 [unreleased]
+
+- Update to `trust-dns` `v0.21`. See [PR 2543].
+
+[PR 2543]: https://github.com/libp2p/rust-libp2p/pull/2543
+
 # 0.32.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
