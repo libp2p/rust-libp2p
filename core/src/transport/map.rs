@@ -37,6 +37,14 @@ impl<T, F> Map<T, F> {
     pub(crate) fn new(transport: T, fun: F) -> Self {
         Map { transport, fun }
     }
+
+    pub fn inner(&self) -> &T {
+        &self.transport
+    }
+
+    pub fn inner_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
 }
 
 impl<T, F, D> Transport for Map<T, F>

@@ -70,7 +70,7 @@ impl Transport for $uds_config {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             Ok(async move { $build_listener(&path).await }
                 .map_ok(move |listener| {
@@ -104,7 +104,7 @@ impl Transport for $uds_config {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // TODO: Should we dial at all?
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
@@ -114,7 +114,7 @@ impl Transport for $uds_config {
         }
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.dial(addr)
     }
 

@@ -149,7 +149,10 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
     type ListenerUpgrade = RelayedListenerUpgrade<T>;
     type Dial = EitherFuture<<T as Transport>::Dial, RelayedDial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let orig_addr = addr.clone();
 
         match parse_relayed_multiaddr(addr)? {
@@ -198,7 +201,7 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
                 };
 
                 let (to_listener, from_behaviour) = mpsc::channel(0);
-                let mut to_behaviour = self.to_behaviour;
+                let mut to_behaviour = self.to_behaviour.clone();
                 let msg_to_behaviour = Some(
                     async move {
                         to_behaviour
@@ -220,11 +223,14 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
@@ -235,7 +241,7 @@ impl<T: Transport + Clone> Transport for RelayTransport<T> {
 
 impl<T: Transport + Clone> RelayTransport<T> {
     fn do_dial(
-        self,
+        &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
@@ -268,7 +274,7 @@ impl<T: Transport + Clone> RelayTransport<T> {
                 let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
                 let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
 
-                let mut to_behaviour = self.to_behaviour;
+                let mut to_behaviour = self.to_behaviour.clone();
                 Ok(EitherFuture::Second(
                     async move {
                         let (tx, rx) = oneshot::channel();

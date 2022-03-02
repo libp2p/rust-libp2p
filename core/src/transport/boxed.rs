@@ -26,7 +26,7 @@ use std::{error::Error, fmt, io, pin::Pin};
 /// Creates a new [`Boxed`] transport from the given transport.
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
 where
-    T: Transport + Clone + Send + Sync + 'static,
+    T: Transport + Send + Sync + 'static,
     T::Error: Send + Sync,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
@@ -59,7 +59,7 @@ trait Abstract<O> {
 
 impl<T, O> Abstract<O> for T
 where
-    T: Transport<Output = O> + Clone + 'static,
+    T: Transport<Output = O> + 'static,
     T::Error: Send + Sync,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,

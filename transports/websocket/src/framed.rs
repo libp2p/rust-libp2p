@@ -35,6 +35,7 @@ use soketto::{
     extension::deflate::Deflate,
     handshake,
 };
+use std::sync::{Arc, Mutex};
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -46,7 +47,7 @@ const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 /// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
 #[derive(Debug, Clone)]
 pub struct WsConfig<T> {
-    transport: T,
+    transport: Arc<Mutex<T>>,
     max_data_size: usize,
     tls_config: tls::Config,
     max_redirects: u8,
@@ -57,7 +58,7 @@ impl<T> WsConfig<T> {
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
         WsConfig {
-            transport,
+            transport: Arc::new(Mutex::new(transport)),
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
             max_redirects: 0,
@@ -118,7 +119,10 @@ where
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
 
         let (use_tls, proto) = match inner_addr.pop() {
@@ -137,11 +141,14 @@ where
             }
         };
 
-        let tls_config = self.tls_config;
+        let tls_config = self.tls_config.clone();
         let max_size = self.max_data_size;
         let use_deflate = self.use_deflate;
         let transport = self
             .transport
+            .lock()
+            // TODO: Handle unwrap.
+            .unwrap()
             .listen_on(inner_addr)
             .map_err(|e| e.map(Error::Transport))?;
         let listen = transport
@@ -245,16 +252,23 @@ where
         Ok(Box::pin(listen))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
+        // TODO: Handle unwrap
+        self.transport
+            .lock()
+            .unwrap()
+            .address_translation(server, observed)
     }
 }
 
@@ -268,7 +282,7 @@ where
     T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     fn do_dial(
-        self,
+        &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
@@ -282,14 +296,15 @@ where
 
         // We are looping here in order to follow redirects (if any):
         let mut remaining_redirects = self.max_redirects;
+        let max_redirects = self.max_redirects;
         let mut addr = addr;
+        let mut this = self.clone();
         let future = async move {
             loop {
-                let this = self.clone();
                 match this.dial_once(addr, role_override).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
-                            debug!("Too many redirects (> {})", self.max_redirects);
+                            debug!("Too many redirects (> {})", max_redirects);
                             return Err(Error::TooManyRedirects);
                         }
                         remaining_redirects -= 1;
@@ -305,15 +320,21 @@ where
     }
     /// Attempts to dial the given address and perform a websocket handshake.
     async fn dial_once(
-        self,
+        &mut self,
         addr: WsAddress,
         role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("Dialing websocket address: {:?}", addr);
 
         let dial = match role_override {
-            Endpoint::Dialer => self.transport.dial(addr.tcp_addr),
-            Endpoint::Listener => self.transport.dial_as_listener(addr.tcp_addr),
+            // TODO: Handle unwrap.
+            Endpoint::Dialer => self.transport.lock().unwrap().dial(addr.tcp_addr),
+            Endpoint::Listener => self
+                .transport
+                .lock()
+                // TODO: Handle unwrap.
+                .unwrap()
+                .dial_as_listener(addr.tcp_addr),
         }
         .map_err(|e| match e {
             TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
