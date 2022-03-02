@@ -159,6 +159,18 @@ where
         &mut self.inner
     }
 
+    pub fn num_connections_to_peer(&self, peer: PeerId) -> usize {
+        self.inject_connection_established
+            .iter()
+            .filter(|(peer_id, _, _, _)| *peer_id == peer)
+            .count()
+            - self
+                .inject_connection_closed
+                .iter()
+                .filter(|(peer_id, _, _, _)| *peer_id == peer)
+                .count()
+    }
+
     /// Checks that when the expected number of closed connection notifications are received, a
     /// given number of expected disconnections have been received as well.
     ///
