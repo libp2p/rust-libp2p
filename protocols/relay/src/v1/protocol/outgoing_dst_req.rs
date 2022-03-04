@@ -110,8 +110,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
             } = CircuitRelay::decode(msg)?;
 
             match r#type
-                .map(circuit_relay::Type::from_i32)
-                .flatten()
+                .and_then(circuit_relay::Type::from_i32)
                 .ok_or(OutgoingDstReqError::ParseTypeField)?
             {
                 circuit_relay::Type::Status => {}
@@ -126,8 +125,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingDstReq {
             }
 
             match code
-                .map(circuit_relay::Status::from_i32)
-                .flatten()
+                .and_then(circuit_relay::Status::from_i32)
                 .ok_or(OutgoingDstReqError::ParseStatusField)?
             {
                 circuit_relay::Status::Success => {}

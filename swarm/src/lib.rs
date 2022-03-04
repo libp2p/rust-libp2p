@@ -1192,16 +1192,16 @@ pub struct SwarmPollParameters<'a> {
 }
 
 impl<'a> PollParameters for SwarmPollParameters<'a> {
-    type SupportedProtocolsIter = std::vec::IntoIter<Vec<u8>>;
-    type ListenedAddressesIter = std::vec::IntoIter<Multiaddr>;
+    type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
+    type ListenedAddressesIter = std::iter::Cloned<std::slice::Iter<'a, Multiaddr>>;
     type ExternalAddressesIter = AddressIntoIter;
 
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
-        self.supported_protocols.to_vec().into_iter()
+        self.supported_protocols.iter().cloned()
     }
 
     fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        self.listened_addrs.to_vec().into_iter()
+        self.listened_addrs.iter().cloned()
     }
 
     fn external_addresses(&self) -> Self::ExternalAddressesIter {
@@ -1583,27 +1583,36 @@ mod tests {
         TBehaviour: NetworkBehaviour,
         <<TBehaviour::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent: Clone,
     {
-        [swarm1, swarm2]
-            .iter()
-            .all(|s| s.behaviour.inject_connection_established.len() == num_connections)
+        swarm1
+            .behaviour()
+            .num_connections_to_peer(*swarm2.local_peer_id())
+            == num_connections
+            && swarm2
+                .behaviour()
+                .num_connections_to_peer(*swarm1.local_peer_id())
+                == num_connections
+            && swarm1.is_connected(swarm2.local_peer_id())
+            && swarm2.is_connected(swarm1.local_peer_id())
     }
 
     fn swarms_disconnected<TBehaviour: NetworkBehaviour>(
         swarm1: &Swarm<CallTraceBehaviour<TBehaviour>>,
         swarm2: &Swarm<CallTraceBehaviour<TBehaviour>>,
-        num_connections: usize,
     ) -> bool
     where
         TBehaviour: NetworkBehaviour,
         <<TBehaviour::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent: Clone
     {
-        [swarm1, swarm2]
-            .iter()
-            .all(|s| s.behaviour.inject_connection_closed.len() == num_connections)
-            && [swarm1, swarm2].iter().all(|s| {
-                let (.., last_remaining) = s.behaviour.inject_connection_closed.last().unwrap();
-                *last_remaining == 0
-            })
+        swarm1
+            .behaviour()
+            .num_connections_to_peer(*swarm2.local_peer_id())
+            == 0
+            && swarm2
+                .behaviour()
+                .num_connections_to_peer(*swarm1.local_peer_id())
+                == 0
+            && !swarm1.is_connected(swarm2.local_peer_id())
+            && !swarm2.is_connected(swarm1.local_peer_id())
     }
 
     /// Establishes multiple connections between two peers,
@@ -1781,7 +1790,7 @@ mod tests {
                     }
                 }
                 State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2, num_connections) {
+                    if swarms_disconnected(&swarm1, &swarm2) {
                         if reconnected {
                             return Poll::Ready(());
                         }
@@ -1850,18 +1859,17 @@ mod tests {
                             },
                         );
                         state = State::Disconnecting;
+                        continue;
                     }
                 }
                 State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
-                        }
+                    if swarms_disconnected(&swarm1, &swarm2) {
                         reconnected = true;
                         for _ in 0..num_connections {
                             swarm2.dial(addr1.clone()).unwrap();
                         }
                         state = State::Connecting;
+                        continue;
                     }
                 }
             }

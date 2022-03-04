@@ -140,7 +140,7 @@ pub trait SwarmExt {
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
-        T: NetworkBehaviour,
+        T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug;
 
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
@@ -153,12 +153,12 @@ pub trait SwarmExt {
 #[async_trait]
 impl<B> SwarmExt for Swarm<B>
 where
-    B: NetworkBehaviour,
+    B: NetworkBehaviour + Send,
     <B as NetworkBehaviour>::OutEvent: Debug,
 {
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
-        T: NetworkBehaviour,
+        T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug,
     {
         let addr_to_dial = other.external_addresses().next().unwrap().addr.clone();
