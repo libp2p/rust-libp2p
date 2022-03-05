@@ -239,9 +239,9 @@ mod tests {
     }
 
     async fn connect(listen_addr: Multiaddr) {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+        let ws_config = || WsConfig::new(tcp::TcpConfig::new());
 
-        let mut listener = ws_config.clone().listen_on(listen_addr).expect("listener");
+        let mut listener = ws_config().listen_on(listen_addr).expect("listener");
 
         let addr = listener
             .try_next()
@@ -264,7 +264,7 @@ mod tests {
             conn.await
         };
 
-        let outbound = ws_config
+        let outbound = ws_config()
             .dial(addr.with(Protocol::P2p(PeerId::random().into())))
             .unwrap();
 

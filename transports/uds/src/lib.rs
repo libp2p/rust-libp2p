@@ -228,7 +228,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let uds = UdsConfig::new();
+            let mut uds = UdsConfig::new();
             let addr = rx.await.unwrap();
             let mut socket = uds.dial(addr).unwrap().await.unwrap();
             socket.write(&[1, 2, 3]).await.unwrap();
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     #[ignore] // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
-        let uds = UdsConfig::new();
+        let mut uds = UdsConfig::new();
 
         let addr = "/unix//foo/bar".parse::<Multiaddr>().unwrap();
         assert!(uds.listen_on(addr).is_err());

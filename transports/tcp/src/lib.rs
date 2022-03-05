@@ -232,15 +232,12 @@ where
     /// > a single outgoing connection to a particular address and port
     /// > of a peer per local listening socket address.
     ///
-    /// If enabled, the returned `GenTcpConfig` and all of its `Clone`s
-    /// keep track of the listen socket addresses as they are reported
-    /// by polling [`TcpListenStream`]s obtained from [`GenTcpConfig::listen_on()`].
-    ///
-    /// In contrast, two `GenTcpConfig`s constructed separately via [`GenTcpConfig::new()`]
-    /// maintain these addresses independently. It is thus possible to listen on
-    /// multiple addresses, enabling port reuse for each, knowing exactly which
-    /// listen address is reused when dialing with a specific `GenTcpConfig`, as in
-    /// the following example:
+    /// Two `GenTcpConfig`s keep track of the listen socket addresses as they
+    /// are reported by polling [`TcpListenStream`]s obtained from
+    /// [`GenTcpConfig::listen_on()`]. It is thus possible to listen on multiple
+    /// addresses, enabling port reuse for each, knowing exactly which listen
+    /// address is reused when dialing with a specific `GenTcpConfig`, as in the
+    /// following example:
     ///
     /// ```no_run
     /// # use libp2p_core::transport::ListenerEvent;
@@ -279,15 +276,14 @@ where
     /// }
     /// ```
     ///
-    /// If a single `GenTcpConfig` is used and cloned for the creation of multiple
-    /// listening sockets or a wildcard listen socket address is used to listen
-    /// on any interface, there can be multiple such addresses registered for
-    /// port reuse. In this case, one is chosen whose IP protocol version and
-    /// loopback status is the same as that of the remote address. Consequently, for
-    /// maximum control of the local listening addresses and ports that are used
-    /// for outgoing connections, a new `GenTcpConfig` should be created for each
-    /// listening socket, avoiding the use of wildcard addresses which bind a
-    /// socket to all network interfaces.
+    /// If a wildcard listen socket address is used to listen on any interface,
+    /// there can be multiple such addresses registered for port reuse. In this
+    /// case, one is chosen whose IP protocol version and loopback status is the
+    /// same as that of the remote address. Consequently, for maximum control of
+    /// the local listening addresses and ports that are used for outgoing
+    /// connections, a new `GenTcpConfig` should be created for each listening
+    /// socket, avoiding the use of wildcard addresses which bind a socket to
+    /// all network interfaces.
     ///
     /// When this option is enabled on a unix system, the socket
     /// option `SO_REUSEPORT` is set, if available, to permit
@@ -766,7 +762,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpConfig::<T>::new();
             let mut listener = tcp.listen_on(addr).unwrap();
             loop {
                 match listener.next().await.unwrap().unwrap() {
@@ -788,7 +784,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let addr = ready_rx.next().await.unwrap();
-            let tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpConfig::<T>::new();
 
             // Obtain a future socket through dialing
             let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
@@ -835,7 +831,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpConfig::<T>::new();
             let mut listener = tcp.listen_on(addr).unwrap();
 
             loop {
@@ -864,7 +860,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpConfig::<T>::new();
             tcp.dial(dest_addr).unwrap().await.unwrap();
         }
 
@@ -904,7 +900,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpConfig::<T>::new();
             let mut listener = tcp.listen_on(addr).unwrap();
             loop {
                 match listener.next().await.unwrap().unwrap() {
@@ -926,7 +922,7 @@ mod tests {
 
         async fn dialer<T: Provider>(addr: Multiaddr, mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let tcp = GenTcpConfig::<T>::new().port_reuse(true);
+            let mut tcp = GenTcpConfig::<T>::new().port_reuse(true);
             let mut listener = tcp.clone().listen_on(addr).unwrap();
             match listener.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(_) => {
@@ -1062,7 +1058,7 @@ mod tests {
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
             {
-                let tcp = TcpConfig::new();
+                let mut tcp = TcpConfig::new();
                 assert!(tcp.listen_on(addr.clone()).is_err());
             }
 

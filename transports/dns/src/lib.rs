@@ -596,13 +596,13 @@ mod tests {
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
             }
 
-            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Check that all DNS components have been resolved, i.e. replaced.
                 assert!(!addr.iter().any(|p| match p {
                     Protocol::Dns(_)
@@ -615,7 +615,7 @@ mod tests {
             }
 
             fn dial_as_listener(
-                self,
+                &mut self,
                 addr: Multiaddr,
             ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 self.dial(addr)

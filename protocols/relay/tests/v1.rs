@@ -1256,15 +1256,18 @@ impl<T: Transport> Transport for Firewall<T> {
     type ListenerUpgrade = <T as Transport>::ListenerUpgrade;
     type Dial = <T as Transport>::Dial;
 
-    fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(&mut self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         Ok(futures::stream::pending())
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial_as_listener(addr)
     }
 
