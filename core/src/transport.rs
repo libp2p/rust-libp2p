@@ -70,10 +70,12 @@ pub use self::upgrade::Upgrade;
 /// by a [`Transport`] through an upgrade mechanism that is initiated via
 /// [`upgrade`](Transport::upgrade).
 ///
-/// > **Note**: The methods of this trait use `self` and not `&self` or `&mut self`. In other
-/// >           words, listening or dialing consumes the transport object. This has been designed
-/// >           so that you would implement this trait on `&Foo` or `&mut Foo` instead of directly
-/// >           on `Foo`.
+/// Note for implementors: Futures returned by [`Transport::dial`] should only
+/// do work once polled for the first time. E.g. in the case of TCP, connecting
+/// to the remote should not happen immediately on [`Transport::dial`] but only
+/// once the returned [`Future`] is polled. The caller of [`Transport::dial`]
+/// may call the method multiple times with a set of addresses, racing a subset
+/// of the returned dials to success concurrently.
 pub trait Transport {
     /// The result of a connection setup process, including protocol upgrades.
     ///
@@ -126,9 +128,6 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    //
-    // TODO: Document that work should only happen when the returned future is polled.
-    //
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
