@@ -153,7 +153,7 @@ pub trait Transport {
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where
-        Self: Transport + Sized + Clone + Send + Sync + 'static,
+        Self: Transport + Sized + Send + Sync + 'static,
         Self::Dial: Send + 'static,
         Self::Listener: Send + 'static,
         Self::ListenerUpgrade: Send + 'static,
@@ -166,7 +166,7 @@ pub trait Transport {
     fn map<F, O>(self, f: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone,
+        F: FnOnce(Self::Output, ConnectedPoint) -> O,
     {
         map::Map::new(self, f)
     }
@@ -175,7 +175,7 @@ pub trait Transport {
     fn map_err<F, E>(self, f: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> E + Clone,
+        F: FnOnce(Self::Error) -> E,
     {
         map_err::MapErr::new(self, f)
     }
@@ -204,7 +204,7 @@ pub trait Transport {
     fn and_then<C, F, O>(self, f: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F,
         F: TryFuture<Ok = O>,
         <F as TryFuture>::Error: Error + 'static,
     {

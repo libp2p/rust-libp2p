@@ -47,24 +47,22 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct WsConfig<T: Transport>
 where
-    T: Transport + Send + Clone + 'static,
-    T::Error: Send + 'static,
-    T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
-    T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    T: Transport,
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    // T: Transport + Send + 'static,
+    // T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     transport: libp2p_core::transport::map::Map<framed::WsConfig<T>, WrapperFn<T::Output>>,
 }
 
 impl<T: Transport> WsConfig<T>
 where
-    T: Transport + Send + Clone + 'static,
+    T: Transport + Send + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     /// Create a new websocket transport based on the given transport.
     ///
@@ -118,7 +116,7 @@ where
 
 impl<T> Transport for WsConfig<T>
 where
-    T: Transport + Send + Clone + 'static,
+    T: Transport + Send + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,

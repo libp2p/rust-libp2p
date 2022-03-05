@@ -45,13 +45,26 @@ const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 /// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
 /// frame payloads which does not implement [`AsyncRead`] or
 /// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WsConfig<T> {
     transport: Arc<Mutex<T>>,
     max_data_size: usize,
     tls_config: tls::Config,
     max_redirects: u8,
     use_deflate: bool,
+}
+
+// TODO: Is this manual impl needed?
+impl<T> Clone for WsConfig<T> {
+    fn clone(&self) -> Self {
+        Self {
+            transport: self.transport.clone(),
+            max_data_size: self.max_data_size.clone(),
+            tls_config: self.tls_config.clone(),
+            max_redirects: self.max_redirects.clone(),
+            use_deflate: self.use_deflate.clone(),
+        }
+    }
 }
 
 impl<T> WsConfig<T> {
@@ -105,7 +118,7 @@ type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::Tls
 
 impl<T> Transport for WsConfig<T>
 where
-    T: Transport + Send + Clone + 'static,
+    T: Transport + Send + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
@@ -274,7 +287,7 @@ where
 
 impl<T> WsConfig<T>
 where
-    T: Transport + Send + Clone + 'static,
+    T: Transport + Send + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
@@ -286,7 +299,7 @@ where
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
-        let addr = match parse_ws_dial_addr(addr) {
+        let mut addr = match parse_ws_dial_addr(addr) {
             Ok(addr) => addr,
             Err(Error::InvalidMultiaddr(a)) => {
                 return Err(TransportError::MultiaddrNotSupported(a))
@@ -296,15 +309,14 @@ where
 
         // We are looping here in order to follow redirects (if any):
         let mut remaining_redirects = self.max_redirects;
-        let max_redirects = self.max_redirects;
-        let mut addr = addr;
+
         let mut this = self.clone();
         let future = async move {
             loop {
                 match this.dial_once(addr, role_override).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
-                            debug!("Too many redirects (> {})", max_redirects);
+                            debug!("Too many redirects (> {})", this.max_redirects);
                             return Err(Error::TooManyRedirects);
                         }
                         remaining_redirects -= 1;
