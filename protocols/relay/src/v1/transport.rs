@@ -45,7 +45,7 @@ use std::task::{Context, Poll};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
+///    # let (mut relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
 ///    #     inner_transport,
 ///    # );
@@ -59,7 +59,7 @@ use std::task::{Context, Poll};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
+///    # let (mut relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
 ///    #     inner_transport,
 ///    # );
@@ -79,7 +79,7 @@ use std::task::{Context, Poll};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
+///    # let (mut relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
 ///    #     inner_transport,
 ///    # );
@@ -100,7 +100,7 @@ use std::task::{Context, Poll};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_relay::v1::{RelayConfig, new_transport_and_behaviour};
 ///    # let inner_transport = MemoryTransport::default();
-///    # let (relay_transport, relay_behaviour) = new_transport_and_behaviour(
+///    # let (mut relay_transport, relay_behaviour) = new_transport_and_behaviour(
 ///    #     RelayConfig::default(),
 ///    #     inner_transport,
 ///    # );

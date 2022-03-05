@@ -54,7 +54,7 @@ use thiserror::Error;
 ///    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
 ///        PeerId::random(),
 ///    );
-///    let transport = OrTransport::new(relay_transport, actual_transport);
+///    let mut transport = OrTransport::new(relay_transport, actual_transport);
 ///    # let relay_id = PeerId::random();
 ///    # let destination_id = PeerId::random();
 ///    let dst_addr_via_relay = Multiaddr::empty()
@@ -78,7 +78,7 @@ use thiserror::Error;
 ///    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
 ///       local_peer_id,
 ///    );
-///    let transport = OrTransport::new(relay_transport, actual_transport);
+///    let mut transport = OrTransport::new(relay_transport, actual_transport);
 ///    let relay_addr = Multiaddr::empty()
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
@@ -108,7 +108,7 @@ impl ClientTransport {
     /// );
     ///
     /// // To reduce unnecessary connection attempts, put `relay_transport` first.
-    /// let transport = OrTransport::new(relay_transport, actual_transport);
+    /// let mut transport = OrTransport::new(relay_transport, actual_transport);
     /// ```
     pub(crate) fn new() -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
         let (to_behaviour, from_transport) = mpsc::channel(0);

@@ -251,7 +251,7 @@ where
     /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let tcp1 = TcpConfig::new().port_reuse(true);
+    /// let mut tcp1 = TcpConfig::new().port_reuse(true);
     /// let mut listener1 = tcp1.clone().listen_on(listen_addr1.clone()).expect("listener");
     /// match listener1.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
@@ -262,7 +262,7 @@ where
     ///     _ => {}
     /// }
     ///
-    /// let tcp2 = TcpConfig::new().port_reuse(true);
+    /// let mut tcp2 = TcpConfig::new().port_reuse(true);
     /// let mut listener2 = tcp2.clone().listen_on(listen_addr2).expect("listener");
     /// match listener2.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
@@ -1064,7 +1064,7 @@ mod tests {
 
             #[cfg(feature = "tokio")]
             {
-                let tcp = TokioTcpConfig::new();
+                let mut tcp = TokioTcpConfig::new();
                 assert!(tcp.listen_on(addr.clone()).is_err());
             }
         }

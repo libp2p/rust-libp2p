@@ -156,7 +156,7 @@ impl<T> TokioDnsConfig<T> {
         opts: ResolverOpts,
     ) -> Result<TokioDnsConfig<T>, io::Error> {
         Ok(TokioDnsConfig {
-            inner,
+            inner: Arc::new(Mutex::new(inner)),
             resolver: TokioAsyncResolver::tokio(cfg, opts)?,
         })
     }
