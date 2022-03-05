@@ -42,7 +42,7 @@ use libp2p_core::{
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 
@@ -473,14 +473,9 @@ where
 
     /// Lists all mesh peers for a certain topic hash.
     pub fn mesh_peers(&self, topic_hash: &TopicHash) -> impl Iterator<Item = &PeerId> {
-        self.mesh
-            .get(topic_hash)
-            .into_iter()
-            .map(|x| x.iter())
-            .flatten()
+        self.mesh.get(topic_hash).into_iter().flat_map(|x| x.iter())
     }
 
-    /// Lists all mesh peers for all topics.
     pub fn all_mesh_peers(&self) -> impl Iterator<Item = &PeerId> {
         let mut res = BTreeSet::new();
         for peers in self.mesh.values() {
@@ -3051,10 +3046,10 @@ where
     C: Send + 'static + DataTransform,
     F: Send + 'static + TopicSubscriptionFilter,
 {
-    type ProtocolsHandler = GossipsubHandler;
+    type ConnectionHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         GossipsubHandler::new(
             self.config.protocol_id_prefix().clone(),
             self.config.max_transmit_size(),
@@ -3156,7 +3151,7 @@ where
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         // Remove IP from peer scoring system
@@ -3443,7 +3438,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
                 // clone send event reference if others references are present

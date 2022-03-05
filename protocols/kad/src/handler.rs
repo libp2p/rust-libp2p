@@ -31,8 +31,8 @@ use libp2p_core::{
     ConnectedPoint, PeerId,
 };
 use libp2p_swarm::{
-    IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
 use std::{
@@ -54,14 +54,14 @@ impl<T> KademliaHandlerProto<T> {
     }
 }
 
-impl<T: Clone + fmt::Debug + Send + 'static> IntoProtocolsHandler for KademliaHandlerProto<T> {
+impl<T: Clone + fmt::Debug + Send + 'static> IntoConnectionHandler for KademliaHandlerProto<T> {
     type Handler = KademliaHandler<T>;
 
     fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         KademliaHandler::new(self.config, endpoint.clone())
     }
 
-    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         if self.config.allow_listening {
             upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
         } else {
@@ -297,7 +297,7 @@ pub enum KademliaHandlerEvent<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerQueryErr {
     /// Error while trying to perform the query.
-    Upgrade(ProtocolsHandlerUpgrErr<io::Error>),
+    Upgrade(ConnectionHandlerUpgrErr<io::Error>),
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -333,8 +333,8 @@ impl error::Error for KademliaHandlerQueryErr {
     }
 }
 
-impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    fn from(err: ProtocolsHandlerUpgrErr<io::Error>) -> Self {
+impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
+    fn from(err: ConnectionHandlerUpgrErr<io::Error>) -> Self {
         KademliaHandlerQueryErr::Upgrade(err)
     }
 }
@@ -466,7 +466,7 @@ impl<TUserData> KademliaHandler<TUserData> {
     }
 }
 
-impl<TUserData> ProtocolsHandler for KademliaHandler<TUserData>
+impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static,
 {
@@ -676,7 +676,7 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         (_, user_data): Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<io::Error>,
+        error: ConnectionHandlerUpgrErr<io::Error>,
     ) {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
@@ -694,7 +694,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -707,7 +707,7 @@ where
 
         if let ProtocolStatus::Confirmed = self.protocol_status {
             self.protocol_status = ProtocolStatus::Reported;
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::Custom(
                 KademliaHandlerEvent::ProtocolConfirmed {
                     endpoint: self.endpoint.clone(),
                 },
@@ -778,7 +778,7 @@ fn advance_substream<TUserData>(
 ) -> (
     Option<SubstreamState<TUserData>>,
     Option<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             KademliaProtocolConfig,
             (KadRequestMsg, Option<TUserData>),
             KademliaHandlerEvent<TUserData>,
@@ -789,7 +789,7 @@ fn advance_substream<TUserData>(
 ) {
     match state {
         SubstreamState::OutPendingOpen(msg, user_data) => {
-            let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(upgrade, (msg, user_data)),
             };
             (None, Some(ev), false)
@@ -804,7 +804,7 @@ fn advance_substream<TUserData>(
                     ),
                     Err(error) => {
                         let event = user_data.map(|user_data| {
-                            ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                            ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
                                 error: KademliaHandlerQueryErr::Io(error),
                                 user_data,
                             })
@@ -820,7 +820,7 @@ fn advance_substream<TUserData>(
                 ),
                 Poll::Ready(Err(error)) => {
                     let event = user_data.map(|user_data| {
-                        ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                        ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
                             error: KademliaHandlerQueryErr::Io(error),
                             user_data,
                         })
@@ -850,7 +850,7 @@ fn advance_substream<TUserData>(
                 ),
                 Poll::Ready(Err(error)) => {
                     let event = user_data.map(|user_data| {
-                        ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                        ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
                             error: KademliaHandlerQueryErr::Io(error),
                             user_data,
                         })
@@ -867,7 +867,7 @@ fn advance_substream<TUserData>(
                     let event = process_kad_response(msg, user_data);
                     (
                         Some(new_state),
-                        Some(ProtocolsHandlerEvent::Custom(event)),
+                        Some(ConnectionHandlerEvent::Custom(event)),
                         true,
                     )
                 }
@@ -881,20 +881,20 @@ fn advance_substream<TUserData>(
                         error: KademliaHandlerQueryErr::Io(error),
                         user_data,
                     };
-                    (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
+                    (None, Some(ConnectionHandlerEvent::Custom(event)), false)
                 }
                 Poll::Ready(None) => {
                     let event = KademliaHandlerEvent::QueryError {
                         error: KademliaHandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
                         user_data,
                     };
-                    (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
+                    (None, Some(ConnectionHandlerEvent::Custom(event)), false)
                 }
             }
         }
         SubstreamState::OutReportError(error, user_data) => {
             let event = KademliaHandlerEvent::QueryError { error, user_data };
-            (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
+            (None, Some(ConnectionHandlerEvent::Custom(event)), false)
         }
         SubstreamState::OutClosing(mut stream) => match Sink::poll_close(Pin::new(&mut stream), cx)
         {
@@ -908,7 +908,7 @@ fn advance_substream<TUserData>(
                     if let Ok(ev) = process_kad_request(msg, id) {
                         (
                             Some(SubstreamState::InWaitingUser(id, substream)),
-                            Some(ProtocolsHandlerEvent::Custom(ev)),
+                            Some(ConnectionHandlerEvent::Custom(ev)),
                             false,
                         )
                     } else {

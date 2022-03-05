@@ -1,4 +1,4 @@
-# 0.36.0 [unreleased]
+# 0.36.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 

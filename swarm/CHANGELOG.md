@@ -1,4 +1,14 @@
-# 0.34.0 [unreleased]
+# 0.35.0 [unreleased]
+
+- Remove `Send` bound from `NetworkBehaviour`. See [PR 2535].
+
+[PR 2535]: https://github.com/libp2p/rust-libp2p/pull/2535/
+
+# 0.34.0 [2022-02-22]
+
+- Rename `ProtocolsHandler` to `ConnectionHandler`. Upgrade should be as simple as renaming all
+  occurences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool
+  across your codebase. See [PR 2527].
 
 - Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
 
@@ -10,6 +20,7 @@
 
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 [PR 2517]: https://github.com/libp2p/rust-libp2p/pull/2517
+[PR 2527]: https://github.com/libp2p/rust-libp2p/pull/2527
 
 # 0.33.0 [2022-01-27]
 

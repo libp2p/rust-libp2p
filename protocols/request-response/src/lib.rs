@@ -67,7 +67,7 @@ use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEve
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
 };
 use smallvec::SmallVec;
@@ -567,10 +567,10 @@ impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
-    type ProtocolsHandler = RequestResponseHandler<TCodec>;
+    type ConnectionHandler = RequestResponseHandler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         RequestResponseHandler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
@@ -646,7 +646,7 @@ where
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         let connections = self
@@ -691,7 +691,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer: Option<PeerId>,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         _: &DialError,
     ) {
         if let Some(peer) = peer {
@@ -872,7 +872,7 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
