@@ -100,7 +100,6 @@ enum PortReuse {
     Enabled {
         /// The addresses and ports of the listening sockets
         /// registered as eligible for port reuse when dialing.
-        // TODO: Still needed?
         listen_addrs: HashSet<(IpAddr, Port)>,
     },
 }
@@ -377,7 +376,6 @@ where
 
         let socket = self
             .create_socket(&socket_addr)
-            // TODO: Would a `From` impl on `TransportError` do as well?
             .map_err(TransportError::Other)?;
 
         if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {

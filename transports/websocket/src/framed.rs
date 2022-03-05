@@ -55,7 +55,6 @@ pub struct WsConfig<T> {
     use_deflate: bool,
 }
 
-// TODO: Is this manual impl needed?
 impl<T> Clone for WsConfig<T> {
     fn clone(&self) -> Self {
         Self {
