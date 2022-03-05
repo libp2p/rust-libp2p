@@ -20,7 +20,7 @@
 
 use hyper::http::StatusCode;
 use hyper::service::Service;
-use hyper::{Body, Request, Response, Server};
+use hyper::{Body, Method, Request, Response, Server};
 use log::{error, info};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
@@ -36,8 +36,7 @@ pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Use the tokio runtime to run the hyper server.
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
-        let server =
-            Server::bind(&addr).serve(MakeMetricService::new(registry));
+        let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
         info!("Metrics server on http://{}/metrics", server.local_addr());
         if let Err(e) = server.await {
             error!("server error: {}", e);
@@ -60,8 +59,7 @@ impl MetricService {
         let mut encoded: Vec<u8> = Vec::new();
         let reg = self.get_reg();
         encode(&mut encoded, &reg.lock().unwrap()).unwrap();
-        let metrics_content_type =
-            "application/openmetrics-text;charset=utf-8;version=1.0.0";
+        let metrics_content_type = "application/openmetrics-text;charset=utf-8;version=1.0.0";
         Response::builder()
             .status(StatusCode::OK)
             .header(hyper::header::CONTENT_TYPE, metrics_content_type)
@@ -79,21 +77,16 @@ impl MetricService {
 impl Service<Request<Body>> for MetricService {
     type Response = Response<Body>;
     type Error = hyper::Error;
-    type Future = Pin<
-        Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>,
-    >;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(
-        &mut self,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let resp = if (req.method() == &hyper::Method::GET)
-            && (req.uri().path() == "/metrics")
-        {
+        let req_path = req.uri().path();
+        let req_method = req.method();
+        let resp = if (req_method == Method::GET) && (req_path == "/metrics") {
             // Encode and serve metrics from registry.
             self.respond_with_metrics()
         } else {
@@ -118,9 +111,7 @@ impl MakeMetricService {
 impl<T> Service<T> for MakeMetricService {
     type Response = MetricService;
     type Error = hyper::Error;
-    type Future = Pin<
-        Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>,
-    >;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
