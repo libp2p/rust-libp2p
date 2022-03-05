@@ -30,12 +30,13 @@ use libp2p_core::{
     Transport,
 };
 use log::{debug, trace};
+use parking_lot::Mutex;
 use soketto::{
     connection::{self, CloseReason},
     extension::deflate::Deflate,
     handshake,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -160,8 +161,6 @@ where
         let transport = self
             .transport
             .lock()
-            // TODO: Handle unwrap.
-            .unwrap()
             .listen_on(inner_addr)
             .map_err(|e| e.map(Error::Transport))?;
         let listen = transport
@@ -277,11 +276,7 @@ where
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // TODO: Handle unwrap
-        self.transport
-            .lock()
-            .unwrap()
-            .address_translation(server, observed)
+        self.transport.lock().address_translation(server, observed)
     }
 }
 
@@ -339,14 +334,8 @@ where
         trace!("Dialing websocket address: {:?}", addr);
 
         let dial = match role_override {
-            // TODO: Handle unwrap.
-            Endpoint::Dialer => self.transport.lock().unwrap().dial(addr.tcp_addr),
-            Endpoint::Listener => self
-                .transport
-                .lock()
-                // TODO: Handle unwrap.
-                .unwrap()
-                .dial_as_listener(addr.tcp_addr),
+            Endpoint::Dialer => self.transport.lock().dial(addr.tcp_addr),
+            Endpoint::Listener => self.transport.lock().dial_as_listener(addr.tcp_addr),
         }
         .map_err(|e| match e {
             TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),

@@ -49,7 +49,6 @@ type Listener<O> =
     Pin<Box<dyn Stream<Item = io::Result<ListenerEvent<ListenerUpgrade<O>, io::Error>>> + Send>>;
 type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 
-// TODO: Is this still needed?
 trait Abstract<O> {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<Listener<O>, TransportError<io::Error>>;
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;

@@ -477,7 +477,6 @@ where
     /// has been reached.
     pub fn add_outgoing(
         &mut self,
-        // TODO: Could this not as well be an impl Future?
         dials: Vec<
             BoxFuture<
                 'static,

@@ -63,10 +63,11 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
+use parking_lot::Mutex;
 use smallvec::SmallVec;
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{convert::TryFrom, error, fmt, iter, net::IpAddr, str};
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use trust_dns_resolver::system_conf;
@@ -113,8 +114,6 @@ where
     P: ConnectionProvider<Conn = C>,
 {
     /// The underlying transport.
-    //
-    // TODO: Can we do without the Mutex?
     inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: AsyncResolver<C, P>,
@@ -206,8 +205,6 @@ where
         let listener = self
             .inner
             .lock()
-            // TODO: Handle?
-            .unwrap()
             .listen_on(addr)
             .map_err(|err| err.map(DnsErr::Transport))?;
         let listener = listener
@@ -232,11 +229,7 @@ where
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner
-            .lock()
-            // TODO: Handle?
-            .unwrap()
-            .address_translation(server, observed)
+        self.inner.lock().address_translation(server, observed)
     }
 }
 
@@ -253,9 +246,7 @@ where
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
-        // TODO: Can we do without these clones?
         let resolver = self.resolver.clone();
-        // TODO: Can we do without these clones?
         let inner = self.inner.clone();
 
         // Asynchronlously resolve all DNS names in the address before proceeding
@@ -338,10 +329,8 @@ where
 
                     let transport = inner.clone();
                     let dial = match role_override {
-                        // TODO: Handle unwrap?
-                        Endpoint::Dialer => transport.lock().unwrap().dial(addr),
-                        // TODO: Handle unwrap?
-                        Endpoint::Listener => transport.lock().unwrap().dial_as_listener(addr),
+                        Endpoint::Dialer => transport.lock().dial(addr),
+                        Endpoint::Listener => transport.lock().dial_as_listener(addr),
                     };
                     let result = match dial {
                         Ok(out) => {
