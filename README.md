@@ -31,8 +31,8 @@ This repository is the central place for Rust development of the [libp2p](https:
 
 The main components of this repository are structured as follows:
 
-  * `core/`: The implementation of `libp2p-core` with its `Network`,
-    `Transport` and `StreamMuxer` API on which almost all other crates depend.
+  * `core/`: The implementation of `libp2p-core` with its `Transport` and
+    `StreamMuxer` API on which almost all other crates depend.
 
   * `transports/`: Implementations of transport protocols (e.g. TCP) and protocol upgrades
     (e.g. for authenticated encryption, compression, ...) based on the `libp2p-core` `Transport`
