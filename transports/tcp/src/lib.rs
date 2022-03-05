@@ -59,7 +59,6 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
-    sync::{Arc, RwLock},
     task::{Context, Poll},
     time::Duration,
 };
@@ -102,7 +101,7 @@ enum PortReuse {
         /// The addresses and ports of the listening sockets
         /// registered as eligible for port reuse when dialing.
         // TODO: Still needed?
-        listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
+        listen_addrs: HashSet<(IpAddr, Port)>,
     },
 }
 
@@ -113,10 +112,7 @@ impl PortReuse {
     fn register(&mut self, ip: IpAddr, port: Port) {
         if let PortReuse::Enabled { listen_addrs } = self {
             log::trace!("Registering for port reuse: {}:{}", ip, port);
-            listen_addrs
-                .write()
-                .expect("`register()` and `unregister()` never panic while holding the lock")
-                .insert((ip, port));
+            listen_addrs.insert((ip, port));
         }
     }
 
@@ -126,10 +122,7 @@ impl PortReuse {
     fn unregister(&mut self, ip: IpAddr, port: Port) {
         if let PortReuse::Enabled { listen_addrs } = self {
             log::trace!("Unregistering for port reuse: {}:{}", ip, port);
-            listen_addrs
-                .write()
-                .expect("`register()` and `unregister()` never panic while holding the lock")
-                .remove(&(ip, port));
+            listen_addrs.remove(&(ip, port));
         }
     }
 
@@ -144,11 +137,7 @@ impl PortReuse {
     /// listening socket address is found.
     fn local_dial_addr(&self, remote_ip: &IpAddr) -> Option<SocketAddr> {
         if let PortReuse::Enabled { listen_addrs } = self {
-            for (ip, port) in listen_addrs
-                .read()
-                .expect("`register()` and `unregister()` never panic while holding the lock")
-                .iter()
-            {
+            for (ip, port) in listen_addrs.iter() {
                 if ip.is_ipv4() == remote_ip.is_ipv4()
                     && ip.is_loopback() == remote_ip.is_loopback()
                 {
@@ -307,7 +296,7 @@ where
     pub fn port_reuse(mut self, port_reuse: bool) -> Self {
         self.port_reuse = if port_reuse {
             PortReuse::Enabled {
-                listen_addrs: Arc::new(RwLock::new(HashSet::new())),
+                listen_addrs: HashSet::new(),
             }
         } else {
             PortReuse::Disabled
