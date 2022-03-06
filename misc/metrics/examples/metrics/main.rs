@@ -55,66 +55,52 @@ use libp2p::metrics::{Metrics, Recorder};
 use libp2p::ping::{Ping, PingConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, PeerId, Swarm};
-use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
+use env_logger::Env;
+use log::info;
+mod http_service;
+
 fn main() -> Result<(), Box<dyn Error>> {
-    tide::log::start();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    tide::log::info!("Local peer id: {:?}", local_peer_id);
+    info!("Local peer id: {:?}", local_peer_id);
 
     let mut swarm = Swarm::new(
         block_on(libp2p::development_transport(local_key))?,
         Ping::new(PingConfig::new().with_keep_alive(true)),
         local_peer_id,
     );
+
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        tide::log::info!("Dialed {}", addr)
+        info!("Dialed {}", addr)
     }
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
-    thread::spawn(move || block_on(metrics_server(metric_registry)));
+    thread::spawn(move || block_on(http_service::metrics_server(metric_registry)));
 
     block_on(async {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(ping_event) => {
-                    tide::log::info!("{:?}", ping_event);
+                    info!("{:?}", ping_event);
                     metrics.record(&ping_event);
                 }
                 swarm_event => {
-                    tide::log::info!("{:?}", swarm_event);
+                    info!("{:?}", swarm_event);
                     metrics.record(&swarm_event);
                 }
             }
         }
-    })
-}
-
-pub async fn metrics_server(registry: Registry) -> std::result::Result<(), std::io::Error> {
-    let mut app = tide::with_state(Arc::new(Mutex::new(registry)));
-
-    app.at("/metrics")
-        .get(|req: tide::Request<Arc<Mutex<Registry>>>| async move {
-            let mut encoded = Vec::new();
-            encode(&mut encoded, &req.state().lock().unwrap()).unwrap();
-            let response = tide::Response::builder(200)
-                .body(encoded)
-                .content_type("application/openmetrics-text; version=1.0.0; charset=utf-8")
-                .build();
-            Ok(response)
-        });
-
-    app.listen("0.0.0.0:0").await?;
-
+    });
     Ok(())
 }
