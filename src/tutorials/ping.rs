@@ -20,14 +20,15 @@
 
 //! # Ping Tutorial - Getting started with rust-libp2p
 //!
-//! This tutorial aims to give newcomers a hands-on overview on how to use the
+//! This tutorial aims to give newcomers a hands-on overview of how to use the
 //! Rust libp2p implementation. People new to Rust likely want to get started on
 //! [Rust](https://www.rust-lang.org/) itself, before diving into all the
 //! networking fun. This library makes heavy use of asynchronous Rust. In case
-//! you are not familiar with these concepts the Rust
+//! you are not familiar with this concept, the Rust
 //! [async-book](https://rust-lang.github.io/async-book/) should prove useful.
-//! People new to libp2p might prefer to get a general overview at libp2p.io
-//! first, though libp2p knowledge is not required for this tutorial.
+//! People new to libp2p might prefer to get a general overview at
+//! [libp2p.io](https://libp2p.io/)
+//! first, although libp2p knowledge is not required for this tutorial.
 //!
 //! We are going to build a small `ping` clone, sending a ping to a peer,
 //! expecting a pong as a response.
@@ -36,34 +37,37 @@
 //!
 //! Let's start off by
 //!
-//! 1. Creating a new crate: `cargo init rust-libp2p-tutorial`
+//! 1. Updating to the latest Rust toolchain, e.g.: `rustup update`
 //!
-//! 2. Adding `libp2p` as well as `futures` as a dependency in the
-//!    `Cargo.toml` file. We will also include `async-std` with the
-//!    "attributes" feature to allow for an `async main`:
+//! 2. Creating a new crate: `cargo init rust-libp2p-tutorial`
+//!
+//! 3. Adding `libp2p` as well as `futures` as dependencies in the
+//!    `Cargo.toml` file. Current crate versions may be found at
+//!    [crates.io](https://crates.io/).
+//!    We will also include `async-std` with the
+//!    "attributes" feature to allow for an `async main`.
+//!    At the time of writing we have:
 //!
 //!    ```yaml
 //!    [package]
 //!        name = "rust-libp2p-tutorial"
 //!        version = "0.1.0"
-//!        authors = ["Max Inden <mail@max-inden.de>"]
 //!        edition = "2021"
-//!        rust-version = "1.56.1"
 //!
 //!    [dependencies]
-//!        libp2p = "<insert-current-version-here>"
-//!        futures = "<insert-current-version-here>"
-//!        async-std = { version = "<insert-current-version-here>", features = ["attributes"] }
+//!        libp2p = "0.43.0"
+//!        futures = "0.3.21"
+//!        async-std = { version = "1.10.0", features = ["attributes"] }
 //!    ```
 //!
 //! ## Network identity
 //!
-//! With all the scaffolding in place, we can dive into the libp2p specifics. At
-//! first we need to create a network identity for our local node in `async fn
+//! With all the scaffolding in place, we can dive into the libp2p specifics.
+//! First we need to create a network identity for our local node in `async fn
 //! main()`, annotated with an attribute to allow `main` to be `async`.
-//! Identities in libp2p are handled via a public and private key pair.
+//! Identities in libp2p are handled via a public/private key pair.
 //! Nodes identify each other via their [`PeerId`](crate::PeerId) which is
-//! derived from the public key.
+//! derived from their public key. Now, replace the contents of main.rs by:
 //!
 //! ```rust
 //! use libp2p::{identity, PeerId};
@@ -79,17 +83,15 @@
 //! }
 //! ```
 //!
-//! You can already run the code above via `cargo run` which should print a
-//! different [`PeerId`](crate::PeerId) each time, given that we randomly
-//! generate the key pair.
+//! Go ahead and build and run the above code with: `cargo run`. A unique
+//! [`PeerId`](crate::PeerId) should be displayed.
 //!
 //! ## Transport
 //!
-//! Next up we need to construct a transport. After all, we want to send some
-//! bytes from A to B. A transport in libp2p provides connection-oriented
-//! communication channels (e.g. TCP) as well as upgrades on top of those like
-//! authentication and encryption protocols. Technically, a libp2p transport is
-//! anything that implements the [`Transport`] trait.
+//! Next up we need to construct a transport. A transport in libp2p provides
+//! connection-oriented communication channels (e.g. TCP) as well as upgrades
+//! on top of those like authentication and encryption protocols. Technically,
+//! a libp2p transport is anything that implements the [`Transport`] trait.
 //!
 //! Instead of constructing a transport ourselves for this tutorial, we use the
 //! convenience function [`development_transport`](crate::development_transport)
@@ -119,18 +121,18 @@
 //!
 //! ## Network behaviour
 //!
-//! Now it is time to look at another core trait of rust-libp2p - the
+//! Now it is time to look at another core trait of rust-libp2p: the
 //! [`NetworkBehaviour`]. While the previously introduced trait [`Transport`]
 //! defines _how_ to send bytes on the network, a [`NetworkBehaviour`] defines
 //! _what_ bytes to send on the network.
 //!
 //! To make this more concrete, let's take a look at a simple implementation of
-//! the [`NetworkBehaviour`] trait - the [`Ping`](crate::ping::Ping)
+//! the [`NetworkBehaviour`] trait: the [`Ping`](crate::ping::Ping)
 //! [`NetworkBehaviour`]. As you might have guessed, similar to the good old
 //! `ping` network tool, libp2p [`Ping`](crate::ping::Ping) sends a ping to a
-//! remote and expects to receive a pong in turn. The
+//! peer and expects to receive a pong in turn. The
 //! [`Ping`](crate::ping::Ping) [`NetworkBehaviour`] does not care _how_ the
-//! ping or pong messages are send on the network, whether they are sent via
+//! ping and pong messages are sent on the network, whether they are sent via
 //! TCP, whether they are encrypted via [noise](crate::noise) or just in
 //! [plaintext](crate::plaintext). It only cares about _what_ messages are sent
 //! on the network.
@@ -211,14 +213,16 @@
 //!
 //! A [`Multiaddr`] is a self-describing network address and protocol stack that
 //! is used to establish connections to peers. A good introduction to
-//! [`Multiaddr`] can be found on https://docs.libp2p.io/concepts/addressing/
-//! and its specification repository https://github.com/multiformats/multiaddr.
+//! [`Multiaddr`] can be found at
+//! [docs.libp2p.io/concepts/addressing](https://docs.libp2p.io/concepts/addressing/)
+//! and its specification repository
+//! [github.com/multiformats/multiaddr](https://github.com/multiformats/multiaddr/).
 //!
 //! Let's make our local node listen on a new socket.
 //! This socket is listening on multiple network interfaces at the same time. For
-//! each network interface, a new listening address is created, these may change
+//! each network interface, a new listening address is created. These may change
 //! over time as interfaces become available or unavailable.
-//! For example in case of our TCP transport, it may (among others) listen on the
+//! For example, in case of our TCP transport it may (among others) listen on the
 //! loopback interface (localhost) `/ip4/127.0.0.1/tcp/24915` as well as the local
 //! network `/ip4/192.168.178.25tcp/24915`.
 //!
