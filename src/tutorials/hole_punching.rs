@@ -22,7 +22,7 @@
 //!
 //! This tutorial shows hands-on how to overcome firewalls and NATs with libp2p's hole punching
 //! mechanism. Before we get started, please read the [blog
-//! post](https://github.com/ipfs/ipfs-blog/pull/375) to familiarize yourself with libp2p's hole
+//! post](https://blog.ipfs.io/2022-01-20-libp2p-hole-punching/) to familiarize yourself with libp2p's hole
 //! punching mechanism on a conceptual level.
 //!
 //! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
