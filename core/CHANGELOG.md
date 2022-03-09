@@ -1,6 +1,6 @@
 # Unreleased
 
-- Add `PeerId::from_multiaddr` to extract a `PeerId` from a `Multiaddr` that ends in `/p2p/<peer-id>`.
+- Add `PeerId::try_from_multiaddr` to extract a `PeerId` from a `Multiaddr` that ends in `/p2p/<peer-id>`.
 
 # 0.32.0 [2022-02-22]
 
