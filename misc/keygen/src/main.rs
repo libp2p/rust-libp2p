@@ -24,7 +24,7 @@ struct Args {
 
 #[derive(Debug, StructOpt)]
 enum Command {
-    /// Generate from...
+    /// Read from config file
     From {
         /// Provide a IPFS config file
         #[structopt(parse(from_os_str))]
