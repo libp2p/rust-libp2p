@@ -93,7 +93,7 @@ impl PeerId {
     ///
     /// In case the given [`Multiaddr`] ends with `/p2p/<peer-id>`, this function
     /// will return the encapsulated [`PeerId`], otherwise it will return `None`.
-    pub fn from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
+    pub fn try_from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
         address.iter().last().map_or(None, |p| match p {
             Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
             _ => None,
@@ -291,7 +291,7 @@ mod tests {
                 .parse()
                 .unwrap();
 
-        let peer_id = PeerId::from_multiaddr(&address).unwrap();
+        let peer_id = PeerId::try_from_multiaddr(&address).unwrap();
 
         assert_eq!(
             peer_id,
@@ -305,7 +305,7 @@ mod tests {
     fn no_panic_on_extract_peer_id_from_multi_address_if_not_present() {
         let address = format!("/memory/1234").parse().unwrap();
 
-        let maybe_empty = PeerId::from_multiaddr(&address);
+        let maybe_empty = PeerId::try_from_multiaddr(&address);
 
         assert!(maybe_empty.is_none());
     }
