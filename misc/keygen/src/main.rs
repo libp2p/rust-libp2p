@@ -6,8 +6,8 @@ use std::thread;
 
 mod config;
 
-use libp2p::identity::{self, ed25519};
-use libp2p::PeerId;
+use libp2p_core::identity::{self, ed25519};
+use libp2p_core::PeerId;
 use structopt::StructOpt;
 use zeroize::Zeroizing;
 
@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let (tx, rx) = mpsc::channel::<(PeerId, identity::Keypair)>();
 
                 // Find peer IDs in a multithreaded fashion.
-                for _ in 0..num_cpus::get() {
+                for _ in 0..thread::available_parallelism()?.get() {
                     let prefix = prefix.clone();
                     let tx = tx.clone();
 
