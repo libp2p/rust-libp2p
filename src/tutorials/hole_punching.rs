@@ -22,7 +22,7 @@
 //!
 //! This tutorial shows hands-on how to overcome firewalls and NATs with libp2p's hole punching
 //! mechanism. Before we get started, please read the [blog
-//! post](https://github.com/ipfs/ipfs-blog/pull/375) to familiarize yourself with libp2p's hole
+//! post](https://blog.ipfs.io/2022-01-20-libp2p-hole-punching/) to familiarize yourself with libp2p's hole
 //! punching mechanism on a conceptual level.
 //!
 //! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
@@ -30,9 +30,9 @@
 //!
 //! You will need 3 machines for this tutorial:
 //!
-//! - A relay server
+//! - A relay server:
 //!    - Any public server will do, e.g. a cloud provider VM.
-//! - A listening client.
+//! - A listening client:
 //!    - Any computer connected to the internet, but not reachable from outside its own network,
 //!      works.
 //!    - This can e.g. be your friends laptop behind their router (firewall + NAT).
@@ -40,7 +40,7 @@
 //!      Linux's UFW on the same machine.
 //!    - Don't use a machine that is in the same network as the dialing client. (This would require
 //!      NAT hairpinning.)
-//! - A dialing client.
+//! - A dialing client:
 //!    - Like the above, any computer connected to the internet, but not reachable from the outside.
 //!    - Your local machine will likely fulfill these requirements.
 //!
@@ -103,7 +103,7 @@
 //! You can find the binary at `target/debug/examples/client`. In case you built it locally, copy
 //! it to your listening client machine.
 //!
-//! On the listening client machine
+//! On the listening client machine:
 //!
 //! ``` bash
 //! RUST_LOG=info ./client --secret-key-seed 1 --mode listen --relay-address /dns4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
