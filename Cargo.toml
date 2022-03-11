@@ -78,7 +78,7 @@ instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
 lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.3.0", path = "protocols/autonat", optional = true }
-libp2p-core = { version = "0.32.0", path = "core",  default-features = false }
+libp2p-core = { version = "0.32.1", path = "core",  default-features = false }
 libp2p-dcutr = { version = "0.2.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.35.0", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.35.0", path = "protocols/identify", optional = true }
