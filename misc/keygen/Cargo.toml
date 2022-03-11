@@ -1,16 +1,17 @@
 [package]
-name = "peer-id-generator"
-edition = "2021"
-rust-version = "1.56.1"
+name = "keygen"
 version = "0.1.0"
-description = "Generate peer ids that are prefixed with a specific string"
-authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+authors = ["demfabris <demfabris@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
-publish = false
 
 [dependencies]
+structopt = "0.3.26"
+zeroize = "1"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.79"
 libp2p-core = { path = "../../core", default-features = false, version = "0.32.0"}
-num_cpus = "1.8"
+base64 = "0.13.0"

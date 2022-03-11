@@ -21,7 +21,6 @@
 
 //! libp2p circuit relay implementations
 
-pub mod v1;
 pub mod v2;
 
 // Check that we can safely cast a `usize` to a `u64`.
