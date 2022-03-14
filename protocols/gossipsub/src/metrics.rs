@@ -182,7 +182,7 @@ impl Metrics {
         );
 
         let rejected_messages = register_family!(
-            "accepted_messages_per_topic",
+            "rejected_messages_per_topic",
             "Number of rejected messages received for each topic"
         );
 
