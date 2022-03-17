@@ -9,7 +9,7 @@ on:
 jobs:
   test-desktop:
     name: Build and test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         args: [
@@ -34,7 +34,7 @@ jobs:
 
   test-wasm:
     name: Build on WASM
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         toolchain: [
@@ -67,10 +67,7 @@ jobs:
 
     - name: Install a recent version of clang
       run: |
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main"
-        sudo apt-get update
-        sudo apt-get install -y clang-11
+        sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
     - name: Install CMake
       run: sudo apt-get install -y cmake
@@ -86,7 +83,7 @@ jobs:
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: rust
     steps:
@@ -104,7 +101,7 @@ jobs:
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
 
   check-clippy:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
@@ -130,7 +127,7 @@ jobs:
 
   integration-test:
     name: Integration tests
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: rust
     steps:
@@ -148,7 +145,7 @@ jobs:
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
 
   rustfmt:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
