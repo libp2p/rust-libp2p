@@ -67,10 +67,7 @@ jobs:
 
     - name: Install a recent version of clang
       run: |
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main"
-        sudo apt-get update
-        sudo apt-get install -y clang-11
+        sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
     - name: Install CMake
       run: sudo apt-get install -y cmake
