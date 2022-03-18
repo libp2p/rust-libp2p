@@ -92,7 +92,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         event_process
     };
 
-    // The fields of the struct we are interested in (no ignored fields)
+    // The fields of the struct we are interested in (no ignored fields).
     let data_struct_fields = data_struct
         .fields
         .iter()
