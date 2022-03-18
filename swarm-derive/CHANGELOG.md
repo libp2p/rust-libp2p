@@ -1,3 +1,9 @@
+# 0.27.1
+
+- Allow mixing of ignored fields. See [PR 2570].
+
+[PR 2570]: https://github.com/libp2p/rust-libp2p/pull/2570
+
 # 0.27.0 [2022-02-22]
 
 - Adjust to latest changes in `libp2p-swarm`.
