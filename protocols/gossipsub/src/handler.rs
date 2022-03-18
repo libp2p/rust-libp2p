@@ -27,8 +27,9 @@ use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, NegotiationError, OutboundUpgrade, UpgradeError};
-use libp2p_swarm::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
+use libp2p_swarm::handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
 use log::{error, trace, warn};
@@ -123,7 +124,7 @@ pub struct GossipsubHandler {
     idle_timeout: Duration,
 
     /// Collection of errors from attempting an upgrade.
-    upgrade_errors: VecDeque<ProtocolsHandlerUpgrErr<GossipsubHandlerError>>,
+    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<GossipsubHandlerError>>,
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
@@ -196,7 +197,7 @@ impl GossipsubHandler {
     }
 }
 
-impl ProtocolsHandler for GossipsubHandler {
+impl ConnectionHandler for GossipsubHandler {
     type InEvent = GossipsubHandlerIn;
     type OutEvent = HandlerEvent;
     type Error = GossipsubHandlerError;
@@ -285,7 +286,7 @@ impl ProtocolsHandler for GossipsubHandler {
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
-        e: ProtocolsHandlerUpgrErr<
+        e: ConnectionHandlerUpgrErr<
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
@@ -302,7 +303,7 @@ impl ProtocolsHandler for GossipsubHandler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -313,12 +314,12 @@ impl ProtocolsHandler for GossipsubHandler {
         if let Some(error) = self.upgrade_errors.pop_front() {
             let reported_error = match error {
                 // Timeout errors get mapped to NegotiationTimeout and we close the connection.
-                ProtocolsHandlerUpgrErr::Timeout | ProtocolsHandlerUpgrErr::Timer => {
+                ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
                     Some(GossipsubHandlerError::NegotiationTimeout)
                 }
                 // There was an error post negotiation, close the connection.
-                ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
-                ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
+                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
+                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
                     match negotiation_error {
                         NegotiationError::Failed => {
                             // The protocol is not supported
@@ -329,7 +330,7 @@ impl ProtocolsHandler for GossipsubHandler {
                                 self.inbound_substream = None;
                                 self.outbound_substream = None;
                                 self.keep_alive = KeepAlive::No;
-                                return Poll::Ready(ProtocolsHandlerEvent::Custom(
+                                return Poll::Ready(ConnectionHandlerEvent::Custom(
                                     HandlerEvent::PeerKind(PeerKind::NotSupported),
                                 ));
                             } else {
@@ -345,14 +346,14 @@ impl ProtocolsHandler for GossipsubHandler {
 
             // If there was a fatal error, close the connection.
             if let Some(error) = reported_error {
-                return Poll::Ready(ProtocolsHandlerEvent::Close(error));
+                return Poll::Ready(ConnectionHandlerEvent::Close(error));
             }
         }
 
         if !self.peer_kind_sent {
             if let Some(peer_kind) = self.peer_kind.as_ref() {
                 self.peer_kind_sent = true;
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerEvent::PeerKind(
+                return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
                     peer_kind.clone(),
                 )));
             }
@@ -360,7 +361,7 @@ impl ProtocolsHandler for GossipsubHandler {
 
         if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, end the connection.
-            return Poll::Ready(ProtocolsHandlerEvent::Close(
+            return Poll::Ready(ConnectionHandlerEvent::Close(
                 GossipsubHandlerError::MaxInboundSubstreams,
             ));
         }
@@ -371,14 +372,14 @@ impl ProtocolsHandler for GossipsubHandler {
             && !self.outbound_substream_establishing
         {
             if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
-                return Poll::Ready(ProtocolsHandlerEvent::Close(
+                return Poll::Ready(ConnectionHandlerEvent::Close(
                     GossipsubHandlerError::MaxOutboundSubstreams,
                 ));
             }
             let message = self.send_queue.remove(0);
             self.send_queue.shrink_to_fit();
             self.outbound_substream_establishing = true;
-            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: self.listen_protocol.clone().map_info(|()| message),
             });
         }
@@ -398,7 +399,7 @@ impl ProtocolsHandler for GossipsubHandler {
                             }
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
+                            return Poll::Ready(ConnectionHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
                             match error {
@@ -496,13 +497,13 @@ impl ProtocolsHandler for GossipsubHandler {
                                 }
                                 Err(e) => {
                                     error!("Error sending message: {}", e);
-                                    return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                                    return Poll::Ready(ConnectionHandlerEvent::Close(e));
                                 }
                             }
                         }
                         Poll::Ready(Err(e)) => {
                             error!("Outbound substream error while sending output: {:?}", e);
-                            return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                            return Poll::Ready(ConnectionHandlerEvent::Close(e));
                         }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::Yes;
@@ -523,7 +524,9 @@ impl ProtocolsHandler for GossipsubHandler {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
-                        Poll::Ready(Err(e)) => return Poll::Ready(ProtocolsHandlerEvent::Close(e)),
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(ConnectionHandlerEvent::Close(e))
+                        }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::Yes;
                             self.outbound_substream =
@@ -544,7 +547,7 @@ impl ProtocolsHandler for GossipsubHandler {
                         }
                         Poll::Ready(Err(e)) => {
                             warn!("Outbound substream error while closing: {:?}", e);
-                            return Poll::Ready(ProtocolsHandlerEvent::Close(
+                            return Poll::Ready(ConnectionHandlerEvent::Close(
                                 io::Error::new(
                                     io::ErrorKind::BrokenPipe,
                                     "Failed to close outbound substream",

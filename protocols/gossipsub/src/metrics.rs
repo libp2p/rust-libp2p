@@ -23,12 +23,12 @@
 
 use std::collections::HashMap;
 
-use open_metrics_client::encoding::text::Encode;
-use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::{Family, MetricConstructor};
-use open_metrics_client::metrics::gauge::Gauge;
-use open_metrics_client::metrics::histogram::{linear_buckets, Histogram};
-use open_metrics_client::registry::Registry;
+use prometheus_client::encoding::text::Encode;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::{Family, MetricConstructor};
+use prometheus_client::metrics::gauge::Gauge;
+use prometheus_client::metrics::histogram::{linear_buckets, Histogram};
+use prometheus_client::registry::Registry;
 
 use crate::topic::TopicHash;
 use crate::types::{MessageAcceptance, PeerKind};
@@ -40,6 +40,7 @@ const DEFAULT_MAX_TOPICS: usize = 300;
 // store metrics.
 const DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS: usize = 50;
 
+#[derive(Debug, Clone)]
 pub struct Config {
     /// This provides an upper bound to the number of mesh topics we create metrics for. It
     /// prevents unbounded labels being created in the metrics.
@@ -181,7 +182,7 @@ impl Metrics {
         );
 
         let rejected_messages = register_family!(
-            "accepted_messages_per_topic",
+            "rejected_messages_per_topic",
             "Number of rejected messages received for each topic"
         );
 

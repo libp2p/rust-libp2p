@@ -63,7 +63,7 @@ use std::convert::{TryFrom, TryInto};
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
 ///
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Keypair {
     /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),

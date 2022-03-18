@@ -311,39 +311,33 @@ impl Stream for Listen {
                 return Poll::Ready(None);
             };
 
-            for addr in event
-                .new_addrs()
-                .into_iter()
-                .flat_map(|e| e.to_vec().into_iter())
-            {
-                let addr = js_value_to_addr(&addr)?;
-                self.pending_events
-                    .push_back(ListenerEvent::NewAddress(addr));
+            if let Some(addrs) = event.new_addrs() {
+                for addr in addrs.into_iter() {
+                    let addr = js_value_to_addr(&addr)?;
+                    self.pending_events
+                        .push_back(ListenerEvent::NewAddress(addr));
+                }
             }
 
-            for upgrade in event
-                .new_connections()
-                .into_iter()
-                .flat_map(|e| e.to_vec().into_iter())
-            {
-                let upgrade: ffi::ConnectionEvent = upgrade.into();
-                self.pending_events.push_back(ListenerEvent::Upgrade {
-                    local_addr: upgrade.local_addr().parse()?,
-                    remote_addr: upgrade.observed_addr().parse()?,
-                    upgrade: futures::future::ok(Connection::new(upgrade.connection())),
-                });
+            if let Some(upgrades) = event.new_connections() {
+                for upgrade in upgrades.into_iter().cloned() {
+                    let upgrade: ffi::ConnectionEvent = upgrade.into();
+                    self.pending_events.push_back(ListenerEvent::Upgrade {
+                        local_addr: upgrade.local_addr().parse()?,
+                        remote_addr: upgrade.observed_addr().parse()?,
+                        upgrade: futures::future::ok(Connection::new(upgrade.connection())),
+                    });
+                }
             }
 
-            for addr in event
-                .expired_addrs()
-                .into_iter()
-                .flat_map(|e| e.to_vec().into_iter())
-            {
-                match js_value_to_addr(&addr) {
-                    Ok(addr) => self
-                        .pending_events
-                        .push_back(ListenerEvent::NewAddress(addr)),
-                    Err(err) => self.pending_events.push_back(ListenerEvent::Error(err)),
+            if let Some(addrs) = event.expired_addrs() {
+                for addr in addrs.into_iter() {
+                    match js_value_to_addr(&addr) {
+                        Ok(addr) => self
+                            .pending_events
+                            .push_back(ListenerEvent::NewAddress(addr)),
+                        Err(err) => self.pending_events.push_back(ListenerEvent::Error(err)),
+                    }
                 }
             }
         }

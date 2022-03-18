@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{either::IntoEitherHandler, IntoProtocolsHandler, ProtocolsHandler};
+use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
 use crate::{
     DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
     PollParameters,
@@ -36,10 +36,10 @@ where
     L: NetworkBehaviour,
     R: NetworkBehaviour,
 {
-    type ProtocolsHandler = IntoEitherHandler<L::ProtocolsHandler, R::ProtocolsHandler>;
+    type ConnectionHandler = IntoEitherHandler<L::ConnectionHandler, R::ConnectionHandler>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         match self {
             Either::Left(a) => IntoEitherHandler::Left(a.new_handler()),
             Either::Right(b) => IntoEitherHandler::Right(b.new_handler()),
@@ -53,34 +53,29 @@ where
         }
     }
 
-    fn inject_connected(&mut self, peer_id: &PeerId) {
-        match self {
-            Either::Left(a) => a.inject_connected(peer_id),
-            Either::Right(b) => b.inject_connected(peer_id),
-        };
-    }
-
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        match self {
-            Either::Left(a) => a.inject_disconnected(peer_id),
-            Either::Right(b) => b.inject_disconnected(peer_id),
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         match self {
-            Either::Left(a) => {
-                a.inject_connection_established(peer_id, connection, endpoint, errors)
-            }
-            Either::Right(b) => {
-                b.inject_connection_established(peer_id, connection, endpoint, errors)
-            }
+            Either::Left(a) => a.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            ),
+            Either::Right(b) => b.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            ),
         }
     }
 
@@ -89,15 +84,25 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        remaining_established: usize,
     ) {
         match (self, handler) {
-            (Either::Left(behaviour), Either::Left(handler)) => {
-                behaviour.inject_connection_closed(peer_id, connection, endpoint, handler)
-            }
-            (Either::Right(behaviour), Either::Right(handler)) => {
-                behaviour.inject_connection_closed(peer_id, connection, endpoint, handler)
-            }
+            (Either::Left(behaviour), Either::Left(handler)) => behaviour.inject_connection_closed(
+                peer_id,
+                connection,
+                endpoint,
+                handler,
+                remaining_established,
+            ),
+            (Either::Right(behaviour), Either::Right(handler)) => behaviour
+                .inject_connection_closed(
+                    peer_id,
+                    connection,
+                    endpoint,
+                    handler,
+                    remaining_established,
+                ),
             _ => unreachable!(),
         }
     }
@@ -119,7 +124,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match (self, event) {
             (Either::Left(behaviour), Either::Left(event)) => {
@@ -135,7 +140,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
         error: &DialError,
     ) {
         match (self, handler) {
@@ -153,7 +158,7 @@ where
         &mut self,
         local_addr: &Multiaddr,
         send_back_addr: &Multiaddr,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
     ) {
         match (self, handler) {
             (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
@@ -219,7 +224,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(|e| Either::Left(e))

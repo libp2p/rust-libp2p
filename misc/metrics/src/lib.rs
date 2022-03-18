@@ -25,7 +25,10 @@
 //!
 //! See `examples` directory for more.
 
+#[cfg(feature = "dcutr")]
+mod dcutr;
 #[cfg(feature = "gossipsub")]
+#[cfg(not(target_os = "unknown"))]
 mod gossipsub;
 #[cfg(feature = "identify")]
 mod identify;
@@ -37,11 +40,14 @@ mod ping;
 mod relay;
 mod swarm;
 
-use open_metrics_client::registry::Registry;
+use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {
+    #[cfg(feature = "dcutr")]
+    dcutr: dcutr::Metrics,
     #[cfg(feature = "gossipsub")]
+    #[cfg(not(target_os = "unknown"))]
     gossipsub: gossipsub::Metrics,
     #[cfg(feature = "identify")]
     identify: identify::Metrics,
@@ -58,7 +64,7 @@ impl Metrics {
     /// Create a new set of Swarm and protocol [`Metrics`].
     ///
     /// ```
-    /// use open_metrics_client::registry::Registry;
+    /// use prometheus_client::registry::Registry;
     /// use libp2p_metrics::Metrics;
     /// let mut registry = Registry::default();
     /// let metrics = Metrics::new(&mut registry);
@@ -66,7 +72,10 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("libp2p");
         Self {
+            #[cfg(feature = "dcutr")]
+            dcutr: dcutr::Metrics::new(sub_registry),
             #[cfg(feature = "gossipsub")]
+            #[cfg(not(target_os = "unknown"))]
             gossipsub: gossipsub::Metrics::new(sub_registry),
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),

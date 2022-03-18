@@ -37,7 +37,7 @@ use libp2p_request_response::{
     RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -294,7 +294,7 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ProtocolsHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ProtocolsHandler;
+    type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
 
     fn inject_connection_established(
@@ -303,9 +303,15 @@ impl NetworkBehaviour for Behaviour {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         failed_addresses: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
-        self.inner
-            .inject_connection_established(peer, conn, endpoint, failed_addresses);
+        self.inner.inject_connection_established(
+            peer,
+            conn,
+            endpoint,
+            failed_addresses,
+            other_established,
+        );
         let connections = self.connected.entry(*peer).or_default();
         let addr = if endpoint.is_relayed() {
             None
@@ -341,18 +347,23 @@ impl NetworkBehaviour for Behaviour {
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        remaining_established: usize,
     ) {
         self.inner
-            .inject_connection_closed(peer, conn, endpoint, handler);
-        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
-        connections.remove(conn);
+            .inject_connection_closed(peer, conn, endpoint, handler, remaining_established);
+        if remaining_established == 0 {
+            self.connected.remove(peer);
+        } else {
+            let connections = self.connected.get_mut(peer).expect("Peer is connected.");
+            connections.remove(conn);
+        }
     }
 
     fn inject_dial_failure(
         &mut self,
         peer: Option<PeerId>,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
         error: &DialError,
     ) {
         self.inner.inject_dial_failure(peer, handler, error);
@@ -360,11 +371,6 @@ impl NetworkBehaviour for Behaviour {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
         }
-    }
-
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        self.inner.inject_disconnected(peer);
-        self.connected.remove(peer);
     }
 
     fn inject_address_change(
@@ -453,16 +459,12 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         self.inner.new_handler()
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.inner.addresses_of_peer(peer)
-    }
-
-    fn inject_connected(&mut self, peer: &PeerId) {
-        self.inner.inject_connected(peer)
     }
 
     fn inject_event(
@@ -478,7 +480,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         local_addr: &Multiaddr,
         send_back_addr: &Multiaddr,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
     ) {
         self.inner
             .inject_listen_failure(local_addr, send_back_addr, handler)
@@ -499,7 +501,7 @@ impl NetworkBehaviour for Behaviour {
 
 type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::OutEvent,
-    <Behaviour as NetworkBehaviour>::ProtocolsHandler,
+    <Behaviour as NetworkBehaviour>::ConnectionHandler,
 >;
 
 // Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.

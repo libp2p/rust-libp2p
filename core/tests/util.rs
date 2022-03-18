@@ -1,66 +1,8 @@
 #![allow(dead_code)]
 
 use futures::prelude::*;
-use libp2p_core::{
-    connection::{ConnectionHandler, ConnectionHandlerEvent, Substream, SubstreamEndpoint},
-    identity,
-    muxing::{StreamMuxer, StreamMuxerBox},
-    network::{Network, NetworkConfig},
-    transport::{self, memory::MemoryTransport},
-    upgrade, Multiaddr, PeerId, Transport,
-};
-use libp2p_mplex as mplex;
-use libp2p_noise as noise;
-use std::{io, pin::Pin, task::Context, task::Poll};
-
-type TestNetwork = Network<TestTransport, TestHandler>;
-type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
-
-/// Creates a new `TestNetwork` with a TCP transport.
-pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&local_key)
-        .unwrap();
-    let transport: TestTransport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(mplex::MplexConfig::new())
-        .boxed();
-
-    TestNetwork::new(transport, local_public_key.into(), cfg)
-}
-
-#[derive(Debug)]
-pub struct TestHandler();
-
-impl ConnectionHandler for TestHandler {
-    type InEvent = ();
-    type OutEvent = ();
-    type Error = io::Error;
-    type Substream = Substream<StreamMuxerBox>;
-    type OutboundOpenInfo = ();
-
-    fn inject_substream(
-        &mut self,
-        _: Self::Substream,
-        _: SubstreamEndpoint<Self::OutboundOpenInfo>,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
-    {
-        Poll::Pending
-    }
-}
+use libp2p_core::muxing::StreamMuxer;
+use std::{pin::Pin, task::Context, task::Poll};
 
 pub struct CloseMuxer<M> {
     state: CloseMuxerState<M>,

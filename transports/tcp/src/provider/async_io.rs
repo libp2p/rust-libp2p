@@ -44,9 +44,18 @@ impl Provider for Tcp {
 
     fn new_stream(s: net::TcpStream) -> BoxFuture<'static, io::Result<Self::Stream>> {
         async move {
+            // Taken from [`Async::connect`].
+
             let stream = Async::new(s)?;
+
+            // The stream becomes writable when connected.
             stream.writable().await?;
-            Ok(stream)
+
+            // Check if there was an error while connecting.
+            match stream.get_ref().take_error()? {
+                None => Ok(stream),
+                Some(err) => Err(err),
+            }
         }
         .boxed()
     }

@@ -1,4 +1,26 @@
-# 0.6.0 [unreleased]
+# 0.8.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.35.0`.
+
+- Remove support for Circuit Relay v1 protocol.
+
+# 0.7.0 [2022-02-22]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
+# 0.6.1 [2022-02-02]
+
+- Remove empty peer entries in `reservations` `HashMap`. See [PR 2464].
+
+[PR 2464]: https://github.com/libp2p/rust-libp2p/pull/2464
+
+# 0.6.0 [2022-01-27]
 
 - Update dependencies.
 

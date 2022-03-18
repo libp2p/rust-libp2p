@@ -22,7 +22,7 @@
 use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::{connection::ConnectionId, PeerId};
-use open_metrics_client::encoding::text::Encode;
+use prometheus_client::encoding::text::Encode;
 use prost::Message;
 use std::fmt;
 use std::fmt::Debug;

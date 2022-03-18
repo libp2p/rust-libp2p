@@ -29,9 +29,8 @@ use libp2p_core::{
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    AddressScore, DialError, IntoProtocolsHandler, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
-    ProtocolsHandlerUpgrErr,
+    AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError, IntoConnectionHandler,
+    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use lru::LruCache;
 use std::{
@@ -82,7 +81,7 @@ enum Reply {
 
 /// Configuration for the [`Identify`] [`NetworkBehaviour`].
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IdentifyConfig {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
@@ -213,10 +212,10 @@ impl Identify {
 }
 
 impl NetworkBehaviour for Identify {
-    type ProtocolsHandler = IdentifyHandler;
+    type ConnectionHandler = IdentifyHandler;
     type OutEvent = IdentifyEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         IdentifyHandler::new(self.config.initial_delay, self.config.interval)
     }
 
@@ -226,6 +225,7 @@ impl NetworkBehaviour for Identify {
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
         failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
     ) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address, .. } => address.clone(),
@@ -240,8 +240,7 @@ impl NetworkBehaviour for Identify {
         if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
             for addr in failed_addresses
                 .into_iter()
-                .map(|addresses| addresses.into_iter())
-                .flatten()
+                .flat_map(|addresses| addresses.into_iter())
             {
                 entry.remove(addr);
             }
@@ -253,9 +252,13 @@ impl NetworkBehaviour for Identify {
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        remaining_established: usize,
     ) {
-        if let Some(addrs) = self.connected.get_mut(peer_id) {
+        if remaining_established == 0 {
+            self.connected.remove(peer_id);
+            self.pending_push.remove(peer_id);
+        } else if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);
         }
     }
@@ -263,7 +266,7 @@ impl NetworkBehaviour for Identify {
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         error: &DialError,
     ) {
         if let Some(peer_id) = peer_id {
@@ -279,11 +282,6 @@ impl NetworkBehaviour for Identify {
                 }
             }
         }
-    }
-
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        self.connected.remove(peer_id);
-        self.pending_push.remove(peer_id);
     }
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
@@ -302,7 +300,7 @@ impl NetworkBehaviour for Identify {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         match event {
             IdentifyHandlerEvent::Identified(mut info) => {
@@ -356,7 +354,7 @@ impl NetworkBehaviour for Identify {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -433,7 +431,7 @@ impl NetworkBehaviour for Identify {
                             Poll::Ready(Err(err)) => {
                                 let event = IdentifyEvent::Error {
                                     peer_id: peer,
-                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(
+                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
                                         err,
                                     )),
                                 };
@@ -486,7 +484,7 @@ pub enum IdentifyEvent {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ProtocolsHandlerUpgrErr<io::Error>,
+        error: ConnectionHandlerUpgrErr<io::Error>,
     },
 }
 

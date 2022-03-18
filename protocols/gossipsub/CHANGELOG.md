@@ -1,4 +1,34 @@
-# 0.35.0 [unreleased]
+# 0.37.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.35.0`.
+
+- Fix gossipsub metric (see [PR 2558]).
+
+[PR 2558]: https://github.com/libp2p/rust-libp2p/pull/2558
+
+# 0.36.0 [2022-02-22]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
+
+- Emit gossip of all non empty topics (see [PR 2481]).
+
+- Merge NetworkBehaviour's inject_\* paired methods (see [PR 2445]).
+
+- Revert to wasm-timer (see [PR 2506]).
+
+- Do not overwrite msg's peers if put again into mcache (see [PR 2493]).
+
+[PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+[PR 2481]: https://github.com/libp2p/rust-libp2p/pull/2481
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+[PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
+[PR 2493]: https://github.com/libp2p/rust-libp2p/pull/2493
+
+# 0.35.0 [2022-01-27]
 
 - Update dependencies.
 

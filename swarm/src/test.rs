@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    ProtocolsHandler,
+    ConnectionHandler, DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
@@ -35,7 +35,7 @@ use std::task::{Context, Poll};
 /// any further state.
 pub struct MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler,
+    THandler: ConnectionHandler,
 {
     /// The prototype protocols handler that is cloned for every
     /// invocation of `new_handler`.
@@ -50,7 +50,7 @@ where
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler,
+    THandler: ConnectionHandler,
 {
     pub fn new(handler_proto: THandler) -> Self {
         MockBehaviour {
@@ -63,14 +63,14 @@ where
 
 impl<THandler, TOutEvent> NetworkBehaviour for MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ProtocolsHandler + Clone,
+    THandler: ConnectionHandler + Clone,
     THandler::OutEvent: Clone,
     TOutEvent: Send + 'static,
 {
-    type ProtocolsHandler = THandler;
+    type ConnectionHandler = THandler;
     type OutEvent = TOutEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         self.handler_proto.clone()
     }
 
@@ -84,7 +84,7 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 }
@@ -99,14 +99,12 @@ where
     inner: TInner,
 
     pub addresses_of_peer: Vec<PeerId>,
-    pub inject_connected: Vec<PeerId>,
-    pub inject_disconnected: Vec<PeerId>,
-    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
-    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint)>,
+    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub inject_event: Vec<(
         PeerId,
         ConnectionId,
-        <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     )>,
     pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
@@ -127,8 +125,6 @@ where
         Self {
             inner,
             addresses_of_peer: Vec::new(),
-            inject_connected: Vec::new(),
-            inject_disconnected: Vec::new(),
             inject_connection_established: Vec::new(),
             inject_connection_closed: Vec::new(),
             inject_event: Vec::new(),
@@ -147,8 +143,6 @@ where
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
-        self.inject_connected = Vec::new();
-        self.inject_disconnected = Vec::new();
         self.inject_connection_established = Vec::new();
         self.inject_connection_closed = Vec::new();
         self.inject_event = Vec::new();
@@ -165,6 +159,18 @@ where
         &mut self.inner
     }
 
+    pub fn num_connections_to_peer(&self, peer: PeerId) -> usize {
+        self.inject_connection_established
+            .iter()
+            .filter(|(peer_id, _, _, _)| *peer_id == peer)
+            .count()
+            - self
+                .inject_connection_closed
+                .iter()
+                .filter(|(peer_id, _, _, _)| *peer_id == peer)
+                .count()
+    }
+
     /// Checks that when the expected number of closed connection notifications are received, a
     /// given number of expected disconnections have been received as well.
     ///
@@ -175,7 +181,13 @@ where
         expected_disconnections: usize,
     ) -> bool {
         if self.inject_connection_closed.len() == expected_closed_connections {
-            assert_eq!(self.inject_disconnected.len(), expected_disconnections);
+            assert_eq!(
+                self.inject_connection_closed
+                    .iter()
+                    .filter(|(.., remaining_established)| { *remaining_established == 0 })
+                    .count(),
+                expected_disconnections
+            );
             return true;
         }
 
@@ -192,7 +204,15 @@ where
         expected_connections: usize,
     ) -> bool {
         if self.inject_connection_established.len() == expected_established_connections {
-            assert_eq!(self.inject_connected.len(), expected_connections);
+            assert_eq!(
+                self.inject_connection_established
+                    .iter()
+                    .filter(|(.., reported_aditional_connections)| {
+                        *reported_aditional_connections == 0
+                    })
+                    .count(),
+                expected_connections
+            );
             return true;
         }
 
@@ -203,13 +223,13 @@ where
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent:
+    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
         Clone,
 {
-    type ProtocolsHandler = TInner::ProtocolsHandler;
+    type ConnectionHandler = TInner::ConnectionHandler;
     type OutEvent = TInner::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         self.inner.new_handler()
     }
 
@@ -218,38 +238,49 @@ where
         self.inner.addresses_of_peer(p)
     }
 
-    fn inject_connected(&mut self, peer: &PeerId) {
-        assert!(
-            self.inject_connection_established
-                .iter()
-                .any(|(peer_id, _, _)| peer_id == peer),
-            "`inject_connected` is called after at least one `inject_connection_established`."
-        );
-        self.inject_connected.push(peer.clone());
-        self.inner.inject_connected(peer);
-    }
-
     fn inject_connection_established(
         &mut self,
         p: &PeerId,
         c: &ConnectionId,
         e: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
-        self.inject_connection_established
-            .push((p.clone(), c.clone(), e.clone()));
-        self.inner.inject_connection_established(p, c, e, errors);
-    }
+        let mut other_peer_connections = self
+            .inject_connection_established
+            .iter()
+            .rev() // take last to first
+            .filter_map(|(peer, .., other_established)| {
+                if p == peer {
+                    Some(other_established)
+                } else {
+                    None
+                }
+            })
+            .take(other_established);
 
-    fn inject_disconnected(&mut self, peer: &PeerId) {
-        assert!(
-            self.inject_connection_closed
-                .iter()
-                .any(|(peer_id, _, _)| peer_id == peer),
-            "`inject_disconnected` is called after at least one `inject_connection_closed`."
-        );
-        self.inject_disconnected.push(*peer);
-        self.inner.inject_disconnected(peer);
+        // We are informed that there are `other_established` additional connections. Ensure that the
+        // number of previous connections is consistent with this
+        if let Some(&prev) = other_peer_connections.next() {
+            if prev < other_established {
+                assert_eq!(
+                    prev,
+                    other_established - 1,
+                    "Inconsistent connection reporting"
+                )
+            }
+            assert_eq!(other_peer_connections.count(), other_established - 1);
+        } else {
+            assert_eq!(other_established, 0)
+        }
+        self.inject_connection_established.push((
+            p.clone(),
+            c.clone(),
+            e.clone(),
+            other_established,
+        ));
+        self.inner
+            .inject_connection_established(p, c, e, errors, other_established);
     }
 
     fn inject_connection_closed(
@@ -257,35 +288,66 @@ where
         p: &PeerId,
         c: &ConnectionId,
         e: &ConnectedPoint,
-        handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        remaining_established: usize,
     ) {
-        let connection = (p.clone(), c.clone(), e.clone());
+        let mut other_closed_connections = self
+            .inject_connection_established
+            .iter()
+            .rev() // take last to first
+            .filter_map(|(peer, .., remaining_established)| {
+                if p == peer {
+                    Some(remaining_established)
+                } else {
+                    None
+                }
+            })
+            .take(remaining_established);
+
+        // We are informed that there are `other_established` additional connections. Ensure that the
+        // number of previous connections is consistent with this
+        if let Some(&prev) = other_closed_connections.next() {
+            if prev < remaining_established {
+                assert_eq!(
+                    prev,
+                    remaining_established - 1,
+                    "Inconsistent closed connection reporting"
+                )
+            }
+            assert_eq!(other_closed_connections.count(), remaining_established - 1);
+        } else {
+            assert_eq!(remaining_established, 0)
+        }
         assert!(
-            self.inject_connection_established.contains(&connection),
+            self.inject_connection_established
+                .iter()
+                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint) == (p, c, e)),
             "`inject_connection_closed` is called only for connections for \
             which `inject_connection_established` was called first."
         );
-        self.inject_connection_closed.push(connection);
-        self.inner.inject_connection_closed(p, c, e, handler);
+        self.inject_connection_closed
+            .push((*p, *c, e.clone(), remaining_established));
+        self.inner
+            .inject_connection_closed(p, c, e, handler, remaining_established);
     }
 
     fn inject_event(
         &mut self,
         p: PeerId,
         c: ConnectionId,
-        e: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        e: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         assert!(
             self.inject_connection_established
                 .iter()
-                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
+                .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
             "`inject_event` is called for reported connections."
         );
         assert!(
             !self
                 .inject_connection_closed
                 .iter()
-                .any(|(peer_id, conn_id, _)| *peer_id == p && c == *conn_id),
+                .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
             "`inject_event` is never called for closed connections."
         );
 
@@ -296,7 +358,7 @@ where
     fn inject_dial_failure(
         &mut self,
         p: Option<PeerId>,
-        handler: Self::ProtocolsHandler,
+        handler: Self::ConnectionHandler,
         error: &DialError,
     ) {
         self.inject_dial_failure.push(p);
@@ -342,7 +404,7 @@ where
         &mut self,
         cx: &mut Context,
         args: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

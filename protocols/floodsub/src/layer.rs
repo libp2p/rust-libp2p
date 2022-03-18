@@ -27,6 +27,7 @@ use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler, PollParameters,
@@ -280,14 +281,26 @@ impl Floodsub {
 }
 
 impl NetworkBehaviour for Floodsub {
-    type ProtocolsHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
+    type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         Default::default()
     }
 
-    fn inject_connected(&mut self, id: &PeerId) {
+    fn inject_connection_established(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: Option<&Vec<Multiaddr>>,
+        other_established: usize,
+    ) {
+        if other_established > 0 {
+            // We only care about the first time a peer connects.
+            return;
+        }
+
         // We need to send our subscriptions to the newly-connected node.
         if self.target_peers.contains(id) {
             for topic in self.subscribed_topics.iter().cloned() {
@@ -309,7 +322,19 @@ impl NetworkBehaviour for Floodsub {
         self.connected_peers.insert(*id, SmallVec::new());
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId) {
+    fn inject_connection_closed(
+        &mut self,
+        id: &PeerId,
+        _: &ConnectionId,
+        _: &ConnectedPoint,
+        _: Self::ConnectionHandler,
+        remaining_established: usize,
+    ) {
+        if remaining_established > 0 {
+            // we only care about peer disconnections
+            return;
+        }
+
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in.is_some());
 
@@ -449,7 +474,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

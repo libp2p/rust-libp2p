@@ -217,7 +217,7 @@ mod network {
         ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
         RequestResponseMessage, ResponseChannel,
     };
-    use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
+    use libp2p::swarm::{ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent};
     use libp2p::{NetworkBehaviour, Swarm};
     use std::collections::{HashMap, HashSet};
     use std::iter;
@@ -404,7 +404,7 @@ mod network {
             &mut self,
             event: SwarmEvent<
                 ComposedEvent,
-                EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>,
+                EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
             >,
         ) {
             match event {

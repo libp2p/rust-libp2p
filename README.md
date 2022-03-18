@@ -24,12 +24,15 @@ This repository is the central place for Rust development of the [libp2p](https:
 - For **discussions and questions related to multiple libp2p implementations**
   please use the libp2p _Discourse_ forum https://discuss.libp2p.io.
 
+- For general project updates and discussions join the [biweekly libp2p Community
+  Calls](https://discuss.libp2p.io/t/libp2p-community-calls/1157).
+
 ## Repository Structure
 
 The main components of this repository are structured as follows:
 
-  * `core/`: The implementation of `libp2p-core` with its `Network`,
-    `Transport` and `StreamMuxer` API on which almost all other crates depend.
+  * `core/`: The implementation of `libp2p-core` with its `Transport` and
+    `StreamMuxer` API on which almost all other crates depend.
 
   * `transports/`: Implementations of transport protocols (e.g. TCP) and protocol upgrades
     (e.g. for authenticated encryption, compression, ...) based on the `libp2p-core` `Transport`
@@ -40,7 +43,7 @@ The main components of this repository are structured as follows:
     Multiplexing protocols are (mandatory) `Transport` upgrades.
 
   * `swarm/`: The implementation of `libp2p-swarm` building on `libp2p-core`
-    with the central interfaces `NetworkBehaviour` and `ProtocolsHandler` used
+    with the central interfaces `NetworkBehaviour` and `ConnectionHandler` used
     to implement application protocols (see `protocols/`).
 
   * `protocols/`: Implementations of application protocols based on the

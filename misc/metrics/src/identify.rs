@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::histogram::{exponential_buckets, Histogram};
-use open_metrics_client::registry::Registry;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
+use prometheus_client::registry::Registry;
 use std::iter;
 
 pub struct Metrics {
