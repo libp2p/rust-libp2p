@@ -28,5 +28,5 @@ void = "1.0.2"
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
 env_logger = "0.9.0"
-libp2p = { path = "../.." }
+libp2p = { path = "../..", default-features = false, features = ["mdns", "tcp-async-io", "dns-async-std", "websocket", "noise", "mplex", "yamux"] }
 tokio = { version = "1.15", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
