@@ -45,7 +45,7 @@
 //! ```
 //!
 //! The two nodes should then connect.
-#![feature(trivial_bounds, hash_drain_filter)]
+#![feature(trivial_bounds)]
 
 use env_logger::{Builder, Env};
 use libp2p::core::upgrade;
