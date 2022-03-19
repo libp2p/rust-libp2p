@@ -45,21 +45,93 @@
 //! ```
 //!
 //! The two nodes should then connect.
+#![feature(trivial_bounds, hash_drain_filter)]
 
-use async_std::io;
 use env_logger::{Builder, Env};
-use futures::{prelude::*, select};
+use libp2p::core::upgrade;
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
+use libp2p::NetworkBehaviour;
+use libp2p::Transport;
 use libp2p::{gossipsub, identity, swarm::SwarmEvent, Multiaddr, PeerId};
+use libp2p_mdns::{Mdns, MdnsConfig, MdnsEvent};
+use libp2p_swarm::NetworkBehaviourEventProcess;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
+use tokio::io::{self, AsyncBufReadExt};
+use tokio_stream::StreamExt as _;
 
-#[async_std::main]
+#[derive(NetworkBehaviour)]
+#[behaviour(event_process = true)]
+struct Behaviour {
+    gossipsub: gossipsub::Gossipsub,
+    mdns: Mdns,
+    #[behaviour(ignore)]
+    sender: tokio::sync::mpsc::Sender<PeerId>,
+    #[behaviour(ignore)]
+    peers: HashMap<PeerId, Multiaddr>,
+}
+
+impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
+    // Called when `mdns` produces an event.
+    fn inject_event(&mut self, event: MdnsEvent) {
+        match event {
+            MdnsEvent::Discovered(list) => {
+                use libp2p_swarm::NetworkBehaviour;
+
+                for (peer_id, _) in list {
+                    if !self.peers.contains_key(&peer_id) {
+                        match self.sender.try_send(peer_id) {
+                            Ok(_) => {
+                                let address = self.addresses_of_peer(&peer_id).first().unwrap();
+                                self.peers.insert(peer_id, addresses);
+                            }
+                            Err(_) => eprintln!("Failed to send."),
+                        }
+                    }
+
+                    // Or you can just add an explicit peer.
+                    // Note: This peer will not be in the mesh.
+                    // This will lead to the IdleTimeout that will disconnect an explicit peer if this peer didn't send or didn't accept a message for the specific time.
+                    // You can change IdleTimout timer via `GossipsubConfig` with the method `idle_timeout()`.
+                    // self.gossipsub.add_explicit_peer(&peer_id); <-- adding an explicit peer.
+                }
+            }
+            MdnsEvent::Expired(list) => {
+                for (peer_id, address) in list {
+                    if self.peers.contains_key(&peer_id) && !self.mdns.has_node(&peer_id) {
+                        println!("Expired Peer | {:?} | {:?}", peer_id, address);
+                        self.peers.remove(&peer_id);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
+    fn inject_event(&mut self, event: GossipsubEvent) {
+        if let GossipsubEvent::Message {
+            propagation_source: peer,
+            message: msg,
+            ..
+        } = event
+        {
+            println!(
+                "Got message from Peer | {:?} | {:?}",
+                peer,
+                String::from_utf8_lossy(&msg.data)
+            );
+        }
+    }
+}
+
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -68,11 +140,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
+    let noise_keys = libp2p::noise::Keypair::<libp2p::noise::X25519Spec>::new()
+        .into_authentic(&local_key)
+        .expect("Signing libp2p-noise static DH keypair failed.");
+
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::development_transport(local_key.clone()).await?;
+    let transport = libp2p::tcp::TokioTcpConfig::new()
+        .nodelay(true)
+        .upgrade(upgrade::Version::V1)
+        // Note: Only the XX handshake pattern is currently guaranteed to provide interoperability with other libp2p implementations.
+        .authenticate(libp2p::noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(libp2p::mplex::MplexConfig::new())
+        .boxed();
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net");
+
+    let (sender, mut receiver) =
+        tokio::sync::mpsc::channel::<PeerId>(std::mem::size_of::<PeerId>());
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
@@ -85,12 +170,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
-            .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+            .heartbeat_interval(Duration::from_secs(10)) //  Heartbeat sends empty messages to insure that connect is alive.
             .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-            .message_id_fn(message_id_fn) // content-address messages. No two messages of the
-            // same content will be propagated.
+            .message_id_fn(message_id_fn) // Content-address messages. No two messages of the tame content will be propagated.
+            .idle_timeout(Duration::from_secs(5 * 60)) // IdleTimeout exists for the explicit peers that aren't in the mesh.
+            // If the peer doesn't in the mesh or doesn't accept/send the messages for a specific time (IdleTimeout),
+            // It will be disconnected from the peer.
             .build()
-            .expect("Valid config");
+            .expect("Failed to build a GossipsubConfig");
         // build a gossipsub network behaviour
         let mut gossipsub: gossipsub::Gossipsub =
             gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
@@ -99,17 +186,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // subscribes to our topic
         gossipsub.subscribe(&topic).unwrap();
 
-        // add an explicit peer if one was provided
-        if let Some(explicit) = std::env::args().nth(2) {
-            let explicit = explicit.clone();
-            match explicit.parse() {
-                Ok(id) => gossipsub.add_explicit_peer(&id),
-                Err(err) => println!("Failed to parse explicit peer id: {:?}", err),
-            }
-        }
+        let behaviour = Behaviour {
+            gossipsub,
+            mdns: Mdns::new(MdnsConfig::default()).await.unwrap(),
+            sender,
+            peers: Default::default(),
+        };
 
         // build the swarm
-        libp2p::Swarm::new(transport, gossipsub, local_peer_id)
+        libp2p::swarm::SwarmBuilder::new(transport, behaviour, local_peer_id)
+            .executor(Box::new(|future| {
+                tokio::spawn(future);
+            }))
+            .build()
     };
 
     // Listen on all interfaces and whatever port the OS assigns
@@ -119,42 +208,54 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
-        let address: Multiaddr = to_dial.parse().expect("User to provide valid address.");
+        let address: Multiaddr = to_dial
+            .parse()
+            .expect("Failed to parse provided `Multiaddr`.");
         match swarm.dial(address.clone()) {
-            Ok(_) => println!("Dialed {:?}", address),
+            Ok(_) => println!("Dialed {:?}.", address),
             Err(e) => println!("Dial {:?} failed: {:?}", address, e),
-        };
+        }
     }
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
+    let mut stdin =
+        tokio_stream::wrappers::LinesStream::new(io::BufReader::new(io::stdin()).lines()).fuse();
 
     // Kick it off
     loop {
-        select! {
-            line = stdin.select_next_some() => {
+        tokio::select! {
+            Some(line) = stdin.next() => {
                 if let Err(e) = swarm
                     .behaviour_mut()
+                    .gossipsub
                     .publish(topic.clone(), line.expect("Stdin not to close").as_bytes())
                 {
                     println!("Publish error: {:?}", e);
                 }
             },
-            event = swarm.select_next_some() => match event {
-                SwarmEvent::Behaviour(GossipsubEvent::Message {
-                    propagation_source: peer_id,
-                    message_id: id,
-                    message,
-                }) => println!(
-                    "Got message: {} with id: {} from peer: {:?}",
-                    String::from_utf8_lossy(&message.data),
-                    id,
-                    peer_id
-                ),
+            Some(event) = tokio_stream::StreamExt::next(&mut swarm) => match event {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {:?}", address);
+                    println!("Now Listening | {:?}", address);
                 }
-                _ => {}
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    ..
+                } => {
+                    println!("Established Connection with Peer | {:?}", peer_id);
+                }
+                _ => (),
+            },
+            Some(peer_id) = receiver.recv() => {
+                if let Some(address) = swarm
+                    .behaviour()
+                    .peers
+                    .get(&peer_id)
+                    .cloned()
+                {
+                    if let Err(e) = swarm.dial(address) {
+                        eprintln!("Failed to dial: {:?}", e);
+                    }
+                }
             }
         }
     }
