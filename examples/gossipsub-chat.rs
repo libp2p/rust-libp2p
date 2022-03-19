@@ -45,8 +45,6 @@
 //! ```
 //!
 //! The two nodes should then connect.
-#![feature(trivial_bounds)]
-
 use env_logger::{Builder, Env};
 use libp2p::core::upgrade;
 use libp2p::gossipsub::MessageId;
@@ -89,7 +87,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                         match self.sender.try_send(peer_id) {
                             Ok(_) => {
                                 let address = self.addresses_of_peer(&peer_id).first().unwrap();
-                                self.peers.insert(peer_id, addresses);
+                                self.peers.insert(peer_id, address);
                             }
                             Err(_) => eprintln!("Failed to send."),
                         }
