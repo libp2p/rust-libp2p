@@ -87,7 +87,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                         match self.sender.try_send(peer_id) {
                             Ok(_) => {
                                 let address = self.addresses_of_peer(&peer_id).first().unwrap();
-                                self.peers.insert(peer_id, address);
+                                self.peers.insert(peer_id, *address);
                             }
                             Err(_) => eprintln!("Failed to send."),
                         }
