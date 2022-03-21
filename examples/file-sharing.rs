@@ -499,9 +499,8 @@ mod network {
                         }
                     }
                 }
-                // Exclude these two events from panic to prevent unexpected panic. (Issue #2546)
-                SwarmEvent::IncomingConnectionError { error, .. } => println!("{}", error),
-                SwarmEvent::Dialing(peer_id) => println!("{}", peer_id),
+                SwarmEvent::IncomingConnectionError { .. } => {},
+                SwarmEvent::Dialing(peer_id) => println!("Dialing {}", peer_id),
                 e => panic!("{:?}", e),
             }
         }
