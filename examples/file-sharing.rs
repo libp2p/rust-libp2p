@@ -499,7 +499,7 @@ mod network {
                         }
                     }
                 }
-                SwarmEvent::IncomingConnectionError { .. } => {},
+                SwarmEvent::IncomingConnectionError { .. } => {}
                 SwarmEvent::Dialing(peer_id) => println!("Dialing {}", peer_id),
                 e => panic!("{:?}", e),
             }
