@@ -319,6 +319,16 @@ where
     }
 }
 
+/// Split [`MultiHandler`] into parts.
+impl<K, H> IntoIterator for MultiHandler<K, H> {
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = std::collections::hash_map::IntoIter<K, H>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.handlers.into_iter()
+    }
+}
+
 /// A [`IntoConnectionHandler`] for multiple other `IntoConnectionHandler`s.
 #[derive(Clone)]
 pub struct IntoMultiHandler<K, H> {
