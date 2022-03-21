@@ -319,7 +319,7 @@ where
     }
 }
 
-/// Split `MultiHandler` into parts.
+/// Split [`MultiHandler`] into parts.
 impl<K, H> IntoIterator for MultiHandler<K, H> {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = std::collections::hash_map::IntoIter<K, H>;
