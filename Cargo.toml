@@ -153,5 +153,21 @@ members = [
 ]
 
 [[example]]
+name = "chat"
+required-features = ["floodsub"]
+
+[[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
+
+[[example]]
+name = "file-sharing"
+required-features = ["request-response"]
+
+[[example]]
+name = "gossipsub-chat"
+required-features = ["gossipsub"]
+
+[[example]]
+name = "ipfs-private"
+required-features = ["gossipsub"]
