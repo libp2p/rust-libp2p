@@ -1,7 +1,9 @@
 # 0.35.0 [unreleased]
 
+- Add impl `IntoIterator` for `MultiHandler`. See [PR 2572].
 - Remove `Send` bound from `NetworkBehaviour`. See [PR 2535].
 
+[PR 2572]: https://github.com/libp2p/rust-libp2p/pull/2572/
 [PR 2535]: https://github.com/libp2p/rust-libp2p/pull/2535/
 
 # 0.34.0 [2022-02-22]
