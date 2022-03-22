@@ -155,3 +155,7 @@ members = [
 [[example]]
 name = "chat-tokio"
 required-features = ["tcp-tokio", "mdns"]
+
+[[example]]
+name = "peer-discovery"
+required-features = ["tcp-tokio"]
