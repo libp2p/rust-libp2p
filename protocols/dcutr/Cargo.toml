@@ -20,13 +20,13 @@ instant = "0.1.11"
 libp2p-core = { version = "0.32", path = "../../core" }
 libp2p-swarm = { version = "0.35.0", path = "../../swarm" }
 log = "0.4"
-prost = "0.7"
+prost = "0.9"
 thiserror = "1.0"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
 
 [build-dependencies]
-prost-build = "0.7"
+prost-build = "0.9"
 
 [dev-dependencies]
 env_logger = "0.8.3"

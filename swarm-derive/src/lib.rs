@@ -92,6 +92,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         event_process
     };
 
+    // The fields of the struct we are interested in (no ignored fields).
+    let data_struct_fields = data_struct
+        .fields
+        .iter()
+        .filter(|f| !is_ignored(f))
+        .collect::<Vec<_>>();
+
     // The final out event.
     // If we find a `#[behaviour(out_event = "Foo")]` attribute on the struct, we set `Foo` as
     // the out event. Otherwise we use `()`.
@@ -117,10 +124,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
-        let additional = data_struct
-            .fields
+        let additional = data_struct_fields
             .iter()
-            .filter(|x| !is_ignored(x))
             .flat_map(|field| {
                 let ty = &field.ty;
                 vec![
@@ -147,57 +152,42 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `addresses_of_peer()`.
     let addresses_of_peer_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { out.extend(self.#i.addresses_of_peer(peer_id)); },
-                    None => quote! { out.extend(self.#field_n.addresses_of_peer(peer_id)); },
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { out.extend(self.#i.addresses_of_peer(peer_id)); },
+                None => quote! { out.extend(self.#field_n.addresses_of_peer(peer_id)); },
             })
     };
 
     // Build the list of statements to put in the body of `inject_connection_established()`.
     let inject_connection_established_stmts = {
-        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(field) {
-                return None;
-            }
-            Some(match field.ident {
+        data_struct_fields.iter().enumerate().map(move |(field_n, field)| {
+            match field.ident {
                 Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint, errors, other_established); },
                 None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint, errors, other_established); },
-            })
+            }
         })
     };
 
     // Build the list of statements to put in the body of `inject_address_change()`.
     let inject_address_change_stmts = {
-        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(field) {
-                return None;
-            }
-            Some(match field.ident {
+        data_struct_fields.iter().enumerate().map(move |(field_n, field)| {
+            match field.ident {
                 Some(ref i) => quote!{ self.#i.inject_address_change(peer_id, connection_id, old, new); },
                 None => quote!{ self.#field_n.inject_address_change(peer_id, connection_id, old, new); },
-            })
+            }
         })
     };
 
     // Build the list of statements to put in the body of `inject_connection_closed()`.
     let inject_connection_closed_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
             // The outmost handler belongs to the last behaviour.
             .rev()
-            .filter(|f| !is_ignored(f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
@@ -222,13 +212,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_dial_failure()`.
     let inject_dial_failure_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
             // The outmost handler belongs to the last behaviour.
             .rev()
-            .filter(|f| !is_ignored(f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
@@ -258,12 +246,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_listen_failure()`.
     let inject_listen_failure_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
             .rev()
-            .filter(|f| !is_ignored(f.1))
             .enumerate()
             .map(move |(enum_n, (field_n, field))| {
                 let handler = if field_n == 0 {
@@ -288,125 +274,78 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_new_listener()`.
     let inject_new_listener_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_new_listener(id); },
-                    None => quote! { self.#field_n.inject_new_listener(id); },
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.inject_new_listener(id); },
+                None => quote! { self.#field_n.inject_new_listener(id); },
             })
     };
 
     // Build the list of statements to put in the body of `inject_new_listen_addr()`.
     let inject_new_listen_addr_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_new_listen_addr(id, addr); },
-                    None => quote! { self.#field_n.inject_new_listen_addr(id, addr); },
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.inject_new_listen_addr(id, addr); },
+                None => quote! { self.#field_n.inject_new_listen_addr(id, addr); },
             })
     };
 
     // Build the list of statements to put in the body of `inject_expired_listen_addr()`.
     let inject_expired_listen_addr_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_expired_listen_addr(id, addr); },
-                    None => quote! { self.#field_n.inject_expired_listen_addr(id, addr); },
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.inject_expired_listen_addr(id, addr); },
+                None => quote! { self.#field_n.inject_expired_listen_addr(id, addr); },
             })
     };
 
     // Build the list of statements to put in the body of `inject_new_external_addr()`.
     let inject_new_external_addr_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_new_external_addr(addr); },
-                    None => quote! { self.#field_n.inject_new_external_addr(addr); },
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.inject_new_external_addr(addr); },
+                None => quote! { self.#field_n.inject_new_external_addr(addr); },
             })
     };
 
     // Build the list of statements to put in the body of `inject_expired_external_addr()`.
     let inject_expired_external_addr_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { self.#i.inject_expired_external_addr(addr); },
-                    None => quote! { self.#field_n.inject_expired_external_addr(addr); },
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.inject_expired_external_addr(addr); },
+                None => quote! { self.#field_n.inject_expired_external_addr(addr); },
             })
     };
 
     // Build the list of statements to put in the body of `inject_listener_error()`.
     let inject_listener_error_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-                Some(match field.ident {
-                    Some(ref i) => quote!(self.#i.inject_listener_error(id, err);),
-                    None => quote!(self.#field_n.inject_listener_error(id, err);),
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote!(self.#i.inject_listener_error(id, err);),
+                None => quote!(self.#field_n.inject_listener_error(id, err);),
             })
     };
 
     // Build the list of statements to put in the body of `inject_listener_closed()`.
     let inject_listener_closed_stmts = {
-        data_struct
-            .fields
+        data_struct_fields
             .iter()
             .enumerate()
-            .filter_map(move |(field_n, field)| {
-                if is_ignored(field) {
-                    return None;
-                }
-                Some(match field.ident {
-                    Some(ref i) => quote!(self.#i.inject_listener_closed(id, reason);),
-                    None => quote!(self.#field_n.inject_listener_closed(id, reason);),
-                })
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote!(self.#i.inject_listener_closed(id, reason);),
+                None => quote!(self.#field_n.inject_listener_closed(id, reason);),
             })
     };
 
@@ -414,14 +353,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
     // We call `inject_event` on the corresponding child.
-    let inject_node_event_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+    let inject_node_event_stmts = data_struct_fields.iter().enumerate().enumerate().map(|(enum_n, (field_n, field))| {
         let mut elem = if enum_n != 0 {
             quote!{ #either_ident::Second(ev) }
         } else {
             quote!{ ev }
         };
 
-        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - enum_n {
+        for _ in 0 .. data_struct_fields.len() - 1 - enum_n {
             elem = quote!{ #either_ident::First(#elem) };
         }
 
@@ -434,10 +373,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // The [`ConnectionHandler`] associated type.
     let protocols_handler_ty = {
         let mut ph_ty = None;
-        for field in data_struct.fields.iter() {
-            if is_ignored(field) {
-                continue;
-            }
+        for field in data_struct_fields.iter() {
             let ty = &field.ty;
             let field_info = quote! { <#ty as #trait_to_impl>::ConnectionHandler };
             match ph_ty {
@@ -454,11 +390,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let new_handler = {
         let mut out_handler = None;
 
-        for (field_n, field) in data_struct.fields.iter().enumerate() {
-            if is_ignored(field) {
-                continue;
-            }
-
+        for (field_n, field) in data_struct_fields.iter().enumerate() {
             let field_name = match field.ident {
                 Some(ref i) => quote! { self.#i },
                 None => quote! { self.#field_n },
@@ -505,7 +437,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+    let poll_stmts = data_struct_fields.iter().enumerate().enumerate().map(|(enum_n, (field_n, field))| {
         let field_name = match field.ident {
             Some(ref i) => quote!{ self.#i },
             None => quote!{ self.#field_n },
@@ -516,7 +448,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         } else {
             quote!{ event }
         };
-        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - enum_n {
+        for _ in 0 .. data_struct_fields.len() - 1 - enum_n {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
@@ -527,10 +459,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         let provided_handler_and_new_handlers = {
             let mut out_handler = None;
 
-            for (f_n, f) in data_struct.fields.iter().enumerate() {
-                if is_ignored(f) {
-                    continue;
-                }
+            for (f_n, f) in data_struct_fields.iter().enumerate() {
 
                 let f_name = match f.ident {
                     Some(ref i) => quote! { self.#i },
