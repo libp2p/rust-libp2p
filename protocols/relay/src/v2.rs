@@ -30,6 +30,13 @@ mod copy_future;
 mod protocol;
 pub mod relay;
 
+pub use protocol::{
+    inbound_hop::FatalUpgradeError as InHopUpgradeError,
+    inbound_stop::FatalUpgradeError as InStopUpgradeError,
+    outbound_hop::FatalUpgradeError as OutHopUpgradeError,
+    outbound_stop::FatalUpgradeError as OutStopUpgradeError,
+};
+
 /// The ID of an outgoing / incoming, relay / destination request.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
