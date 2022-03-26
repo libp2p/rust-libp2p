@@ -31,10 +31,10 @@ mod protocol;
 pub mod relay;
 
 pub use protocol::{
-    inbound_hop::FatalUpgradeError as InHopUpgradeError,
-    inbound_stop::FatalUpgradeError as InStopUpgradeError,
-    outbound_hop::FatalUpgradeError as OutHopUpgradeError,
-    outbound_stop::FatalUpgradeError as OutStopUpgradeError,
+    inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
+    inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,
+    outbound_hop::FatalUpgradeError as OutboundHopFatalUpgradeError,
+    outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError,
 };
 
 /// The ID of an outgoing / incoming, relay / destination request.
