@@ -1,4 +1,12 @@
 # 0.8.0 [unreleased]
+- Made Relay Error Types visibility to public
+   > inbound_hop::FatalUpgradeError   as InboundHopFatalUpgradeError,
+   > 
+   > inbound_stop::FatalUpgradeError  as InboundStopFatalUpgradeError,
+   > 
+   > outbound_hop::FatalUpgradeError  as OutboundHopFatalUpgradeError,
+   > 
+   > outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError,
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
