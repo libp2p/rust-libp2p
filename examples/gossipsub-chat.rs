@@ -46,13 +46,11 @@
 //!
 //! The two nodes should then connect.
 use env_logger::{Builder, Env};
-use libp2p::core::upgrade;
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
 use libp2p::NetworkBehaviour;
-use libp2p::Transport;
 use libp2p::{gossipsub, identity, swarm::SwarmEvent, Multiaddr, PeerId};
 use libp2p_mdns::{Mdns, MdnsConfig, MdnsEvent};
 use libp2p_swarm::NetworkBehaviourEventProcess;
@@ -104,7 +102,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
             MdnsEvent::Expired(list) => {
                 for (peer_id, address) in list {
                     if self.peers.contains_key(&peer_id) && !self.mdns.has_node(&peer_id) {
-                        println!("Expired Peer | {:?} | {:?}", peer_id, address);
+                        println!("Expired Peer | {peer_id:?} | {address:?}");
                         self.peers.remove(&peer_id);
                     }
                 }
@@ -122,8 +120,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
         } = event
         {
             println!(
-                "Got message from Peer | {:?} | {:?}",
-                peer,
+                "Got message from Peer | {peer:?} | {:?}",
                 String::from_utf8_lossy(&msg.data)
             );
         }
@@ -137,23 +134,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
-
-    let noise_keys = libp2p::noise::Keypair::<libp2p::noise::X25519Spec>::new()
-        .into_authentic(&local_key)
-        .expect("Signing libp2p-noise static DH keypair failed.");
+    println!("Local peer id: {local_peer_id:?}");
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::tcp::TokioTcpConfig::new()
-        .nodelay(true)
-        .upgrade(upgrade::Version::V1)
-        // Note: Only the XX handshake pattern is currently guaranteed to provide interoperability with other libp2p implementations.
-        .authenticate(libp2p::noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(libp2p::mplex::MplexConfig::new())
-        .boxed();
+    let transport = libp2p::tokio_development_transport(local_key.clone())?;
 
     // Create a Gossipsub topic
-    let topic = Topic::new("test-net");
+    let topic = Topic::new("chat");
 
     let (sender, mut receiver) =
         tokio::sync::mpsc::channel::<PeerId>(std::mem::size_of::<PeerId>());
@@ -211,8 +198,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .parse()
             .expect("Failed to parse provided `Multiaddr`.");
         match swarm.dial(address.clone()) {
-            Ok(_) => println!("Dialed {:?}.", address),
-            Err(e) => println!("Dial {:?} failed: {:?}", address, e),
+            Ok(_) => println!("Dialed {address:?}."),
+            Err(e) => println!("Dial {address:?} failed: {e:?}"),
         }
     }
 
@@ -229,18 +216,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .gossipsub
                     .publish(topic.clone(), line.expect("Stdin not to close").as_bytes())
                 {
-                    println!("Publish error: {:?}", e);
+                    println!("Publish error: {e:?}");
                 }
             },
             Some(event) = tokio_stream::StreamExt::next(&mut swarm) => match event {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Now Listening | {:?}", address);
+                    println!("Now Listening | {address:?}");
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
                     ..
                 } => {
-                    println!("Established Connection with Peer | {:?}", peer_id);
+                    println!("Established Connection with Peer | {peer_id:?}");
                 }
                 _ => (),
             },
@@ -252,7 +239,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .cloned()
                 {
                     if let Err(e) = swarm.dial(address) {
-                        eprintln!("Failed to dial: {:?}", e);
+                        eprintln!("Failed to dial: {e:?}");
                     }
                 }
             }

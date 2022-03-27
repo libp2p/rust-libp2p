@@ -167,7 +167,7 @@ required-features = ["request-response"]
 
 [[example]]
 name = "gossipsub-chat"
-required-features = ["gossipsub", "tcp-tokio", "mdns"]
+required-features = ["gossipsub", "tcp-tokio", "mdns", "dns-tokio"]
 
 [[example]]
 name = "ipfs-private"
