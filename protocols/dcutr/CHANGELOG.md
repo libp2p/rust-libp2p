@@ -1,4 +1,8 @@
 # 0.2.0 [unreleased]
+- Made DCUtR Error Types visibility to public
+  > protocol::inbound::UpgradeError  as InboundUpgradeError
+  
+  > protocol::outbound::UpgradeError as OutboundUpgradeError
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
