@@ -1,5 +1,5 @@
 # 0.8.0 [unreleased]
-- Made Relay Error Types visibility to public
+- Made Relay Error Types visibility to public (see PR https://github.com/libp2p/rust-libp2p/pull/2586)
    > inbound_hop::FatalUpgradeError   as InboundHopFatalUpgradeError,
    > 
    > inbound_stop::FatalUpgradeError  as InboundStopFatalUpgradeError,
