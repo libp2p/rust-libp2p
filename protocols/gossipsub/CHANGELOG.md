@@ -4,6 +4,8 @@
 
 - Fix gossipsub metric (see [PR 2558]).
 
+- Allow the user to set the buckets for the score histogram, and to adjust them from the score thresholds.
+
 [PR 2558]: https://github.com/libp2p/rust-libp2p/pull/2558
 
 # 0.36.0 [2022-02-22]
