@@ -54,6 +54,7 @@ pub struct Config {
 }
 
 impl Config {
+    /// Create buckets for the score histograms based on score thresholds.
     pub fn buckets_using_scoring_thresholds(&mut self, params: &crate::PeerScoreThresholds) {
         self.score_buckets = vec![
             params.graylist_threshold,
