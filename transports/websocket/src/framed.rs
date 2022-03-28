@@ -197,7 +197,6 @@ where
                 ListenerEvent::NewAddress(mut a) => {
                     a = a.with(proto.clone());
                     debug!("Listening on {}", a);
-                    println!("Listening on {}", a);
                     ListenerEvent::NewAddress(a)
                 }
                 ListenerEvent::AddressExpired(mut a) => {
