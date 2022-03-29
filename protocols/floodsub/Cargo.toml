@@ -22,4 +22,4 @@ rand = "0.7"
 smallvec = "1.6.1"
 
 [build-dependencies]
-prost-build = "0.9"
+prost-build = "0.10"

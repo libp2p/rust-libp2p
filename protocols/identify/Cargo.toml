@@ -28,4 +28,4 @@ libp2p-noise = { path = "../../transports/noise" }
 libp2p-tcp = { path = "../../transports/tcp" }
 
 [build-dependencies]
-prost-build = "0.9"
+prost-build = "0.10"
