@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use clap::Parser;
 use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
@@ -39,29 +40,28 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "libp2p DCUtR client")]
+#[derive(Debug, Parser)]
+#[clap(name = "libp2p DCUtR client")]
 struct Opts {
     /// The mode (client-listen, client-dial).
-    #[structopt(long)]
+    #[clap(long)]
     mode: Mode,
 
     /// Fixed value to generate deterministic peer id.
-    #[structopt(long)]
+    #[clap(long)]
     secret_key_seed: u8,
 
     /// The listening address
-    #[structopt(long)]
+    #[clap(long)]
     relay_address: Multiaddr,
 
     /// Peer ID of the remote peer to hole punch to.
-    #[structopt(long)]
+    #[clap(long)]
     remote_peer_id: Option<PeerId>,
 }
 
-#[derive(Debug, StructOpt, PartialEq)]
+#[derive(Debug, Parser, PartialEq)]
 enum Mode {
     Dial,
     Listen,
@@ -81,7 +81,7 @@ impl FromStr for Mode {
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let opts = Opts::from_args();
+    let opts = Opts::parse();
 
     let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
