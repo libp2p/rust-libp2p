@@ -59,10 +59,10 @@ impl<T> Clone for WsConfig<T> {
     fn clone(&self) -> Self {
         Self {
             transport: self.transport.clone(),
-            max_data_size: self.max_data_size.clone(),
+            max_data_size: self.max_data_size,
             tls_config: self.tls_config.clone(),
-            max_redirects: self.max_redirects.clone(),
-            use_deflate: self.use_deflate.clone(),
+            max_redirects: self.max_redirects,
+            use_deflate: self.use_deflate,
         }
     }
 }
