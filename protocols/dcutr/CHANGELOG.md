@@ -1,4 +1,4 @@
-# 0.2.0 [unreleased]
+# 0.2.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
