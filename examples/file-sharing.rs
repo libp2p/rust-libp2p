@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             network_client.respond_file(file_content, channel).await;
                         }
                     }
-                    _ => todo!(),
+                    e => todo!("{:?}", e),
                 }
             }
         }
@@ -499,6 +499,8 @@ mod network {
                         }
                     }
                 }
+                SwarmEvent::IncomingConnectionError { .. } => {}
+                SwarmEvent::Dialing(peer_id) => println!("Dialing {}", peer_id),
                 e => panic!("{:?}", e),
             }
         }
@@ -631,6 +633,7 @@ mod network {
         },
     }
 
+    #[derive(Debug)]
     pub enum Event {
         InboundRequest {
             request: String,

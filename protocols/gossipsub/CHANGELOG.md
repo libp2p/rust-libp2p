@@ -2,6 +2,10 @@
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
+- Fix gossipsub metric (see [PR 2558]).
+
+[PR 2558]: https://github.com/libp2p/rust-libp2p/pull/2558
+
 # 0.36.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.

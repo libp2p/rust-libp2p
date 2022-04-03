@@ -1,3 +1,7 @@
+# 0.32.1 [unreleased]
+
+- Add `PeerId::try_from_multiaddr` to extract a `PeerId` from a `Multiaddr` that ends in `/p2p/<peer-id>`.
+
 # 0.32.0 [2022-02-22]
 
 - Remove `Network`. `libp2p-core` is from now on an auxiliary crate only. Users
