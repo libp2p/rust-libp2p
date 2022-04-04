@@ -1,4 +1,4 @@
-# 0.8.0 [unreleased]
+# 0.8.0
 
 - Expose `{Inbound,Outbound}{Hop,Stop}UpgradeError`. See [PR 2586].
 

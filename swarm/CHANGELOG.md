@@ -1,4 +1,4 @@
-# 0.35.0 [unreleased]
+# 0.35.0
 
 - Add impl `IntoIterator` for `MultiHandler`. See [PR 2572].
 - Remove `Send` bound from `NetworkBehaviour`. See [PR 2535].
