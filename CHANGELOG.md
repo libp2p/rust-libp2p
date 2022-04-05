@@ -42,7 +42,7 @@
 
 # `libp2p` facade crate
 
-## 0.44.0 [unreleased]
+## 0.44.0
 
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.2.0`](protocols/dcutr/CHANGELOG.md).
