@@ -23,7 +23,7 @@ libp2p-swarm = { version = "0.35.0", path = "../../swarm" }
 libp2p-request-response = { version = "0.17.0", path = "../request-response" }
 log = "0.4"
 rand = "0.8"
-prost = "0.9"
+prost = "0.10"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
