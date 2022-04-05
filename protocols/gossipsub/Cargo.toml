@@ -24,7 +24,7 @@ log = "0.4.11"
 sha2 = "0.10.0"
 base64 = "0.13.0"
 smallvec = "1.6.1"
-prost = "0.9"
+prost = "0.10"
 hex_fmt = "0.3.0"
 regex = "1.5.5"
 serde = { version = "1", optional = true, features = ["derive"] }
