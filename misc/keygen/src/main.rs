@@ -6,34 +6,34 @@ use std::thread;
 
 mod config;
 
+use clap::Parser;
 use libp2p_core::identity::{self, ed25519};
 use libp2p_core::PeerId;
-use structopt::StructOpt;
 use zeroize::Zeroizing;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "libp2p key material generator")]
+#[derive(Debug, Parser)]
+#[clap(name = "libp2p key material generator")]
 struct Args {
     /// JSON formatted output
-    #[structopt(long, global = true)]
+    #[clap(long, global = true)]
     json: bool,
 
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     cmd: Command,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 enum Command {
     /// Read from config file
     From {
         /// Provide a IPFS config file
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         config: PathBuf,
     },
     /// Generate random
     Rand {
         /// The keypair prefix
-        #[structopt(long)]
+        #[clap(long)]
         prefix: Option<String>,
     },
 }
@@ -46,7 +46,7 @@ const ALLOWED_FIRST_BYTE: &[u8] = b"NPQRSTUVWXYZ";
 const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::from_args();
+    let args = Args::parse();
 
     let (local_peer_id, local_keypair) = match args.cmd {
         // Generate keypair from some sort of key material. Currently supporting `IPFS` config file
