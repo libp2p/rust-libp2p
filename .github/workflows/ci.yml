@@ -84,8 +84,6 @@ jobs:
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
-    container:
-      image: rust
     steps:
 
     - name: Cancel Previous Runs
@@ -94,6 +92,12 @@ jobs:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
 
     - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 
@@ -128,8 +132,6 @@ jobs:
   integration-test:
     name: Integration tests
     runs-on: ubuntu-latest
-    container:
-      image: rust
     steps:
 
     - name: Cancel Previous Runs
@@ -138,6 +140,12 @@ jobs:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
 
     - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
 

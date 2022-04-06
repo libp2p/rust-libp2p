@@ -3,7 +3,7 @@ name = "libp2p-yamux"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Yamux multiplexing protocol for libp2p"
-version = "0.36.0"
+version = "0.37.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.32.0", path = "../../core", default-features = false }
+libp2p-core = { version = "0.33.0", path = "../../core", default-features = false }
 parking_lot = "0.12"
 thiserror = "1.0"
 yamux = "0.10.0"

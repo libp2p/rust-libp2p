@@ -477,15 +477,25 @@ where
     /// has been reached.
     pub fn add_outgoing(
         &mut self,
-        transport: TTrans,
-        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
+        dials: Vec<
+            BoxFuture<
+                'static,
+                (
+                    Multiaddr,
+                    Result<
+                        <TTrans as Transport>::Output,
+                        TransportError<<TTrans as Transport>::Error>,
+                    >,
+                ),
+            >,
+        >,
         peer: Option<PeerId>,
         handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
     ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
-        TTrans: Clone + Send,
+        TTrans: Send,
         TTrans::Dial: Send + 'static,
     {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
@@ -493,11 +503,8 @@ where
         };
 
         let dial = ConcurrentDial::new(
-            transport,
-            peer,
-            addresses,
+            dials,
             dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
-            role_override,
         );
 
         let connection_id = self.next_connection_id();

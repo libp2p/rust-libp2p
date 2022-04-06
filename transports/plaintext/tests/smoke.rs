@@ -45,7 +45,7 @@ fn variable_msg_length() {
         let client_id_public = client_id.public();
 
         futures::executor::block_on(async {
-            let server_transport =
+            let mut server_transport =
                 libp2p_core::transport::MemoryTransport {}.and_then(move |output, endpoint| {
                     upgrade::apply(
                         output,
@@ -57,7 +57,7 @@ fn variable_msg_length() {
                     )
                 });
 
-            let client_transport =
+            let mut client_transport =
                 libp2p_core::transport::MemoryTransport {}.and_then(move |output, endpoint| {
                     upgrade::apply(
                         output,

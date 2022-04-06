@@ -3,7 +3,7 @@ name = "libp2p-autonat"
 edition = "2021"
 rust-version = "1.56.1"
 description = "NAT and firewall detection for libp2p"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,24 +11,24 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [build-dependencies]
-prost-build = "0.9"
+prost-build = "0.10"
 
 [dependencies]
 async-trait = "0.1"
 futures = "0.3"
 futures-timer = "3.0"
 instant = "0.1"
-libp2p-core = { version = "0.32.0", path = "../../core", default-features = false }
-libp2p-swarm = { version = "0.35.0", path = "../../swarm" }
-libp2p-request-response = { version = "0.17.0", path = "../request-response" }
+libp2p-core = { version = "0.33.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.36.0", path = "../../swarm" }
+libp2p-request-response = { version = "0.18.0", path = "../request-response" }
 log = "0.4"
 rand = "0.8"
-prost = "0.9"
+prost = "0.10"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
 env_logger = "0.9"
-structopt = "0.3"
+clap = {version = "3.1.6", features = ["derive"]}
 
 
 [dev-dependencies.libp2p]
