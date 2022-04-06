@@ -38,6 +38,7 @@ use futures::{
     stream::Stream,
 };
 use libp2p_core::multiaddr::Multiaddr;
+use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
 use std::{
     collections::{HashMap, VecDeque},
     fmt, io,
@@ -45,10 +46,6 @@ use std::{
     sync::{Arc, Weak},
     task::{Context, Poll},
     time::{Duration, Instant},
-};
-use quinn_proto::{
-    ClientConfig as QuinnClientConfig,
-    ServerConfig as QuinnServerConfig,
 };
 
 /// Represents the configuration for the [`Endpoint`].
@@ -71,7 +68,7 @@ impl Config {
         multiaddr: Multiaddr,
     ) -> Result<Self, tls::ConfigError> {
         let mut transport = quinn_proto::TransportConfig::default();
-        transport.max_concurrent_uni_streams(0u32.into());  // Can only panic if value is out of range.
+        transport.max_concurrent_uni_streams(0u32.into()); // Can only panic if value is out of range.
         transport.datagram_receive_buffer_size(None);
         transport.keep_alive_interval(Some(Duration::from_millis(10)));
         let transport = Arc::new(transport);
@@ -229,7 +226,8 @@ impl Endpoint {
         // reasonable thing to do.
         let (tx, rx) = oneshot::channel();
         self.to_endpoint
-            .lock().await
+            .lock()
+            .await
             .send(ToEndpoint::Dial { addr, result: tx })
             .await
             .expect("background task has crashed");
@@ -250,14 +248,11 @@ impl Endpoint {
     /// There is no guarantee that the packet will actually be sent, but considering that this is
     /// a UDP packet, you cannot rely on the packet being delivered anyway.
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn send_udp_packet(
-        &self,
-        destination: SocketAddr,
-        data: impl Into<Vec<u8>>,
-    ) {
+    pub(crate) async fn send_udp_packet(&self, destination: SocketAddr, data: impl Into<Vec<u8>>) {
         let _ = self
             .to_endpoint
-            .lock().await
+            .lock()
+            .await
             .send(ToEndpoint::SendUdpPacket {
                 destination,
                 data: data.into(),
@@ -281,7 +276,8 @@ impl Endpoint {
             tracing::error!("drained, {:?}", connection_id);
         }
         self.to_endpoint
-            .lock().await
+            .lock()
+            .await
             .send(ToEndpoint::ProcessConnectionEvent {
                 connection_id,
                 event,
@@ -306,7 +302,8 @@ impl Endpoint {
         }
         // We implement this by cloning the `mpsc::Sender`. Since each sender is guaranteed a slot
         // in the buffer, cloning the sender reserves the slot and sending thus always succeeds.
-        let result = self.to_endpoint2
+        let result = self
+            .to_endpoint2
             .clone()
             .try_send(ToEndpoint::ProcessConnectionEvent {
                 connection_id,
@@ -467,7 +464,11 @@ async fn background_task(
             // channels.
             // TODO: set ECN bits; there is no support for them in the ecosystem right now
             let span = tracing::trace_span!("udp_socket.send_to");
-            match udp_socket.send_to(&data, destination).instrument(span).await {
+            match udp_socket
+                .send_to(&data, destination)
+                .instrument(span)
+                .await
+            {
                 Ok(n) if n == data.len() => {}
                 Ok(_) => tracing::error!(
                     "QUIC UDP socket violated expectation that packets are always fully \

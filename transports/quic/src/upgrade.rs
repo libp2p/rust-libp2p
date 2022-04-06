@@ -53,7 +53,9 @@ impl Future for Upgrade {
 
     #[tracing::instrument(skip_all)]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let connection = self.connection.as_mut()
+        let connection = self
+            .connection
+            .as_mut()
             .expect("Future polled after it has completed");
 
         let event = Connection::poll_event(connection, cx);
@@ -80,7 +82,7 @@ impl Future for Upgrade {
                 // But for `Upgrade` we get `Connected` event, wrap connection into a muxer
                 // and pass it to the result Stream of muxers.
                 unreachable!()
-            },
+            }
         }
     }
 }

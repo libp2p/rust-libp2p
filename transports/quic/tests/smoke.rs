@@ -9,8 +9,8 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p_core::muxing::StreamMuxerBox;
 use libp2p::{Multiaddr, Transport};
+use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_quic::{Config as QuicConfig, Endpoint as QuicEndpoint, QuicTransport};
 use rand::RngCore;
 use std::{io, iter};
@@ -40,9 +40,10 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     //     transport.enable_keylogger();
     // }
 
-    let transport = 
-        Transport::map(transport, |(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
-        .boxed();
+    let transport = Transport::map(transport, |(peer, muxer), _| {
+        (peer, StreamMuxerBox::new(muxer))
+    })
+    .boxed();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
@@ -53,7 +54,7 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
 
 fn setup_global_subscriber() -> impl Drop {
     use tracing_flame::FlameLayer;
-    use tracing_subscriber::{prelude::*, fmt};
+    use tracing_subscriber::{fmt, prelude::*};
 
     let filter_layer = tracing_subscriber::EnvFilter::from_default_env();
 

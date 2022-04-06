@@ -58,8 +58,8 @@ mod endpoint;
 mod error;
 mod in_addr;
 mod muxer;
-mod upgrade;
 mod tls;
+mod upgrade;
 
 pub mod transport;
 

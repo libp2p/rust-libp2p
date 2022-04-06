@@ -29,6 +29,7 @@
 use crate::endpoint::Endpoint;
 
 use futures::{channel::mpsc, prelude::*};
+use libp2p_core::PeerId;
 use std::{
     fmt,
     net::SocketAddr,
@@ -37,7 +38,6 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-use libp2p_core::PeerId;
 
 /// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Upgrade`].
 ///
@@ -127,7 +127,8 @@ impl Connection {
     pub(crate) fn local_addr(&self) -> SocketAddr {
         debug_assert_eq!(self.connection.side(), quinn_proto::Side::Server);
         let endpoint_addr = self.endpoint.local_addr;
-        self.connection.local_ip()
+        self.connection
+            .local_ip()
             .map(|ip| SocketAddr::new(ip, endpoint_addr.port()))
             .unwrap_or_else(|| {
                 // In a normal case scenario this should not happen, because
@@ -155,11 +156,15 @@ impl Connection {
     pub(crate) fn remote_peer_id(&self) -> PeerId {
         debug_assert!(!self.is_handshaking());
         let session = self.connection.crypto_session();
-        let identity = session.peer_identity()
+        let identity = session
+            .peer_identity()
             .expect("connection got identity because it passed TLS handshake; qed");
-        let certificates: Box<Vec<rustls::Certificate>> = identity.downcast().ok()
+        let certificates: Box<Vec<rustls::Certificate>> = identity
+            .downcast()
+            .ok()
             .expect("we rely on rustls feature; qed");
-        let end_entity = certificates.get(0)
+        let end_entity = certificates
+            .get(0)
             .expect("there should be exactly one certificate; qed");
         let end_entity_der = end_entity.as_ref();
         let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
@@ -183,7 +188,10 @@ impl Connection {
         // support this.
         self.connection
             .close(Instant::now(), From::from(0u32), Default::default());
-        self.endpoint.report_quinn_event_non_block(self.connection_id, quinn_proto::EndpointEvent::drained());
+        self.endpoint.report_quinn_event_non_block(
+            self.connection_id,
+            quinn_proto::EndpointEvent::drained(),
+        );
     }
 
     /// Pops a new substream opened by the remote.
@@ -281,7 +289,7 @@ impl Connection {
                 Poll::Ready(Some(event)) => {
                     let _span = tracing::trace_span!("handle").entered();
                     self.connection.handle_event(event)
-                },
+                }
                 Poll::Ready(None) => {
                     tracing::error!("connection handle event should close connection");
                     debug_assert!(self.closed.is_none());
@@ -388,7 +396,7 @@ impl Connection {
                         // We don't use datagrams or unidirectional streams. If these events
                         // happen, it is by some code not compatible with libp2p-quic.
                         self.connection
-                        .close(Instant::now(), From::from(0u32), Default::default());
+                            .close(Instant::now(), From::from(0u32), Default::default());
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
                         return Poll::Ready(ConnectionEvent::StreamReadable(id));
@@ -426,9 +434,7 @@ impl Connection {
                         //    .close(Instant::now(), From::from(0u32), Default::default());
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));
                     }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished {
-                        id,
-                    }) => {
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
                         tracing::error!("StreamEvent::StreamFinished {}", id);
                         return Poll::Ready(ConnectionEvent::StreamFinished(id));
                     }
@@ -464,11 +470,11 @@ impl Drop for Connection {
         let is_closed = self.connection.is_closed();
         let is_drained = self.connection.is_drained();
         if !is_drained {
-        // TODO:
-        // if let Some(_) = self.closed.take() {
+            // TODO:
+            // if let Some(_) = self.closed.take() {
             // We send a `Drained` message to the endpoint to clean endpoint's resources.
             self.close();
-        // }
+            // }
         }
     }
 }
