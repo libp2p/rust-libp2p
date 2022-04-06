@@ -8,12 +8,16 @@ use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p::{Multiaddr, Transport};
 use libp2p_quic::{Config as QuicConfig, Endpoint as QuicEndpoint, QuicTransport};
 use rand::RngCore;
 use std::{io, iter};
+
+use futures::task::Spawn;
+use std::num::NonZeroU8;
+use std::time::Duration;
 
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
@@ -314,4 +318,155 @@ async fn dial_failure() -> Result<()> {
     };
 
     Ok(())
+}
+
+#[test]
+fn concurrent_connections_and_streams() {
+    use futures::executor::block_on;
+    use quickcheck::*;
+
+    tracing_subscriber::fmt()
+        //.pretty()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init()
+        .ok();
+    log_panics::init();
+
+    #[tracing::instrument]
+    fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> TestResult {
+        tracing::info!("entered");
+        let (number_listeners, number_streams): (u8, u8) =
+            (number_listeners.into(), number_streams.into());
+        if number_listeners > 10 || number_streams > 10 {
+            return TestResult::discard();
+        }
+
+        let mut pool = futures::executor::LocalPool::default();
+        let mut data = vec![0; 4096 * 10];
+        rand::thread_rng().fill_bytes(&mut data);
+        let mut listeners = vec![];
+
+        // Spawn the listener nodes.
+        for _ in 0..number_listeners {
+            let mut listener = block_on(create_swarm(true)).unwrap();
+            Swarm::listen_on(&mut listener, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()).unwrap();
+
+            // Wait to listen on address.
+            let addr = match block_on(listener.next()) {
+                Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+                e => panic!("{:?}", e),
+            };
+
+            listeners.push((*listener.local_peer_id(), addr));
+
+            pool.spawner()
+                .spawn_obj(
+                    async move {
+                        loop {
+                            match listener.next().await {
+                                Some(SwarmEvent::ConnectionEstablished { .. }) => {
+                                    tracing::info!("listener ConnectionEstablished");
+                                }
+                                Some(SwarmEvent::IncomingConnection { .. }) => {
+                                    tracing::info!("listener IncomingConnection");
+                                }
+                                Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                                    message:
+                                        RequestResponseMessage::Request {
+                                            request: Ping(ping),
+                                            channel,
+                                            ..
+                                        },
+                                    ..
+                                })) => {
+                                    tracing::info!("listener got Message");
+                                    listener
+                                        .behaviour_mut()
+                                        .send_response(channel, Pong(ping))
+                                        .unwrap();
+                                }
+                                Some(SwarmEvent::Behaviour(
+                                    RequestResponseEvent::ResponseSent { .. },
+                                )) => {
+                                    tracing::info!("listener ResponseSent");
+                                }
+                                Some(SwarmEvent::ConnectionClosed { .. }) => {}
+                                Some(e) => {
+                                    tracing::info!(?e, "listener");
+                                } // panic!("{:?}", e),
+                                None => {
+                                    panic!("listener stopped");
+                                }
+                            }
+                        }
+                    }
+                    .boxed()
+                    .into(),
+                )
+                .unwrap();
+        }
+
+        let mut dialer = block_on(create_swarm(true)).unwrap();
+
+        // For each listener node start `number_streams` requests.
+        for (listener_peer_id, listener_addr) in &listeners {
+            dialer
+                .behaviour_mut()
+                .add_address(&listener_peer_id, listener_addr.clone());
+
+            dialer.dial(listener_peer_id.clone()).unwrap();
+            //dialer
+            //    .behaviour_mut()
+            //    .send_request(&listener_peer_id, Ping(data.clone()));
+        }
+
+        // Wait for responses to each request.
+        pool.run_until(async {
+            let mut num_responses = 0;
+            loop {
+                match dialer.next().await {
+                    Some(SwarmEvent::Dialing(_)) => {
+                        tracing::info!("dialer Dialing");
+                    }
+                    Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                        tracing::info!("dialer Connection established");
+                        for _ in 0..number_streams {
+                            dialer
+                                .behaviour_mut()
+                                .send_request(&peer_id, Ping(data.clone()));
+                        }
+                    }
+                    Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                        message:
+                            RequestResponseMessage::Response {
+                                response: Pong(pong),
+                                ..
+                            },
+                        ..
+                    })) => {
+                        tracing::info!("dialer got Message");
+                        num_responses += 1;
+                        assert_eq!(data, pong);
+                        let should_be = number_listeners as usize * (number_streams) as usize;
+                        tracing::info!(?num_responses, ?should_be);
+                        if num_responses == should_be {
+                            break;
+                        }
+                    }
+                    Some(SwarmEvent::ConnectionClosed { .. }) => {
+                        tracing::info!("dialer ConnectionClosed");
+                    }
+                    e => {
+                        tracing::info!(?e, "dialer");
+                    } // panic!("{:?}", e),
+                }
+            }
+        });
+
+        TestResult::passed()
+    }
+
+    prop(NonZeroU8::new(1).unwrap(), NonZeroU8::new(2).unwrap());
+
+    // QuickCheck::new().quickcheck(prop as fn(_, _) -> _);
 }

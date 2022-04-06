@@ -183,6 +183,7 @@ impl Connection {
         // support this.
         self.connection
             .close(Instant::now(), From::from(0u32), Default::default());
+        self.endpoint.report_quinn_event_non_block(self.connection_id, quinn_proto::EndpointEvent::drained());
     }
 
     /// Pops a new substream opened by the remote.
@@ -254,6 +255,16 @@ impl Connection {
         self.connection.send_stream(id).finish()
     }
 
+    // pub(crate) fn flush_substream(
+    //     &mut self,
+    //     id: quinn_proto::StreamId,
+    // ) -> Result<(), quinn_proto::FinishError> {
+    //     let mut substream = self.connection.send_stream(id);
+    //     if let Ok(_) = substream.stopped() {
+
+    //     }
+    // }
+
     /// Polls the connection for an event that happend on it.
     #[tracing::instrument]
     pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
@@ -267,11 +278,12 @@ impl Connection {
         let span = tracing::trace_span!("connection.handle_event").entered();
         loop {
             match Pin::new(&mut self.from_endpoint).poll_next(cx) {
-            Poll::Ready(Some(event)) => {
+                Poll::Ready(Some(event)) => {
                     let _span = tracing::trace_span!("handle").entered();
                     self.connection.handle_event(event)
                 },
                 Poll::Ready(None) => {
+                    tracing::error!("connection handle event should close connection");
                     debug_assert!(self.closed.is_none());
                     let err = Error::ClosedChannel;
                     self.closed = Some(err.clone());
@@ -321,22 +333,6 @@ impl Connection {
             }
             drop(span);
 
-            // The connection also needs to be able to send control messages to the endpoint. This is
-            // handled here, and we try to send them on `to_endpoint` as well.
-            let span = tracing::trace_span!("connection.poll_endpoint_events").entered();
-            while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
-                let endpoint = self.endpoint.clone();
-                let connection_id = self.connection_id;
-                debug_assert!(self.pending_to_endpoint.is_none());
-                self.pending_to_endpoint = Some(Box::pin(async move {
-                    endpoint
-                        .report_quinn_event(connection_id, endpoint_event)
-                        .await;
-                }));
-                continue 'send_pending;
-            }
-            drop(span);
-
             // Timeout system.
             // We break out of the following loop until if `poll_timeout()` returns `None` or if
             // polling `self.next_timeout` returns `Poll::Pending`.
@@ -361,6 +357,22 @@ impl Connection {
                     break;
                 }
             }
+
+            // The connection also needs to be able to send control messages to the endpoint. This is
+            // handled here, and we try to send them on `to_endpoint` as well.
+            let span = tracing::trace_span!("connection.poll_endpoint_events").entered();
+            while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
+                let endpoint = self.endpoint.clone();
+                let connection_id = self.connection_id;
+                debug_assert!(self.pending_to_endpoint.is_none());
+                self.pending_to_endpoint = Some(Box::pin(async move {
+                    endpoint
+                        .report_quinn_event(connection_id, endpoint_event)
+                        .await;
+                }));
+                continue 'send_pending;
+            }
+            drop(span);
 
             // The final step consists in handling the events related to the various substreams.
             let _span = tracing::trace_span!("connection.poll").entered();
@@ -389,7 +401,7 @@ impl Connection {
                     }) => {
                         // The `Stop` QUIC event is more or less similar to a `Reset`, except that
                         // it applies only on the writing side of the pipe.
-                        tracing::error!("stream stopped {}", id);
+                        tracing::error!("StreamEvent::Stopped {}", id);
                         return Poll::Ready(ConnectionEvent::StreamStopped(id));
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
@@ -403,16 +415,20 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::StreamOpened);
                     }
                     quinn_proto::Event::ConnectionLost { reason } => {
+                        tracing::error!("connection poll should close connection");
                         tracing::error!("connection lost {}", reason);
                         debug_assert!(self.closed.is_none());
                         self.is_handshaking = false;
                         let err = Error::Quinn(reason);
                         self.closed = Some(err.clone());
+                        // self.connection
+                        //    .close(Instant::now(), From::from(0u32), Default::default());
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished {
                         id,
                     }) => {
+                        tracing::error!("StreamEvent::StreamFinished {}", id);
                         return Poll::Ready(ConnectionEvent::StreamFinished(id));
                     }
                     quinn_proto::Event::Connected => {
@@ -444,11 +460,15 @@ impl fmt::Debug for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        let is_closed = self.connection.is_closed();
+        let is_drained = self.connection.is_drained();
+        if !is_drained {
         // TODO:
         // if let Some(_) = self.closed.take() {
             // We send a `Drained` message to the endpoint to clean endpoint's resources.
-            self.endpoint.report_quinn_event_non_block(self.connection_id, quinn_proto::EndpointEvent::drained());
+            self.close();
         // }
+        }
     }
 }
 

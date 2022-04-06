@@ -528,7 +528,14 @@ async fn background_task(
 
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
-                        debug_assert!(alive_connections.contains_key(&connection_id));
+                        let has_key = alive_connections.contains_key(&connection_id);
+                        tracing::error!(
+                            has_key,
+                            is_drained_event = event.is_drained());
+                        if !has_key {
+                            continue;
+                        }
+                        //debug_assert!(alive_connections.contains_key(&connection_id));
                         // We "drained" event indicates that the connection no longer exists and
                         // its ID can be reclaimed.
                         let is_drained_event = event.is_drained();

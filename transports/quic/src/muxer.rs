@@ -54,7 +54,7 @@ struct QuicMuxerInner {
 }
 
 /// State of a single substream.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct SubstreamState {
     /// Waker to wake if the substream becomes readable or stopped.
     read_waker: Option<Waker>,
@@ -107,15 +107,30 @@ impl StreamMuxer for QuicMuxer {
         let _enter = span.entered();
 
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
-            tracing::info!(?event);
+            // tracing::info!(?event);
             match event {
                 ConnectionEvent::Connected => {
                     tracing::error!("Unexpected Connected event on established QUIC connection");
                 }
                 ConnectionEvent::ConnectionLost(e) => {
+                    tracing::error!(?e, "ConnectionLost");
+                    // for (_, substream) in inner.substreams.iter_mut() {
+                    //     substream.finished = true;
+                    //     // }
+                    //     if let Some(waker) = substream.read_waker.take() {
+                    //         waker.wake();
+                    //     }
+                    //     if let Some(waker) = substream.write_waker.take() {
+                    //         waker.wake();
+                    //     }
+                    //     if let Some(waker) = substream.finished_waker.take() {
+                    //         waker.wake();
+                    //     }
+                    // }
                     if let Some(waker) = inner.poll_close_waker.take() {
                         waker.wake();
                     }
+                    inner.connection.close();
                     return Poll::Ready(Err(Error::ConnectionLost(e)))
                 }
 
@@ -140,10 +155,11 @@ impl StreamMuxer for QuicMuxer {
                 }
                 ConnectionEvent::StreamFinished(substream) |
                 ConnectionEvent::StreamStopped(substream) => {
+                    tracing::info!(?event);
                     if let Some(substream) = inner.substreams.get_mut(&substream) {
-                        if let ConnectionEvent::StreamFinished(_) = event {
+                        // if let ConnectionEvent::StreamFinished(_) = event {
                             substream.finished = true;
-                        }
+                        // }
                         if let Some(waker) = substream.read_waker.take() {
                             waker.wake();
                         }
@@ -158,7 +174,7 @@ impl StreamMuxer for QuicMuxer {
                     }
                 }
                 ConnectionEvent::StreamAvailable => {
-                    tracing::info!("StreamAvailable");
+                    tracing::info!(?event);
                     // Handled below.
                 }
             }
@@ -169,7 +185,7 @@ impl StreamMuxer for QuicMuxer {
             inner.substreams.insert(substream, Default::default());
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream)))
         } else {
-            tracing::info!("set poll_event_waker");
+            //tracing::info!("set poll_event_waker");
             inner.poll_event_waker = Some(cx.waker().clone());
             Poll::Pending
         }
@@ -177,7 +193,7 @@ impl StreamMuxer for QuicMuxer {
 
     #[tracing::instrument(skip_all)]
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        tracing::info!("open_outbound");
+        tracing::error!("open_outbound");
         ()
     }
 
@@ -214,7 +230,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip(self, cx, buf), ret)]
     fn write_substream(
         &self,
         cx: &mut Context<'_>,
@@ -226,7 +242,7 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner.lock();
 
         let side = inner.connection.connection.side();
-        tracing::info!(?side, ?substream, "write_substream");
+        //tracing::info!(?side, ?substream, "write_substream");
 
         let id = substream;
 
@@ -274,7 +290,7 @@ impl StreamMuxer for QuicMuxer {
         // }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip(self, cx, buf), ret)]
     fn read_substream(
         &self,
         cx: &mut Context<'_>,
@@ -320,14 +336,23 @@ impl StreamMuxer for QuicMuxer {
         let id = *substream;
 
         let mut inner = self.inner.lock();
+
         let side = inner.connection.connection.side();
-        tracing::info!(?side, ?id, "read_substream");
+        //tracing::info!(?side, ?id, "read_substream");
+
+        let substream_state = inner.substreams.get_mut(substream)
+            .expect("invalid StreamMuxer::read_substream API usage");
+        if substream_state.finished {
+            return Poll::Ready(Ok(0))
+        }
+        
         let mut stream = inner.connection.connection.recv_stream(id);
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
             Err(ReadableError::UnknownStream) => {
                 tracing::error!("read error UnknownStream: substream={}", id);
-                return Poll::Ready(Err(Self::Error::ExpiredStream))
+                return Poll::Ready(Ok(0))
+                // return Poll::Ready(Err(Self::Error::ExpiredStream))
             }
             Err(ReadableError::IllegalOrderedRead) => {
                 panic!("Illegal ordered read can only happen if `stream.read(false)` is used.");
@@ -344,19 +369,24 @@ impl StreamMuxer for QuicMuxer {
                     buf.write_all(&chunk.bytes).expect("enough buffer space");
                     bytes += chunk.bytes.len();
                 }
-                Ok(None) => break,
+                Ok(None) => {
+                    tracing::error!("No more data");
+                    break
+                },
                 Err(ReadError::Reset(error_code)) => {
-                    tracing::debug!("substream {} was reset with error code {}", id, error_code);
+                    tracing::error!("substream {} was reset with error code {}", id, error_code);
                     bytes = 0;
                     break;
                 }
                 Err(ReadError::Blocked) => {
+                    tracing::error!("Blocked");
                     pending = true;
                     break;
                 }
             }
         }
         if chunks.finalize().should_transmit() {
+            tracing::error!("read should transmit");
             if let Some(waker) = inner.poll_event_waker.take() {
                 waker.wake();
             }
@@ -370,7 +400,7 @@ impl StreamMuxer for QuicMuxer {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip(self, cx), ret)]
     fn shutdown_substream(
         &self,
         cx: &mut Context<'_>,
@@ -378,7 +408,7 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner.lock();
         let inner = &mut *inner;
-        tracing::info!(?inner.connection.connection, "shutdown_substream");
+        tracing::error!(?inner.connection.connection, "shutdown_substream");
 
         let mut substream_state = inner.substreams.get_mut(substream)
             .expect("invalid StreamMuxer::shutdown_substream API usage");
@@ -388,6 +418,7 @@ impl StreamMuxer for QuicMuxer {
 
         match inner.connection.shutdown_substream(*substream) {
             Ok(()) => {
+                substream_state.finished = true;
                 match substream_state.finished_waker {
                     Some(ref w) if w.will_wake(cx.waker()) => {},
                     _ => substream_state.finished_waker = Some(cx.waker().clone()),
@@ -403,9 +434,27 @@ impl StreamMuxer for QuicMuxer {
         }
     }
 
+    #[tracing::instrument(skip(self), ret)]
     fn destroy_substream(&self, substream: Self::Substream) {
+        tracing::error!(?substream, "destroy_substream");
         let mut inner = self.inner.lock();
-        inner.substreams.remove(&substream);
+        if let Some(mut substream) = inner.substreams.remove(&substream) {
+            // // if let ConnectionEvent::StreamFinished(_) = event {
+            // substream.finished = true;
+            // // }
+            // if let Some(waker) = substream.read_waker.take() {
+            //     tracing::error!("read_waker");
+            //     waker.wake();
+            // }
+            // if let Some(waker) = substream.write_waker.take() {
+            //     tracing::error!("write_waker");
+            //     waker.wake();
+            // }
+            // if let Some(waker) = substream.finished_waker.take() {
+            //     tracing::error!("finished_waker");
+            //     waker.wake();
+            // }
+        }
     }
 
     fn flush_substream(
@@ -417,14 +466,34 @@ impl StreamMuxer for QuicMuxer {
     }
 
     // TODO: what if called multiple times? register all wakers?
+    #[tracing::instrument(skip_all, ret)]
     fn flush_all(&self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // TODO: call poll_transmit() and stuff
-        Poll::Ready(Ok(()))
+        return Poll::Ready(Ok(()));
+        let mut inner = self.inner.lock();
+        let inner = &mut *inner;
+        if inner.substreams.is_empty() {
+            return Poll::Ready(Ok(()))
+        }
+        for substream in inner.substreams.keys() {
+            match inner.connection.shutdown_substream(*substream) {
+                Ok(()) => {
+                },
+                Err(quinn_proto::FinishError::Stopped(err)) => return Poll::Ready(Err(Error::Reset(err))),
+                Err(quinn_proto::FinishError::UnknownStream) => {
+                    // Illegal usage of the API.
+                    debug_assert!(false);
+                    return Poll::Ready(Err(Error::ExpiredStream))
+                },
+            }
+        }
+        return Poll::Pending
     }
 
     // TODO: what if called multiple times? register all wakers?
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, ret)]
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        // return Poll::Ready(Ok(()));
+        tracing::error!("muxer_close");
         // StreamMuxer's `close` documentation mentions that it automatically implies `flush_all`.
         if let Poll::Pending = self.flush_all(cx)? {
             return Poll::Pending;
@@ -433,7 +502,41 @@ impl StreamMuxer for QuicMuxer {
         // TODO: poll if closed or something
 
         let mut inner = self.inner.lock();
-        //self.connection.close();
+
+        // if inner.connection.connection.is_drained() {
+        //     return Poll::Ready(Ok(()))
+        // }
+        
+        // if inner.substreams.is_empty() {
+        //     let connection = &mut inner.connection;
+        //     if !connection.connection.is_closed() {
+        //         connection.close();
+        //         if let Some(waker) = inner.poll_event_waker.take() {
+        //             waker.wake();
+        //         }
+        //     } else {
+                
+        //     }
+        //     tracing::error!(
+        //         is_closed = inner.connection.connection.is_closed(),
+        //         is_drained = inner.connection.connection.is_drained()
+        //     );
+        //     while let Poll::Ready(event) = inner.connection.poll_event(cx) {
+        //         match event {
+        //             ConnectionEvent::ConnectionLost(_) => {
+        //                 return Poll::Ready(Ok(()))
+        //             },
+        //             _ => {
+
+        //             }
+        //         }
+        //     }
+        //     // return Poll::Ready(Ok(()))
+        // } else {
+        //     for substream in inner.substreams.clone().keys() {
+        //         inner.connection.shutdown_substream(*substream);
+        //     }
+        // }
 
         // Register `cx.waker()` as being woken up if the connection closes.
         if !inner

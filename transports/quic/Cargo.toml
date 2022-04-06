@@ -16,7 +16,7 @@ futures = "0.3.15"
 if-watch = "0.2.2"
 libp2p-core = { version = "0.31.0", path = "../../core" }
 parking_lot = "0.11.1"
-quinn-proto = { version = "0.8.0", default-features = false, features = ["tls-rustls"] }
+quinn-proto = { version = "0.8.2", default-features = false, features = ["tls-rustls"] }
 rcgen = { version = "0.8.11" }
 ring = { version = "0.16.20" }
 rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
@@ -41,3 +41,4 @@ rand = "0.8.4"
 rand_core = "0.5.1"
 tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
 tracing-flame = "0.2"
+quickcheck = "1"
