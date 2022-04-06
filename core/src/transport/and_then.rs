@@ -53,7 +53,10 @@ where
     type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F>;
     type Dial = AndThenFuture<T::Dial, C, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let listener = self
             .transport
             .listen_on(addr)
@@ -64,12 +67,12 @@ where
         // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
         let stream = AndThenStream {
             stream: listener,
-            fun: self.fun,
+            fun: self.fun.clone(),
         };
         Ok(stream)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
             .dial(addr.clone())
@@ -77,7 +80,7 @@ where
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
             args: Some((
-                self.fun,
+                self.fun.clone(),
                 ConnectedPoint::Dialer {
                     address: addr,
                     role_override: Endpoint::Dialer,
@@ -88,7 +91,10 @@ where
         Ok(future)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
             .dial_as_listener(addr.clone())
@@ -96,7 +102,7 @@ where
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
             args: Some((
-                self.fun,
+                self.fun.clone(),
                 ConnectedPoint::Dialer {
                     address: addr,
                     role_override: Endpoint::Listener,

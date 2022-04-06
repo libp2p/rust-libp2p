@@ -32,7 +32,7 @@ fn client_to_server_outbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new()
+        let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -71,7 +71,7 @@ fn client_to_server_outbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new()
+        let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
@@ -100,7 +100,7 @@ fn client_to_server_inbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new()
+        let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -147,7 +147,7 @@ fn client_to_server_inbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new()
+        let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
@@ -168,7 +168,7 @@ fn protocol_not_match() {
     let _bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new()
+        let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -209,7 +209,7 @@ fn protocol_not_match() {
         // Make sure they do not connect when protocols do not match
         let mut mplex = libp2p_mplex::MplexConfig::new();
         mplex.set_protocol_name(b"/mplextest/1.0.0");
-        let transport = TcpConfig::new()
+        let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
         match transport.dial(rx.await.unwrap()).unwrap().await {
             Ok(_) => {

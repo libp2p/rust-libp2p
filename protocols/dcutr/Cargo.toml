@@ -3,7 +3,7 @@ name = "libp2p-dcutr"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Direct connection upgrade through relay"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,8 +17,8 @@ either = "1.6.0"
 futures = "0.3.1"
 futures-timer = "3.0"
 instant = "0.1.11"
-libp2p-core = { version = "0.32", path = "../../core" }
-libp2p-swarm = { version = "0.35.0", path = "../../swarm" }
+libp2p-core = { version = "0.33.0", path = "../../core" }
+libp2p-swarm = { version = "0.36.0", path = "../../swarm" }
 log = "0.4"
 prost = "0.10"
 thiserror = "1.0"

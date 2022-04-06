@@ -37,6 +37,14 @@ impl<T, F> Map<T, F> {
     pub(crate) fn new(transport: T, fun: F) -> Self {
         Map { transport, fun }
     }
+
+    pub fn inner(&self) -> &T {
+        &self.transport
+    }
+
+    pub fn inner_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
 }
 
 impl<T, F, D> Transport for Map<T, F>
@@ -50,15 +58,18 @@ where
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
     type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let stream = self.transport.listen_on(addr)?;
         Ok(MapStream {
             stream,
-            fun: self.fun,
+            fun: self.fun.clone(),
         })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial(addr.clone())?;
         let p = ConnectedPoint::Dialer {
             address: addr,
@@ -66,11 +77,14 @@ where
         };
         Ok(MapFuture {
             inner: future,
-            args: Some((self.fun, p)),
+            args: Some((self.fun.clone(), p)),
         })
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial_as_listener(addr.clone())?;
         let p = ConnectedPoint::Dialer {
             address: addr,
@@ -78,7 +92,7 @@ where
         };
         Ok(MapFuture {
             inner: future,
-            args: Some((self.fun, p)),
+            args: Some((self.fun.clone(), p)),
         })
     }
 

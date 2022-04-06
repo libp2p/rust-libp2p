@@ -20,15 +20,13 @@
 
 use crate::{
     transport::{Transport, TransportError},
-    Multiaddr, PeerId,
+    Multiaddr,
 };
 use futures::{
-    future::{BoxFuture, Future, FutureExt},
+    future::{BoxFuture, Future},
     ready,
     stream::{FuturesUnordered, StreamExt},
 };
-use libp2p_core::connection::Endpoint;
-use libp2p_core::multiaddr::Protocol;
 use std::{
     num::NonZeroU8,
     pin::Pin,
@@ -53,37 +51,13 @@ impl<TTrans: Transport> Unpin for ConcurrentDial<TTrans> {}
 
 impl<TTrans> ConcurrentDial<TTrans>
 where
-    TTrans: Transport + Clone + Send + 'static,
+    TTrans: Transport + Send + 'static,
     TTrans::Output: Send,
     TTrans::Error: Send,
     TTrans::Dial: Send + 'static,
 {
-    pub(crate) fn new(
-        transport: TTrans,
-        peer: Option<PeerId>,
-        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
-        concurrency_factor: NonZeroU8,
-        role_override: Endpoint,
-    ) -> Self {
-        let mut pending_dials = addresses.map(move |address| match p2p_addr(peer, address) {
-            Ok(address) => {
-                let dial = match role_override {
-                    Endpoint::Dialer => transport.clone().dial(address.clone()),
-                    Endpoint::Listener => transport.clone().dial_as_listener(address.clone()),
-                };
-                match dial {
-                    Ok(fut) => fut
-                        .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
-                        .boxed(),
-                    Err(err) => futures::future::ready((address, Err(err))).boxed(),
-                }
-            }
-            Err(address) => futures::future::ready((
-                address.clone(),
-                Err(TransportError::MultiaddrNotSupported(address)),
-            ))
-            .boxed(),
-        });
+    pub(crate) fn new(pending_dials: Vec<Dial<TTrans>>, concurrency_factor: NonZeroU8) -> Self {
+        let mut pending_dials = pending_dials.into_iter();
 
         let dials = FuturesUnordered::new();
         while let Some(dial) = pending_dials.next() {
@@ -135,31 +109,5 @@ where
                 }
             }
         }
-    }
-}
-
-/// Ensures a given `Multiaddr` is a `/p2p/...` address for the given peer.
-///
-/// If the given address is already a `p2p` address for the given peer,
-/// i.e. the last encapsulated protocol is `/p2p/<peer-id>`, this is a no-op.
-///
-/// If the given address is already a `p2p` address for a different peer
-/// than the one given, the given `Multiaddr` is returned as an `Err`.
-///
-/// If the given address is not yet a `p2p` address for the given peer,
-/// the `/p2p/<peer-id>` protocol is appended to the returned address.
-fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-    let peer = match peer {
-        Some(p) => p,
-        None => return Ok(addr),
-    };
-
-    if let Some(Protocol::P2p(hash)) = addr.iter().last() {
-        if &hash != peer.as_ref() {
-            return Err(addr);
-        }
-        Ok(addr)
-    } else {
-        Ok(addr.with(Protocol::P2p(peer.into())))
     }
 }

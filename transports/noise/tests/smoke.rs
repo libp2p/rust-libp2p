@@ -232,7 +232,7 @@ fn ik_xx() {
 
 type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<Async<TcpStream>>>);
 
-fn run<T, U, I, C>(server_transport: T, client_transport: U, messages: I)
+fn run<T, U, I, C>(mut server_transport: T, mut client_transport: U, messages: I)
 where
     T: Transport<Output = Output<C>>,
     T::Dial: Send + 'static,

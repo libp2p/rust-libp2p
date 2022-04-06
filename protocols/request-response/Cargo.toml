@@ -3,7 +3,7 @@ name = "libp2p-request-response"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Generic Request/Response Protocols"
-version = "0.17.0"
+version = "0.18.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,8 +15,8 @@ async-trait = "0.1"
 bytes = "1"
 futures = "0.3.1"
 instant = "0.1.11"
-libp2p-core = { version = "0.32.0", path = "../../core", default-features = false  }
-libp2p-swarm = { version = "0.35.0", path = "../../swarm" }
+libp2p-core = { version = "0.33.0", path = "../../core", default-features = false  }
+libp2p-swarm = { version = "0.36.0", path = "../../swarm" }
 log = "0.4.11"
 rand = "0.7"
 smallvec = "1.6.1"

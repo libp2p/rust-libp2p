@@ -84,7 +84,7 @@ fn upgrade_pipeline() {
     let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&listener_keys)
         .unwrap();
-    let listener_transport = MemoryTransport::default()
+    let mut listener_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(listener_noise_keys).into_authenticated())
         .apply(HelloUpgrade {})
@@ -102,7 +102,7 @@ fn upgrade_pipeline() {
     let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&dialer_keys)
         .unwrap();
-    let dialer_transport = MemoryTransport::default()
+    let mut dialer_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(dialer_noise_keys).into_authenticated())
         .apply(HelloUpgrade {})

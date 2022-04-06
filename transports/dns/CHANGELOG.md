@@ -1,3 +1,7 @@
+# 0.33.0 [unreleased]
+
+- Update to `libp2p-core` `v0.33.0`.
+
 # 0.32.1
 
 - Update to `trust-dns` `v0.21`. See [PR 2543].
