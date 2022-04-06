@@ -36,6 +36,11 @@ impl PeerRecord {
         let record = peer_record_proto::PeerRecord::decode(payload)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
+
+        if peer_id != envelope.key.to_peer_id() {
+            return Err(FromEnvelopeError::MismatchedSignature);
+        }
+
         let seq = record.seq;
         let addresses = record
             .addresses
@@ -126,6 +131,8 @@ pub enum FromEnvelopeError {
     InvalidPeerRecord(prost::DecodeError),
     /// Failed to decode the peer ID.
     InvalidPeerId(multihash::Error),
+    /// The signer of the envelope is different than the peer id in the record.
+    MismatchedSignature,
     /// Failed to decode a multi-address.
     InvalidMultiaddr(multiaddr::Error),
 }
@@ -162,6 +169,10 @@ impl fmt::Display for FromEnvelopeError {
                 write!(f, "Failed to decode bytes as PeerRecord")
             }
             Self::InvalidPeerId(_) => write!(f, "Failed to decode bytes as PeerId"),
+            Self::MismatchedSignature => write!(
+                f,
+                "The signer of the envelope is different than the peer id in the record"
+            ),
             Self::InvalidMultiaddr(_) => {
                 write!(f, "Failed to decode bytes as MultiAddress")
             }
@@ -174,6 +185,7 @@ impl std::error::Error for FromEnvelopeError {
         match self {
             Self::InvalidPeerRecord(inner) => Some(inner),
             Self::InvalidPeerId(inner) => Some(inner),
+            Self::MismatchedSignature => None,
             Self::InvalidMultiaddr(inner) => Some(inner),
             Self::BadPayload(inner) => Some(inner),
         }
@@ -195,5 +207,46 @@ mod tests {
         let reconstructed = PeerRecord::from_signed_envelope(envelope).unwrap();
 
         assert_eq!(reconstructed, record)
+    }
+
+    #[test]
+    fn mismatched_signature() {
+        use prost::Message;
+
+        let addr: Multiaddr = HOME.parse().unwrap();
+
+        let envelope = {
+            let identity_a = Keypair::generate_ed25519();
+            let identity_b = Keypair::generate_ed25519();
+
+            let payload = {
+                let record = peer_record_proto::PeerRecord {
+                    peer_id: identity_a.public().to_peer_id().to_bytes(),
+                    seq: 0,
+                    addresses: vec![peer_record_proto::peer_record::AddressInfo {
+                        multiaddr: addr.to_vec(),
+                    }],
+                };
+
+                let mut buf = Vec::with_capacity(record.encoded_len());
+                record
+                    .encode(&mut buf)
+                    .expect("Vec<u8> provides capacity as needed");
+                buf
+            };
+
+            SignedEnvelope::new(
+                identity_b,
+                String::from(DOMAIN_SEP),
+                PAYLOAD_TYPE.as_bytes().to_vec(),
+                payload,
+            )
+            .unwrap()
+        };
+
+        assert!(matches!(
+            PeerRecord::from_signed_envelope(envelope),
+            Err(FromEnvelopeError::MismatchedSignature)
+        ));
     }
 }

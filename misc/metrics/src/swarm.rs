@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use open_metrics_client::encoding::text::Encode;
-use open_metrics_client::metrics::counter::Counter;
-use open_metrics_client::metrics::family::Family;
-use open_metrics_client::registry::Registry;
+use prometheus_client::encoding::text::Encode;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
+use prometheus_client::registry::Registry;
 
 pub struct Metrics {
     connections_incoming: Counter,
@@ -216,8 +216,11 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::Aborted => {
                         record(OutgoingConnectionErrorError::Aborted)
                     }
-                    libp2p_swarm::DialError::InvalidPeerId => {
+                    libp2p_swarm::DialError::InvalidPeerId { .. } => {
                         record(OutgoingConnectionErrorError::InvalidPeerId)
+                    }
+                    libp2p_swarm::DialError::WrongPeerId { .. } => {
+                        record(OutgoingConnectionErrorError::WrongPeerId)
                     }
                     libp2p_swarm::DialError::ConnectionIo(_) => {
                         record(OutgoingConnectionErrorError::ConnectionIo)
@@ -292,6 +295,7 @@ enum OutgoingConnectionErrorError {
     DialPeerConditionFalse,
     Aborted,
     InvalidPeerId,
+    WrongPeerId,
     ConnectionIo,
     TransportMultiaddrNotSupported,
     TransportOther,
@@ -304,7 +308,7 @@ struct IncomingConnectionErrorLabels {
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 enum PendingInboundConnectionError {
-    InvalidPeerId,
+    WrongPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
@@ -312,29 +316,27 @@ enum PendingInboundConnectionError {
     ConnectionLimit,
 }
 
-impl<TTransErr> From<&libp2p_core::connection::PendingInboundConnectionError<TTransErr>>
+impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
     for PendingInboundConnectionError
 {
-    fn from(error: &libp2p_core::connection::PendingInboundConnectionError<TTransErr>) -> Self {
+    fn from(error: &libp2p_swarm::PendingInboundConnectionError<TTransErr>) -> Self {
         match error {
-            libp2p_core::connection::PendingInboundConnectionError::InvalidPeerId => {
-                PendingInboundConnectionError::InvalidPeerId
+            libp2p_swarm::PendingInboundConnectionError::WrongPeerId { .. } => {
+                PendingInboundConnectionError::WrongPeerId
             }
-            libp2p_core::connection::PendingInboundConnectionError::ConnectionLimit(_) => {
+            libp2p_swarm::PendingInboundConnectionError::ConnectionLimit(_) => {
                 PendingInboundConnectionError::ConnectionLimit
             }
-            libp2p_core::connection::PendingInboundConnectionError::Transport(
+            libp2p_swarm::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
             ) => PendingInboundConnectionError::TransportErrorMultiaddrNotSupported,
-            libp2p_core::connection::PendingInboundConnectionError::Transport(
+            libp2p_swarm::PendingInboundConnectionError::Transport(
                 libp2p_core::transport::TransportError::Other(_),
             ) => PendingInboundConnectionError::TransportErrorOther,
-            libp2p_core::connection::PendingInboundConnectionError::Aborted => {
+            libp2p_swarm::PendingInboundConnectionError::Aborted => {
                 PendingInboundConnectionError::Aborted
             }
-            libp2p_core::connection::PendingInboundConnectionError::IO(_) => {
-                PendingInboundConnectionError::Io
-            }
+            libp2p_swarm::PendingInboundConnectionError::IO(_) => PendingInboundConnectionError::Io,
         }
     }
 }

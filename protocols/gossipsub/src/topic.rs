@@ -20,7 +20,7 @@
 
 use crate::rpc_proto;
 use base64::encode;
-use open_metrics_client::encoding::text::Encode;
+use prometheus_client::encoding::text::Encode;
 use prost::Message;
 use sha2::{Digest, Sha256};
 use std::fmt;

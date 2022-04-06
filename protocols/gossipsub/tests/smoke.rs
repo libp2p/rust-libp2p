@@ -37,7 +37,7 @@ use libp2p_gossipsub::{
     ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::{dial_opts::DialOpts, Swarm, SwarmEvent};
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {

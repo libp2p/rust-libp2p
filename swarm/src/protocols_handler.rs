@@ -318,6 +318,13 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, T
     },
 
     /// Close the connection for the given reason.
+    ///
+    /// Note this will affect all [`ProtocolsHandler`]s handling this
+    /// connection, in other words it will close the connection for all
+    /// [`ProtocolsHandler`]s. To signal that one has no more need for the
+    /// connection, while allowing other [`ProtocolsHandler`]s to continue using
+    /// the connection, return [`KeepAlive::No`] in
+    /// [`ProtocolsHandler::connection_keep_alive`].
     Close(TErr),
 
     /// Other event.

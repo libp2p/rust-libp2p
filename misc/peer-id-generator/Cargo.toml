@@ -12,5 +12,5 @@ categories = ["network-programming", "asynchronous"]
 publish = false
 
 [dependencies]
-libp2p-core = { path = "../../core", default-features = false, version = "0.31.0"}
+libp2p-core = { path = "../../core", default-features = false, version = "0.32.0"}
 num_cpus = "1.8"

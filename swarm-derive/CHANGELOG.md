@@ -1,4 +1,4 @@
-# 0.26.1 [unreleased]
+# 0.26.1 [2022-01-27]
 
 - Remove unnecessary clone of error in `inject_dial_failure` (see [PR 2349]).
 

@@ -27,6 +27,7 @@ use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
+use instant::Duration;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
@@ -37,7 +38,6 @@ use libp2p_swarm::{
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
 pub struct Behaviour {
     events: VecDeque<

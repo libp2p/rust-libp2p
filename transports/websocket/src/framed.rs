@@ -23,6 +23,7 @@ use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
 use libp2p_core::{
+    connection::Endpoint,
     either::EitherOutput,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
@@ -245,6 +246,32 @@ where
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Dialer)
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.do_dial(addr, Endpoint::Listener)
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
+    }
+}
+
+impl<T> WsConfig<T>
+where
+    T: Transport + Send + Clone + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    fn do_dial(
+        self,
+        addr: Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
         let addr = match parse_ws_dial_addr(addr) {
             Ok(addr) => addr,
             Err(Error::InvalidMultiaddr(a)) => {
@@ -259,7 +286,7 @@ where
         let future = async move {
             loop {
                 let this = self.clone();
-                match this.dial_once(addr).await {
+                match this.dial_once(addr, role_override).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
                             debug!("Too many redirects (> {})", self.max_redirects);
@@ -276,25 +303,19 @@ where
 
         Ok(Box::pin(future))
     }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
-    }
-}
-
-impl<T> WsConfig<T>
-where
-    T: Transport,
-    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
     /// Attempts to dial the given address and perform a websocket handshake.
     async fn dial_once(
         self,
         addr: WsAddress,
+        role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("Dialing websocket address: {:?}", addr);
 
-        let dial = self.transport.dial(addr.tcp_addr).map_err(|e| match e {
+        let dial = match role_override {
+            Endpoint::Dialer => self.transport.dial(addr.tcp_addr),
+            Endpoint::Listener => self.transport.dial_as_listener(addr.tcp_addr),
+        }
+        .map_err(|e| match e {
             TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
             TransportError::Other(e) => Error::Transport(e),
         })?;

@@ -152,6 +152,13 @@ type THandlerInEvent<THandler> =
 /// struct members are delegated to [`NetworkBehaviourEventProcess`] implementations. Those must be
 /// provided by the user on the type that [`NetworkBehaviour`] is derived on.
 ///
+/// Because these implementations are granted exclusive access to the [`NetworkBehaviour`],
+/// [blocking code](https://ryhl.io/blog/async-what-is-blocking/) in these implementations will
+/// block the entire [`Swarm`](crate::Swarm) from processing new events, since the swarm cannot progress
+/// without also having exclusive access to the [`NetworkBehaviour`]. A better alternative is to execute
+/// blocking or asynchronous logic on a separate task, perhaps with the help of a bounded channel to
+/// maintain backpressure. The sender for the channel could be included in the NetworkBehaviours constructor.
+///
 /// Optionally one can provide a custom `poll` function through the `#[behaviour(poll_method =
 /// "poll")]` attribute. This function must have the same signature as the [`NetworkBehaviour#poll`]
 /// function and will be called last within the generated [`NetworkBehaviour`] implementation.
@@ -190,23 +197,6 @@ pub trait NetworkBehaviour: Send + 'static {
         vec![]
     }
 
-    /// Indicate to the behaviour that we connected to the node with the given peer id.
-    ///
-    /// This node now has a handler (as spawned by `new_handler`) running in the background.
-    ///
-    /// This method is only called when the first connection to the peer is established, preceded by
-    /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
-    fn inject_connected(&mut self, _: &PeerId) {}
-
-    /// Indicates to the behaviour that we disconnected from the node with the given peer id.
-    ///
-    /// There is no handler running anymore for this node. Any event that has been sent to it may
-    /// or may not have been processed by the handler.
-    ///
-    /// This method is only called when the last established connection to the peer is closed,
-    /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
-    fn inject_disconnected(&mut self, _: &PeerId) {}
-
     /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(
         &mut self,
@@ -214,6 +204,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _connection_id: &ConnectionId,
         _endpoint: &ConnectedPoint,
         _failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
     ) {
     }
 
@@ -228,6 +219,7 @@ pub trait NetworkBehaviour: Send + 'static {
         _: &ConnectionId,
         _: &ConnectedPoint,
         _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _remaining_established: usize,
     ) {
     }
 

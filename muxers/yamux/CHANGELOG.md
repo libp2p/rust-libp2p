@@ -1,10 +1,18 @@
-# 0.35.0 [unreleased]
+# 0.36.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+# 0.35.0 [2022-01-27]
 
 - Update dependencies.
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 
+- Update to `yamux` `v0.10.0` and thus defaulting to `WindowUpdateMode::OnRead`.
+  See [PR 2435].
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
+[PR 2435]: https://github.com/libp2p/rust-libp2p/pull/2435
 
 # 0.34.0 [2021-11-01]
 

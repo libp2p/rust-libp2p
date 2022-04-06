@@ -99,7 +99,7 @@ impl Transport for QuicTransport {
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        panic!("not implemented")
+        Some(observed.clone())
     }
 
     #[tracing::instrument]
@@ -125,6 +125,14 @@ impl Transport for QuicTransport {
             Ok(final_connec)
         }
         .boxed())
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // TODO: As the listener of a QUIC hole punch, we need to send a random UDP packet to the
+        // `addr`. See DCUtR specification below.
+        //
+        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+        self.dial(addr)
     }
 }
 

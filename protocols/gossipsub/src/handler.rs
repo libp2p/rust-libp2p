@@ -211,9 +211,11 @@ impl ProtocolsHandler for GossipsubHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        (substream, peer_kind): <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _info: Self::InboundOpenInfo,
     ) {
+        let (substream, peer_kind) = protocol;
+
         // If the peer doesn't support the protocol, reject all substreams
         if self.protocol_unsupported {
             return;
@@ -233,9 +235,11 @@ impl ProtocolsHandler for GossipsubHandler {
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        (substream, peer_kind): <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         message: Self::OutboundOpenInfo,
     ) {
+        let (substream, peer_kind) = protocol;
+
         // If the peer doesn't support the protocol, reject all substreams
         if self.protocol_unsupported {
             return;

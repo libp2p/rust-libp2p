@@ -38,6 +38,7 @@ mod tests {
     use crate::subscription_filter::WhitelistSubscriptionFilter;
     use crate::transform::{DataTransform, IdentityTransform};
     use crate::types::FastMessageId;
+    use libp2p_core::Endpoint;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -184,12 +185,14 @@ mod tests {
         F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
     {
         let peer = PeerId::random();
-        //peers.push(peer.clone());
         gs.inject_connection_established(
             &peer,
             &ConnectionId::new(0),
             &if outbound {
-                ConnectedPoint::Dialer { address }
+                ConnectedPoint::Dialer {
+                    address,
+                    role_override: Endpoint::Dialer,
+                }
             } else {
                 ConnectedPoint::Listener {
                     local_addr: Multiaddr::empty(),
@@ -197,8 +200,8 @@ mod tests {
                 }
             },
             None,
+            0, // first connection
         );
-        <Gossipsub<D, F> as NetworkBehaviour>::inject_connected(gs, &peer);
         if let Some(kind) = kind {
             gs.inject_event(
                 peer.clone(),
@@ -223,6 +226,32 @@ mod tests {
             );
         }
         peer
+    }
+
+    fn disconnect_peer<D, F>(gs: &mut Gossipsub<D, F>, peer_id: &PeerId)
+    where
+        D: DataTransform + Default + Clone + Send + 'static,
+        F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
+    {
+        if let Some(peer_connections) = gs.connected_peers.get(peer_id) {
+            let fake_endpoint = ConnectedPoint::Dialer {
+                address: Multiaddr::empty(),
+                role_override: Endpoint::Dialer,
+            }; // this is not relevant
+               // peer_connections.connections should never be empty.
+            let mut active_connections = peer_connections.connections.len();
+            for conn_id in peer_connections.connections.clone() {
+                let handler = gs.new_handler();
+                active_connections = active_connections.checked_sub(1).unwrap();
+                gs.inject_connection_closed(
+                    peer_id,
+                    &conn_id,
+                    &fake_endpoint,
+                    handler,
+                    active_connections,
+                );
+            }
+        }
     }
 
     // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
@@ -534,10 +563,11 @@ mod tests {
                 &ConnectionId::new(1),
                 &ConnectedPoint::Dialer {
                     address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
+                    role_override: Endpoint::Dialer,
                 },
                 None,
+                0,
             );
-            gs.inject_connected(&random_peer);
 
             // add the new peer to the fanout
             let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
@@ -1378,7 +1408,7 @@ mod tests {
         flush_events(&mut gs);
 
         //disconnect peer
-        gs.inject_disconnected(peer);
+        disconnect_peer(&mut gs, peer);
 
         gs.heartbeat();
 
@@ -2023,6 +2053,77 @@ mod tests {
         gs.heartbeat();
 
         //check that graft got created
+        assert!(
+            count_control_msgs(&gs, |_, m| match m {
+                GossipsubControlAction::Graft { .. } => true,
+                _ => false,
+            }) > 0,
+            "No graft message was created after backoff period"
+        );
+    }
+
+    #[test]
+    fn test_unsubscribe_backoff() {
+        const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
+        let config = GossipsubConfigBuilder::default()
+            .backoff_slack(1)
+            // ensure a prune_backoff > unsubscribe_backoff
+            .prune_backoff(Duration::from_secs(5))
+            .unsubscribe_backoff(1)
+            .heartbeat_interval(HEARTBEAT_INTERVAL)
+            .build()
+            .unwrap();
+
+        let topic = String::from("test");
+        // only one peer => mesh too small and will try to regraft as early as possible
+        let (mut gs, _, topics) = inject_nodes1()
+            .peer_no(1)
+            .topics(vec![topic.clone()])
+            .to_subscribe(true)
+            .gs_config(config)
+            .create_network();
+
+        let _ = gs.unsubscribe(&Topic::new(topic.clone()));
+
+        assert_eq!(
+            count_control_msgs(&gs, |_, m| match m {
+                GossipsubControlAction::Prune { backoff, .. } => backoff == &Some(1),
+                _ => false,
+            }),
+            1,
+            "Peer should be pruned with `unsubscribe_backoff`."
+        );
+
+        let _ = gs.subscribe(&Topic::new(topics[0].to_string()));
+
+        // forget all events until now
+        flush_events(&mut gs);
+
+        // call heartbeat
+        gs.heartbeat();
+
+        // Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
+        for _ in 0..10 {
+            sleep(HEARTBEAT_INTERVAL);
+            gs.heartbeat();
+        }
+
+        // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+        // is needed).
+        assert_eq!(
+            count_control_msgs(&gs, |_, m| match m {
+                GossipsubControlAction::Graft { .. } => true,
+                _ => false,
+            }),
+            0,
+            "Graft message created too early within backoff period"
+        );
+
+        // Heartbeat one more time this should graft now
+        sleep(HEARTBEAT_INTERVAL);
+        gs.heartbeat();
+
+        // check that graft got created
         assert!(
             count_control_msgs(&gs, |_, m| match m {
                 GossipsubControlAction::Graft { .. } => true,
@@ -4075,8 +4176,10 @@ mod tests {
                 &ConnectionId::new(0),
                 &ConnectedPoint::Dialer {
                     address: addr.clone(),
+                    role_override: Endpoint::Dialer,
                 },
                 None,
+                0,
             );
         }
 
@@ -4094,8 +4197,10 @@ mod tests {
                 &ConnectionId::new(0),
                 &ConnectedPoint::Dialer {
                     address: addr2.clone(),
+                    role_override: Endpoint::Dialer,
                 },
                 None,
+                1,
             );
         }
 
@@ -4122,8 +4227,10 @@ mod tests {
             &ConnectionId::new(0),
             &ConnectedPoint::Dialer {
                 address: addr.clone(),
+                role_override: Endpoint::Dialer,
             },
             None,
+            2,
         );
 
         //nothing changed
@@ -4659,6 +4766,8 @@ mod tests {
 
     #[test]
     fn test_iwant_penalties() {
+        let _ = env_logger::try_init();
+
         let config = GossipsubConfigBuilder::default()
             .iwant_followup_time(Duration::from_secs(4))
             .build()
@@ -4666,9 +4775,9 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         peer_score_params.behaviour_penalty_weight = -1.0;
 
-        //fill the mesh
+        // fill the mesh
         let (mut gs, peers, topics) = inject_nodes1()
-            .peer_no(config.mesh_n_high())
+            .peer_no(2)
             .topics(vec!["test".into()])
             .to_subscribe(false)
             .gs_config(config.clone())
@@ -4677,79 +4786,76 @@ mod tests {
             .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
             .create_network();
 
-        //graft to all peers to really fill the mesh with all the peers
+        // graft to all peers to really fill the mesh with all the peers
         for peer in peers {
             gs.handle_graft(&peer, topics.clone());
         }
 
-        //add 100 more peers
+        // add 100 more peers
         let other_peers: Vec<_> = (0..100)
             .map(|_| add_peer(&mut gs, &topics, false, false))
             .collect();
 
-        //each peer sends us two ihave containing each two message ids
+        // each peer sends us an ihave containing each two message ids
         let mut first_messages = Vec::new();
         let mut second_messages = Vec::new();
         let mut seq = 0;
         for peer in &other_peers {
-            for _ in 0..2 {
-                let msg1 = random_message(&mut seq, &topics);
-                let msg2 = random_message(&mut seq, &topics);
+            let msg1 = random_message(&mut seq, &topics);
+            let msg2 = random_message(&mut seq, &topics);
 
-                // Decompress the raw message and calculate the message id.
-                // Transform the inbound message
-                let message1 = &gs.data_transform.inbound_transform(msg1.clone()).unwrap();
+            // Decompress the raw message and calculate the message id.
+            // Transform the inbound message
+            let message1 = &gs.data_transform.inbound_transform(msg1.clone()).unwrap();
 
-                // Transform the inbound message
-                let message2 = &gs.data_transform.inbound_transform(msg2.clone()).unwrap();
+            // Transform the inbound message
+            let message2 = &gs.data_transform.inbound_transform(msg2.clone()).unwrap();
 
-                first_messages.push(msg1.clone());
-                second_messages.push(msg2.clone());
-                gs.handle_ihave(
-                    peer,
-                    vec![(
-                        topics[0].clone(),
-                        vec![config.message_id(&message1), config.message_id(&message2)],
-                    )],
-                );
-            }
+            first_messages.push(msg1.clone());
+            second_messages.push(msg2.clone());
+            gs.handle_ihave(
+                peer,
+                vec![(
+                    topics[0].clone(),
+                    vec![config.message_id(&message1), config.message_id(&message2)],
+                )],
+            );
         }
 
-        //other peers send us all the first message ids in time
-        for message in first_messages {
-            gs.handle_received_message(message.clone(), &PeerId::random());
+        // the peers send us all the first message ids in time
+        for (index, peer) in other_peers.iter().enumerate() {
+            gs.handle_received_message(first_messages[index].clone(), &peer);
         }
 
-        //now we do a heartbeat no penalization should have been applied yet
+        // now we do a heartbeat no penalization should have been applied yet
         gs.heartbeat();
 
         for peer in &other_peers {
             assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 0.0);
         }
 
-        //receive the first twenty of the second messages (that are the messages of the first 10
-        // peers)
-        for message in second_messages.iter().take(20) {
-            gs.handle_received_message(message.clone(), &PeerId::random());
+        // receive the first twenty of the other peers then send their response
+        for (index, peer) in other_peers.iter().enumerate().take(20) {
+            gs.handle_received_message(second_messages[index].clone(), &peer);
         }
 
-        //sleep for one second
+        // sleep for the promise duration
         sleep(Duration::from_secs(4));
 
-        //now we do a heartbeat to apply penalization
+        // now we do a heartbeat to apply penalization
         gs.heartbeat();
 
-        //now we get all the second messages
-        for message in second_messages {
-            gs.handle_received_message(message.clone(), &PeerId::random());
+        // now we get the second messages from the last 80 peers.
+        for (index, peer) in other_peers.iter().enumerate() {
+            if index > 19 {
+                gs.handle_received_message(second_messages[index].clone(), &peer);
+            }
         }
 
-        //no further penalizations should get applied
+        // no further penalizations should get applied
         gs.heartbeat();
 
-        //now randomly some peers got penalized, some may not, and some may got penalized twice
-        //with very high probability (> 1 - 10^-50) all three cases are present under the 100 peers
-        //but the first 10 peers should all not got penalized.
+        // Only the last 80 peers should be penalized for not responding in time
         let mut not_penalized = 0;
         let mut single_penalized = 0;
         let mut double_penalized = 0;
@@ -4765,13 +4871,15 @@ mod tests {
                 assert!(i > 9);
                 double_penalized += 1
             } else {
+                println!("{}", peer);
+                println!("{}", score);
                 assert!(false, "Invalid score of peer")
             }
         }
 
-        assert!(not_penalized > 10);
-        assert!(single_penalized > 0);
-        assert!(double_penalized > 0);
+        assert_eq!(not_penalized, 20);
+        assert_eq!(single_penalized, 80);
+        assert_eq!(double_penalized, 0);
     }
 
     #[test]
@@ -5138,7 +5246,7 @@ mod tests {
             gs.handle_received_message(message.clone(), &PeerId::random());
         }
 
-        assert!(counters.fast_counter <= 5);
+        assert_eq!(counters.fast_counter, 5);
         assert_eq!(counters.slow_counter, 1);
     }
 
@@ -5253,7 +5361,7 @@ mod tests {
         gs.handle_graft(&peers[0], subscribe_topic_hash);
 
         // The node disconnects
-        gs.inject_disconnected(&peers[0]);
+        disconnect_peer(&mut gs, &peers[0]);
 
         // We unsubscribe from the topic.
         let _ = gs.unsubscribe(&Topic::new(topic));

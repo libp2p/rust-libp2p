@@ -1,4 +1,14 @@
-# 0.34.0 [unreleased]
+# 0.35.0 [unreleased]
+
+- Update to `libp2p-core` `v0.32.0`.
+
+- Update to `libp2p-swarm` `v0.34.0`.
+
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+
+[PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
+
+# 0.34.0 [2022-01-27]
 
 - Update dependencies.
 
@@ -13,11 +23,15 @@
 
 - Fix generation of peer expiration event and listen on specified IP version (see [PR 2359]).
 
+- Support multiple interfaces (see [PR 2383]).
+
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
 [PR 2311]: https://github.com/libp2p/rust-libp2p/pull/2311/
 
 [PR 2359]: https://github.com/libp2p/rust-libp2p/pull/2359
+
+[PR 2383]: https://github.com/libp2p/rust-libp2p/pull/2383
 
 # 0.33.0 [2021-11-16]
 

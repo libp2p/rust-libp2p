@@ -29,9 +29,7 @@ use libp2p::core::upgrade::SelectUpgrade;
 use libp2p::core::{identity, Multiaddr, PeerId, Transport};
 use libp2p::mplex::MplexConfig;
 use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
-use libp2p::swarm::{
-    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
-};
+use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::time::Duration;

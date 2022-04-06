@@ -42,33 +42,96 @@
 
 # `libp2p` facade crate
 
-## Version 0.42.0 [unreleased]
+## Version 0.43.0 [unreleased]
 
 - Update individual crates.
+  - Update to `libp2p-autonat` `v0.2.0`.
+  - Update to `libp2p-core` `v0.32.0`.
+  - Update to `libp2p-deflate` `v0.32.0`.
+  - Update to `libp2p-dns` `v0.32.0`.
+  - Update to `libp2p-floodsub` `v0.34.0`.
+  - Update to `libp2p-gossipsub` `v0.36.0`.
+  - Update to `libp2p-identify` `v0.34.0`.
+  - Update to `libp2p-kad` `v0.35.0`.
+  - Update to `libp2p-mdns` `v0.35.0`.
+  - Update to `libp2p-metrics` `v0.4.0`.
+  - Update to `libp2p-mplex` `v0.32.0`.
+  - Update to `libp2p-noise` `v0.35.0`.
+  - Update to `libp2p-ping` `v0.34.0`.
+  - Update to `libp2p-plaintext` `v0.32.0`.
+  - Update to `libp2p-relay` `v0.7.0`.
+  - Update to `libp2p-rendezvous` `v0.4.0`.
+  - Update to `libp2p-request-response` `v0.16.0`.
+  - Update to `libp2p-swarm` `v0.34.0`.
+  - Update to `libp2p-tcp` `v0.32.0`.
+  - Update to `libp2p-uds` `v0.32.0`.
+  - Update to `libp2p-wasm-ext` `v0.32.0`.
+  - Update to `libp2p-websocket` `v0.34.0`.
+  - Update to `libp2p-yamux` `v0.36.0`.
+
+- Drop support for gossipsub in the wasm32-unknown-unknown target (see [PR 2506]).
+
+[PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
+
+## Version 0.42.1 [2022-02-02]
+
+- Update individual crates.
+  - `libp2p-relay`
+      - [v0.6.1](protocols/relay/CHANGELOG.md#061-2022-02-02)
+  - `libp2p-tcp`
+      - [v0.31.1](transports/tcp/CHANGELOG.md#0311-2022-02-02)
+
+## Version 0.42.0 [2022-01-27]
+
+- Update individual crates.
+    - `libp2p-autonat`
+      - [v0.1.0](protocols/autonat/CHANGELOG.md#010-2022-01-27)
     - `libp2p-core`
+      - [v0.31.0](core/CHANGELOG.md#0310-2022-01-27)
     - `libp2p-deflate`
+      - [v0.31.0](transports/deflate/CHANGELOG.md#0310-2022-01-27)
     - `libp2p-dns`
+      - [v0.31.0](transports/dns/CHANGELOG.md#0310-2022-01-27)
     - `libp2p-floodsub`
+      - [v0.33.0](protocols/floodsub/CHANGELOG.md#0330-2022-01-27)
     - `libp2p-gossipsub`
+      - [v0.35.0](protocols/gossipsub/CHANGELOG.md#0350-2022-01-27)
     - `libp2p-identify`
+      - [v0.33.0](protocols/identify/CHANGELOG.md#0330-2022-01-27)
     - `libp2p-kad`
-    - `libp2p-mdns`
-    - `libp2p-metrics`
-    - `libp2p-mplex`
-    - `libp2p-noise`
-    - `libp2p-ping`
-    - `libp2p-plaintext`
-    - `libp2p-relay`
-    - `libp2p-rendezvous`
-    - `libp2p-request-response`
-    - `libp2p-swarm-derive`
-    - `libp2p-swarm`
-    - `libp2p-tcp`
-    - `libp2p-uds`
-    - `libp2p-wasm-ext`
-    - `libp2p-websocket`
-    - `libp2p-yamux`
+      - [v0.34.0](protocols/kad/CHANGELOG.md#0340-2022-01-27)
     - `libp2p-mdns` (breaking compatibility with previous versions)
+      - [v0.34.0](protocols/mdns/CHANGELOG.md#0340-2022-01-27)
+    - `libp2p-metrics`
+      - [v0.3.0](misc/metrics/CHANGELOG.md#030-2022-01-27)
+    - `libp2p-mplex`
+      - [v0.31.0](muxers/mplex/CHANGELOG.md#0310-2022-01-27)
+    - `libp2p-noise`
+      - [v0.34.0](transports/noise/CHANGELOG.md#0340-2022-01-27)
+    - `libp2p-ping`
+      - [v0.33.0](protocols/ping/CHANGELOG.md#0330-2022-01-27)
+    - `libp2p-plaintext`
+      - [v0.31.0](transports/plaintext/CHANGELOG.md#0310-2022-01-27)
+    - `libp2p-relay`
+      - [v0.6.0](protocols/relay/CHANGELOG.md#060-2022-01-27)
+    - `libp2p-rendezvous`
+      - [v0.3.0](protocols/rendezvous/CHANGELOG.md#030-2022-01-27)
+    - `libp2p-request-response`
+      - [v0.15.0](protocols/request-response/CHANGELOG.md#0150-2022-01-27)
+    - `libp2p-swarm-derive`
+      - [v0.26.1](swarm-derive/CHANGELOG.md#0261-2022-01-27)
+    - `libp2p-swarm`
+      - [v0.33.0](swarm/CHANGELOG.md#0330-2022-01-27)
+    - `libp2p-tcp`
+      - [v0.31.0](transports/tcp/CHANGELOG.md#0310-2022-01-27)
+    - `libp2p-uds`
+      - [v0.31.0](transports/uds/CHANGELOG.md#0310-2022-01-27)
+    - `libp2p-wasm-ext`
+      - [v0.31.0](transports/wasm-ext/CHANGELOG.md#0310-2022-01-27)
+    - `libp2p-websocket`
+      - [v0.33.0](transports/websocket/CHANGELOG.md#0330-2022-01-27)
+    - `libp2p-yamux`
+      - [v0.35.0](muxers/yamux/CHANGELOG.md#0350-2022-01-27)
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
 

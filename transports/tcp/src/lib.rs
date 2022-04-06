@@ -57,7 +57,7 @@ use socket2::{Domain, Socket, Type};
 use std::{
     collections::HashSet,
     io,
-    net::{IpAddr, SocketAddr, TcpListener},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
     sync::{Arc, RwLock},
     task::{Context, Poll},
@@ -151,7 +151,11 @@ impl PortReuse {
                 if ip.is_ipv4() == remote_ip.is_ipv4()
                     && ip.is_loopback() == remote_ip.is_loopback()
                 {
-                    return Some(SocketAddr::new(*ip, *port));
+                    if remote_ip.is_ipv4() {
+                        return Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), *port));
+                    } else {
+                        return Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), *port));
+                    }
                 }
             }
         }
@@ -399,6 +403,10 @@ where
         };
         log::debug!("dialing {}", socket_addr);
         Ok(Box::pin(self.do_dial(socket_addr)))
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.dial(addr)
     }
 
     /// When port reuse is disabled and hence ephemeral local ports are
@@ -844,6 +852,8 @@ mod tests {
                             panic!("No TCP port in address: {}", a)
                         }
                         ready_tx.send(a).await.ok();
+                    }
+                    ListenerEvent::Upgrade { .. } => {
                         return;
                     }
                     _ => {}

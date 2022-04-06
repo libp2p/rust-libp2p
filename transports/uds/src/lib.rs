@@ -105,12 +105,17 @@ impl Transport for $uds_config {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // TODO: Should we dial at all?
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
+    }
+
+    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.dial(addr)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {

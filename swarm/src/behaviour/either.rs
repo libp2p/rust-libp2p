@@ -53,34 +53,29 @@ where
         }
     }
 
-    fn inject_connected(&mut self, peer_id: &PeerId) {
-        match self {
-            Either::Left(a) => a.inject_connected(peer_id),
-            Either::Right(b) => b.inject_connected(peer_id),
-        };
-    }
-
-    fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        match self {
-            Either::Left(a) => a.inject_disconnected(peer_id),
-            Either::Right(b) => b.inject_disconnected(peer_id),
-        }
-    }
-
     fn inject_connection_established(
         &mut self,
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         errors: Option<&Vec<Multiaddr>>,
+        other_established: usize,
     ) {
         match self {
-            Either::Left(a) => {
-                a.inject_connection_established(peer_id, connection, endpoint, errors)
-            }
-            Either::Right(b) => {
-                b.inject_connection_established(peer_id, connection, endpoint, errors)
-            }
+            Either::Left(a) => a.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            ),
+            Either::Right(b) => b.inject_connection_established(
+                peer_id,
+                connection,
+                endpoint,
+                errors,
+                other_established,
+            ),
         }
     }
 
@@ -90,14 +85,24 @@ where
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
         handler: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        remaining_established: usize,
     ) {
         match (self, handler) {
-            (Either::Left(behaviour), Either::Left(handler)) => {
-                behaviour.inject_connection_closed(peer_id, connection, endpoint, handler)
-            }
-            (Either::Right(behaviour), Either::Right(handler)) => {
-                behaviour.inject_connection_closed(peer_id, connection, endpoint, handler)
-            }
+            (Either::Left(behaviour), Either::Left(handler)) => behaviour.inject_connection_closed(
+                peer_id,
+                connection,
+                endpoint,
+                handler,
+                remaining_established,
+            ),
+            (Either::Right(behaviour), Either::Right(handler)) => behaviour
+                .inject_connection_closed(
+                    peer_id,
+                    connection,
+                    endpoint,
+                    handler,
+                    remaining_established,
+                ),
             _ => unreachable!(),
         }
     }
