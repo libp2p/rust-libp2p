@@ -131,7 +131,7 @@ impl StreamMuxer for QuicMuxer {
                         waker.wake();
                     }
                     inner.connection.close();
-                    return Poll::Ready(Err(Error::ConnectionLost(e)))
+                    // return Poll::Ready(Err(Error::ConnectionLost(e)))
                 }
 
                 ConnectionEvent::StreamOpened => {
@@ -340,11 +340,11 @@ impl StreamMuxer for QuicMuxer {
         let side = inner.connection.connection.side();
         //tracing::info!(?side, ?id, "read_substream");
 
-        let substream_state = inner.substreams.get_mut(substream)
-            .expect("invalid StreamMuxer::read_substream API usage");
-        if substream_state.finished {
-            return Poll::Ready(Ok(0))
-        }
+        // let substream_state = inner.substreams.get_mut(substream)
+        //     .expect("invalid StreamMuxer::read_substream API usage");
+        // if substream_state.finished {
+        //     return Poll::Ready(Ok(0))
+        // }
         
         let mut stream = inner.connection.connection.recv_stream(id);
         let mut chunks = match stream.read(true) {
@@ -503,40 +503,40 @@ impl StreamMuxer for QuicMuxer {
 
         let mut inner = self.inner.lock();
 
-        // if inner.connection.connection.is_drained() {
-        //     return Poll::Ready(Ok(()))
-        // }
+        if inner.connection.connection.is_drained() {
+            return Poll::Ready(Ok(()))
+        }
         
-        // if inner.substreams.is_empty() {
-        //     let connection = &mut inner.connection;
-        //     if !connection.connection.is_closed() {
-        //         connection.close();
-        //         if let Some(waker) = inner.poll_event_waker.take() {
-        //             waker.wake();
-        //         }
-        //     } else {
+        if inner.substreams.is_empty() {
+            let connection = &mut inner.connection;
+            if !connection.connection.is_closed() {
+                connection.close();
+                if let Some(waker) = inner.poll_event_waker.take() {
+                    waker.wake();
+                }
+            } else {
                 
-        //     }
-        //     tracing::error!(
-        //         is_closed = inner.connection.connection.is_closed(),
-        //         is_drained = inner.connection.connection.is_drained()
-        //     );
-        //     while let Poll::Ready(event) = inner.connection.poll_event(cx) {
-        //         match event {
-        //             ConnectionEvent::ConnectionLost(_) => {
-        //                 return Poll::Ready(Ok(()))
-        //             },
-        //             _ => {
+            }
+            tracing::error!(
+                is_closed = inner.connection.connection.is_closed(),
+                is_drained = inner.connection.connection.is_drained()
+            );
+            while let Poll::Ready(event) = inner.connection.poll_event(cx) {
+                match event {
+                    ConnectionEvent::ConnectionLost(_) => {
+                        return Poll::Ready(Ok(()))
+                    },
+                    _ => {
 
-        //             }
-        //         }
-        //     }
-        //     // return Poll::Ready(Ok(()))
-        // } else {
-        //     for substream in inner.substreams.clone().keys() {
-        //         inner.connection.shutdown_substream(*substream);
-        //     }
-        // }
+                    }
+                }
+            }
+            // return Poll::Ready(Ok(()))
+        } else {
+            for substream in inner.substreams.clone().keys() {
+                inner.connection.shutdown_substream(*substream);
+            }
+        }
 
         // Register `cx.waker()` as being woken up if the connection closes.
         if !inner

@@ -421,6 +421,7 @@ impl Connection {
                         self.is_handshaking = false;
                         let err = Error::Quinn(reason);
                         self.closed = Some(err.clone());
+                        // self.close();
                         // self.connection
                         //    .close(Instant::now(), From::from(0u32), Default::default());
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));

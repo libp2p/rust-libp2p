@@ -466,7 +466,5 @@ fn concurrent_connections_and_streams() {
         TestResult::passed()
     }
 
-    prop(NonZeroU8::new(1).unwrap(), NonZeroU8::new(2).unwrap());
-
-    // QuickCheck::new().quickcheck(prop as fn(_, _) -> _);
+    QuickCheck::new().quickcheck(prop as fn(_, _) -> _);
 }
