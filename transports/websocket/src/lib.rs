@@ -49,8 +49,6 @@ pub struct WsConfig<T: Transport>
 where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    // T: Transport + Send + 'static,
-    // T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     transport: libp2p_core::transport::map::Map<framed::WsConfig<T>, WrapperFn<T::Output>>,
 }
