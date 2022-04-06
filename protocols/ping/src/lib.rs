@@ -120,6 +120,14 @@ impl NetworkBehaviour for Behaviour {
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(e) = self.events.pop_back() {
+            let Event { result, peer } = &e;
+
+            match result {
+                Ok(Success::Ping { .. }) => log::debug!("Ping sent to {:?}", peer),
+                Ok(Success::Pong) => log::debug!("Ping received from {:?}", peer),
+                _ => {}
+            }
+
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
             Poll::Pending
