@@ -25,6 +25,10 @@ pub mod behaviour;
 mod handler;
 mod protocol;
 
+pub use protocol::{
+    inbound::UpgradeError as InboundUpgradeError, outbound::UpgradeError as OutboundUpgradeError,
+};
+
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }

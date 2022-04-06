@@ -1,4 +1,4 @@
-# 0.32.1 [unreleased]
+# 0.32.1
 
 - Update to `trust-dns` `v0.21`. See [PR 2543].
 
