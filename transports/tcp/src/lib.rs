@@ -66,11 +66,6 @@ use std::{
 use provider::{IfEvent, Provider};
 
 /// The configuration for a TCP/IP transport capability for libp2p.
-///
-/// A [`GenTcpConfig`] implements the [`Transport`] interface and thus
-/// is consumed on [`Transport::listen_on`] and [`Transport::dial`].
-/// However, the config can be cheaply cloned to perform multiple such
-/// operations with the same config.
 #[derive(Clone, Debug)]
 pub struct GenTcpConfig<T> {
     /// The type of the I/O provider.
@@ -232,9 +227,9 @@ where
     /// > a single outgoing connection to a particular address and port
     /// > of a peer per local listening socket address.
     ///
-    /// Two `GenTcpConfig`s keep track of the listen socket addresses as they
+    /// `GenTcpConfig` keeps track of the listen socket addresses as they
     /// are reported by polling [`TcpListenStream`]s obtained from
-    /// [`GenTcpConfig::listen_on()`]. It is thus possible to listen on multiple
+    /// [`GenTcpConfig::listen_on()`]. It is possible to listen on multiple
     /// addresses, enabling port reuse for each, knowing exactly which listen
     /// address is reused when dialing with a specific `GenTcpConfig`, as in the
     /// following example:
