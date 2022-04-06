@@ -42,6 +42,27 @@
 
 # `libp2p` facade crate
 
+# 0.45.0 [unreleased]
+
+- Update individual crates.
+    - Update to [`libp2p-plaintext` `v0.33.0`](transports/plaintext/CHANGELOG.md).
+    - Update to [`libp2p-noise` `v0.36.0`](transports/noise/CHANGELOG.md).
+    - Update to [`libp2p-wasm-ext` `v0.33.0`](transports/wasm-ext/CHANGELOG.md).
+    - Update to [`libp2p-yamux` `v0.37.0`](muxers/yamux/CHANGELOG.md).
+    - Update to [`libp2p-mplex` `v0.33.0`](muxers/mplex/CHANGELOG.md).
+    - Update to [`libp2p-dcutr` `v0.3.0`](protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-rendezvous` `v0.6.0`](protocols/rendezvous/CHANGELOG.md).
+    - Update to [`libp2p-ping` `v0.36.0`](protocols/ping/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.36.0`](protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-floodsub` `v0.36.0`](protocols/floodsub/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.9.0`](protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-metrics` `v0.6.0`](misc/metrics/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.37.0`](protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-autonat` `v0.4.0`](protocols/autonat/CHANGELOG.md).
+    - Update to [`libp2p-request-response` `v0.18.0`](protocols/request-response/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.36.0`](swarm/CHANGELOG.md).
+    - Update to [`libp2p-core` `v0.33.0`](core/CHANGELOG.md).
+
 ## 0.44.0
 
 - Update individual crates.

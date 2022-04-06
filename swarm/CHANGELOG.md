@@ -1,3 +1,11 @@
+# 0.36.0 [unreleased]
+
+- Don't require `Transport` to be `Clone`. See [PR 2529].
+
+- Update to `libp2p-core` `v0.33.0`.
+
+[PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
+
 # 0.35.0
 
 - Add impl `IntoIterator` for `MultiHandler`. See [PR 2572].
