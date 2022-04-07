@@ -4,7 +4,10 @@
 
 - Update to `libp2p-core` `v0.33.0`.
 
+- Make `behaviour::either` module private. See [PR 2610]
+
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
+[PR 2610]: https://github.com/libp2p/rust-libp2p/pull/2610/
 
 # 0.35.0
 
