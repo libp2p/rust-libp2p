@@ -290,6 +290,13 @@ impl YamuxConfig {
         self
     }
 
+    /// Set the max. payload size used when sending data frames. Payloads larger
+    /// than the configured max. will be split.
+    pub fn set_split_send_size(&mut self, n: usize) -> &mut Self {
+        self.inner.set_split_send_size(n);
+        self
+    }
+
     /// Converts the config into a [`YamuxLocalConfig`] for use with upgrades
     /// of I/O streams that are ![`Send`].
     pub fn into_local(self) -> YamuxLocalConfig {

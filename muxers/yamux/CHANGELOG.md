@@ -2,6 +2,10 @@
 
 - Update to `libp2p-core` `v0.33.0`.
 
+- Update `yamux` to `v0.10.1`.
+
+- Add `set_split_send_size` to `YamuxConfig`
+
 # 0.36.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
