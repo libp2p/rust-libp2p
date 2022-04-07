@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Libp2p Discourse Forum
+    url:  https://discuss.libp2p.io
+    about: Discussions and questions related to multiple libp2p implementations 
