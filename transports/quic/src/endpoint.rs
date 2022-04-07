@@ -450,10 +450,7 @@ async fn background_task(
             // network interface is too busy, we back-pressure all of our internal
             // channels.
             // TODO: set ECN bits; there is no support for them in the ecosystem right now
-            match udp_socket
-                .send_to(&data, destination)
-                .await
-            {
+            match udp_socket.send_to(&data, destination).await {
                 Ok(n) if n == data.len() => {}
                 Ok(_) => tracing::error!(
                     "QUIC UDP socket violated expectation that packets are always fully \

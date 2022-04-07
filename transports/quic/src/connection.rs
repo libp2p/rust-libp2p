@@ -272,9 +272,7 @@ impl Connection {
         // Process events that the endpoint has sent to us.
         loop {
             match Pin::new(&mut self.from_endpoint).poll_next(cx) {
-                Poll::Ready(Some(event)) => {
-                    self.connection.handle_event(event)
-                }
+                Poll::Ready(Some(event)) => self.connection.handle_event(event),
                 Poll::Ready(None) => {
                     debug_assert!(self.closed.is_none());
                     let err = Error::ClosedChannel;

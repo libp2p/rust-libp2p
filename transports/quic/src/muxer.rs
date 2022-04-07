@@ -233,12 +233,8 @@ impl StreamMuxer for QuicMuxer {
                 substream.write_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
-            Err(WriteError::Stopped(_)) => {
-                Poll::Ready(Ok(0))
-            }
-            Err(WriteError::UnknownStream) => {
-                Poll::Ready(Err(Self::Error::ExpiredStream))
-            }
+            Err(WriteError::Stopped(_)) => Poll::Ready(Ok(0)),
+            Err(WriteError::UnknownStream) => Poll::Ready(Err(Self::Error::ExpiredStream)),
         }
 
         // match inner.connection.write_substream(*substream, buf) {
@@ -281,10 +277,12 @@ impl StreamMuxer for QuicMuxer {
 
         let mut inner = self.inner.lock();
 
-        let substream_state = inner.substreams.get_mut(substream)
+        let substream_state = inner
+            .substreams
+            .get_mut(substream)
             .expect("invalid StreamMuxer::read_substream API usage");
         if substream_state.stopped {
-            return Poll::Ready(Ok(0))
+            return Poll::Ready(Ok(0));
         }
 
         let mut stream = inner.connection.connection.recv_stream(id);
@@ -293,7 +291,7 @@ impl StreamMuxer for QuicMuxer {
             Err(ReadableError::UnknownStream) => {
                 return Poll::Ready(Ok(0)); // FIXME This is a hack,
                                            // a rust client should close substream correctly
-                // return Poll::Ready(Err(Self::Error::ExpiredStream))
+                                           // return Poll::Ready(Err(Self::Error::ExpiredStream))
             }
             Err(ReadableError::IllegalOrderedRead) => {
                 panic!("Illegal ordered read can only happen if `stream.read(false)` is used.");
