@@ -99,7 +99,6 @@ impl Connection {
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     // TODO: maybe abstract `to_endpoint` more and make it generic? dunno
-    #[tracing::instrument(skip_all)]
     pub(crate) fn from_quinn_connection(
         endpoint: Arc<Endpoint>,
         connection: quinn_proto::Connection,
@@ -152,7 +151,6 @@ impl Connection {
 
     /// Returns the address of the node we're connected to.
     /// Panics if the connection is still handshaking.
-    #[tracing::instrument(skip_all)]
     pub(crate) fn remote_peer_id(&self) -> PeerId {
         debug_assert!(!self.is_handshaking());
         let session = self.connection.crypto_session();
@@ -263,18 +261,7 @@ impl Connection {
         self.connection.send_stream(id).finish()
     }
 
-    // pub(crate) fn flush_substream(
-    //     &mut self,
-    //     id: quinn_proto::StreamId,
-    // ) -> Result<(), quinn_proto::FinishError> {
-    //     let mut substream = self.connection.send_stream(id);
-    //     if let Ok(_) = substream.stopped() {
-
-    //     }
-    // }
-
     /// Polls the connection for an event that happend on it.
-    #[tracing::instrument]
     pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
         // Nothing more can be done if the connection is closed.
         // Return `Pending` without registering the waker, essentially freezing the task forever.
@@ -283,15 +270,12 @@ impl Connection {
         }
 
         // Process events that the endpoint has sent to us.
-        let span = tracing::trace_span!("connection.handle_event").entered();
         loop {
             match Pin::new(&mut self.from_endpoint).poll_next(cx) {
                 Poll::Ready(Some(event)) => {
-                    let _span = tracing::trace_span!("handle").entered();
                     self.connection.handle_event(event)
                 }
                 Poll::Ready(None) => {
-                    tracing::error!("connection handle event should close connection");
                     debug_assert!(self.closed.is_none());
                     let err = Error::ClosedChannel;
                     self.closed = Some(err.clone());
@@ -300,7 +284,6 @@ impl Connection {
                 Poll::Pending => break,
             }
         }
-        drop(span);
 
         'send_pending: loop {
             // Sending the pending event to the endpoint. If the endpoint is too busy, we just
@@ -313,21 +296,18 @@ impl Connection {
             // However we don't deliver substream-related events to the user as long as
             // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
             // being full to the user.
-            let span = tracing::trace_span!("connection.send_pending").entered();
             if let Some(pending_to_endpoint) = &mut self.pending_to_endpoint {
                 match Future::poll(Pin::new(pending_to_endpoint), cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(()) => self.pending_to_endpoint = None,
                 }
             }
-            drop(span);
 
             let now = Instant::now();
 
             // Poll the connection for packets to send on the UDP socket and try to send them on
             // `to_endpoint`.
             // FIXME max_datagrams
-            let span = tracing::trace_span!("connection.poll_transmit").entered();
             while let Some(transmit) = self.connection.poll_transmit(now, 1) {
                 let endpoint = self.endpoint.clone();
                 debug_assert!(self.pending_to_endpoint.is_none());
@@ -339,13 +319,11 @@ impl Connection {
                 }));
                 continue 'send_pending;
             }
-            drop(span);
 
             // Timeout system.
             // We break out of the following loop until if `poll_timeout()` returns `None` or if
             // polling `self.next_timeout` returns `Poll::Pending`.
             loop {
-                let _span = tracing::trace_span!("connection.timeout").entered();
                 if let Some(next_timeout) = &mut self.next_timeout {
                     match Future::poll(Pin::new(next_timeout), cx) {
                         Poll::Ready(()) => {
@@ -368,7 +346,6 @@ impl Connection {
 
             // The connection also needs to be able to send control messages to the endpoint. This is
             // handled here, and we try to send them on `to_endpoint` as well.
-            let span = tracing::trace_span!("connection.poll_endpoint_events").entered();
             while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
                 let endpoint = self.endpoint.clone();
                 let connection_id = self.connection_id;
@@ -380,10 +357,8 @@ impl Connection {
                 }));
                 continue 'send_pending;
             }
-            drop(span);
 
             // The final step consists in handling the events related to the various substreams.
-            let _span = tracing::trace_span!("connection.poll").entered();
             while let Some(event) = self.connection.poll() {
                 match event {
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
@@ -409,7 +384,6 @@ impl Connection {
                     }) => {
                         // The `Stop` QUIC event is more or less similar to a `Reset`, except that
                         // it applies only on the writing side of the pipe.
-                        tracing::error!("StreamEvent::Stopped {}", id);
                         return Poll::Ready(ConnectionEvent::StreamStopped(id));
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
@@ -423,8 +397,6 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::StreamOpened);
                     }
                     quinn_proto::Event::ConnectionLost { reason } => {
-                        tracing::error!("connection poll should close connection");
-                        tracing::error!("connection lost {}", reason);
                         debug_assert!(self.closed.is_none());
                         self.is_handshaking = false;
                         let err = Error::Quinn(reason);
@@ -435,7 +407,6 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
-                        tracing::error!("StreamEvent::StreamFinished {}", id);
                         return Poll::Ready(ConnectionEvent::StreamFinished(id));
                     }
                     quinn_proto::Event::Connected => {
@@ -467,14 +438,9 @@ impl fmt::Debug for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        let is_closed = self.connection.is_closed();
         let is_drained = self.connection.is_drained();
         if !is_drained {
-            // TODO:
-            // if let Some(_) = self.closed.take() {
-            // We send a `Drained` message to the endpoint to clean endpoint's resources.
             self.close();
-            // }
         }
     }
 }

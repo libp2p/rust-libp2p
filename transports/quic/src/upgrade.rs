@@ -51,7 +51,6 @@ impl Upgrade {
 impl Future for Upgrade {
     type Output = Result<(PeerId, QuicMuxer), transport::Error>;
 
-    #[tracing::instrument(skip_all)]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connection = self
             .connection
@@ -59,7 +58,6 @@ impl Future for Upgrade {
             .expect("Future polled after it has completed");
 
         let event = Connection::poll_event(connection, cx);
-        tracing::info!(?event);
         match event {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(ConnectionEvent::Connected) => {

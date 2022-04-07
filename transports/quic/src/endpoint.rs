@@ -123,7 +123,6 @@ pub struct Endpoint {
 
 impl Endpoint {
     /// Builds a new `Endpoint`.
-    #[tracing::instrument(skip_all)]
     pub fn new(config: Config) -> Result<Arc<Endpoint>, io::Error> {
         let local_socket_addr = match crate::transport::multiaddr_to_socketaddr(&config.multiaddr) {
             Some(a) => a,
@@ -215,7 +214,6 @@ impl Endpoint {
     ///
     /// Note that this method only *starts* the dialing. `Ok` is returned as soon as possible, even
     /// when the remote might end up being unreachable.
-    #[tracing::instrument]
     pub(crate) async fn dial(
         &self,
         addr: SocketAddr,
@@ -235,7 +233,6 @@ impl Endpoint {
     }
 
     /// Tries to pop a new incoming connection from the queue.
-    #[tracing::instrument]
     pub(crate) fn poll_incoming(&self, cx: &mut Context) -> Poll<Option<Connection>> {
         let mut connections_lock = self.new_connections.lock();
         let mut guard = futures::ready!(Pin::new(&mut connections_lock).poll(cx));
@@ -247,7 +244,6 @@ impl Endpoint {
     /// Note that this method only queues the packet and returns as soon as the packet is in queue.
     /// There is no guarantee that the packet will actually be sent, but considering that this is
     /// a UDP packet, you cannot rely on the packet being delivered anyway.
-    #[tracing::instrument(skip_all)]
     pub(crate) async fn send_udp_packet(&self, destination: SocketAddr, data: impl Into<Vec<u8>>) {
         let _ = self
             .to_endpoint
@@ -266,15 +262,11 @@ impl Endpoint {
     ///
     /// If `event.is_drained()` is true, the event indicates that the connection no longer exists.
     /// This must therefore be the last event sent using this [`quinn_proto::ConnectionHandle`].
-    #[tracing::instrument(skip_all)]
     pub(crate) async fn report_quinn_event(
         &self,
         connection_id: quinn_proto::ConnectionHandle,
         event: quinn_proto::EndpointEvent,
     ) {
-        if event.is_drained() {
-            tracing::error!("drained, {:?}", connection_id);
-        }
         self.to_endpoint
             .lock()
             .await
@@ -291,15 +283,11 @@ impl Endpoint {
     ///
     /// This method bypasses back-pressure mechanisms and is meant to be called only from
     /// destructors, where waiting is not advisable.
-    #[tracing::instrument(skip_all)]
     pub(crate) fn report_quinn_event_non_block(
         &self,
         connection_id: quinn_proto::ConnectionHandle,
         event: quinn_proto::EndpointEvent,
     ) {
-        if event.is_drained() {
-            tracing::error!("drained, {:?}", connection_id);
-        }
         // We implement this by cloning the `mpsc::Sender`. Since each sender is guaranteed a slot
         // in the buffer, cloning the sender reserves the slot and sending thus always succeeds.
         let result = self
@@ -423,7 +411,6 @@ enum ToEndpoint {
 /// guarantees that the [`Endpoint`], and therefore the background task, is properly kept alive
 /// for as long as any QUIC connection is open.
 ///
-#[tracing::instrument(skip_all)]
 async fn background_task(
     config: Config,
     endpoint_weak: Weak<Endpoint>,
@@ -463,10 +450,8 @@ async fn background_task(
             // network interface is too busy, we back-pressure all of our internal
             // channels.
             // TODO: set ECN bits; there is no support for them in the ecosystem right now
-            let span = tracing::trace_span!("udp_socket.send_to");
             match udp_socket
                 .send_to(&data, destination)
-                .instrument(span)
                 .await
             {
                 Ok(n) if n == data.len() => {}
@@ -486,16 +471,13 @@ async fn background_task(
         // The endpoint might request packets to be sent out. This is handled in priority to avoid
         // buffering up packets.
         if let Some(packet) = endpoint.poll_transmit() {
-            tracing::trace!("endpoint.poll_transmit");
             debug_assert!(next_packet_out.is_none());
             next_packet_out = Some((packet.destination, packet.contents));
             continue;
         }
 
-        use tracing::Instrument;
-
         futures::select! {
-            message = receiver.next().instrument(tracing::trace_span!("ToEndpoint message")).fuse() => {
+            message = receiver.next().fuse() => {
                 // Received a message from a different part of the code requesting us to
                 // do something.
                 match message {
@@ -530,9 +512,6 @@ async fn background_task(
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
                         let has_key = alive_connections.contains_key(&connection_id);
-                        tracing::error!(
-                            has_key,
-                            is_drained_event = event.is_drained());
                         if !has_key {
                             continue;
                         }
@@ -541,20 +520,17 @@ async fn background_task(
                         // its ID can be reclaimed.
                         let is_drained_event = event.is_drained();
                         if is_drained_event {
-                            tracing::error!("ProcessConnectionEvent Drained : {:?}", connection_id);
                             alive_connections.remove(&connection_id);
                         }
 
-                        tracing::trace!("endpoint.handle_event");
                         let event_back = endpoint.handle_event(connection_id, event);
 
                         if let Some(event_back) = event_back {
-                            // tracing::trace_span!("process event back");
                             debug_assert!(!is_drained_event);
                             if let Some(sender) = alive_connections.get_mut(&connection_id) {
                                 let _ = sender.send(event_back).await; // TODO: don't await here /!\
                             } else {
-                                tracing::error!("event back: no such connection {:?}", connection_id);
+                                tracing::error!("State mismatch: event for closed connection");
                             }
                         }
                     }
@@ -582,7 +558,6 @@ async fn background_task(
                 future::poll_fn(move |cx| {
                     if active { new_connections.poll_ready(cx) } else { Poll::Pending }
                 })
-                .instrument(tracing::trace_span!("readiness"))
                 .fuse()
             } => {
                 if readiness.is_err() {
@@ -598,7 +573,7 @@ async fn background_task(
                 //endpoint.accept();
             }
 
-            result = udp_socket.recv_from(&mut socket_recv_buffer).instrument(tracing::trace_span!("udp recv")).fuse() => {
+            result = udp_socket.recv_from(&mut socket_recv_buffer).fuse() => {
                 let (packet_len, packet_src) = match result {
                     Ok(v) => v,
                     // Errors on the socket are expected to never happen, and we handle them by
@@ -614,16 +589,12 @@ async fn background_task(
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
                 let local_ip = udp_socket.local_addr().ok().map(|a| a.ip());
                 // TODO: ECN bits aren't handled
-                // let span = tracing::trace_span!("endpoint.handle_event");
                 let event = endpoint.handle(Instant::now(), packet_src, local_ip, None, packet);
-                // drop(span);
 
-                // tracing::trace_span!("process endpoint event");
                 match event {
                     None => {},
                     Some((connec_id, quinn_proto::DatagramEvent::ConnectionEvent(event))) => {
                         // Event to send to an existing connection.
-                        // tracing::trace_span!("send event");
                         if let Some(sender) = alive_connections.get_mut(&connec_id) {
                             let _ = sender.send(event).await; // TODO: don't await here /!\
                         } else {
