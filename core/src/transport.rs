@@ -70,10 +70,12 @@ pub use self::upgrade::Upgrade;
 /// by a [`Transport`] through an upgrade mechanism that is initiated via
 /// [`upgrade`](Transport::upgrade).
 ///
-/// > **Note**: The methods of this trait use `self` and not `&self` or `&mut self`. In other
-/// >           words, listening or dialing consumes the transport object. This has been designed
-/// >           so that you would implement this trait on `&Foo` or `&mut Foo` instead of directly
-/// >           on `Foo`.
+/// Note for implementors: Futures returned by [`Transport::dial`] should only
+/// do work once polled for the first time. E.g. in the case of TCP, connecting
+/// to the remote should not happen immediately on [`Transport::dial`] but only
+/// once the returned [`Future`] is polled. The caller of [`Transport::dial`]
+/// may call the method multiple times with a set of addresses, racing a subset
+/// of the returned dials to success concurrently.
 pub trait Transport {
     /// The result of a connection setup process, including protocol upgrades.
     ///
@@ -118,7 +120,7 @@ pub trait Transport {
     ///
     /// Returning an error from the stream is considered fatal. The listener can also report
     /// non-fatal errors by producing a [`ListenerEvent::Error`].
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>>
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>>
     where
         Self: Sized;
 
@@ -126,7 +128,7 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
 
@@ -135,7 +137,10 @@ pub trait Transport {
     /// This option is needed for NAT and firewall hole punching.
     ///
     /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
 
@@ -147,7 +152,7 @@ pub trait Transport {
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where
-        Self: Transport + Sized + Clone + Send + Sync + 'static,
+        Self: Transport + Sized + Send + Sync + 'static,
         Self::Dial: Send + 'static,
         Self::Listener: Send + 'static,
         Self::ListenerUpgrade: Send + 'static,
@@ -160,7 +165,7 @@ pub trait Transport {
     fn map<F, O>(self, f: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone,
+        F: FnOnce(Self::Output, ConnectedPoint) -> O,
     {
         map::Map::new(self, f)
     }
@@ -169,7 +174,7 @@ pub trait Transport {
     fn map_err<F, E>(self, f: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> E + Clone,
+        F: FnOnce(Self::Error) -> E,
     {
         map_err::MapErr::new(self, f)
     }
@@ -198,7 +203,7 @@ pub trait Transport {
     fn and_then<C, F, O>(self, f: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F,
         F: TryFuture<Ok = O>,
         <F as TryFuture>::Error: Error + 'static,
     {

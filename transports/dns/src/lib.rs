@@ -63,9 +63,11 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
+use parking_lot::Mutex;
 use smallvec::SmallVec;
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
+use std::sync::Arc;
 use std::{convert::TryFrom, error, fmt, iter, net::IpAddr, str};
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use trust_dns_resolver::system_conf;
@@ -112,7 +114,7 @@ where
     P: ConnectionProvider<Conn = C>,
 {
     /// The underlying transport.
-    inner: T,
+    inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: AsyncResolver<C, P>,
 }
@@ -132,7 +134,7 @@ impl<T> DnsConfig<T> {
         opts: ResolverOpts,
     ) -> Result<DnsConfig<T>, io::Error> {
         Ok(DnsConfig {
-            inner,
+            inner: Arc::new(Mutex::new(inner)),
             resolver: async_std_resolver::resolver(cfg, opts).await?,
         })
     }
@@ -154,7 +156,7 @@ impl<T> TokioDnsConfig<T> {
         opts: ResolverOpts,
     ) -> Result<TokioDnsConfig<T>, io::Error> {
         Ok(TokioDnsConfig {
-            inner,
+            inner: Arc::new(Mutex::new(inner)),
             resolver: TokioAsyncResolver::tokio(cfg, opts)?,
         })
     }
@@ -196,9 +198,13 @@ where
         BoxFuture<'static, Result<Self::Output, Self::Error>>,
     >;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let listener = self
             .inner
+            .lock()
             .listen_on(addr)
             .map_err(|err| err.map(DnsErr::Transport))?;
         let listener = listener
@@ -211,16 +217,19 @@ where
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
+        self.inner.lock().address_translation(server, observed)
     }
 }
 
@@ -233,16 +242,16 @@ where
     P: ConnectionProvider<Conn = C>,
 {
     fn do_dial(
-        self,
+        &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
+        let resolver = self.resolver.clone();
+        let inner = self.inner.clone();
+
         // Asynchronlously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         Ok(async move {
-            let resolver = self.resolver;
-            let inner = self.inner;
-
             let mut last_err = None;
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
@@ -320,8 +329,8 @@ where
 
                     let transport = inner.clone();
                     let dial = match role_override {
-                        Endpoint::Dialer => transport.dial(addr),
-                        Endpoint::Listener => transport.dial_as_listener(addr),
+                        Endpoint::Dialer => transport.lock().dial(addr),
+                        Endpoint::Listener => transport.lock().dial_as_listener(addr),
                     };
                     let result = match dial {
                         Ok(out) => {
@@ -587,13 +596,13 @@ mod tests {
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
             }
 
-            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Check that all DNS components have been resolved, i.e. replaced.
                 assert!(!addr.iter().any(|p| match p {
                     Protocol::Dns(_)
@@ -606,7 +615,7 @@ mod tests {
             }
 
             fn dial_as_listener(
-                self,
+                &mut self,
                 addr: Multiaddr,
             ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 self.dial(addr)

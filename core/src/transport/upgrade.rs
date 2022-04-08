@@ -294,7 +294,7 @@ impl<T> Multiplexed<T> {
     /// the [`StreamMuxer`] and custom transport errors.
     pub fn boxed<M>(self) -> super::Boxed<(PeerId, StreamMuxerBox)>
     where
-        T: Transport<Output = (PeerId, M)> + Sized + Clone + Send + Sync + 'static,
+        T: Transport<Output = (PeerId, M)> + Sized + Send + Sync + 'static,
         T::Dial: Send + 'static,
         T::Listener: Send + 'static,
         T::ListenerUpgrade: Send + 'static,
@@ -335,15 +335,21 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial_as_listener(addr)
     }
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.0.listen_on(addr)
     }
 
@@ -385,36 +391,42 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
             .dial(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
-            upgrade: future::Either::Left(Some(self.upgrade)),
+            upgrade: future::Either::Left(Some(self.upgrade.clone())),
         })
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
             .dial_as_listener(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
-            upgrade: future::Either::Left(Some(self.upgrade)),
+            upgrade: future::Either::Left(Some(self.upgrade.clone())),
         })
     }
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let stream = self
             .inner
             .listen_on(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(ListenerStream {
             stream: Box::pin(stream),
-            upgrade: self.upgrade,
+            upgrade: self.upgrade.clone(),
         })
     }
 

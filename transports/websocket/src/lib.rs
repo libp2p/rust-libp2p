@@ -45,11 +45,23 @@ use std::{
 
 /// A Websocket transport.
 #[derive(Debug, Clone)]
-pub struct WsConfig<T> {
-    transport: framed::WsConfig<T>,
+pub struct WsConfig<T: Transport>
+where
+    T: Transport,
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    transport: libp2p_core::transport::map::Map<framed::WsConfig<T>, WrapperFn<T::Output>>,
 }
 
-impl<T> WsConfig<T> {
+impl<T: Transport> WsConfig<T>
+where
+    T: Transport + Send + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     /// Create a new websocket transport based on the given transport.
     ///
     /// > **Note*: The given transport must be based on TCP/IP and should
@@ -59,53 +71,50 @@ impl<T> WsConfig<T> {
     /// > and [`libp2p-dns`](https://docs.rs/libp2p-dns) for constructing
     /// > the inner transport.
     pub fn new(transport: T) -> Self {
-        framed::WsConfig::new(transport).into()
+        Self {
+            transport: framed::WsConfig::new(transport)
+                .map(wrap_connection as WrapperFn<T::Output>),
+        }
     }
 
     /// Return the configured maximum number of redirects.
     pub fn max_redirects(&self) -> u8 {
-        self.transport.max_redirects()
+        self.transport.inner().max_redirects()
     }
 
     /// Set max. number of redirects to follow.
     pub fn set_max_redirects(&mut self, max: u8) -> &mut Self {
-        self.transport.set_max_redirects(max);
+        self.transport.inner_mut().set_max_redirects(max);
         self
     }
 
     /// Get the max. frame data size we support.
     pub fn max_data_size(&self) -> usize {
-        self.transport.max_data_size()
+        self.transport.inner().max_data_size()
     }
 
     /// Set the max. frame data size we support.
     pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
-        self.transport.set_max_data_size(size);
+        self.transport.inner_mut().set_max_data_size(size);
         self
     }
 
     /// Set the TLS configuration if TLS support is desired.
     pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
-        self.transport.set_tls_config(c);
+        self.transport.inner_mut().set_tls_config(c);
         self
     }
 
     /// Should the deflate extension (RFC 7692) be used if supported?
     pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
-        self.transport.use_deflate(flag);
+        self.transport.inner_mut().use_deflate(flag);
         self
-    }
-}
-
-impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
-    fn from(framed: framed::WsConfig<T>) -> Self {
-        WsConfig { transport: framed }
     }
 }
 
 impl<T> Transport for WsConfig<T>
 where
-    T: Transport + Send + Clone + 'static,
+    T: Transport + Send + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
@@ -118,22 +127,22 @@ where
     type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.transport
-            .map(wrap_connection as WrapperFn<T::Output>)
-            .listen_on(addr)
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+        self.transport.listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport
-            .map(wrap_connection as WrapperFn<T::Output>)
-            .dial(addr)
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport.dial(addr)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport
-            .map(wrap_connection as WrapperFn<T::Output>)
-            .dial_as_listener(addr)
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport.dial_as_listener(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -228,9 +237,9 @@ mod tests {
     }
 
     async fn connect(listen_addr: Multiaddr) {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+        let ws_config = || WsConfig::new(tcp::TcpConfig::new());
 
-        let mut listener = ws_config.clone().listen_on(listen_addr).expect("listener");
+        let mut listener = ws_config().listen_on(listen_addr).expect("listener");
 
         let addr = listener
             .try_next()
@@ -253,7 +262,7 @@ mod tests {
             conn.await
         };
 
-        let outbound = ws_config
+        let outbound = ws_config()
             .dial(addr.with(Protocol::P2p(PeerId::random().into())))
             .unwrap();
 
