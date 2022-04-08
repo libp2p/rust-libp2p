@@ -49,13 +49,48 @@ pub struct Config {
     /// determined by users on the network.  This limit permits a fixed amount of topics to allow,
     /// in-addition to the mesh topics.
     pub max_never_subscribed_topics: usize,
+    /// Buckets used for the score histograms.
+    pub score_buckets: Vec<f64>,
+}
+
+impl Config {
+    /// Create buckets for the score histograms based on score thresholds.
+    pub fn buckets_using_scoring_thresholds(&mut self, params: &crate::PeerScoreThresholds) {
+        self.score_buckets = vec![
+            params.graylist_threshold,
+            params.publish_threshold,
+            params.gossip_threshold,
+            params.gossip_threshold / 2.0,
+            params.gossip_threshold / 4.0,
+            0.0,
+            1.0,
+            10.0,
+            100.0,
+        ];
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
+        // Some sensible defaults
+        let gossip_threshold = -4000.0;
+        let publish_threshold = -8000.0;
+        let graylist_threshold = -16000.0;
+        let score_buckets: Vec<f64> = vec![
+            graylist_threshold,
+            publish_threshold,
+            gossip_threshold,
+            gossip_threshold / 2.0,
+            gossip_threshold / 4.0,
+            0.0,
+            1.0,
+            10.0,
+            100.0,
+        ];
         Config {
             max_topics: DEFAULT_MAX_TOPICS,
             max_never_subscribed_topics: DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS,
+            score_buckets,
         }
     }
 }
@@ -147,6 +182,7 @@ impl Metrics {
         let Config {
             max_topics,
             max_never_subscribed_topics,
+            score_buckets,
         } = config;
 
         macro_rules! register_family {
@@ -224,24 +260,9 @@ impl Metrics {
             "topic_msg_recv_bytes",
             "Bytes received from gossip messages for each topic"
         );
-        // TODO: Update default variables once a builder pattern is used.
-        let gossip_threshold = -4000.0;
-        let publish_threshold = -8000.0;
-        let greylist_threshold = -16000.0;
-        let histogram_buckets: Vec<f64> = vec![
-            greylist_threshold,
-            publish_threshold,
-            gossip_threshold,
-            gossip_threshold / 2.0,
-            gossip_threshold / 4.0,
-            0.0,
-            1.0,
-            10.0,
-            100.0,
-        ];
 
         let hist_builder = HistBuilder {
-            buckets: histogram_buckets,
+            buckets: score_buckets,
         };
 
         let score_per_mesh: Family<_, _, HistBuilder> = Family::new_with_constructor(hist_builder);
