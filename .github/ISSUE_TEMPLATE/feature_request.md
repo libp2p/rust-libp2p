@@ -4,7 +4,7 @@ about: Suggest a new feature in rust-libp2p.
 ---
 
 <!--
-Note: If you'd like to suggest an feature related to libp2p but not specifically related to the rust implementation, please file an issue at https://github.com/libp2p/libp2p instead. Even better, create a new topic on the forums (https://discuss.libp2p.io).
+Note: If you'd like to suggest an feature related to libp2p but not specifically related to the rust implementation, please file an issue at https://github.com/libp2p/specs instead.
 -->
 
 ## Description
