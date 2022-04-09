@@ -5,8 +5,6 @@ about: Create a bug report for rust-libp2p.
 
 <!-- Thank you for filing a bug report! -->
 
-<!-- For questions please use the rust-libp2p GitHub Discussions forum.-->
-
 <!-- For security related issues please reach out to security@ipfs.io. Please do not file a public issue on GitHub. -->
 
 ## Summary
