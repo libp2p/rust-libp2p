@@ -85,12 +85,10 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let payload: [u8; PING_SIZE] = thread_rng().sample(distributions::Standard);
-    log::debug!("Preparing ping payload {:?}", payload);
     stream.write_all(&payload).await?;
     stream.flush().await?;
     let started = Instant::now();
     let mut recv_payload = [0u8; PING_SIZE];
-    log::debug!("Awaiting pong for {:?}", payload);
     stream.read_exact(&mut recv_payload).await?;
     if recv_payload == payload {
         Ok((stream, started.elapsed()))
@@ -108,9 +106,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut payload = [0u8; PING_SIZE];
-    log::debug!("Waiting for ping ...");
     stream.read_exact(&mut payload).await?;
-    log::debug!("Sending pong for {:?}", payload);
     stream.write_all(&payload).await?;
     stream.flush().await?;
     Ok(stream)
