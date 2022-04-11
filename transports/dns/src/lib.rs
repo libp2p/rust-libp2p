@@ -264,12 +264,14 @@ where
             // dialing attempts as soon as there is another fully resolved
             // address.
             while let Some(addr) = unresolved.pop() {
-                if let Some((i, name)) = addr.iter().enumerate().find(|(_, p)| match p {
-                    Protocol::Dns(_)
-                    | Protocol::Dns4(_)
-                    | Protocol::Dns6(_)
-                    | Protocol::Dnsaddr(_) => true,
-                    _ => false,
+                if let Some((i, name)) = addr.iter().enumerate().find(|(_, p)| {
+                    matches!(
+                        p,
+                        Protocol::Dns(_)
+                            | Protocol::Dns4(_)
+                            | Protocol::Dns6(_)
+                            | Protocol::Dnsaddr(_)
+                    )
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);

@@ -328,6 +328,12 @@ where
     }
 }
 
+impl<T: Provider + Send> Default for GenTcpConfig<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> Transport for GenTcpConfig<T>
 where
     T: Provider + Send + 'static,
