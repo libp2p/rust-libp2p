@@ -4,7 +4,7 @@
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
--   Derive `Error` for `kad::GetRecordError` (see [PR 2614])
+- Derive `Error` for `GetRecordError` (see [PR 2614]).
 
 [pr 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
 
