@@ -34,10 +34,11 @@ use libp2p_core::{ConnectedPoint, Endpoint};
 use libp2p_swarm::DialError;
 use std::{num::NonZeroU32, time::Duration};
 
-async fn init_swarm(config: Config) -> Swarm<Behaviour> {
+async fn init_swarm(mut config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
     let transport = development_transport(keypair).await.unwrap();
+    config.only_global_ips = false;
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }

@@ -35,10 +35,11 @@ const MAX_CONFIDENCE: usize = 3;
 const TEST_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 const TEST_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
-async fn init_swarm(config: Config) -> Swarm<Behaviour> {
+async fn init_swarm(mut config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
     let transport = development_transport(keypair).await.unwrap();
+    config.only_global_ips = false;
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }

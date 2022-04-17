@@ -192,7 +192,7 @@ pub struct Behaviour {
     ongoing_outbound: HashMap<RequestId, ProbeId>,
 
     // Connected peers with the observed address of each connection.
-    // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips), 
+    // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips),
     // the observed address is `None`.
     connected: HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
 
@@ -319,13 +319,12 @@ impl NetworkBehaviour for Behaviour {
         );
         let connections = self.connected.entry(*peer).or_default();
         let addr = endpoint.get_remote_address();
-        let observed_addr = if !endpoint.is_relayed()
-            &&( !self.config.only_global_ips || addr.is_global_ip())
-        {
-            Some(addr.clone())
-        } else {
-            None
-        };
+        let observed_addr =
+            if !endpoint.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
+                Some(addr.clone())
+            } else {
+                None
+            };
         connections.insert(*conn, observed_addr);
 
         match endpoint {
@@ -395,13 +394,12 @@ impl NetworkBehaviour for Behaviour {
         }
         let connections = self.connected.get_mut(peer).expect("Peer is connected.");
         let addr = new.get_remote_address();
-        let observed_addr = if !new.is_relayed()
-            &&( !self.config.only_global_ips || addr.is_global_ip())
-        {
-            Some(addr.clone())
-        } else {
-            None
-        };
+        let observed_addr =
+            if !new.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
+                Some(addr.clone())
+            } else {
+                None
+            };
         connections.insert(*conn, observed_addr);
     }
 
@@ -587,29 +585,22 @@ impl GlobalIp for std::net::Ipv4Addr {
     }
 }
 
-
-
 impl GlobalIp for std::net::Ipv6Addr {
     // NOTE: The below logic is copied from `std::net::Ipv6Addr::is_global`, which is at the time of
     // writing behind the unstable `ip` feature.
     // See https://github.com/rust-lang/rust/issues/27709 for more info.
     //
-    // Note that contrary to `Ipv4Addr::is_global_ip` this currently checks for global scope 
+    // Note that contrary to `Ipv4Addr::is_global_ip` this currently checks for global scope
     // rather than global reachability.
     // TODO: There is a PR to change this, but seems inactive. Should we help push this forward?
     // See https://github.com/rust-lang/rust/pull/86634 and https://github.com/rust-lang/rust/issues/85604.
     fn is_global_ip(&self) -> bool {
-
         let is_unicast_global = || {
-
             let is_unicast_link_local = (self.segments()[0] & 0xffc0) == 0xfe80;
             let is_unique_local = (self.segments()[0] & 0xfe00) == 0xfc00;
             let is_documentation = (self.segments()[0] == 0x2001) && (self.segments()[1] == 0xdb8);
 
-            !self.is_loopback()
-                && !is_unicast_link_local
-                && !is_unique_local
-                && is_documentation
+            !self.is_loopback() && !is_unicast_link_local && !is_unique_local && is_documentation
         };
 
         if !self.is_multicast() {
