@@ -30,6 +30,7 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
+    multiaddr::Protocol,
     ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
@@ -77,6 +78,8 @@ pub struct Config {
     pub throttle_clients_peer_max: usize,
     /// Period for throttling clients requests.
     pub throttle_clients_period: Duration,
+    /// Reject probes for clients that are observed at a non-global ip address.
+    pub only_global_ips: bool,
 }
 
 impl Default for Config {
@@ -93,6 +96,7 @@ impl Default for Config {
             throttle_clients_global_max: 30,
             throttle_clients_peer_max: 3,
             throttle_clients_period: Duration::from_secs(1),
+            only_global_ips: true,
         }
     }
 }
@@ -188,7 +192,8 @@ pub struct Behaviour {
     ongoing_outbound: HashMap<RequestId, ProbeId>,
 
     // Connected peers with the observed address of each connection.
-    // If the endpoint of a connection is relayed, the observed address is `None`.
+    // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips), 
+    // the observed address is `None`.
     connected: HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
 
     // Used servers in recent outbound probes that are throttled through Config::throttle_server_period.
@@ -313,12 +318,15 @@ impl NetworkBehaviour for Behaviour {
             other_established,
         );
         let connections = self.connected.entry(*peer).or_default();
-        let addr = if endpoint.is_relayed() {
-            None
+        let addr = endpoint.get_remote_address();
+        let observed_addr = if !endpoint.is_relayed()
+            &&( !self.config.only_global_ips || addr.is_global_ip())
+        {
+            Some(addr.clone())
         } else {
-            Some(endpoint.get_remote_address().clone())
+            None
         };
-        connections.insert(*conn, addr);
+        connections.insert(*conn, observed_addr);
 
         match endpoint {
             ConnectedPoint::Dialer {
@@ -386,12 +394,15 @@ impl NetworkBehaviour for Behaviour {
             return;
         }
         let connections = self.connected.get_mut(peer).expect("Peer is connected.");
-        let addr = if new.is_relayed() {
-            None
+        let addr = new.get_remote_address();
+        let observed_addr = if !new.is_relayed()
+            &&( !self.config.only_global_ips || addr.is_global_ip())
+        {
+            Some(addr.clone())
         } else {
-            Some(new.get_remote_address().clone())
+            None
         };
-        connections.insert(*conn, addr);
+        connections.insert(*conn, observed_addr);
     }
 
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
@@ -511,4 +522,105 @@ trait HandleInnerEvent {
         params: &mut impl PollParameters,
         event: RequestResponseEvent<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>);
+}
+
+trait GlobalIp {
+    fn is_global_ip(&self) -> bool;
+}
+
+impl GlobalIp for Multiaddr {
+    fn is_global_ip(&self) -> bool {
+        match self.iter().next() {
+            Some(Protocol::Ip4(a)) => a.is_global_ip(),
+            Some(Protocol::Ip6(a)) => a.is_global_ip(),
+            _ => false,
+        }
+    }
+}
+
+impl GlobalIp for std::net::Ipv4Addr {
+    // NOTE: The below logic is copied from `std::net::Ipv4Addr::is_global`, which is at the time of
+    // writing behind the unstable `ip` feature.
+    // See https://github.com/rust-lang/rust/issues/27709 for more info.
+    //
+    // TODO: Consider removing check check with the unstable methods `is_shared`, `is_reserved` and `is_benchmarking`? In case
+    // of the former the peer is still eligible for a dial-back, the latter cases should never occur in practice.
+    //
+    // TODO: Consider to only check for loopback, private ip and link-local. Can any other case ever happen in practice if we solely
+    // use this check for observed addresses?
+    fn is_global_ip(&self) -> bool {
+        // Check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the only two
+        // globally routable addresses in the 192.0.0.0/24 range.
+        if u32::from_be_bytes(self.octets()) == 0xc0000009
+            || u32::from_be_bytes(self.octets()) == 0xc000000a
+        {
+            return true;
+        }
+
+        // Copied from the unstable method `std::net::Ipv4Addr::is_shared`.
+        let is_shared =
+            || self.octets()[0] == 100 && (self.octets()[1] & 0b1100_0000 == 0b0100_0000);
+
+        // Copied from the unstable method `std::net::Ipv4Addr::is_reserved`.
+        //
+        // **Warning**: As IANA assigns new addresses, this logic will be
+        // updated. This may result in non-reserved addresses being
+        // treated as reserved in code that relies on an outdated version
+        // of this method.
+        let is_reserved = || self.octets()[0] & 240 == 240 && !self.is_broadcast();
+
+        // Copied from the unstable method `std::net::Ipv4Addr::is_benchmarking`.
+        let is_benchmarking = || self.octets()[0] == 198 && (self.octets()[1] & 0xfe) == 18;
+
+        !self.is_private()
+            && !self.is_loopback()
+            && !self.is_link_local()
+            && !self.is_broadcast()
+            && !self.is_documentation()
+            && !is_shared()
+            // addresses reserved for future protocols (`192.0.0.0/24`)
+            && !(self.octets()[0] == 192 && self.octets()[1] == 0 && self.octets()[2] == 0)
+            && !is_reserved()
+            && !is_benchmarking()
+            // Make sure the address is not in 0.0.0.0/8
+            && self.octets()[0] != 0
+    }
+}
+
+
+
+impl GlobalIp for std::net::Ipv6Addr {
+    // NOTE: The below logic is copied from `std::net::Ipv6Addr::is_global`, which is at the time of
+    // writing behind the unstable `ip` feature.
+    // See https://github.com/rust-lang/rust/issues/27709 for more info.
+    //
+    // Note that contrary to `Ipv4Addr::is_global_ip` this currently checks for global scope 
+    // rather than global reachability.
+    // TODO: There is a PR to change this, but seems inactive. Should we help push this forward?
+    // See https://github.com/rust-lang/rust/pull/86634 and https://github.com/rust-lang/rust/issues/85604.
+    fn is_global_ip(&self) -> bool {
+
+        let is_unicast_global = || {
+
+            let is_unicast_link_local = (self.segments()[0] & 0xffc0) == 0xfe80;
+            let is_unique_local = (self.segments()[0] & 0xfe00) == 0xfc00;
+            let is_documentation = (self.segments()[0] == 0x2001) && (self.segments()[1] == 0xdb8);
+
+            !self.is_loopback()
+                && !is_unicast_link_local
+                && !is_unique_local
+                && is_documentation
+        };
+
+        if !self.is_multicast() {
+            return is_unicast_global();
+        }
+        // Check scope of the multicast address.
+        // Copied from unstable method [`std::net::Ipv6Addr::multicast_scope`].
+        match self.segments()[0] & 0x000f {
+            14 => true,               // Global multicast scope.
+            1..=5 | 8 => false,       // Local multicast scope.
+            _ => is_unicast_global(), // Unknown multicast scope.
+        }
+    }
 }
