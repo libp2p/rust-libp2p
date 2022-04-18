@@ -2555,17 +2555,20 @@ pub struct GetRecordOk {
 }
 
 /// The error result of [`Kademlia::get_record`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetRecordError {
+    #[error("the record was not found")]
     NotFound {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
+    #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
         key: record::Key,
         records: Vec<PeerRecord>,
         quorum: NonZeroUsize,
     },
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         records: Vec<PeerRecord>,
