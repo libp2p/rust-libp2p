@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question
+    url:  https://github.com/libp2p/rust-libp2p/discussions/new?category=q-a
+    about: Please ask questions in the rust-libp2p GitHub Discussions forum.
+  - name: Libp2p Discourse Forum
+    url:  https://discuss.libp2p.io
+    about: Discussions and questions related to multiple libp2p implementations.
