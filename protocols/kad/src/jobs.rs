@@ -108,6 +108,7 @@ impl<T> PeriodicJob<T> {
 
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
+    #[allow(clippy::wrong_self_convention)]
     fn is_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {

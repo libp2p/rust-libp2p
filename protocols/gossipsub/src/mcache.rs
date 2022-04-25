@@ -148,7 +148,7 @@ impl MessageCache {
             message.validated = true;
             // Clear the known peers list (after a message is validated, it is forwarded and we no
             // longer need to store the originating peers).
-            let originating_peers = std::mem::replace(known_peers, HashSet::new());
+            let originating_peers = std::mem::take(known_peers);
             (&*message, originating_peers)
         })
     }

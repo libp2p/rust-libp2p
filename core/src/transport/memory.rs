@@ -150,9 +150,12 @@ impl Future for DialFuture {
             .take()
             .expect("Future should not be polled again once complete");
         let dial_port = self.dial_port;
-        match self.sender.start_send((channel_to_send, dial_port)) {
-            Err(_) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
-            Ok(()) => {}
+        if self
+            .sender
+            .start_send((channel_to_send, dial_port))
+            .is_err()
+        {
+            return Poll::Ready(Err(MemoryTransportError::Unreachable));
         }
 
         Poll::Ready(Ok(self

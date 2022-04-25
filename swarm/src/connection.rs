@@ -176,6 +176,7 @@ pub struct IncomingInfo<'a> {
 
 impl<'a> IncomingInfo<'a> {
     /// Builds the [`ConnectedPoint`] corresponding to the incoming connection.
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Listener {
             local_addr: self.local_addr.clone(),

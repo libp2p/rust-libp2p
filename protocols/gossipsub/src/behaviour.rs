@@ -1226,19 +1226,19 @@ where
             }
 
             for id in ids {
-                if !self.duplicate_cache.contains(&id) && !self.pending_iwant_msgs.contains(&id) {
-                    if self
+                if !self.duplicate_cache.contains(&id)
+                    && !self.pending_iwant_msgs.contains(&id)
+                    && self
                         .peer_score
                         .as_ref()
                         .map(|(_, _, _, promises)| !promises.contains(&id))
                         .unwrap_or(true)
-                    {
-                        // have not seen this message and are not currently requesting it
-                        if iwant_ids.insert(id) {
-                            // Register the IWANT metric
-                            if let Some(metrics) = self.metrics.as_mut() {
-                                metrics.register_iwant(&topic);
-                            }
+                {
+                    // have not seen this message and are not currently requesting it
+                    if iwant_ids.insert(id) {
+                        // Register the IWANT metric
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.register_iwant(&topic);
                         }
                     }
                 }
@@ -1353,7 +1353,7 @@ where
             } else if let Some(m) = self.metrics.as_mut() {
                 // Sending of messages succeeded, register them on the internal metrics.
                 for topic in topics.iter() {
-                    m.msg_sent(&topic, msg_bytes);
+                    m.msg_sent(topic, msg_bytes);
                 }
             }
         }
@@ -2136,7 +2136,7 @@ where
             for peer_id in self.connected_peers.keys() {
                 scores
                     .entry(peer_id)
-                    .or_insert_with(|| peer_score.metric_score(&peer_id, self.metrics.as_mut()));
+                    .or_insert_with(|| peer_score.metric_score(peer_id, self.metrics.as_mut()));
             }
         }
 

@@ -1825,7 +1825,7 @@ where
         errors: Option<&Vec<Multiaddr>>,
         other_established: usize,
     ) {
-        for addr in errors.map(|a| a.into_iter()).into_iter().flatten() {
+        for addr in errors.map(|a| a.iter()).into_iter().flatten() {
             self.address_failed(*peer_id, addr);
         }
 

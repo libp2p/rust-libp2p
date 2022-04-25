@@ -254,6 +254,7 @@ impl Decoder for RendezvousCodec {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to encode message as bytes")]

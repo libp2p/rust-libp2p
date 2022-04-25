@@ -86,7 +86,9 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                         .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
-                hop_message::Type::Status => Err(FatalUpgradeError::UnexpectedTypeStatus)?,
+                hop_message::Type::Status => {
+                    return Err(FatalUpgradeError::UnexpectedTypeStatus.into())
+                }
             };
 
             Ok(req)

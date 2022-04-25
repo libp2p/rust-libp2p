@@ -97,7 +97,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let r#type =
                 stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
-                stop_message::Type::Connect => Err(FatalUpgradeError::UnexpectedTypeConnect)?,
+                stop_message::Type::Connect => {
+                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
+                }
                 stop_message::Type::Status => {}
             }
 
@@ -105,9 +107,13 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::ParseStatusField)?;
             match status {
                 Status::Ok => {}
-                Status::ResourceLimitExceeded => Err(CircuitFailedReason::ResourceLimitExceeded)?,
-                Status::PermissionDenied => Err(CircuitFailedReason::PermissionDenied)?,
-                s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                Status::ResourceLimitExceeded => {
+                    return Err(CircuitFailedReason::ResourceLimitExceeded.into())
+                }
+                Status::PermissionDenied => {
+                    return Err(CircuitFailedReason::PermissionDenied.into())
+                }
+                s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
             }
 
             let FramedParts {
