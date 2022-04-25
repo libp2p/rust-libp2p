@@ -21,7 +21,7 @@
 use crate::codec::MAX_FRAME_SIZE;
 use std::cmp;
 
-pub(crate) const DEFAULT_MPLEX_PROTOCOL_NAME: &'static [u8] = b"/mplex/6.7.0";
+pub(crate) const DEFAULT_MPLEX_PROTOCOL_NAME: &[u8] = b"/mplex/6.7.0";
 
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone)]

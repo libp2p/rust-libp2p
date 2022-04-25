@@ -358,9 +358,9 @@ impl<T> Sink<T> for Chan<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
-    fn into(self) -> RwStreamSink<Chan<T>> {
-        RwStreamSink::new(self)
+impl<T: AsRef<[u8]>> From<Chan<T>> for RwStreamSink<Chan<T>> {
+    fn from(channel: Chan<T>) -> RwStreamSink<Chan<T>> {
+        RwStreamSink::new(channel)
     }
 }
 

@@ -514,7 +514,7 @@ where
                     };
                     match dial {
                         Ok(fut) => fut
-                            .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
+                            .map(|r| (address, r.map_err(TransportError::Other)))
                             .boxed(),
                         Err(err) => futures::future::ready((address, Err(err))).boxed(),
                     }
@@ -538,7 +538,7 @@ where
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
                 self.behaviour.inject_dial_failure(None, handler, &error);
-                return Err(error);
+                Err(error)
             }
         }
     }
@@ -800,7 +800,7 @@ where
                         .expect("n + 1 is always non-zero; qed");
                         let non_banned_established = other_established_connection_ids
                             .into_iter()
-                            .filter(|conn_id| !this.banned_peer_connections.contains(&conn_id))
+                            .filter(|conn_id| !this.banned_peer_connections.contains(conn_id))
                             .count();
 
                         log::debug!(
@@ -896,7 +896,7 @@ where
                     if conn_was_reported {
                         let remaining_non_banned = remaining_established_connection_ids
                             .into_iter()
-                            .filter(|conn_id| !this.banned_peer_connections.contains(&conn_id))
+                            .filter(|conn_id| !this.banned_peer_connections.contains(conn_id))
                             .count();
                         this.behaviour.inject_connection_closed(
                             &peer_id,

@@ -810,10 +810,10 @@ where
 
     /// Checks whether a substream is open for reading.
     fn can_read(&self, id: &LocalStreamId) -> bool {
-        match self.substreams.get(id) {
-            Some(SubstreamState::Open { .. }) | Some(SubstreamState::SendClosed { .. }) => true,
-            _ => false,
-        }
+        matches!(
+            self.substreams.get(id),
+            Some(SubstreamState::Open { .. }) | Some(SubstreamState::SendClosed { .. })
+        )
     }
 
     /// Sends pending frames, without flushing.
