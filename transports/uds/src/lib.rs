@@ -63,6 +63,12 @@ impl $uds_config {
     }
 }
 
+impl Default for $uds_config {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Transport for $uds_config {
     type Output = $unix_stream;
     type Error = io::Error;

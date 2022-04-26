@@ -263,7 +263,7 @@ impl DerDecodable<'_> for Asn1SubjectPublicKey {
             )));
         }
 
-        let pk_der: Vec<u8> = object.value().into_iter().skip(1).cloned().collect();
+        let pk_der: Vec<u8> = object.value().iter().skip(1).cloned().collect();
         // We don't parse pk_der further as an ASN.1 RsaPublicKey, since
         // we only need the DER encoding for `verify`.
         Ok(Self(PublicKey(pk_der)))

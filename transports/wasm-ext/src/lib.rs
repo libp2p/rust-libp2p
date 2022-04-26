@@ -318,15 +318,15 @@ impl Stream for Listen {
             };
 
             if let Some(addrs) = event.new_addrs() {
-                for addr in addrs.into_iter() {
-                    let addr = js_value_to_addr(&addr)?;
+                for addr in addrs.iter() {
+                    let addr = js_value_to_addr(addr)?;
                     self.pending_events
                         .push_back(ListenerEvent::NewAddress(addr));
                 }
             }
 
             if let Some(upgrades) = event.new_connections() {
-                for upgrade in upgrades.into_iter().cloned() {
+                for upgrade in upgrades.iter().cloned() {
                     let upgrade: ffi::ConnectionEvent = upgrade.into();
                     self.pending_events.push_back(ListenerEvent::Upgrade {
                         local_addr: upgrade.local_addr().parse()?,
@@ -337,8 +337,8 @@ impl Stream for Listen {
             }
 
             if let Some(addrs) = event.expired_addrs() {
-                for addr in addrs.into_iter() {
-                    match js_value_to_addr(&addr) {
+                for addr in addrs.iter() {
+                    match js_value_to_addr(addr) {
                         Ok(addr) => self
                             .pending_events
                             .push_back(ListenerEvent::NewAddress(addr)),

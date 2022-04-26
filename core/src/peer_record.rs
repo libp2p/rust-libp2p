@@ -89,7 +89,7 @@ impl PeerRecord {
         };
 
         let envelope = SignedEnvelope::new(
-            &key,
+            key,
             String::from(DOMAIN_SEP),
             PAYLOAD_TYPE.as_bytes().to_vec(),
             payload,

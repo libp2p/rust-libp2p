@@ -60,7 +60,7 @@ where
         let mut pending_dials = pending_dials.into_iter();
 
         let dials = FuturesUnordered::new();
-        while let Some(dial) = pending_dials.next() {
+        for dial in pending_dials.by_ref() {
             dials.push(dial);
             if dials.len() == concurrency_factor.get() as usize {
                 break;
@@ -95,7 +95,7 @@ where
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
                 Some((addr, Ok(output))) => {
-                    let errors = std::mem::replace(&mut self.errors, vec![]);
+                    let errors = std::mem::take(&mut self.errors);
                     return Poll::Ready(Ok((addr, output, errors)));
                 }
                 Some((addr, Err(e))) => {
@@ -105,7 +105,7 @@ where
                     }
                 }
                 None => {
-                    return Poll::Ready(Err(std::mem::replace(&mut self.errors, vec![])));
+                    return Poll::Ready(Err(std::mem::take(&mut self.errors)));
                 }
             }
         }
