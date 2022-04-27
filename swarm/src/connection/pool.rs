@@ -550,7 +550,7 @@ where
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
-        let endpoint = info.to_connected_point();
+        let endpoint = info.create_connected_point();
 
         if let Err(limit) = self.counters.check_max_pending_incoming() {
             return Err((limit, handler));

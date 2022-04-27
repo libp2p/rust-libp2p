@@ -254,7 +254,6 @@ impl Decoder for RendezvousCodec {
     }
 }
 
-#[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to encode message as bytes")]
@@ -264,7 +263,7 @@ pub enum Error {
     #[error("Failed to read/write")]
     Io(#[from] std::io::Error),
     #[error("Failed to convert wire message to internal data model")]
-    ConversionError(#[from] ConversionError),
+    Conversion(#[from] ConversionError),
 }
 
 impl From<Message> for wire::Message {
