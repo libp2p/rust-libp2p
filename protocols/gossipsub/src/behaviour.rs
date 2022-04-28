@@ -1215,6 +1215,21 @@ where
 
         let mut iwant_ids = HashSet::new();
 
+        let want_message = |id: &MessageId| {
+            if self.duplicate_cache.contains(id) {
+                return false;
+            }
+
+            if self.pending_iwant_msgs.contains(id) {
+                return false;
+            }
+
+            self.peer_score
+                .as_ref()
+                .map(|(_, _, _, promises)| !promises.contains(id))
+                .unwrap_or(true)
+        };
+
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
             if !self.mesh.contains_key(&topic) {
@@ -1225,21 +1240,12 @@ where
                 continue;
             }
 
-            for id in ids {
-                if !self.duplicate_cache.contains(&id)
-                    && !self.pending_iwant_msgs.contains(&id)
-                    && self
-                        .peer_score
-                        .as_ref()
-                        .map(|(_, _, _, promises)| !promises.contains(&id))
-                        .unwrap_or(true)
-                {
-                    // have not seen this message and are not currently requesting it
-                    if iwant_ids.insert(id) {
-                        // Register the IWANT metric
-                        if let Some(metrics) = self.metrics.as_mut() {
-                            metrics.register_iwant(&topic);
-                        }
+            for id in ids.into_iter().filter(want_message) {
+                // have not seen this message and are not currently requesting it
+                if iwant_ids.insert(id) {
+                    // Register the IWANT metric
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        metrics.register_iwant(&topic);
                     }
                 }
             }

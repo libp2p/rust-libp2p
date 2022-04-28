@@ -4,6 +4,10 @@
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
+- changed `TimeCache::contains_key` and `DuplicateCache::contains` to immutable methods. See [PR 2620].
+
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
+
 # 0.37.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
