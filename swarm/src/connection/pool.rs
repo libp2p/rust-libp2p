@@ -517,10 +517,7 @@ where
         Ok(connection_id)
     }
     /// Polls the connection pool for events.
-    ///
-    /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
-    /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         THandler: IntoConnectionHandler + 'static,
