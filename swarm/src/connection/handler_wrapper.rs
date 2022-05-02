@@ -35,6 +35,10 @@ use libp2p_core::{
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
+/// The maximum number of incoming streams concurrently negotiated. Streams are
+/// dropped and thus reset.
+const MAX_NUM_NEGOTIATING_IN: usize = 128;
+
 /// A wrapper for an underlying [`ConnectionHandler`].
 ///
 /// It extends [`ConnectionHandler`] with:
@@ -243,6 +247,11 @@ where
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
+                if self.negotiating_in.len() == MAX_NUM_NEGOTIATING_IN {
+                    log::warn!("Incoming substream exceeding `MAX_NUM_NEGOTIATING_IN`. Dropping.",);
+                    return;
+                }
+
                 let protocol = self.handler.listen_protocol();
                 let timeout = *protocol.timeout();
                 let (upgrade, user_data) = protocol.into_upgrade();
