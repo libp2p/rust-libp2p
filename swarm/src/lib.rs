@@ -514,7 +514,7 @@ where
                     };
                     match dial {
                         Ok(fut) => fut
-                            .map(|r| (address, r.map_err(|e| TransportError::Other(e))))
+                            .map(|r| (address, r.map_err(TransportError::Other)))
                             .boxed(),
                         Err(err) => futures::future::ready((address, Err(err))).boxed(),
                     }
