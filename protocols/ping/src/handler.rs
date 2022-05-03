@@ -116,6 +116,12 @@ impl Config {
     }
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The successful result of processing an inbound or outbound ping.
 #[derive(Debug)]
 pub enum Success {

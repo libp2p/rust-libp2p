@@ -633,6 +633,7 @@ where
     /// collaborative manner across [`ConnectionHandler`]s
     /// with [`ConnectionHandler::connection_keep_alive`] or directly with
     /// [`ConnectionHandlerEvent::Close`].
+    #[allow(clippy::result_unit_err)]
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
         let was_connected = self.pool.is_connected(peer_id);
         self.pool.disconnect(peer_id);

@@ -6,8 +6,11 @@
 
 - Make `behaviour::either` module private. See [PR 2610]
 
+- Rename `IncomingInfo::to_connected_point` to `IncomingInfo::create_connected_point`. See [PR 2620].
+
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
-[PR 2610]: https://github.com/libp2p/rust-libp2p/pull/2610/
+[PR 2610]: https://github.com/libp2p/rust-libp2p/pull/2610
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
 
 # 0.35.0
 
