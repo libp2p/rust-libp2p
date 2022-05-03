@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod codec;
 pub mod inbound;
 pub mod outbound;
 
 const PROTOCOL_NAME: &[u8; 13] = b"/libp2p/dcutr";
+
+const MAX_MESSAGE_SIZE_BYTES: usize = 4096;

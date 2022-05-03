@@ -44,14 +44,17 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(substream, super::codec::Codec::new());
+        let mut substream = Framed::new(
+            substream,
+            prost_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
+        );
 
         async move {
             let HolePunch { r#type, obs_addrs } =
                 substream
                     .next()
                     .await
-                    .ok_or(super::codec::Error::Io(std::io::Error::new(
+                    .ok_or(prost_codec::Error::Io(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
                         "",
                     )))??;
@@ -88,7 +91,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 }
 
 pub struct PendingConnect {
-    substream: Framed<NegotiatedSubstream, super::codec::Codec>,
+    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HolePunch>>,
     remote_obs_addrs: Vec<Multiaddr>,
 }
 
@@ -107,7 +110,7 @@ impl PendingConnect {
             self.substream
                 .next()
                 .await
-                .ok_or(super::codec::Error::Io(std::io::Error::new(
+                .ok_or(prost_codec::Error::Io(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "",
                 )))??;
@@ -128,7 +131,7 @@ pub enum UpgradeError {
     Codec(
         #[from]
         #[source]
-        super::codec::Error,
+        prost_codec::Error,
     ),
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
