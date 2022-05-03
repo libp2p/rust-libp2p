@@ -121,6 +121,7 @@ pub enum OutEvent {
 }
 
 #[allow(clippy::large_enum_variant)]
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum OpenInfo {
     RegisterRequest(NewRegistration),

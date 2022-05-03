@@ -86,9 +86,9 @@ impl<T> Key<T> {
     }
 }
 
-impl<T> Into<KeyBytes> for Key<T> {
-    fn into(self) -> KeyBytes {
-        self.bytes
+impl<T> From<Key<T>> for KeyBytes {
+    fn from(key: Key<T>) -> KeyBytes {
+        key.bytes
     }
 }
 

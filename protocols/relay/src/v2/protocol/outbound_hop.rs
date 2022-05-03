@@ -100,8 +100,12 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let r#type =
                 hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
-                hop_message::Type::Connect => Err(FatalUpgradeError::UnexpectedTypeConnect)?,
-                hop_message::Type::Reserve => Err(FatalUpgradeError::UnexpectedTypeReserve)?,
+                hop_message::Type::Connect => {
+                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
+                }
+                hop_message::Type::Reserve => {
+                    return Err(FatalUpgradeError::UnexpectedTypeReserve.into())
+                }
                 hop_message::Type::Status => {}
             }
 
@@ -114,18 +118,20 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 Upgrade::Reserve => {
                     match status {
                         Status::Ok => {}
-                        Status::ReservationRefused => Err(ReservationFailedReason::Refused)?,
-                        Status::ResourceLimitExceeded => {
-                            Err(ReservationFailedReason::ResourceLimitExceeded)?
+                        Status::ReservationRefused => {
+                            return Err(ReservationFailedReason::Refused.into())
                         }
-                        s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                        Status::ResourceLimitExceeded => {
+                            return Err(ReservationFailedReason::ResourceLimitExceeded.into())
+                        }
+                        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
                     }
 
                     let reservation =
                         reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
 
                     if reservation.addrs.is_empty() {
-                        Err(FatalUpgradeError::NoAddressesInReservation)?;
+                        return Err(FatalUpgradeError::NoAddressesInReservation.into());
                     }
 
                     let addrs = reservation
@@ -161,12 +167,18 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     match status {
                         Status::Ok => {}
                         Status::ResourceLimitExceeded => {
-                            Err(CircuitFailedReason::ResourceLimitExceeded)?
+                            return Err(CircuitFailedReason::ResourceLimitExceeded.into())
                         }
-                        Status::ConnectionFailed => Err(CircuitFailedReason::ConnectionFailed)?,
-                        Status::NoReservation => Err(CircuitFailedReason::NoReservation)?,
-                        Status::PermissionDenied => Err(CircuitFailedReason::PermissionDenied)?,
-                        s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                        Status::ConnectionFailed => {
+                            return Err(CircuitFailedReason::ConnectionFailed.into())
+                        }
+                        Status::NoReservation => {
+                            return Err(CircuitFailedReason::NoReservation.into())
+                        }
+                        Status::PermissionDenied => {
+                            return Err(CircuitFailedReason::PermissionDenied.into())
+                        }
+                        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
                     }
 
                     let FramedParts {

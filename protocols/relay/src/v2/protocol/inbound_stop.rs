@@ -78,7 +78,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                         limit: limit.map(Into::into),
                     })
                 }
-                stop_message::Type::Status => Err(FatalUpgradeError::UnexpectedTypeStatus)?,
+                stop_message::Type::Status => Err(FatalUpgradeError::UnexpectedTypeStatus.into()),
             }
         }
         .boxed()

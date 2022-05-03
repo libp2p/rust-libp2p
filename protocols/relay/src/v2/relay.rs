@@ -238,7 +238,7 @@ impl NetworkBehaviour for Relay {
         _remaining_established: usize,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
-            peer.get_mut().remove(&connection);
+            peer.get_mut().remove(connection);
             if peer.get().is_empty() {
                 peer.remove();
             }
