@@ -6,10 +6,7 @@
 
 - Derive `Error` for `GetRecordError` (see [PR 2614]).
 
-- Renamed `PeriodicJob::is_ready` to `PeriodicJob::check_ready`. See [PR 2620].
-
 [PR 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
-[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
 
 # 0.36.0
 
