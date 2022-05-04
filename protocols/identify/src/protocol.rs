@@ -253,13 +253,13 @@ impl TryFrom<structs_proto::Identify> for IdentifyInfo {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode: {0}")]
+    #[error("Failed to encode or decode")]
     Codec(
         #[from]
         #[source]
         prost_codec::Error,
     ),
-    #[error("I/O interaction failed: {0}")]
+    #[error("I/O interaction failed")]
     Io(
         #[from]
         #[source]
@@ -267,13 +267,13 @@ pub enum UpgradeError {
     ),
     #[error("Stream closed")]
     StreamClosed,
-    #[error("Failed decoding multiaddr: {0}")]
+    #[error("Failed decoding multiaddr")]
     Multiaddr(
         #[from]
         #[source]
         multiaddr::Error,
     ),
-    #[error("Failed decoding public key: {0}")]
+    #[error("Failed decoding public key")]
     PublicKey(
         #[from]
         #[source]

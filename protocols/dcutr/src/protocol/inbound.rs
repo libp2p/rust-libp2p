@@ -127,7 +127,7 @@ impl PendingConnect {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode: {0}")]
+    #[error("Failed to encode or decode")]
     Codec(
         #[from]
         #[source]
