@@ -556,8 +556,9 @@ impl GlobalIp for std::net::Ipv4Addr {
         }
 
         // Copied from the unstable method `std::net::Ipv4Addr::is_shared`.
-        let is_shared =
-            || self.octets()[0] == 100 && (self.octets()[1] & 0b1100_0000 == 0b0100_0000);
+        fn is_shared(addr: &std::net::Ipv4Addr) -> bool {
+            addr.octets()[0] == 100 && (addr.octets()[1] & 0b1100_0000 == 0b0100_0000)
+        }
 
         // Copied from the unstable method `std::net::Ipv4Addr::is_reserved`.
         //
@@ -565,21 +566,25 @@ impl GlobalIp for std::net::Ipv4Addr {
         // updated. This may result in non-reserved addresses being
         // treated as reserved in code that relies on an outdated version
         // of this method.
-        let is_reserved = || self.octets()[0] & 240 == 240 && !self.is_broadcast();
+        fn is_reserved(addr: &std::net::Ipv4Addr) -> bool {
+            addr.octets()[0] & 240 == 240 && !addr.is_broadcast()
+        }
 
         // Copied from the unstable method `std::net::Ipv4Addr::is_benchmarking`.
-        let is_benchmarking = || self.octets()[0] == 198 && (self.octets()[1] & 0xfe) == 18;
+        fn is_benchmarking(addr: &std::net::Ipv4Addr) -> bool {
+            addr.octets()[0] == 198 && (addr.octets()[1] & 0xfe) == 18
+        }
 
         !self.is_private()
             && !self.is_loopback()
             && !self.is_link_local()
             && !self.is_broadcast()
             && !self.is_documentation()
-            && !is_shared()
+            && !is_shared(self)
             // addresses reserved for future protocols (`192.0.0.0/24`)
             && !(self.octets()[0] == 192 && self.octets()[1] == 0 && self.octets()[2] == 0)
-            && !is_reserved()
-            && !is_benchmarking()
+            && !is_reserved(self)
+            && !is_benchmarking(self)
             // Make sure the address is not in 0.0.0.0/8
             && self.octets()[0] != 0
     }
@@ -596,11 +601,24 @@ impl GlobalIp for std::net::Ipv6Addr {
     // See https://github.com/rust-lang/rust/pull/86634 and https://github.com/rust-lang/rust/issues/85604.
     fn is_global_ip(&self) -> bool {
         let is_unicast_global = || {
-            let is_unicast_link_local = (self.segments()[0] & 0xffc0) == 0xfe80;
-            let is_unique_local = (self.segments()[0] & 0xfe00) == 0xfc00;
-            let is_documentation = (self.segments()[0] == 0x2001) && (self.segments()[1] == 0xdb8);
+            // Copied from the unstable method `std::net::Ipv6Addr::is_unicast_link_local`.
+            fn is_unicast_link_local(addr: &std::net::Ipv6Addr) -> bool {
+                (addr.segments()[0] & 0xffc0) == 0xfe80
+            }
+            // Copied from the unstable method `std::net::Ipv6Addr::is_unique_local`.
+            fn is_unique_local(addr: &std::net::Ipv6Addr) -> bool {
+                (addr.segments()[0] & 0xfe00) == 0xfc00
+            }
+            // Copied from the unstable method `std::net::Ipv6Addr::is_documentation`.
+            fn is_documentation(addr: &std::net::Ipv6Addr) -> bool {
+                (addr.segments()[0] == 0x2001) && (addr.segments()[1] == 0xdb8)
+            }
 
-            !self.is_loopback() && !is_unicast_link_local && !is_unique_local && is_documentation
+            !self.is_loopback()
+                && !is_unicast_link_local(self)
+                && !is_unique_local(self)
+                && !self.is_unspecified()
+                && !is_documentation(self)
         };
 
         if !self.is_multicast() {
