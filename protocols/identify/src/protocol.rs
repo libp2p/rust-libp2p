@@ -211,7 +211,7 @@ where
     )
     .next()
     .await
-    .ok_or_else(|| UpgradeError::StreamClosed)??
+    .ok_or(UpgradeError::StreamClosed)??
     .try_into()?;
 
     trace!("Received: {:?}", info);
