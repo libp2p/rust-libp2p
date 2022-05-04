@@ -782,16 +782,16 @@ where
                     connections_not_ready = true;
                 }
                 Poll::Ready(PoolEvent::ConnectionEstablished {
-                    connection,
+                    id,
+                    peer_id,
+                    endpoint,
                     other_established_connection_ids,
                     concurrent_dial_errors,
                 }) => {
-                    let peer_id = connection.peer_id();
-                    let endpoint = connection.endpoint().clone();
                     if this.banned_peers.contains(&peer_id) {
                         // Mark the connection for the banned peer as banned, thus withholding any
                         // future events from the connection to the behaviour.
-                        this.banned_peer_connections.insert(connection.id());
+                        this.banned_peer_connections.insert(id);
                         this.pool.disconnect(peer_id);
                         return Poll::Ready(SwarmEvent::BannedPeer { peer_id, endpoint });
                     } else {
@@ -806,18 +806,17 @@ where
 
                         log::debug!(
                             "Connection established: {:?} {:?}; Total (peer): {}. Total non-banned (peer): {}",
-                            connection.peer_id(),
-                            connection.endpoint(),
+                            peer_id,
+                            endpoint,
                             num_established,
                             non_banned_established + 1,
                         );
-                        let endpoint = connection.endpoint().clone();
                         let failed_addresses = concurrent_dial_errors
                             .as_ref()
                             .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
                         this.behaviour.inject_connection_established(
                             &peer_id,
-                            &connection.id(),
+                            &id,
                             &endpoint,
                             failed_addresses.as_ref(),
                             non_banned_established,
@@ -914,26 +913,23 @@ where
                         num_established,
                     });
                 }
-                Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
-                    let peer = connection.peer_id();
-                    let conn_id = connection.id();
-                    if this.banned_peer_connections.contains(&conn_id) {
-                        log::debug!("Ignoring event from banned peer: {} {:?}.", peer, conn_id);
+                Poll::Ready(PoolEvent::ConnectionEvent { id, peer_id, event }) => {
+                    if this.banned_peer_connections.contains(&id) {
+                        log::debug!("Ignoring event from banned peer: {} {:?}.", peer_id, id);
                     } else {
-                        this.behaviour.inject_event(peer, conn_id, event);
+                        this.behaviour.inject_event(peer_id, id, event);
                     }
                 }
                 Poll::Ready(PoolEvent::AddressChange {
-                    connection,
+                    id,
+                    peer_id,
                     new_endpoint,
                     old_endpoint,
                 }) => {
-                    let peer = connection.peer_id();
-                    let conn_id = connection.id();
-                    if !this.banned_peer_connections.contains(&conn_id) {
+                    if !this.banned_peer_connections.contains(&id) {
                         this.behaviour.inject_address_change(
-                            &peer,
-                            &conn_id,
+                            &peer_id,
+                            &id,
                             &old_endpoint,
                             &new_endpoint,
                         );
