@@ -860,7 +860,7 @@ impl PeerScore {
                             //should always be true
                             let window_time = validated_time
                                 .checked_add(topic_params.mesh_message_deliveries_window)
-                                .unwrap_or_else(|| *now);
+                                .unwrap_or(*now);
                             if now > &window_time {
                                 falls_in_mesh_deliver_window = false;
                             }

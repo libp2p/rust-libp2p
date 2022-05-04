@@ -196,16 +196,14 @@ impl Identify {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
-            if self.pending_push.insert(p) {
-                if !self.connected.contains_key(&p) {
-                    let handler = self.new_handler();
-                    self.events.push_back(NetworkBehaviourAction::Dial {
-                        opts: DialOpts::peer_id(p)
-                            .condition(dial_opts::PeerCondition::Disconnected)
-                            .build(),
-                        handler,
-                    });
-                }
+            if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
+                let handler = self.new_handler();
+                self.events.push_back(NetworkBehaviourAction::Dial {
+                    opts: DialOpts::peer_id(p)
+                        .condition(dial_opts::PeerCondition::Disconnected)
+                        .build(),
+                    handler,
+                });
             }
         }
     }
@@ -240,7 +238,7 @@ impl NetworkBehaviour for Identify {
         if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
             for addr in failed_addresses
                 .into_iter()
-                .flat_map(|addresses| addresses.into_iter())
+                .flat_map(|addresses| addresses.iter())
             {
                 entry.remove(addr);
             }
@@ -451,7 +449,7 @@ impl NetworkBehaviour for Identify {
         self.discovered_peers
             .get(peer)
             .cloned()
-            .map(|addr| Vec::from_iter(addr))
+            .map(Vec::from_iter)
             .unwrap_or_default()
     }
 }
@@ -510,7 +508,7 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     if let Some(Protocol::P2p(multi_addr_peer_id)) = last_component {
         return multi_addr_peer_id == *peer_id.as_ref();
     }
-    return true;
+    true
 }
 
 #[cfg(test)]

@@ -224,7 +224,7 @@
 //! over time as interfaces become available or unavailable.
 //! For example, in case of our TCP transport it may (among others) listen on the
 //! loopback interface (localhost) `/ip4/127.0.0.1/tcp/24915` as well as the local
-//! network `/ip4/192.168.178.25tcp/24915`.
+//! network `/ip4/192.168.178.25/tcp/24915`.
 //!
 //! In addition, if provided on the CLI, let's instruct our local node to dial a
 //! remote peer.

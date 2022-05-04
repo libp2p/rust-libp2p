@@ -706,7 +706,7 @@ where
                     self.pending_events
                         .push_back(NetworkBehaviourAction::GenerateEvent(
                             RequestResponseEvent::OutboundFailure {
-                                peer: peer,
+                                peer,
                                 request_id: request.request_id,
                                 error: OutboundFailure::DialFailure,
                             },

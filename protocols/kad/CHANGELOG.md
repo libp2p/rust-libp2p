@@ -6,7 +6,7 @@
 
 - Derive `Error` for `GetRecordError` (see [PR 2614]).
 
-[pr 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
+[PR 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
 
 # 0.36.0
 
