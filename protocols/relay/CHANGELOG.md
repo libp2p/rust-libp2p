@@ -4,6 +4,8 @@
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
+- Expose explicits errors via `UpgradeError` instead of generic `io::Error`.
+
 # 0.8.0
 
 - Expose `{Inbound,Outbound}{Hop,Stop}UpgradeError`. See [PR 2586].

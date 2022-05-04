@@ -153,11 +153,11 @@ pub enum Event {
         renewed: bool,
     },
     /// Accepting an inbound reservation request failed.
-    ReservationReqAcceptFailed { error: std::io::Error },
+    ReservationReqAcceptFailed { error: inbound_hop::UpgradeError },
     /// An inbound reservation request has been denied.
     ReservationReqDenied {},
     /// Denying an inbound reservation request has failed.
-    ReservationReqDenyFailed { error: std::io::Error },
+    ReservationReqDenyFailed { error: inbound_hop::UpgradeError },
     /// An inbound reservation has timed out.
     ReservationTimedOut {},
     /// An inbound circuit request has been received.
@@ -178,7 +178,7 @@ pub enum Event {
     CircuitReqDenyFailed {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
@@ -189,7 +189,7 @@ pub enum Event {
     CircuitReqAcceptFailed {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An outbound substream for an inbound circuit request has been
     /// negotiated.
@@ -404,16 +404,21 @@ pub struct Handler {
     keep_alive: KeepAlive,
 
     /// Futures accepting an inbound reservation request.
-    reservation_accept_futures: Futures<Result<(), std::io::Error>>,
+    reservation_accept_futures: Futures<Result<(), inbound_hop::UpgradeError>>,
     /// Futures denying an inbound reservation request.
-    reservation_deny_futures: Futures<Result<(), std::io::Error>>,
+    reservation_deny_futures: Futures<Result<(), inbound_hop::UpgradeError>>,
     /// Timeout for the currently active reservation.
     active_reservation: Option<Delay>,
 
     /// Futures accepting an inbound circuit request.
-    circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, std::io::Error)>>,
+    circuit_accept_futures:
+        Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::UpgradeError)>>,
     /// Futures deying an inbound circuit request.
-    circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), std::io::Error>)>,
+    circuit_deny_futures: Futures<(
+        Option<CircuitId>,
+        PeerId,
+        Result<(), inbound_hop::UpgradeError>,
+    )>,
     /// Tracks substreams lend out to other [`Handler`]s.
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that

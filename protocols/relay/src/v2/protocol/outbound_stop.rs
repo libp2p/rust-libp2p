@@ -25,13 +25,10 @@ use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{upgrade, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
-use prost::Message;
 use std::convert::TryInto;
-use std::io::Cursor;
 use std::iter;
 use std::time::Duration;
 use thiserror::Error;
-use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {
     pub relay_peer_id: PeerId,
@@ -72,27 +69,19 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             status: None,
         };
 
-        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut encoded_msg)
-            .expect("Vec to have sufficient capacity.");
-
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_MESSAGE_SIZE);
-        let mut substream = Framed::new(substream, codec);
+        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
         async move {
-            substream.send(std::io::Cursor::new(encoded_msg)).await?;
-            let msg: bytes::BytesMut = substream
-                .next()
-                .await
-                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
-
+            substream.send(msg).await?;
             let StopMessage {
                 r#type,
                 peer: _,
                 limit: _,
                 status,
-            } = StopMessage::decode(Cursor::new(msg))?;
+            } = substream
+                .next()
+                .await
+                .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
                 stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
@@ -141,14 +130,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<std::io::Error> for UpgradeError {
-    fn from(error: std::io::Error) -> Self {
-        Self::Fatal(error.into())
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(error: prost::DecodeError) -> Self {
+impl From<prost_codec::Error> for UpgradeError {
+    fn from(error: prost_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -163,14 +146,14 @@ pub enum CircuitFailedReason {
 
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
-    #[error("Failed to decode message: {0}.")]
-    Decode(
+    #[error("Failed to encode or decode")]
+    Codec(
         #[from]
         #[source]
-        prost::DecodeError,
+        prost_codec::Error,
     ),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Failed to parse response type field.")]

@@ -100,7 +100,7 @@ pub enum Event {
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_stop::UpgradeError,
     },
 }
 
@@ -196,7 +196,9 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
+    circuit_deny_futs: FuturesUnordered<
+        BoxFuture<'static, (PeerId, Result<(), protocol::inbound_stop::UpgradeError>)>,
+    >,
 
     /// Futures that try to send errors to the transport.
     ///
