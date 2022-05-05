@@ -39,6 +39,8 @@ use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
 
+const MAX_NUM_INBOUND_SUBSTREAMS: usize = 32;
+
 /// A prototype from which [`KademliaHandler`]s can be constructed.
 pub struct KademliaHandlerProto<T> {
     config: KademliaHandlerConfig,
@@ -533,6 +535,10 @@ where
             EitherOutput::First(p) => p,
             EitherOutput::Second(p) => void::unreachable(p),
         };
+
+        if self.inbound_substreams.len() == MAX_NUM_INBOUND_SUBSTREAMS {
+            panic!("New inbound substream exceeds inbound substream limit. Dropping.");
+        }
 
         debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
