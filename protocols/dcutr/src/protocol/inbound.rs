@@ -51,13 +51,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         async move {
             let HolePunch { r#type, obs_addrs } =
-                substream
-                    .next()
-                    .await
-                    .ok_or(prost_codec::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
             let obs_addrs = if obs_addrs.is_empty() {
                 return Err(UpgradeError::NoAddresses);
@@ -106,14 +100,11 @@ impl PendingConnect {
         };
 
         self.substream.send(msg).await?;
-        let HolePunch { r#type, .. } =
-            self.substream
-                .next()
-                .await
-                .ok_or(prost_codec::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "",
-                )))??;
+        let HolePunch { r#type, .. } = self
+            .substream
+            .next()
+            .await
+            .ok_or(UpgradeError::StreamClosed)??;
 
         let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
         match r#type {
@@ -133,6 +124,8 @@ pub enum UpgradeError {
         #[source]
         prost_codec::Error,
     ),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
     #[error("Invalid addresses.")]

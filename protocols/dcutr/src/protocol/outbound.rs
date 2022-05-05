@@ -70,13 +70,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let sent_time = Instant::now();
 
             let HolePunch { r#type, obs_addrs } =
-                substream
-                    .next()
-                    .await
-                    .ok_or(prost_codec::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
             let rtt = sent_time.elapsed();
 
@@ -128,6 +122,8 @@ pub enum UpgradeError {
         #[source]
         prost_codec::Error,
     ),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]
