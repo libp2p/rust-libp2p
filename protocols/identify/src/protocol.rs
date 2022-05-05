@@ -19,15 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::structs_proto;
+use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
 use libp2p_core::{
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    identity, multiaddr,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Multiaddr, PublicKey,
 };
-use log::{debug, trace};
-use prost::Message;
+use log::trace;
 use std::convert::TryFrom;
 use std::{fmt, io, iter, pin::Pin};
+use thiserror::Error;
+
+const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
@@ -89,8 +93,8 @@ where
     ///
     /// Consumes the substream, returning a future that resolves
     /// when the reply has been sent on the underlying connection.
-    pub async fn send(self, info: IdentifyInfo) -> io::Result<()> {
-        send(self.inner, info).await
+    pub async fn send(self, info: IdentifyInfo) -> Result<(), UpgradeError> {
+        send(self.inner, info).await.map_err(Into::into)
     }
 }
 
@@ -105,8 +109,8 @@ impl UpgradeInfo for IdentifyProtocol {
 
 impl<C> InboundUpgrade<C> for IdentifyProtocol {
     type Output = ReplySubstream<C>;
-    type Error = io::Error;
-    type Future = future::Ready<Result<Self::Output, io::Error>>;
+    type Error = UpgradeError;
+    type Future = future::Ready<Result<Self::Output, UpgradeError>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ok(ReplySubstream { inner: socket })
@@ -118,7 +122,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = IdentifyInfo;
-    type Error = io::Error;
+    type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -140,7 +144,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = IdentifyInfo;
-    type Error = io::Error;
+    type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -153,7 +157,7 @@ where
     C: AsyncWrite + Unpin + Send + 'static,
 {
     type Output = ();
-    type Error = io::Error;
+    type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -161,7 +165,7 @@ where
     }
 }
 
-async fn send<T>(mut io: T, info: IdentifyInfo) -> io::Result<()>
+async fn send<T>(io: T, info: IdentifyInfo) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -184,75 +188,97 @@ where
         protocols: info.protocols,
     };
 
-    let mut bytes = Vec::with_capacity(message.encoded_len());
-    message
-        .encode(&mut bytes)
-        .expect("Vec<u8> provides capacity as needed");
+    let mut framed_io = FramedWrite::new(
+        io,
+        prost_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+    );
 
-    upgrade::write_length_prefixed(&mut io, bytes).await?;
-    io.close().await?;
+    framed_io.send(message).await?;
+    framed_io.close().await?;
 
     Ok(())
 }
 
-async fn recv<T>(mut socket: T) -> io::Result<IdentifyInfo>
+async fn recv<T>(mut socket: T) -> Result<IdentifyInfo, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     socket.close().await?;
 
-    let msg = upgrade::read_length_prefixed(&mut socket, 4096)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-        .await?;
-
-    let info = match parse_proto_msg(msg) {
-        Ok(v) => v,
-        Err(err) => {
-            debug!("Invalid message: {:?}", err);
-            return Err(err);
-        }
-    };
+    let info = FramedRead::new(
+        socket,
+        prost_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+    )
+    .next()
+    .await
+    .ok_or(UpgradeError::StreamClosed)??
+    .try_into()?;
 
     trace!("Received: {:?}", info);
 
     Ok(info)
 }
 
-/// Turns a protobuf message into an `IdentifyInfo`.
-fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<IdentifyInfo, io::Error> {
-    match structs_proto::Identify::decode(msg.as_ref()) {
-        Ok(msg) => {
-            fn parse_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, io::Error> {
-                Multiaddr::try_from(bytes)
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
-            }
+impl TryFrom<structs_proto::Identify> for IdentifyInfo {
+    type Error = UpgradeError;
 
-            let listen_addrs = {
-                let mut addrs = Vec::new();
-                for addr in msg.listen_addrs.into_iter() {
-                    addrs.push(parse_multiaddr(addr)?);
-                }
-                addrs
-            };
-
-            let public_key = PublicKey::from_protobuf_encoding(&msg.public_key.unwrap_or_default())
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-            let observed_addr = parse_multiaddr(msg.observed_addr.unwrap_or_default())?;
-            let info = IdentifyInfo {
-                public_key,
-                protocol_version: msg.protocol_version.unwrap_or_default(),
-                agent_version: msg.agent_version.unwrap_or_default(),
-                listen_addrs,
-                protocols: msg.protocols,
-                observed_addr,
-            };
-
-            Ok(info)
+    fn try_from(msg: structs_proto::Identify) -> Result<Self, Self::Error> {
+        fn parse_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, multiaddr::Error> {
+            Multiaddr::try_from(bytes)
         }
 
-        Err(err) => Err(io::Error::new(io::ErrorKind::InvalidData, err)),
+        let listen_addrs = {
+            let mut addrs = Vec::new();
+            for addr in msg.listen_addrs.into_iter() {
+                addrs.push(parse_multiaddr(addr)?);
+            }
+            addrs
+        };
+
+        let public_key = PublicKey::from_protobuf_encoding(&msg.public_key.unwrap_or_default())?;
+
+        let observed_addr = parse_multiaddr(msg.observed_addr.unwrap_or_default())?;
+        let info = IdentifyInfo {
+            public_key,
+            protocol_version: msg.protocol_version.unwrap_or_default(),
+            agent_version: msg.agent_version.unwrap_or_default(),
+            listen_addrs,
+            protocols: msg.protocols,
+            observed_addr,
+        };
+
+        Ok(info)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum UpgradeError {
+    #[error("Failed to encode or decode")]
+    Codec(
+        #[from]
+        #[source]
+        prost_codec::Error,
+    ),
+    #[error("I/O interaction failed")]
+    Io(
+        #[from]
+        #[source]
+        io::Error,
+    ),
+    #[error("Stream closed")]
+    StreamClosed,
+    #[error("Failed decoding multiaddr")]
+    Multiaddr(
+        #[from]
+        #[source]
+        multiaddr::Error,
+    ),
+    #[error("Failed decoding public key")]
+    PublicKey(
+        #[from]
+        #[source]
+        identity::error::DecodingError,
+    ),
 }
 
 #[cfg(test)]

@@ -19,14 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{
-    IdentifyInfo, IdentifyProtocol, IdentifyPushProtocol, InboundPush, OutboundPush, ReplySubstream,
+    IdentifyInfo, IdentifyProtocol, IdentifyPushProtocol, InboundPush, OutboundPush,
+    ReplySubstream, UpgradeError,
 };
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::upgrade::{
-    EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade, UpgradeError,
-};
+use libp2p_core::upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
@@ -70,7 +69,7 @@ pub enum IdentifyHandlerEvent {
     /// We received a request for identification.
     Identify(ReplySubstream<NegotiatedSubstream>),
     /// Failed to identify the remote.
-    IdentificationError(ConnectionHandlerUpgrErr<io::Error>),
+    IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
 }
 
 /// Identifying information of the local node that is pushed to a remote.
@@ -155,6 +154,8 @@ impl ConnectionHandler for IdentifyHandler {
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
+        use libp2p_core::upgrade::UpgradeError;
+
         let err = err.map_upgrade_err(|e| match e {
             UpgradeError::Select(e) => UpgradeError::Select(e),
             UpgradeError::Apply(EitherError::A(ioe)) => UpgradeError::Apply(ioe),
