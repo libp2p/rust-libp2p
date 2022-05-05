@@ -84,8 +84,11 @@ pub struct KademliaHandler<TUserData> {
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
 
-    /// List of active substreams with the state they are in.
-    substreams: Vec<SubstreamState<TUserData>>,
+    /// List of active outbound substreams with the state they are in.
+    outbound_substreams: Vec<OutboundSubstreamState<TUserData>>,
+
+    /// List of active inbound substreams with the state they are in.
+    inbound_substreams: Vec<InboundSubstreamState>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
@@ -125,8 +128,8 @@ pub struct KademliaHandlerConfig {
     pub idle_timeout: Duration,
 }
 
-/// State of an active substream, opened either by us or by the remote.
-enum SubstreamState<TUserData> {
+/// State of an active outbound substream.
+enum OutboundSubstreamState<TUserData> {
     /// We haven't started opening the outgoing substream yet.
     /// Contains the request we want to send, and the user data if we expect an answer.
     OutPendingOpen(KadRequestMsg, Option<TUserData>),
@@ -145,6 +148,10 @@ enum SubstreamState<TUserData> {
     OutReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
     OutClosing(KadOutStreamSink<NegotiatedSubstream>),
+}
+
+/// State of an active inbound substream.
+enum InboundSubstreamState {
     /// Waiting for a request from the remote.
     InWaitingMessage(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// Waiting for the user to send a `KademliaHandlerIn` event containing the response.
@@ -161,29 +168,38 @@ enum SubstreamState<TUserData> {
     InClosing(KadInStreamSink<NegotiatedSubstream>),
 }
 
-impl<TUserData> SubstreamState<TUserData> {
+impl<TUserData> OutboundSubstreamState<TUserData> {
     /// Tries to close the substream.
     ///
     /// If the substream is not ready to be closed, returns it back.
     fn try_close(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         match self {
-            SubstreamState::OutPendingOpen(_, _) | SubstreamState::OutReportError(_, _) => {
-                Poll::Ready(())
-            }
-            SubstreamState::OutPendingSend(ref mut stream, _, _)
-            | SubstreamState::OutPendingFlush(ref mut stream, _)
-            | SubstreamState::OutWaitingAnswer(ref mut stream, _)
-            | SubstreamState::OutClosing(ref mut stream) => {
+            OutboundSubstreamState::OutPendingOpen(_, _)
+            | OutboundSubstreamState::OutReportError(_, _) => Poll::Ready(()),
+            OutboundSubstreamState::OutPendingSend(ref mut stream, _, _)
+            | OutboundSubstreamState::OutPendingFlush(ref mut stream, _)
+            | OutboundSubstreamState::OutWaitingAnswer(ref mut stream, _)
+            | OutboundSubstreamState::OutClosing(ref mut stream) => {
                 match Sink::poll_close(Pin::new(stream), cx) {
                     Poll::Ready(_) => Poll::Ready(()),
                     Poll::Pending => Poll::Pending,
                 }
             }
-            SubstreamState::InWaitingMessage(_, ref mut stream)
-            | SubstreamState::InWaitingUser(_, ref mut stream)
-            | SubstreamState::InPendingSend(_, ref mut stream, _)
-            | SubstreamState::InPendingFlush(_, ref mut stream)
-            | SubstreamState::InClosing(ref mut stream) => {
+        }
+    }
+}
+
+impl InboundSubstreamState {
+    /// Tries to close the substream.
+    ///
+    /// If the substream is not ready to be closed, returns it back.
+    fn try_close(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        match self {
+            InboundSubstreamState::InWaitingMessage(_, ref mut stream)
+            | InboundSubstreamState::InWaitingUser(_, ref mut stream)
+            | InboundSubstreamState::InPendingSend(_, ref mut stream, _)
+            | InboundSubstreamState::InPendingFlush(_, ref mut stream)
+            | InboundSubstreamState::InClosing(ref mut stream) => {
                 match Sink::poll_close(Pin::new(stream), cx) {
                     Poll::Ready(_) => Poll::Ready(()),
                     Poll::Pending => Poll::Pending,
@@ -459,7 +475,8 @@ impl<TUserData> KademliaHandler<TUserData> {
             config,
             endpoint,
             next_connec_unique_id: UniqueConnecId(0),
-            substreams: Vec::new(),
+            inbound_substreams: Default::default(),
+            outbound_substreams: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unconfirmed,
         }
@@ -493,8 +510,10 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
-        self.substreams
-            .push(SubstreamState::OutPendingSend(protocol, msg, user_data));
+        self.outbound_substreams
+            .push(OutboundSubstreamState::OutPendingSend(
+                protocol, msg, user_data,
+            ));
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
@@ -518,8 +537,12 @@ where
         debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
-        self.substreams
-            .push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
+        // TODO: Limit number
+        self.inbound_substreams
+            .push(InboundSubstreamState::InWaitingMessage(
+                connec_unique_id,
+                protocol,
+            ));
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
@@ -531,68 +554,83 @@ where
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
             KademliaHandlerIn::Reset(request_id) => {
-                let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(conn_id, _) => {
-                        conn_id == &request_id.connec_unique_id
-                    }
-                    _ => false,
-                });
+                let pos = self
+                    .inbound_substreams
+                    .iter()
+                    .position(|state| match state {
+                        InboundSubstreamState::InWaitingUser(conn_id, _) => {
+                            conn_id == &request_id.connec_unique_id
+                        }
+                        _ => false,
+                    });
                 if let Some(pos) = pos {
                     // TODO: we don't properly close down the substream
                     let waker = futures::task::noop_waker();
                     let mut cx = Context::from_waker(&waker);
-                    let _ = self.substreams.remove(pos).try_close(&mut cx);
+                    let _ = self.inbound_substreams.remove(pos).try_close(&mut cx);
                 }
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
+                self.outbound_substreams
+                    .push(OutboundSubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
                 request_id,
             } => {
-                let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _) => {
-                        conn_id == &request_id.connec_unique_id
-                    }
-                    _ => false,
-                });
+                let pos = self
+                    .inbound_substreams
+                    .iter()
+                    .position(|state| match state {
+                        InboundSubstreamState::InWaitingUser(ref conn_id, _) => {
+                            conn_id == &request_id.connec_unique_id
+                        }
+                        _ => false,
+                    });
 
                 if let Some(pos) = pos {
-                    let (conn_id, substream) = match self.substreams.remove(pos) {
-                        SubstreamState::InWaitingUser(conn_id, substream) => (conn_id, substream),
+                    let (conn_id, substream) = match self.inbound_substreams.remove(pos) {
+                        InboundSubstreamState::InWaitingUser(conn_id, substream) => {
+                            (conn_id, substream)
+                        }
                         _ => unreachable!(),
                     };
 
                     let msg = KadResponseMsg::FindNode { closer_peers };
-                    self.substreams
-                        .push(SubstreamState::InPendingSend(conn_id, substream, msg));
+                    self.inbound_substreams
+                        .push(InboundSubstreamState::InPendingSend(
+                            conn_id, substream, msg,
+                        ));
                 }
             }
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
+                self.outbound_substreams
+                    .push(OutboundSubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::GetProvidersRes {
                 closer_peers,
                 provider_peers,
                 request_id,
             } => {
-                let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _)
-                        if conn_id == &request_id.connec_unique_id =>
-                    {
-                        true
-                    }
-                    _ => false,
-                });
+                let pos = self
+                    .inbound_substreams
+                    .iter()
+                    .position(|state| match state {
+                        InboundSubstreamState::InWaitingUser(ref conn_id, _)
+                            if conn_id == &request_id.connec_unique_id =>
+                        {
+                            true
+                        }
+                        _ => false,
+                    });
 
                 if let Some(pos) = pos {
-                    let (conn_id, substream) = match self.substreams.remove(pos) {
-                        SubstreamState::InWaitingUser(conn_id, substream) => (conn_id, substream),
+                    let (conn_id, substream) = match self.inbound_substreams.remove(pos) {
+                        InboundSubstreamState::InWaitingUser(conn_id, substream) => {
+                            (conn_id, substream)
+                        }
                         _ => unreachable!(),
                     };
 
@@ -600,40 +638,47 @@ where
                         closer_peers,
                         provider_peers,
                     };
-                    self.substreams
-                        .push(SubstreamState::InPendingSend(conn_id, substream, msg));
+                    self.inbound_substreams
+                        .push(InboundSubstreamState::InPendingSend(
+                            conn_id, substream, msg,
+                        ));
                 }
             }
             KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, None));
+                self.outbound_substreams
+                    .push(OutboundSubstreamState::OutPendingOpen(msg, None));
             }
             KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
+                self.outbound_substreams
+                    .push(OutboundSubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::PutRecord { record, user_data } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
+                self.outbound_substreams
+                    .push(OutboundSubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::GetRecordRes {
                 record,
                 closer_peers,
                 request_id,
             } => {
-                let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _) => {
-                        conn_id == &request_id.connec_unique_id
-                    }
-                    _ => false,
-                });
+                let pos = self
+                    .inbound_substreams
+                    .iter()
+                    .position(|state| match state {
+                        InboundSubstreamState::InWaitingUser(ref conn_id, _) => {
+                            conn_id == &request_id.connec_unique_id
+                        }
+                        _ => false,
+                    });
 
                 if let Some(pos) = pos {
-                    let (conn_id, substream) = match self.substreams.remove(pos) {
-                        SubstreamState::InWaitingUser(conn_id, substream) => (conn_id, substream),
+                    let (conn_id, substream) = match self.inbound_substreams.remove(pos) {
+                        InboundSubstreamState::InWaitingUser(conn_id, substream) => {
+                            (conn_id, substream)
+                        }
                         _ => unreachable!(),
                     };
 
@@ -641,8 +686,10 @@ where
                         record,
                         closer_peers,
                     };
-                    self.substreams
-                        .push(SubstreamState::InPendingSend(conn_id, substream, msg));
+                    self.inbound_substreams
+                        .push(InboundSubstreamState::InPendingSend(
+                            conn_id, substream, msg,
+                        ));
                 }
             }
             KademliaHandlerIn::PutRecordRes {
@@ -650,24 +697,31 @@ where
                 request_id,
                 value,
             } => {
-                let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _)
-                        if conn_id == &request_id.connec_unique_id =>
-                    {
-                        true
-                    }
-                    _ => false,
-                });
+                let pos = self
+                    .inbound_substreams
+                    .iter()
+                    .position(|state| match state {
+                        InboundSubstreamState::InWaitingUser(ref conn_id, _)
+                            if conn_id == &request_id.connec_unique_id =>
+                        {
+                            true
+                        }
+                        _ => false,
+                    });
 
                 if let Some(pos) = pos {
-                    let (conn_id, substream) = match self.substreams.remove(pos) {
-                        SubstreamState::InWaitingUser(conn_id, substream) => (conn_id, substream),
+                    let (conn_id, substream) = match self.inbound_substreams.remove(pos) {
+                        InboundSubstreamState::InWaitingUser(conn_id, substream) => {
+                            (conn_id, substream)
+                        }
                         _ => unreachable!(),
                     };
 
                     let msg = KadResponseMsg::PutValue { key, value };
-                    self.substreams
-                        .push(SubstreamState::InPendingSend(conn_id, substream, msg));
+                    self.inbound_substreams
+                        .push(InboundSubstreamState::InPendingSend(
+                            conn_id, substream, msg,
+                        ));
                 }
             }
         }
@@ -681,8 +735,11 @@ where
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
         if let Some(user_data) = user_data {
-            self.substreams
-                .push(SubstreamState::OutReportError(error.into(), user_data));
+            self.outbound_substreams
+                .push(OutboundSubstreamState::OutReportError(
+                    error.into(),
+                    user_data,
+                ));
         }
     }
 
@@ -701,7 +758,7 @@ where
             Self::Error,
         >,
     > {
-        if self.substreams.is_empty() {
+        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
             return Poll::Pending;
         }
 
@@ -714,25 +771,26 @@ where
             ));
         }
 
-        // We remove each element from `substreams` one by one and add them back.
-        for n in (0..self.substreams.len()).rev() {
-            let mut substream = self.substreams.swap_remove(n);
+        // We remove each element from `outbound_substreams` one by one and add them back.
+        for n in (0..self.outbound_substreams.len()).rev() {
+            let mut substream = self.outbound_substreams.swap_remove(n);
 
             loop {
-                match advance_substream(substream, self.config.protocol_config.clone(), cx) {
+                match advance_outbound_substream(substream, self.config.protocol_config.clone(), cx)
+                {
                     (Some(new_state), Some(event), _) => {
-                        self.substreams.push(new_state);
+                        self.outbound_substreams.push(new_state);
                         return Poll::Ready(event);
                     }
                     (None, Some(event), _) => {
-                        if self.substreams.is_empty() {
+                        if self.outbound_substreams.is_empty() {
                             self.keep_alive =
                                 KeepAlive::Until(Instant::now() + self.config.idle_timeout);
                         }
                         return Poll::Ready(event);
                     }
                     (Some(new_state), None, false) => {
-                        self.substreams.push(new_state);
+                        self.outbound_substreams.push(new_state);
                         break;
                     }
                     (Some(new_state), None, true) => {
@@ -746,7 +804,39 @@ where
             }
         }
 
-        if self.substreams.is_empty() {
+        // We remove each element from `inbound_substreams` one by one and add them back.
+        for n in (0..self.inbound_substreams.len()).rev() {
+            let mut substream = self.inbound_substreams.swap_remove(n);
+
+            loop {
+                match advance_inbound_substream(substream, cx) {
+                    (Some(new_state), Some(event), _) => {
+                        self.inbound_substreams.push(new_state);
+                        return Poll::Ready(event);
+                    }
+                    (None, Some(event), _) => {
+                        if self.inbound_substreams.is_empty() {
+                            self.keep_alive =
+                                KeepAlive::Until(Instant::now() + self.config.idle_timeout);
+                        }
+                        return Poll::Ready(event);
+                    }
+                    (Some(new_state), None, false) => {
+                        self.inbound_substreams.push(new_state);
+                        break;
+                    }
+                    (Some(new_state), None, true) => {
+                        substream = new_state;
+                        continue;
+                    }
+                    (None, None, _) => {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
             // We destroyed all substreams in this function.
             self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
         } else {
@@ -767,16 +857,16 @@ impl Default for KademliaHandlerConfig {
     }
 }
 
-/// Advances one substream.
+/// Advances one outbound substream.
 ///
 /// Returns the new state for that substream, an event to generate, and whether the substream
 /// should be polled again.
-fn advance_substream<TUserData>(
-    state: SubstreamState<TUserData>,
+fn advance_outbound_substream<TUserData>(
+    state: OutboundSubstreamState<TUserData>,
     upgrade: KademliaProtocolConfig,
     cx: &mut Context<'_>,
 ) -> (
-    Option<SubstreamState<TUserData>>,
+    Option<OutboundSubstreamState<TUserData>>,
     Option<
         ConnectionHandlerEvent<
             KademliaProtocolConfig,
@@ -788,17 +878,19 @@ fn advance_substream<TUserData>(
     bool,
 ) {
     match state {
-        SubstreamState::OutPendingOpen(msg, user_data) => {
+        OutboundSubstreamState::OutPendingOpen(msg, user_data) => {
             let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(upgrade, (msg, user_data)),
             };
             (None, Some(ev), false)
         }
-        SubstreamState::OutPendingSend(mut substream, msg, user_data) => {
+        OutboundSubstreamState::OutPendingSend(mut substream, msg, user_data) => {
             match Sink::poll_ready(Pin::new(&mut substream), cx) {
                 Poll::Ready(Ok(())) => match Sink::start_send(Pin::new(&mut substream), msg) {
                     Ok(()) => (
-                        Some(SubstreamState::OutPendingFlush(substream, user_data)),
+                        Some(OutboundSubstreamState::OutPendingFlush(
+                            substream, user_data,
+                        )),
                         None,
                         true,
                     ),
@@ -814,7 +906,9 @@ fn advance_substream<TUserData>(
                     }
                 },
                 Poll::Pending => (
-                    Some(SubstreamState::OutPendingSend(substream, msg, user_data)),
+                    Some(OutboundSubstreamState::OutPendingSend(
+                        substream, msg, user_data,
+                    )),
                     None,
                     false,
                 ),
@@ -830,21 +924,29 @@ fn advance_substream<TUserData>(
                 }
             }
         }
-        SubstreamState::OutPendingFlush(mut substream, user_data) => {
+        OutboundSubstreamState::OutPendingFlush(mut substream, user_data) => {
             match Sink::poll_flush(Pin::new(&mut substream), cx) {
                 Poll::Ready(Ok(())) => {
                     if let Some(user_data) = user_data {
                         (
-                            Some(SubstreamState::OutWaitingAnswer(substream, user_data)),
+                            Some(OutboundSubstreamState::OutWaitingAnswer(
+                                substream, user_data,
+                            )),
                             None,
                             true,
                         )
                     } else {
-                        (Some(SubstreamState::OutClosing(substream)), None, true)
+                        (
+                            Some(OutboundSubstreamState::OutClosing(substream)),
+                            None,
+                            true,
+                        )
                     }
                 }
                 Poll::Pending => (
-                    Some(SubstreamState::OutPendingFlush(substream, user_data)),
+                    Some(OutboundSubstreamState::OutPendingFlush(
+                        substream, user_data,
+                    )),
                     None,
                     false,
                 ),
@@ -860,10 +962,10 @@ fn advance_substream<TUserData>(
                 }
             }
         }
-        SubstreamState::OutWaitingAnswer(mut substream, user_data) => {
+        OutboundSubstreamState::OutWaitingAnswer(mut substream, user_data) => {
             match Stream::poll_next(Pin::new(&mut substream), cx) {
                 Poll::Ready(Some(Ok(msg))) => {
-                    let new_state = SubstreamState::OutClosing(substream);
+                    let new_state = OutboundSubstreamState::OutClosing(substream);
                     let event = process_kad_response(msg, user_data);
                     (
                         Some(new_state),
@@ -872,7 +974,9 @@ fn advance_substream<TUserData>(
                     )
                 }
                 Poll::Pending => (
-                    Some(SubstreamState::OutWaitingAnswer(substream, user_data)),
+                    Some(OutboundSubstreamState::OutWaitingAnswer(
+                        substream, user_data,
+                    )),
                     None,
                     false,
                 ),
@@ -892,31 +996,62 @@ fn advance_substream<TUserData>(
                 }
             }
         }
-        SubstreamState::OutReportError(error, user_data) => {
+        OutboundSubstreamState::OutReportError(error, user_data) => {
             let event = KademliaHandlerEvent::QueryError { error, user_data };
             (None, Some(ConnectionHandlerEvent::Custom(event)), false)
         }
-        SubstreamState::OutClosing(mut stream) => match Sink::poll_close(Pin::new(&mut stream), cx)
-        {
-            Poll::Ready(Ok(())) => (None, None, false),
-            Poll::Pending => (Some(SubstreamState::OutClosing(stream)), None, false),
-            Poll::Ready(Err(_)) => (None, None, false),
-        },
-        SubstreamState::InWaitingMessage(id, mut substream) => {
+        OutboundSubstreamState::OutClosing(mut stream) => {
+            match Sink::poll_close(Pin::new(&mut stream), cx) {
+                Poll::Ready(Ok(())) => (None, None, false),
+                Poll::Pending => (
+                    Some(OutboundSubstreamState::OutClosing(stream)),
+                    None,
+                    false,
+                ),
+                Poll::Ready(Err(_)) => (None, None, false),
+            }
+        }
+    }
+}
+/// Advances one inbound substream.
+///
+/// Returns the new state for that substream, an event to generate, and whether the substream
+/// should be polled again.
+fn advance_inbound_substream<TUserData>(
+    state: InboundSubstreamState,
+    cx: &mut Context<'_>,
+) -> (
+    Option<InboundSubstreamState>,
+    Option<
+        ConnectionHandlerEvent<
+            KademliaProtocolConfig,
+            (KadRequestMsg, Option<TUserData>),
+            KademliaHandlerEvent<TUserData>,
+            io::Error,
+        >,
+    >,
+    bool,
+) {
+    match state {
+        InboundSubstreamState::InWaitingMessage(id, mut substream) => {
             match Stream::poll_next(Pin::new(&mut substream), cx) {
                 Poll::Ready(Some(Ok(msg))) => {
                     if let Ok(ev) = process_kad_request(msg, id) {
                         (
-                            Some(SubstreamState::InWaitingUser(id, substream)),
+                            Some(InboundSubstreamState::InWaitingUser(id, substream)),
                             Some(ConnectionHandlerEvent::Custom(ev)),
                             false,
                         )
                     } else {
-                        (Some(SubstreamState::InClosing(substream)), None, true)
+                        (
+                            Some(InboundSubstreamState::InClosing(substream)),
+                            None,
+                            true,
+                        )
                     }
                 }
                 Poll::Pending => (
-                    Some(SubstreamState::InWaitingMessage(id, substream)),
+                    Some(InboundSubstreamState::InWaitingMessage(id, substream)),
                     None,
                     false,
                 ),
@@ -930,48 +1065,48 @@ fn advance_substream<TUserData>(
                 }
             }
         }
-        SubstreamState::InWaitingUser(id, substream) => (
-            Some(SubstreamState::InWaitingUser(id, substream)),
+        InboundSubstreamState::InWaitingUser(id, substream) => (
+            Some(InboundSubstreamState::InWaitingUser(id, substream)),
             None,
             false,
         ),
-        SubstreamState::InPendingSend(id, mut substream, msg) => {
+        InboundSubstreamState::InPendingSend(id, mut substream, msg) => {
             match Sink::poll_ready(Pin::new(&mut substream), cx) {
                 Poll::Ready(Ok(())) => match Sink::start_send(Pin::new(&mut substream), msg) {
                     Ok(()) => (
-                        Some(SubstreamState::InPendingFlush(id, substream)),
+                        Some(InboundSubstreamState::InPendingFlush(id, substream)),
                         None,
                         true,
                     ),
                     Err(_) => (None, None, false),
                 },
                 Poll::Pending => (
-                    Some(SubstreamState::InPendingSend(id, substream, msg)),
+                    Some(InboundSubstreamState::InPendingSend(id, substream, msg)),
                     None,
                     false,
                 ),
                 Poll::Ready(Err(_)) => (None, None, false),
             }
         }
-        SubstreamState::InPendingFlush(id, mut substream) => {
+        InboundSubstreamState::InPendingFlush(id, mut substream) => {
             match Sink::poll_flush(Pin::new(&mut substream), cx) {
                 Poll::Ready(Ok(())) => (
-                    Some(SubstreamState::InWaitingMessage(id, substream)),
+                    Some(InboundSubstreamState::InWaitingMessage(id, substream)),
                     None,
                     true,
                 ),
                 Poll::Pending => (
-                    Some(SubstreamState::InPendingFlush(id, substream)),
+                    Some(InboundSubstreamState::InPendingFlush(id, substream)),
                     None,
                     false,
                 ),
                 Poll::Ready(Err(_)) => (None, None, false),
             }
         }
-        SubstreamState::InClosing(mut stream) => {
+        InboundSubstreamState::InClosing(mut stream) => {
             match Sink::poll_close(Pin::new(&mut stream), cx) {
                 Poll::Ready(Ok(())) => (None, None, false),
-                Poll::Pending => (Some(SubstreamState::InClosing(stream)), None, false),
+                Poll::Pending => (Some(InboundSubstreamState::InClosing(stream)), None, false),
                 Poll::Ready(Err(_)) => (None, None, false),
             }
         }
