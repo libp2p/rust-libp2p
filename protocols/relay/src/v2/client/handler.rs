@@ -143,7 +143,7 @@ impl IntoConnectionHandler for Prototype {
                 pending_error: Default::default(),
                 reservation: Reservation::None,
                 alive_lend_out_substreams: Default::default(),
-                circuit_deny_futs: Default::default(),
+                circuit_deny_fut: Default::default(),
                 send_error_futs: Default::default(),
                 keep_alive: KeepAlive::Yes,
             };
@@ -196,9 +196,8 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs: FuturesUnordered<
-        BoxFuture<'static, (PeerId, Result<(), protocol::inbound_stop::UpgradeError>)>,
-    >,
+    circuit_deny_fut:
+        Option<BoxFuture<'static, (PeerId, Result<(), protocol::inbound_stop::UpgradeError>)>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -253,12 +252,14 @@ impl ConnectionHandler for Handler {
             }
             Reservation::None => {
                 let src_peer_id = inbound_circuit.src_peer_id();
-                self.circuit_deny_futs.push(
+                if let Some(_) = self.circuit_deny_fut.replace(
                     inbound_circuit
                         .deny(Status::NoReservation)
                         .map(move |result| (src_peer_id, result))
                         .boxed(),
-                )
+                ) {
+                    log::warn!("Dropping existing circuit deny future in favor of new one.")
+                }
             }
         }
     }
@@ -539,8 +540,11 @@ impl ConnectionHandler for Handler {
         }
 
         // Deny incoming circuit requests.
-        if let Poll::Ready(Some((src_peer_id, result))) = self.circuit_deny_futs.poll_next_unpin(cx)
+        if let Some(Poll::Ready((src_peer_id, result))) =
+            self.circuit_deny_fut.as_mut().map(|f| f.poll_unpin(cx))
         {
+            self.circuit_deny_fut = None;
+
             match result {
                 Ok(()) => {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(
@@ -570,7 +574,7 @@ impl ConnectionHandler for Handler {
         // Update keep-alive handling.
         if matches!(self.reservation, Reservation::None)
             && self.alive_lend_out_substreams.is_empty()
-            && self.circuit_deny_futs.is_empty()
+            && self.circuit_deny_fut.is_none()
         {
             match self.keep_alive {
                 KeepAlive::Yes => {
