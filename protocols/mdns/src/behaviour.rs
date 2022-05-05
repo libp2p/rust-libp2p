@@ -122,7 +122,7 @@ impl NetworkBehaviour for Mdns {
 
     fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
         log::trace!("waking interface state because listening address changed");
-        for (_, iface) in &mut self.iface_states {
+        for iface in self.iface_states.values_mut() {
             iface.fire_timer();
         }
     }
@@ -178,7 +178,7 @@ impl NetworkBehaviour for Mdns {
         }
         // Emit discovered event.
         let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
-        for (_, iface_state) in &mut self.iface_states {
+        for iface_state in self.iface_states.values_mut() {
             while let Some((peer, addr, expiration)) = iface_state.poll(cx, params) {
                 if let Some((_, _, cur_expires)) = self
                     .discovered_nodes

@@ -126,6 +126,7 @@ members = [
     "misc/metrics",
     "misc/multistream-select",
     "misc/keygen",
+    "misc/prost-codec",
     "muxers/mplex",
     "muxers/yamux",
     "protocols/dcutr",

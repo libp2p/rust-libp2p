@@ -274,6 +274,7 @@ where
 }
 
 /// Event sent from the [`libp2p_swarm::NetworkBehaviour`] to the [`SubstreamConnectionHandler`].
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum InEvent<I, TInboundEvent, TOutboundEvent> {
     /// Open a new substream using the provided `open_info`.

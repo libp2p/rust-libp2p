@@ -313,7 +313,7 @@ impl NetworkBehaviour for Client {
             ),
         };
 
-        return Poll::Ready(action);
+        Poll::Ready(action)
     }
 }
 

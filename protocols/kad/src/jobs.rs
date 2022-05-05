@@ -108,7 +108,7 @@ impl<T> PeriodicJob<T> {
 
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
-    fn is_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
+    fn check_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
                 return true;
@@ -195,7 +195,7 @@ impl PutRecordJob {
     where
         for<'a> T: RecordStore<'a>,
     {
-        if self.inner.is_ready(cx, now) {
+        if self.inner.check_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
             let records = store
                 .records()
@@ -239,7 +239,7 @@ impl PutRecordJob {
             let deadline = now + self.inner.interval;
             let delay = Delay::new(self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay, deadline);
-            assert!(!self.inner.is_ready(cx, now));
+            assert!(!self.inner.check_ready(cx, now));
         }
 
         Poll::Pending
@@ -296,7 +296,7 @@ impl AddProviderJob {
     where
         for<'a> T: RecordStore<'a>,
     {
-        if self.inner.is_ready(cx, now) {
+        if self.inner.check_ready(cx, now) {
             let records = store
                 .provided()
                 .map(|r| r.into_owned())
@@ -317,7 +317,7 @@ impl AddProviderJob {
             let deadline = now + self.inner.interval;
             let delay = Delay::new(self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay, deadline);
-            assert!(!self.inner.is_ready(cx, now));
+            assert!(!self.inner.check_ready(cx, now));
         }
 
         Poll::Pending

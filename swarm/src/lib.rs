@@ -538,7 +538,7 @@ where
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
                 self.behaviour.inject_dial_failure(None, handler, &error);
-                return Err(error);
+                Err(error)
             }
         }
     }
@@ -633,6 +633,7 @@ where
     /// collaborative manner across [`ConnectionHandler`]s
     /// with [`ConnectionHandler::connection_keep_alive`] or directly with
     /// [`ConnectionHandlerEvent::Close`].
+    #[allow(clippy::result_unit_err)]
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
         let was_connected = self.pool.is_connected(peer_id);
         self.pool.disconnect(peer_id);
@@ -689,7 +690,7 @@ where
                     .expect("n + 1 is always non-zero; qed");
                     let non_banned_established = other_established_connection_ids
                         .into_iter()
-                        .filter(|conn_id| !self.banned_peer_connections.contains(&conn_id))
+                        .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
                         .count();
 
                     log::debug!(
@@ -699,7 +700,6 @@ where
                             num_established,
                             non_banned_established + 1,
                         );
-                    let endpoint = endpoint.clone();
                     let failed_addresses = concurrent_dial_errors
                         .as_ref()
                         .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
@@ -785,7 +785,7 @@ where
                 if conn_was_reported {
                     let remaining_non_banned = remaining_established_connection_ids
                         .into_iter()
-                        .filter(|conn_id| !self.banned_peer_connections.contains(&conn_id))
+                        .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
                         .count();
                     self.behaviour.inject_connection_closed(
                         &peer_id,

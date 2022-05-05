@@ -211,7 +211,7 @@ impl Transport for ClientTransport {
         // traversal. One would coordinate such traversal via a previously
         // established relayed connection, but never using a relayed connection
         // itself.
-        return Err(TransportError::MultiaddrNotSupported(addr));
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
@@ -244,7 +244,7 @@ fn parse_relayed_multiaddr(
                 if before_circuit {
                     before_circuit = false;
                 } else {
-                    Err(RelayError::MultipleCircuitRelayProtocolsUnsupported)?;
+                    return Err(RelayError::MultipleCircuitRelayProtocolsUnsupported.into());
                 }
             }
             Protocol::P2p(hash) => {
@@ -252,12 +252,12 @@ fn parse_relayed_multiaddr(
 
                 if before_circuit {
                     if relayed_multiaddr.relay_peer_id.is_some() {
-                        Err(RelayError::MalformedMultiaddr)?;
+                        return Err(RelayError::MalformedMultiaddr.into());
                     }
                     relayed_multiaddr.relay_peer_id = Some(peer_id)
                 } else {
                     if relayed_multiaddr.dst_peer_id.is_some() {
-                        Err(RelayError::MalformedMultiaddr)?;
+                        return Err(RelayError::MalformedMultiaddr.into());
                     }
                     relayed_multiaddr.dst_peer_id = Some(peer_id)
                 }

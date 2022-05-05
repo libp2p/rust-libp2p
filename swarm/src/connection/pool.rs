@@ -484,7 +484,7 @@ where
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
-        let endpoint = info.to_connected_point();
+        let endpoint = info.create_connected_point();
 
         if let Err(limit) = self.counters.check_max_pending_incoming() {
             return Err((limit, handler));
@@ -516,11 +516,9 @@ where
         );
         Ok(connection_id)
     }
+
     /// Polls the connection pool for events.
-    ///
-    /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
-    /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         THandler: IntoConnectionHandler + 'static,
