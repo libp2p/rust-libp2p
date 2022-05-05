@@ -54,7 +54,10 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(substream, super::codec::Codec::new());
+        let mut substream = Framed::new(
+            substream,
+            prost_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
+        );
 
         let msg = HolePunch {
             r#type: hole_punch::Type::Connect.into(),
@@ -67,13 +70,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             let sent_time = Instant::now();
 
             let HolePunch { r#type, obs_addrs } =
-                substream
-                    .next()
-                    .await
-                    .ok_or(super::codec::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
             let rtt = sent_time.elapsed();
 
@@ -123,8 +120,10 @@ pub enum UpgradeError {
     Codec(
         #[from]
         #[source]
-        super::codec::Error,
+        prost_codec::Error,
     ),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]
