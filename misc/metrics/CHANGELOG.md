@@ -14,6 +14,10 @@
 
 - Update to `libp2p-kad` `v0.37.0`.
 
+- Update to `prometheus-client` `v0.16.0`. See [PR 2631].
+
+[PR 2631]: https://github.com/libp2p/rust-libp2p/pull/2631
+
 # 0.5.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
