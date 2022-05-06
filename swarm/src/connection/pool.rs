@@ -516,6 +516,7 @@ where
         );
         Ok(connection_id)
     }
+
     /// Polls the connection pool for events.
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
     where
