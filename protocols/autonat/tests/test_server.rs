@@ -228,8 +228,6 @@ async fn test_dial_back() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -274,8 +272,6 @@ async fn test_dial_error() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -323,8 +319,6 @@ async fn test_throttle_global_max() {
                 other => panic!("Unexpected behaviour event: {:?}.", other),
             };
         }
-
-        drop(_handles);
     };
 
     run_test_with_timeout(test).await;
@@ -375,8 +369,6 @@ async fn test_throttle_peer_max() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         };
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;

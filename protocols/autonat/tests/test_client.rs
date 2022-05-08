@@ -244,8 +244,6 @@ async fn test_auto_probe() {
         assert_eq!(client.behaviour().confidence(), 0);
         assert!(client.behaviour().nat_status().is_public());
         assert!(client.behaviour().public_address().is_some());
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -340,8 +338,6 @@ async fn test_confidence() {
                 }
             }
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -402,8 +398,6 @@ async fn test_throttle_server_period() {
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
         assert_eq!(client.behaviour().confidence(), 0);
-
-        drop(_handle)
     };
 
     run_test_with_timeout(test).await;
@@ -455,8 +449,6 @@ async fn test_use_connected_as_server() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
