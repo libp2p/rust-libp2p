@@ -600,36 +600,48 @@ impl GlobalIp for std::net::Ipv6Addr {
     // TODO: There is a PR to change this, but seems inactive. Should we help push this forward?
     // See https://github.com/rust-lang/rust/pull/86634 and https://github.com/rust-lang/rust/issues/85604.
     fn is_global_ip(&self) -> bool {
-        let is_unicast_global = || {
-            // Copied from the unstable method `std::net::Ipv6Addr::is_unicast_link_local`.
-            fn is_unicast_link_local(addr: &std::net::Ipv6Addr) -> bool {
-                (addr.segments()[0] & 0xffc0) == 0xfe80
-            }
-            // Copied from the unstable method `std::net::Ipv6Addr::is_unique_local`.
-            fn is_unique_local(addr: &std::net::Ipv6Addr) -> bool {
-                (addr.segments()[0] & 0xfe00) == 0xfc00
-            }
-            // Copied from the unstable method `std::net::Ipv6Addr::is_documentation`.
-            fn is_documentation(addr: &std::net::Ipv6Addr) -> bool {
-                (addr.segments()[0] == 0x2001) && (addr.segments()[1] == 0xdb8)
-            }
-
-            !self.is_loopback()
-                && !is_unicast_link_local(self)
-                && !is_unique_local(self)
-                && !self.is_unspecified()
-                && !is_documentation(self)
-        };
-
-        if !self.is_multicast() {
-            return is_unicast_global();
+        // Copied from the unstable method `std::net::Ipv6Addr::is_unicast`.
+        fn is_unicast(addr: &std::net::Ipv6Addr) -> bool {
+            !addr.is_multicast()
         }
-        // Check scope of the multicast address.
-        // Copied from unstable method [`std::net::Ipv6Addr::multicast_scope`].
-        match self.segments()[0] & 0x000f {
-            14 => true,               // Global multicast scope.
-            1..=5 | 8 => false,       // Local multicast scope.
-            _ => is_unicast_global(), // Unknown multicast scope.
+        // Copied from the unstable method `std::net::Ipv6Addr::is_unicast_link_local`.
+        fn is_unicast_link_local(addr: &std::net::Ipv6Addr) -> bool {
+            (addr.segments()[0] & 0xffc0) == 0xfe80
+        }
+        // Copied from the unstable method `std::net::Ipv6Addr::is_unique_local`.
+        fn is_unique_local(addr: &std::net::Ipv6Addr) -> bool {
+            (addr.segments()[0] & 0xfe00) == 0xfc00
+        }
+        // Copied from the unstable method `std::net::Ipv6Addr::is_documentation`.
+        fn is_documentation(addr: &std::net::Ipv6Addr) -> bool {
+            (addr.segments()[0] == 0x2001) && (addr.segments()[1] == 0xdb8)
+        }
+
+        // Copied from the unstable method `std::net::Ipv6Addr::is_unicast_global`.
+        fn is_unicast_global(addr: &std::net::Ipv6Addr) -> bool {
+            is_unicast(addr)
+                && !addr.is_loopback()
+                && !is_unicast_link_local(addr)
+                && !is_unique_local(addr)
+                && !addr.is_unspecified()
+                && !is_documentation(addr)
+        }
+
+        // Variation of unstable method [`std::net::Ipv6Addr::multicast_scope`] that instead of the
+        // `Ipv6MulticastScope` just return if the scope is global or not.
+        // Equivalent to `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope, Ipv6MulticastScope::Global))`.
+        fn is_multicast_scope_global(addr: &std::net::Ipv6Addr) -> Option<bool> {
+            match addr.segments()[0] & 0x000f {
+                14 => Some(true),         // Global multicast scope.
+                1..=5 | 8 => Some(false), // Local multicast scope.
+                _ => None,                // Unknown multicast scope.
+            }
+        }
+
+        match is_multicast_scope_global(self) {
+            Some(true) => true,
+            None => is_unicast_global(self),
+            _ => false,
         }
     }
 }
