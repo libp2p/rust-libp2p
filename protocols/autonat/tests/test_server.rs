@@ -34,17 +34,19 @@ use libp2p_core::{ConnectedPoint, Endpoint};
 use libp2p_swarm::DialError;
 use std::{num::NonZeroU32, time::Duration};
 
-async fn init_swarm(mut config: Config) -> Swarm<Behaviour> {
+async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
     let transport = development_transport(keypair).await.unwrap();
-    config.only_global_ips = false;
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }
 
 async fn init_server(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, Multiaddr) {
-    let mut config = config.unwrap_or_default();
+    let mut config = config.unwrap_or_else(|| Config {
+        only_global_ips: false,
+        ..Default::default()
+    });
     // Don't do any outbound probes.
     config.boot_delay = Duration::from_secs(60);
 
@@ -75,6 +77,7 @@ async fn spawn_client(
             boot_delay: Duration::from_secs(1),
             retry_interval: Duration::from_secs(1),
             throttle_server_period: Duration::ZERO,
+            only_global_ips: false,
             ..Default::default()
         })
         .await;
@@ -284,6 +287,7 @@ async fn test_throttle_global_max() {
         let (mut server, server_id, server_addr) = init_server(Some(Config {
             throttle_clients_global_max: 1,
             throttle_clients_period: Duration::from_secs(60),
+            only_global_ips: false,
             ..Default::default()
         }))
         .await;
@@ -332,6 +336,7 @@ async fn test_throttle_peer_max() {
         let (mut server, server_id, server_addr) = init_server(Some(Config {
             throttle_clients_peer_max: 1,
             throttle_clients_period: Duration::from_secs(60),
+            only_global_ips: false,
             ..Default::default()
         }))
         .await;
@@ -383,6 +388,7 @@ async fn test_dial_multiple_addr() {
         let (mut server, server_id, server_addr) = init_server(Some(Config {
             throttle_clients_peer_max: 1,
             throttle_clients_period: Duration::from_secs(60),
+            only_global_ips: false,
             ..Default::default()
         }))
         .await;
@@ -425,6 +431,32 @@ async fn test_dial_multiple_addr() {
                 other => panic!("Unexpected swarm event: {:?}.", other),
             }
         }
+    };
+
+    run_test_with_timeout(test).await;
+}
+
+#[async_std::test]
+async fn test_global_ips_config() {
+    let test = async {
+        let (mut server, server_id, server_addr) = init_server(Some(Config {
+            // Enforce that only clients outside of the local network are qualified for dial-backs.
+            only_global_ips: true,
+            ..Default::default()
+        }))
+        .await;
+
+        let (_handle, rx) = oneshot::channel();
+        spawn_client(true, false, server_id, server_addr.clone(), rx).await;
+
+        // Expect the probe to be refused as both peers run on the same machine and thus in the same local network.
+        match next_event(&mut server).await {
+            Event::InboundProbe(InboundProbeEvent::Error { error, .. }) => assert!(matches!(
+                error,
+                InboundProbeError::Response(ResponseError::DialRefused)
+            )),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
+        };
     };
 
     run_test_with_timeout(test).await;
