@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{IdentifyHandler, IdentifyHandlerEvent, IdentifyPush};
-use crate::protocol::{IdentifyInfo, ReplySubstream};
+use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     multiaddr::Protocol,
-    upgrade::UpgradeError,
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
@@ -35,7 +34,6 @@ use libp2p_swarm::{
 use lru::LruCache;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    io,
     iter::FromIterator,
     pin::Pin,
     task::Context,
@@ -75,7 +73,7 @@ enum Reply {
     /// The reply is being sent.
     Sending {
         peer: PeerId,
-        io: Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>,
+        io: Pin<Box<dyn Future<Output = Result<(), UpgradeError>> + Send>>,
     },
 }
 
@@ -429,9 +427,9 @@ impl NetworkBehaviour for Identify {
                             Poll::Ready(Err(err)) => {
                                 let event = IdentifyEvent::Error {
                                     peer_id: peer,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
-                                        err,
-                                    )),
+                                    error: ConnectionHandlerUpgrErr::Upgrade(
+                                        libp2p_core::upgrade::UpgradeError::Apply(err),
+                                    ),
                                 };
                                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             }
@@ -482,7 +480,7 @@ pub enum IdentifyEvent {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ConnectionHandlerUpgrErr<io::Error>,
+        error: ConnectionHandlerUpgrErr<UpgradeError>,
     },
 }
 

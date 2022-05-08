@@ -23,6 +23,8 @@ Please provide a short summary of the bug, along with any information you feel r
 
 <!--
 Include debug output in the code block by setting `RUST_LOG=debug` in your environment.
+Note that for this a logger implementation needs to be initialized in the program, e.g. with
+`env_logger::init()`. See <https://docs.rs/log> for more info.
 -->
 <details><summary>Debug Output</summary>
 <p>
