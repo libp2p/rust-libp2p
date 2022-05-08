@@ -295,8 +295,8 @@ impl<'a> AsServer<'a> {
             .values()
             .find_map(|a| a.as_ref())
             .ok_or_else(|| {
-                let status_text = "no dial-request over relayed connections".to_string();
-                (status_text, ResponseError::DialError)
+                let status_text = "refusing to dial peer with blocked observed address".to_string();
+                (status_text, ResponseError::DialRefused)
             })?;
 
         let mut addrs = Self::filter_valid_addrs(sender, request.addresses, observed_addr);
