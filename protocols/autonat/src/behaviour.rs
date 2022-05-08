@@ -543,12 +543,6 @@ impl GlobalIp for std::net::Ipv4Addr {
     // NOTE: The below logic is copied from `std::net::Ipv4Addr::is_global`, which is at the time of
     // writing behind the unstable `ip` feature.
     // See https://github.com/rust-lang/rust/issues/27709 for more info.
-    //
-    // TODO: Consider removing check check with the unstable methods `is_shared`, `is_reserved` and `is_benchmarking`? In case
-    // of the former the peer is still eligible for a dial-back, the latter cases should never occur in practice.
-    //
-    // TODO: Consider to only check for loopback, private ip and link-local. Can any other case ever happen in practice if we solely
-    // use this check for observed addresses?
     fn is_global_ip(&self) -> bool {
         // Check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the only two
         // globally routable addresses in the 192.0.0.0/24 range.
@@ -600,8 +594,6 @@ impl GlobalIp for std::net::Ipv6Addr {
     //
     // Note that contrary to `Ipv4Addr::is_global_ip` this currently checks for global scope
     // rather than global reachability.
-    // TODO: There is a PR to change this, but seems inactive. Should we help push this forward?
-    // See https://github.com/rust-lang/rust/pull/86634 and https://github.com/rust-lang/rust/issues/85604.
     fn is_global_ip(&self) -> bool {
         // Copied from the unstable method `std::net::Ipv6Addr::is_unicast`.
         fn is_unicast(addr: &std::net::Ipv6Addr) -> bool {
