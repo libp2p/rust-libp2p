@@ -1,4 +1,4 @@
-// Copyright 2021 David Craven.
+// Copyright 2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,74 +18,53 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod crypto;
+#![recursion_limit = "1024"]
+
+//! Implementation of the libp2p `Transport` and `StreamMuxer` traits for QUIC.
+//!
+//! # Usage
+//!
+//! Example:
+//!
+//! ```
+//! use libp2p_quic::{Config, Endpoint};
+//! use libp2p_core::Multiaddr;
+//!
+//! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+//! let addr = "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?");
+//! let quic_config = Config::new(&keypair, addr).expect("could not make config");
+//! let quic_endpoint = Endpoint::new(quic_config).expect("I/O error");
+//! ```
+//!
+//! The `Endpoint` struct implements the `Transport` trait of the `core` library. See the
+//! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
+//!
+//! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
+//! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.
+//! Instead, you must pass all needed configuration into the constructor.
+//!
+//! # Design Notes
+//!
+//! The entry point is the `Endpoint` struct.  It represents a single QUIC endpoint.  You
+//! should generally have one of these per process.
+//!
+//! `Endpoint` manages a background task that processes all incoming packets.  Each
+//! `QuicConnection` also manages a background task, which handles socket output and timer polling.
+
+#![deny(unsafe_code)]
+
+mod connection;
 mod endpoint;
+mod error;
+mod in_addr;
 mod muxer;
 mod tls;
-mod transport;
+mod upgrade;
 
-use crate::crypto::TlsCrypto;
-pub use crate::muxer::{QuicMuxer, QuicMuxerError};
-pub use crate::transport::{QuicDial, QuicTransport};
-pub use quinn_proto::{ConfigError, ConnectError, ConnectionError, TransportConfig};
+pub mod transport;
 
-use libp2p_core::identity::Keypair;
-use libp2p_core::transport::TransportError;
-use libp2p_core::Multiaddr;
-use std::sync::Arc;
-use thiserror::Error;
-
-/// Quic configuration.
-pub struct QuicConfig {
-    pub keypair: Keypair,
-    pub transport: TransportConfig,
-    pub keylogger: Option<Arc<dyn rustls::KeyLog>>,
-}
-
-impl std::fmt::Debug for QuicConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("QuicConfig")
-            .field("keypair", &self.keypair.public())
-            .field("transport", &self.transport)
-            .finish()
-    }
-}
-
-impl QuicConfig {
-    /// Creates a new config from a keypair.
-    pub fn new(keypair: Keypair) -> Self {
-        Self {
-            keypair,
-            transport: TransportConfig::default(),
-            keylogger: None,
-        }
-    }
-
-    /// Enable keylogging.
-    pub fn enable_keylogger(&mut self) -> &mut Self {
-        self.keylogger = Some(TlsCrypto::keylogger());
-        self
-    }
-
-    /// Spawns a new endpoint.
-    pub async fn listen_on(
-        self,
-        addr: Multiaddr,
-    ) -> Result<QuicTransport, TransportError<QuicError>> {
-        QuicTransport::new(self, addr).await
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum QuicError {
-    #[error("{0}")]
-    Config(#[from] ConfigError),
-    #[error("{0}")]
-    Connect(#[from] ConnectError),
-    #[error("{0}")]
-    Muxer(#[from] QuicMuxerError),
-    #[error("{0}")]
-    Io(#[from] std::io::Error),
-    #[error("a `StreamMuxerEvent` was generated before the handshake was complete.")]
-    UpgradeError,
-}
+pub use endpoint::{Config, Endpoint};
+pub use error::Error;
+pub use muxer::{QuicMuxer, Substream};
+pub use transport::QuicTransport;
+pub use upgrade::Upgrade;
