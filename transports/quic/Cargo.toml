@@ -10,35 +10,25 @@ license = "MIT"
 [dependencies]
 async-global-executor = "2.0.2"
 async-io = "1.6.0"
-bytes = "1.0.1"
-der-parser = { version = "6.0.0", default-features = false }
 futures = "0.3.15"
-if-watch = "0.2.2"
+if-watch = "1.0.0"
 libp2p-core = { version = "0.32.0", path = "../../core" }
-parking_lot = "0.11.1"
+parking_lot = "0.12.0"
 quinn-proto = { version = "0.8.2", default-features = false, features = ["tls-rustls"] }
-rcgen = { version = "0.8.11" }
-ring = { version = "0.16.20" }
+rcgen = "0.9.2"
+ring = "0.16.20"
 rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
 thiserror = "1.0.26"
 tracing = "0.1.30"
-udp-socket = "0.1.5"
 webpki = "0.22.0"
-x509-parser = "0.12.0"
-yasna = { version = "0.4.0" }
-
-async-std = "*"
-futures-timer = "*"
+x509-parser = "0.13.0"
+yasna = "0.5.0"
 
 [dev-dependencies]
 anyhow = "1.0.41"
 async-std = { version = "1.10.0", features = ["attributes"] }
 async-trait = "0.1.50"
-async-macros = "*"
 libp2p = { version = "0.43.0", default-features = false, features = ["request-response"], path = "../.." }
-log-panics = "2.0.0"
 rand = "0.8.4"
-rand_core = "0.5.1"
 tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
-tracing-flame = "0.2"
 quickcheck = "1"

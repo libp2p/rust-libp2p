@@ -59,14 +59,14 @@ impl Future for Upgrade {
 
         let event = Connection::poll_event(connection, cx);
         match event {
-            Poll::Pending => return Poll::Pending,
+            Poll::Pending => Poll::Pending,
             Poll::Ready(ConnectionEvent::Connected) => {
                 let peer_id = connection.remote_peer_id();
                 let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
-                return Poll::Ready(Ok((peer_id, muxer)));
+                Poll::Ready(Ok((peer_id, muxer)))
             }
             Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
-                return Poll::Ready(Err(transport::Error::Established(err)));
+                Poll::Ready(Err(transport::Error::Established(err)))
             }
             // Other items are:
             // - StreamAvailable

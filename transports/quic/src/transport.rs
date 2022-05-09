@@ -91,7 +91,6 @@ impl Transport for QuicTransport {
     type ListenerUpgrade = Upgrade;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    #[tracing::instrument]
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
@@ -102,7 +101,6 @@ impl Transport for QuicTransport {
         Some(observed.clone())
     }
 
-    #[tracing::instrument]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
@@ -139,7 +137,6 @@ impl Transport for QuicTransport {
 impl Stream for QuicTransport {
     type Item = Result<ListenerEvent<Upgrade, Error>, Error>;
 
-    #[tracing::instrument(skip_all)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
         let endpoint = me.endpoint.as_ref();
@@ -186,7 +183,7 @@ impl Stream for QuicTransport {
         }
 
         let connection = match endpoint.poll_incoming(cx) {
-            Poll::Ready(Some(conn)) => conn,
+            Poll::Ready(Some(connection)) => connection,
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Pending => return Poll::Pending,
         };
@@ -209,7 +206,7 @@ pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
 
-    while let Some(proto) = iter.next() {
+    for proto in iter {
         match proto {
             Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
             _ => return None,

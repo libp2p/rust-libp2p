@@ -30,7 +30,8 @@
 
 use crate::{connection::Connection, tls};
 
-use async_std::net::SocketAddr;
+use std::net::{SocketAddr, UdpSocket};
+
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
@@ -85,7 +86,7 @@ impl Config {
             client_config,
             server_config: Arc::new(server_config),
             endpoint_config: Default::default(),
-            multiaddr: multiaddr,
+            multiaddr,
         })
     }
 }
@@ -117,7 +118,7 @@ pub struct Endpoint {
     /// has potentially been modified to handle port number `0`.
     local_multiaddr: Multiaddr,
 
-    // after bind(), the result is without port=0
+    // The real addr the endpoint bound to.
     pub(crate) local_addr: SocketAddr,
 }
 
@@ -156,13 +157,14 @@ impl Endpoint {
         });
 
         // TODO: just for testing, do proper task spawning
-        async_std::task::spawn(background_task(
+        async_global_executor::spawn(background_task(
             config.clone(),
             Arc::downgrade(&endpoint),
-            async_std::net::UdpSocket::from(socket),
+            async_io::Async::<UdpSocket>::new(socket)?,
             new_connections_tx,
             to_endpoint_rx.fuse(),
-        ));
+        ))
+        .detach();
 
         Ok(endpoint)
 
@@ -414,7 +416,7 @@ enum ToEndpoint {
 async fn background_task(
     config: Config,
     endpoint_weak: Weak<Endpoint>,
-    udp_socket: async_std::net::UdpSocket,
+    udp_socket: async_io::Async<UdpSocket>,
     mut new_connections: mpsc::Sender<Connection>,
     mut receiver: stream::Fuse<mpsc::Receiver<ToEndpoint>>,
 ) {
@@ -584,7 +586,7 @@ async fn background_task(
                 // Received a UDP packet from the socket.
                 debug_assert!(packet_len <= socket_recv_buffer.len());
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
-                let local_ip = udp_socket.local_addr().ok().map(|a| a.ip());
+                let local_ip = udp_socket.get_ref().local_addr().ok().map(|a| a.ip());
                 // TODO: ECN bits aren't handled
                 let event = endpoint.handle(Instant::now(), packet_src, local_ip, None, packet);
 

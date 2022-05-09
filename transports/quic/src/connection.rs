@@ -28,6 +28,7 @@
 
 use crate::endpoint::Endpoint;
 
+use async_io::Timer;
 use futures::{channel::mpsc, prelude::*};
 use libp2p_core::PeerId;
 use std::{
@@ -58,7 +59,7 @@ pub(crate) struct Connection {
     /// the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
     /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
-    next_timeout: Option<futures_timer::Delay>,
+    next_timeout: Option<Timer>,
 
     /// In other to avoid race conditions where a "connected" event happens if we were not
     /// handshaking, we cache whether the connection is handshaking and only set this to true
@@ -157,10 +158,8 @@ impl Connection {
         let identity = session
             .peer_identity()
             .expect("connection got identity because it passed TLS handshake; qed");
-        let certificates: Box<Vec<rustls::Certificate>> = identity
-            .downcast()
-            .ok()
-            .expect("we rely on rustls feature; qed");
+        let certificates: Box<Vec<rustls::Certificate>> =
+            identity.downcast().expect("we rely on rustls feature; qed");
         let end_entity = certificates
             .get(0)
             .expect("there should be exactly one certificate; qed");
@@ -168,14 +167,6 @@ impl Connection {
         let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
             .expect("the certificate was validated during TLS handshake; qed");
         PeerId::from_public_key(&p2p_cert.extension.public_key)
-    }
-
-    /// If the connection is closed, returns why. If the connection is open, returns `None`.
-    ///
-    /// > **Note**: This method is also the main way to determine whether a connection is closed.
-    pub(crate) fn close_reason(&self) -> Option<&Error> {
-        debug_assert!(!self.is_handshaking);
-        self.closed.as_ref()
     }
 
     /// Start closing the connection. A [`ConnectionEvent::ConnectionLost`] event will be
@@ -306,7 +297,7 @@ impl Connection {
             // Poll the connection for packets to send on the UDP socket and try to send them on
             // `to_endpoint`.
             // FIXME max_datagrams
-            while let Some(transmit) = self.connection.poll_transmit(now, 1) {
+            if let Some(transmit) = self.connection.poll_transmit(now, 1) {
                 let endpoint = self.endpoint.clone();
                 debug_assert!(self.pending_to_endpoint.is_none());
                 self.pending_to_endpoint = Some(Box::pin(async move {
@@ -324,8 +315,8 @@ impl Connection {
             loop {
                 if let Some(next_timeout) = &mut self.next_timeout {
                     match Future::poll(Pin::new(next_timeout), cx) {
-                        Poll::Ready(()) => {
-                            self.connection.handle_timeout(now);
+                        Poll::Ready(when) => {
+                            self.connection.handle_timeout(when);
                             self.next_timeout = None;
                         }
                         Poll::Pending => break,
@@ -334,8 +325,8 @@ impl Connection {
                     if when <= now {
                         self.connection.handle_timeout(now);
                     } else {
-                        let delay = when - now;
-                        self.next_timeout = Some(futures_timer::Delay::new(delay));
+                        //let delay = when - now;
+                        self.next_timeout = Some(Timer::at(when));
                     }
                 } else {
                     break;
@@ -344,7 +335,7 @@ impl Connection {
 
             // The connection also needs to be able to send control messages to the endpoint. This is
             // handled here, and we try to send them on `to_endpoint` as well.
-            while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
+            if let Some(endpoint_event) = self.connection.poll_endpoint_events() {
                 let endpoint = self.endpoint.clone();
                 let connection_id = self.connection_id;
                 debug_assert!(self.pending_to_endpoint.is_none());
