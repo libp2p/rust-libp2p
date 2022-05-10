@@ -304,7 +304,7 @@ impl<'a> AsServer<'a> {
 
         if addrs.is_empty() {
             let status_text = "no dialable addresses".to_string();
-            return Err((status_text, ResponseError::DialError));
+            return Err((status_text, ResponseError::DialRefused));
         }
 
         Ok(addrs)
