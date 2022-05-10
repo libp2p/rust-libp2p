@@ -307,27 +307,57 @@ where
             Error<TProtoHandler::Error>,
         >,
     > {
-        while let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
-            match res {
-                Ok(upgrade) => self
-                    .handler
-                    .inject_fully_negotiated_inbound(upgrade, user_data),
-                Err(err) => self.handler.inject_listen_upgrade_error(user_data, err),
+        loop {
+            // Poll the [`ConnectionHandler`].
+            if let Poll::Ready(res) = self.handler.poll(cx) {
+                match res {
+                    ConnectionHandlerEvent::Custom(event) => {
+                        return Poll::Ready(Ok(Event::Custom(event)));
+                    }
+                    ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
+                        let id = self.unique_dial_upgrade_id;
+                        let timeout = *protocol.timeout();
+                        self.unique_dial_upgrade_id += 1;
+                        let (upgrade, info) = protocol.into_upgrade();
+                        self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
+                        return Poll::Ready(Ok(Event::OutboundSubstreamRequest((
+                            id, info, timeout,
+                        ))));
+                    }
+                    ConnectionHandlerEvent::Close(err) => return Poll::Ready(Err(err.into())),
+                }
             }
-        }
 
-        while let Poll::Ready(Some((user_data, res))) = self.negotiating_out.poll_next_unpin(cx) {
-            match res {
-                Ok(upgrade) => self
-                    .handler
-                    .inject_fully_negotiated_outbound(upgrade, user_data),
-                Err(err) => self.handler.inject_dial_upgrade_error(user_data, err),
+            // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
+            if let Poll::Ready(Some((user_data, res))) = self.negotiating_out.poll_next_unpin(cx) {
+                match res {
+                    Ok(upgrade) => self
+                        .handler
+                        .inject_fully_negotiated_outbound(upgrade, user_data),
+                    Err(err) => self.handler.inject_dial_upgrade_error(user_data, err),
+                }
+
+                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
+                continue;
             }
-        }
 
-        // Poll the handler at the end so that we see the consequences of the method
-        // calls on `self.handler`.
-        let poll_result = self.handler.poll(cx);
+            // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
+            // make any more progress, poll the negotiating inbound streams.
+            if let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
+                match res {
+                    Ok(upgrade) => self
+                        .handler
+                        .inject_fully_negotiated_inbound(upgrade, user_data),
+                    Err(err) => self.handler.inject_listen_upgrade_error(user_data, err),
+                }
+
+                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
+                continue;
+            }
+
+            // None of the three can make any more progress, thus breaking the loop.
+            break;
+        }
 
         // Ask the handler whether it wants the connection (and the handler itself)
         // to be kept alive, which determines the planned shutdown, if any.
@@ -347,22 +377,6 @@ where
             }
             (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
             (_, KeepAlive::Yes) => self.shutdown = Shutdown::None,
-        };
-
-        match poll_result {
-            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(Ok(Event::Custom(event)));
-            }
-            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                let id = self.unique_dial_upgrade_id;
-                let timeout = *protocol.timeout();
-                self.unique_dial_upgrade_id += 1;
-                let (upgrade, info) = protocol.into_upgrade();
-                self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
-                return Poll::Ready(Ok(Event::OutboundSubstreamRequest((id, info, timeout))));
-            }
-            Poll::Ready(ConnectionHandlerEvent::Close(err)) => return Poll::Ready(Err(err.into())),
-            Poll::Pending => (),
         };
 
         // Check if the connection (and handler) should be shut down.
