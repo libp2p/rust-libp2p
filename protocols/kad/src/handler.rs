@@ -155,7 +155,12 @@ enum OutboundSubstreamState<TUserData> {
 /// State of an active inbound substream.
 enum InboundSubstreamState {
     /// Waiting for a request from the remote.
-    InWaitingMessage(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
+    InWaitingMessage {
+        /// Whether it is the first message to be awaited on this stream.
+        first: bool,
+        connection_id: UniqueConnecId,
+        substream: KadInStreamSink<NegotiatedSubstream>,
+    },
     /// Waiting for the user to send a `KademliaHandlerIn` event containing the response.
     InWaitingUser(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// Waiting to send an answer back to the remote.
@@ -197,7 +202,10 @@ impl InboundSubstreamState {
     /// If the substream is not ready to be closed, returns it back.
     fn try_close(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         match self {
-            InboundSubstreamState::InWaitingMessage(_, ref mut stream)
+            InboundSubstreamState::InWaitingMessage {
+                substream: ref mut stream,
+                ..
+            }
             | InboundSubstreamState::InWaitingUser(_, ref mut stream)
             | InboundSubstreamState::InPendingSend(_, ref mut stream, _)
             | InboundSubstreamState::InPendingFlush(_, ref mut stream)
@@ -536,25 +544,44 @@ where
             EitherOutput::Second(p) => void::unreachable(p),
         };
 
-        if self.inbound_substreams.len() == MAX_NUM_INBOUND_SUBSTREAMS {
-            panic!("New inbound substream exceeds inbound substream limit. Dropping.");
-        }
-
-        debug_assert!(self.config.allow_listening);
-        let connec_unique_id = self.next_connec_unique_id;
-        self.next_connec_unique_id.0 += 1;
-        // TODO: Limit number
-        self.inbound_substreams
-            .push(InboundSubstreamState::InWaitingMessage(
-                connec_unique_id,
-                protocol,
-            ));
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
             self.protocol_status = ProtocolStatus::Confirmed;
         }
+
+        if self.inbound_substreams.len() == MAX_NUM_INBOUND_SUBSTREAMS {
+            if let Some(position) = self.inbound_substreams.iter().position(|s| {
+                matches!(
+                    s,
+                    // An inbound substream waiting to be reused.
+                    InboundSubstreamState::InWaitingMessage { first: false, .. }
+                )
+            }) {
+                self.inbound_substreams.remove(position);
+                log::warn!(
+                    "New inbound substream exceeds inbound substream limit. \
+                    Removed older substream waiting to be reused."
+                )
+            } else {
+                log::warn!(
+                    "New inbound substream exceeds inbound substream limit. \
+                     No older substream waiting to be reused. Dropping new substream."
+                );
+                return;
+            }
+        }
+
+        debug_assert!(self.config.allow_listening);
+        let connec_unique_id = self.next_connec_unique_id;
+        self.next_connec_unique_id.0 += 1;
+        self.inbound_substreams
+            .push(InboundSubstreamState::InWaitingMessage {
+                first: true,
+                connection_id: connec_unique_id,
+                substream: protocol,
+            });
     }
 
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
@@ -1039,38 +1066,47 @@ fn advance_inbound_substream<TUserData>(
     bool,
 ) {
     match state {
-        InboundSubstreamState::InWaitingMessage(id, mut substream) => {
-            match Stream::poll_next(Pin::new(&mut substream), cx) {
-                Poll::Ready(Some(Ok(msg))) => {
-                    if let Ok(ev) = process_kad_request(msg, id) {
-                        (
-                            Some(InboundSubstreamState::InWaitingUser(id, substream)),
-                            Some(ConnectionHandlerEvent::Custom(ev)),
-                            false,
-                        )
-                    } else {
-                        (
-                            Some(InboundSubstreamState::InClosing(substream)),
-                            None,
-                            true,
-                        )
-                    }
-                }
-                Poll::Pending => (
-                    Some(InboundSubstreamState::InWaitingMessage(id, substream)),
-                    None,
-                    false,
-                ),
-                Poll::Ready(None) => {
-                    trace!("Inbound substream: EOF");
-                    (None, None, false)
-                }
-                Poll::Ready(Some(Err(e))) => {
-                    trace!("Inbound substream error: {:?}", e);
-                    (None, None, false)
+        InboundSubstreamState::InWaitingMessage {
+            first,
+            connection_id,
+            mut substream,
+        } => match Stream::poll_next(Pin::new(&mut substream), cx) {
+            Poll::Ready(Some(Ok(msg))) => {
+                if let Ok(ev) = process_kad_request(msg, connection_id) {
+                    (
+                        Some(InboundSubstreamState::InWaitingUser(
+                            connection_id,
+                            substream,
+                        )),
+                        Some(ConnectionHandlerEvent::Custom(ev)),
+                        false,
+                    )
+                } else {
+                    (
+                        Some(InboundSubstreamState::InClosing(substream)),
+                        None,
+                        true,
+                    )
                 }
             }
-        }
+            Poll::Pending => (
+                Some(InboundSubstreamState::InWaitingMessage {
+                    first,
+                    connection_id,
+                    substream,
+                }),
+                None,
+                false,
+            ),
+            Poll::Ready(None) => {
+                trace!("Inbound substream: EOF");
+                (None, None, false)
+            }
+            Poll::Ready(Some(Err(e))) => {
+                trace!("Inbound substream error: {:?}", e);
+                (None, None, false)
+            }
+        },
         InboundSubstreamState::InWaitingUser(id, substream) => (
             Some(InboundSubstreamState::InWaitingUser(id, substream)),
             None,
@@ -1097,7 +1133,11 @@ fn advance_inbound_substream<TUserData>(
         InboundSubstreamState::InPendingFlush(id, mut substream) => {
             match Sink::poll_flush(Pin::new(&mut substream), cx) {
                 Poll::Ready(Ok(())) => (
-                    Some(InboundSubstreamState::InWaitingMessage(id, substream)),
+                    Some(InboundSubstreamState::InWaitingMessage {
+                        first: false,
+                        connection_id: id,
+                        substream,
+                    }),
                     None,
                     true,
                 ),
