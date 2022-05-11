@@ -52,33 +52,17 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     Ok(Swarm::new(transport, behaviour, peer_id))
 }
 
-fn setup_global_subscriber() -> impl Drop {
-    use tracing_flame::FlameLayer;
-    use tracing_subscriber::{fmt, prelude::*};
-
+fn setup_global_subscriber() {
     let filter_layer = tracing_subscriber::EnvFilter::from_default_env();
-
-    let fmt_format = tracing_subscriber::fmt::format()
-        .pretty()
-        .with_thread_ids(false)
-        .without_time();
-    let fmt_layer = fmt::Layer::default().event_format(fmt_format);
-
-    let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .with(flame_layer)
+    tracing_subscriber::fmt()
+        .with_env_filter(filter_layer)
         .try_init()
         .ok();
-    _guard
 }
 
 #[async_std::test]
 async fn smoke() -> Result<()> {
-    let _guard = setup_global_subscriber();
-    log_panics::init();
+    setup_global_subscriber();
     let mut rng = rand::thread_rng();
 
     let mut a = create_swarm(true).await?;
@@ -281,11 +265,7 @@ impl RequestResponseCodec for PingCodec {
 
 #[async_std::test]
 async fn dial_failure() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init()
-        .ok();
-    log_panics::init();
+    setup_global_subscriber();
 
     let mut a = create_swarm(false).await?;
     let mut b = create_swarm(true).await?;
@@ -326,16 +306,10 @@ fn concurrent_connections_and_streams() {
     use futures::executor::block_on;
     use quickcheck::*;
 
-    tracing_subscriber::fmt()
-        //.pretty()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init()
-        .ok();
-    log_panics::init();
+    setup_global_subscriber();
 
     #[tracing::instrument]
     fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> TestResult {
-        tracing::info!("entered");
         let (number_listeners, number_streams): (u8, u8) =
             (number_listeners.into(), number_streams.into());
         if number_listeners > 10 || number_streams > 10 {
@@ -393,8 +367,8 @@ fn concurrent_connections_and_streams() {
                                 }
                                 Some(SwarmEvent::ConnectionClosed { .. }) => {}
                                 Some(e) => {
-                                    tracing::info!(?e, "listener");
-                                } // panic!("{:?}", e),
+                                    panic!("unexpected event {:?}", e);
+                                }
                                 None => {
                                     panic!("listener stopped");
                                 }
@@ -416,9 +390,6 @@ fn concurrent_connections_and_streams() {
                 .add_address(&listener_peer_id, listener_addr.clone());
 
             dialer.dial(listener_peer_id.clone()).unwrap();
-            //dialer
-            //    .behaviour_mut()
-            //    .send_request(&listener_peer_id, Ping(data.clone()));
         }
 
         // Wait for responses to each request.
@@ -458,8 +429,8 @@ fn concurrent_connections_and_streams() {
                         tracing::info!("dialer ConnectionClosed");
                     }
                     e => {
-                        tracing::info!(?e, "dialer");
-                    } // panic!("{:?}", e),
+                        panic!("unexpected event {:?}", e);
+                    }
                 }
             }
         });
