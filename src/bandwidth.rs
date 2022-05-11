@@ -26,7 +26,6 @@ use crate::{
     Multiaddr,
 };
 
-use atomic::Atomic;
 use futures::{
     io::{IoSlice, IoSliceMut},
     prelude::*,
@@ -36,7 +35,10 @@ use std::{
     convert::TryFrom as _,
     io,
     pin::Pin,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 
@@ -52,8 +54,8 @@ impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new [`BandwidthLogging`] around the transport.
     pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
         let sink = Arc::new(BandwidthSinks {
-            inbound: Atomic::new(0),
-            outbound: Atomic::new(0),
+            inbound: AtomicU64::new(0),
+            outbound: AtomicU64::new(0),
         });
 
         let trans = BandwidthLogging {
@@ -165,8 +167,8 @@ impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
 
 /// Allows obtaining the average bandwidth of the connections created from a [`BandwidthLogging`].
 pub struct BandwidthSinks {
-    inbound: Atomic<u64>,
-    outbound: Atomic<u64>,
+    inbound: AtomicU64,
+    outbound: AtomicU64,
 }
 
 impl BandwidthSinks {
