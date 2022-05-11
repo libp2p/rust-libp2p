@@ -160,7 +160,7 @@ fn custom_polling() {
         ) -> std::task::Poll<
             libp2p::swarm::NetworkBehaviourAction<
                 <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ProtocolsHandler,
+                <Self as NetworkBehaviour>::ConnectionHandler,
             >,
         > {
             std::task::Poll::Pending
@@ -223,7 +223,7 @@ fn custom_event_and_polling() {
         ) -> std::task::Poll<
             libp2p::swarm::NetworkBehaviourAction<
                 <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ProtocolsHandler,
+                <Self as NetworkBehaviour>::ConnectionHandler,
             >,
         > {
             std::task::Poll::Pending
@@ -417,5 +417,32 @@ fn no_event_with_either() {
     #[allow(dead_code)]
     fn foo() {
         require_net_behaviour::<Foo>();
+    }
+}
+
+#[test]
+fn mixed_field_order() {
+    struct Foo {}
+
+    #[derive(NetworkBehaviour)]
+    #[behaviour(event_process = true)]
+    pub struct Behaviour {
+        #[behaviour(ignore)]
+        _foo: Foo,
+        _ping: libp2p::ping::Ping,
+        #[behaviour(ignore)]
+        _foo2: Foo,
+        _identify: libp2p::identify::Identify,
+        #[behaviour(ignore)]
+        _foo3: Foo,
+    }
+
+    impl<T> libp2p::swarm::NetworkBehaviourEventProcess<T> for Behaviour {
+        fn inject_event(&mut self, _evt: T) {}
+    }
+
+    #[allow(dead_code)]
+    fn behaviour() {
+        require_net_behaviour::<Behaviour>();
     }
 }

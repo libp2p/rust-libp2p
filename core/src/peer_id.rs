@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::PublicKey;
+use multiaddr::{Multiaddr, Protocol};
 use multihash::{Code, Error, Multihash, MultihashDigest};
 use rand::Rng;
 use std::{convert::TryFrom, fmt, str::FromStr};
@@ -86,6 +87,17 @@ impl PeerId {
             }
             _ => Err(multihash),
         }
+    }
+
+    /// Tries to extract a [`PeerId`] from the given [`Multiaddr`].
+    ///
+    /// In case the given [`Multiaddr`] ends with `/p2p/<peer-id>`, this function
+    /// will return the encapsulated [`PeerId`], otherwise it will return `None`.
+    pub fn try_from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
+        address.iter().last().map_or(None, |p| match p {
+            Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
+            _ => None,
+        })
     }
 
     /// Generates a random peer ID from a cryptographically secure PRNG.
@@ -270,5 +282,31 @@ mod tests {
             let peer_id = PeerId::random();
             assert_eq!(peer_id, PeerId::from_bytes(&peer_id.to_bytes()).unwrap());
         }
+    }
+
+    #[test]
+    fn extract_peer_id_from_multi_address() {
+        let address =
+            format!("/memory/1234/p2p/12D3KooWGQmdpzHXCqLno4mMxWXKNFQHASBeF99gTm2JR8Vu5Bdc")
+                .parse()
+                .unwrap();
+
+        let peer_id = PeerId::try_from_multiaddr(&address).unwrap();
+
+        assert_eq!(
+            peer_id,
+            "12D3KooWGQmdpzHXCqLno4mMxWXKNFQHASBeF99gTm2JR8Vu5Bdc"
+                .parse()
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn no_panic_on_extract_peer_id_from_multi_address_if_not_present() {
+        let address = format!("/memory/1234").parse().unwrap();
+
+        let maybe_empty = PeerId::try_from_multiaddr(&address);
+
+        assert!(maybe_empty.is_none());
     }
 }

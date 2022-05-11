@@ -40,6 +40,7 @@ const DEFAULT_MAX_TOPICS: usize = 300;
 // store metrics.
 const DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS: usize = 50;
 
+#[derive(Debug, Clone)]
 pub struct Config {
     /// This provides an upper bound to the number of mesh topics we create metrics for. It
     /// prevents unbounded labels being created in the metrics.
@@ -181,7 +182,7 @@ impl Metrics {
         );
 
         let rejected_messages = register_family!(
-            "accepted_messages_per_topic",
+            "rejected_messages_per_topic",
             "Number of rejected messages received for each topic"
         );
 

@@ -28,7 +28,7 @@ yasna = "0.5.0"
 anyhow = "1.0.41"
 async-std = { version = "1.10.0", features = ["attributes"] }
 async-trait = "0.1.50"
-libp2p = { version = "0.43.0", default-features = false, features = ["request-response"], path = "../.." }
+libp2p = { version = "0.44.0", default-features = false, features = ["request-response"], path = "../.." }
 rand = "0.8.4"
 tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
 quickcheck = "1"

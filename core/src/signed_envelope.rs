@@ -10,7 +10,7 @@ use unsigned_varint::encode::usize_buffer;
 /// For more details see libp2p RFC0002: <https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md>
 #[derive(Debug, Clone, PartialEq)]
 pub struct SignedEnvelope {
-    pub(crate) key: PublicKey,
+    key: PublicKey,
     payload_type: Vec<u8>,
     payload: Vec<u8>,
     signature: Vec<u8>,
@@ -19,7 +19,7 @@ pub struct SignedEnvelope {
 impl SignedEnvelope {
     /// Constructs a new [`SignedEnvelope`].
     pub fn new(
-        key: Keypair,
+        key: &Keypair,
         domain_separation: String,
         payload_type: Vec<u8>,
         payload: Vec<u8>,
@@ -44,15 +44,19 @@ impl SignedEnvelope {
         self.key.verify(&buffer, &self.signature)
     }
 
-    /// Extract the payload of this [`SignedEnvelope`].
+    /// Extract the payload and signing key of this [`SignedEnvelope`].
     ///
     /// You must provide the correct domain-separation string and expected payload type in order to get the payload.
     /// This guards against accidental mis-use of the payload where the signature was created for a different purpose or payload type.
-    pub fn payload(
+    ///
+    /// It is the caller's responsibility to check that the signing key is what
+    /// is expected. For example, checking that the signing key is from a
+    /// certain peer.
+    pub fn payload_and_signing_key(
         &self,
         domain_separation: String,
         expected_payload_type: &[u8],
-    ) -> Result<&[u8], ReadPayloadError> {
+    ) -> Result<(&[u8], &PublicKey), ReadPayloadError> {
         if self.payload_type != expected_payload_type {
             return Err(ReadPayloadError::UnexpectedPayloadType {
                 expected: expected_payload_type.to_vec(),
@@ -64,7 +68,7 @@ impl SignedEnvelope {
             return Err(ReadPayloadError::InvalidSignature);
         }
 
-        Ok(&self.payload)
+        Ok((&self.payload, &self.key))
     }
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
@@ -214,18 +218,18 @@ mod tests {
         let payload_type: Vec<u8> = "payload type".into();
 
         let env = SignedEnvelope::new(
-            kp.clone(),
+            &kp,
             domain_separation.clone(),
             payload_type.clone(),
             payload.into(),
         )
         .expect("Failed to create envelope");
 
-        let actual_payload = env
-            .payload(domain_separation, &payload_type)
+        let (actual_payload, signing_key) = env
+            .payload_and_signing_key(domain_separation, &payload_type)
             .expect("Failed to extract payload and public key");
 
         assert_eq!(actual_payload, payload);
-        assert_eq!(env.key, kp.public());
+        assert_eq!(signing_key, &kp.public());
     }
 }

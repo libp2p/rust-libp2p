@@ -42,7 +42,7 @@ use libp2p_core::{
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 
@@ -149,6 +149,7 @@ pub enum GossipsubEvent {
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
 enum PublishConfig {
     Signing {
         keypair: Keypair,
@@ -472,14 +473,9 @@ where
 
     /// Lists all mesh peers for a certain topic hash.
     pub fn mesh_peers(&self, topic_hash: &TopicHash) -> impl Iterator<Item = &PeerId> {
-        self.mesh
-            .get(topic_hash)
-            .into_iter()
-            .map(|x| x.iter())
-            .flatten()
+        self.mesh.get(topic_hash).into_iter().flat_map(|x| x.iter())
     }
 
-    /// Lists all mesh peers for all topics.
     pub fn all_mesh_peers(&self) -> impl Iterator<Item = &PeerId> {
         let mut res = BTreeSet::new();
         for peers in self.mesh.values() {
@@ -787,6 +783,9 @@ where
                             "Message not in cache. Ignoring forwarding. Message Id: {}",
                             msg_id
                         );
+                        if let Some(metrics) = self.metrics.as_mut() {
+                            metrics.memcache_miss();
+                        }
                         return Ok(false);
                     }
                 };
@@ -1214,8 +1213,7 @@ where
 
         trace!("Handling IHAVE for peer: {:?}", peer_id);
 
-        // use a hashmap to avoid duplicates efficiently
-        let mut iwant_ids = HashMap::new();
+        let mut iwant_ids = HashSet::new();
 
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
@@ -1236,7 +1234,12 @@ where
                         .unwrap_or(true)
                     {
                         // have not seen this message and are not currently requesting it
-                        iwant_ids.insert(id, topic.clone());
+                        if iwant_ids.insert(id) {
+                            // Register the IWANT metric
+                            if let Some(metrics) = self.metrics.as_mut() {
+                                metrics.register_iwant(&topic);
+                            }
+                        }
                     }
                 }
             }
@@ -1258,37 +1261,37 @@ where
             );
 
             // Ask in random order
-            let mut iwant_ids_vec: Vec<_> = iwant_ids.keys().collect();
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
             let mut rng = thread_rng();
             iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
 
             iwant_ids_vec.truncate(iask as usize);
             *iasked += iask;
 
-            let mut message_ids = Vec::new();
-            for message_id in iwant_ids_vec {
+            for message_id in &iwant_ids_vec {
                 // Add all messages to the pending list
                 self.pending_iwant_msgs.insert(message_id.clone());
-                message_ids.push(message_id.clone());
             }
 
             if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
                 gossip_promises.add_promise(
                     *peer_id,
-                    &message_ids,
+                    &iwant_ids_vec,
                     Instant::now() + self.config.iwant_followup_time(),
                 );
             }
             trace!(
                 "IHAVE: Asking for the following messages from {}: {:?}",
                 peer_id,
-                message_ids
+                iwant_ids_vec
             );
 
             Self::control_pool_add(
                 &mut self.control_pool,
                 *peer_id,
-                GossipsubControlAction::IWant { message_ids },
+                GossipsubControlAction::IWant {
+                    message_ids: iwant_ids_vec,
+                },
             );
         }
         trace!("Completed IHAVE handling for peer: {:?}", peer_id);
@@ -3043,10 +3046,10 @@ where
     C: Send + 'static + DataTransform,
     F: Send + 'static + TopicSubscriptionFilter,
 {
-    type ProtocolsHandler = GossipsubHandler;
+    type ConnectionHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         GossipsubHandler::new(
             self.config.protocol_id_prefix().clone(),
             self.config.max_transmit_size(),
@@ -3148,7 +3151,7 @@ where
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         // Remove IP from peer scoring system
@@ -3435,7 +3438,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
                 // clone send event reference if others references are present

@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
+    // Set up an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::development_transport(local_key).await?;
 
     // Create a Floodsub topic

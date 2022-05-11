@@ -28,8 +28,8 @@ use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::connection::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters, ProtocolsHandler,
+    handler::DummyConnectionHandler, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -96,11 +96,11 @@ impl Mdns {
 }
 
 impl NetworkBehaviour for Mdns {
-    type ProtocolsHandler = DummyProtocolsHandler;
+    type ConnectionHandler = DummyConnectionHandler;
     type OutEvent = MdnsEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        DummyProtocolsHandler::default()
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        DummyConnectionHandler::default()
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -115,7 +115,7 @@ impl NetworkBehaviour for Mdns {
         &mut self,
         _: PeerId,
         _: libp2p_core::connection::ConnectionId,
-        ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         void::unreachable(ev)
     }
@@ -132,7 +132,7 @@ impl NetworkBehaviour for Mdns {
         peer: &PeerId,
         _: &libp2p_core::connection::ConnectionId,
         _: &libp2p_core::ConnectedPoint,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         if remaining_established == 0 {
@@ -144,7 +144,7 @@ impl NetworkBehaviour for Mdns {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyConnectionHandler>> {
         // Poll ifwatch.
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
             match event {

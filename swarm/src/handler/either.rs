@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{
-    IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+use crate::handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use either::Either;
@@ -34,12 +34,12 @@ pub enum IntoEitherHandler<L, R> {
     Right(R),
 }
 
-/// Implementation of a [`IntoProtocolsHandler`] that represents either of two [`IntoProtocolsHandler`]
+/// Implementation of a [`IntoConnectionHandler`] that represents either of two [`IntoConnectionHandler`]
 /// implementations.
-impl<L, R> IntoProtocolsHandler for IntoEitherHandler<L, R>
+impl<L, R> IntoConnectionHandler for IntoEitherHandler<L, R>
 where
-    L: IntoProtocolsHandler,
-    R: IntoProtocolsHandler,
+    L: IntoConnectionHandler,
+    R: IntoConnectionHandler,
 {
     type Handler = Either<L::Handler, R::Handler>;
 
@@ -52,7 +52,7 @@ where
         }
     }
 
-    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         match self {
             IntoEitherHandler::Left(into_handler) => {
                 EitherUpgrade::A(SendWrapper(into_handler.inbound_protocol()))
@@ -64,12 +64,12 @@ where
     }
 }
 
-/// Implementation of a [`ProtocolsHandler`] that represents either of two [`ProtocolsHandler`]
+/// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
 /// implementations.
-impl<L, R> ProtocolsHandler for Either<L, R>
+impl<L, R> ConnectionHandler for Either<L, R>
 where
-    L: ProtocolsHandler,
-    R: ProtocolsHandler,
+    L: ConnectionHandler,
+    R: ConnectionHandler,
 {
     type InEvent = Either<L::InEvent, R::InEvent>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
@@ -144,59 +144,59 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timer => match (self, info) {
+            ConnectionHandlerUpgrErr::Timer => match (self, info) {
                 (Either::Left(handler), Either::Left(info)) => {
-                    handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
+                    handler.inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timer);
                 }
                 (Either::Right(handler), Either::Right(info)) => {
-                    handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
+                    handler.inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timer);
                 }
                 _ => unreachable!(),
             },
-            ProtocolsHandlerUpgrErr::Timeout => match (self, info) {
+            ConnectionHandlerUpgrErr::Timeout => match (self, info) {
                 (Either::Left(handler), Either::Left(info)) => {
-                    handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
+                    handler.inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timeout);
                 }
                 (Either::Right(handler), Either::Right(info)) => {
-                    handler.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
+                    handler.inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timeout);
                 }
                 _ => unreachable!(),
             },
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)) => match (self, info) {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)) => match (self, info) {
                 (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_dial_upgrade_error(
                         info,
-                        ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
                     );
                 }
                 (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_dial_upgrade_error(
                         info,
-                        ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
                     );
                 }
                 _ => unreachable!(),
             },
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
                 match (self, info) {
                     (Either::Left(handler), Either::Left(info)) => {
                         handler.inject_dial_upgrade_error(
                             info,
-                            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                         );
                     }
                     _ => unreachable!(),
                 }
             }
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
                 match (self, info) {
                     (Either::Right(handler), Either::Right(info)) => {
                         handler.inject_dial_upgrade_error(
                             info,
-                            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                         );
                     }
                     _ => unreachable!(),
@@ -208,59 +208,59 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         info: Self::InboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
         match error {
-            ProtocolsHandlerUpgrErr::Timer => match (self, info) {
+            ConnectionHandlerUpgrErr::Timer => match (self, info) {
                 (Either::Left(handler), Either::Left(info)) => {
-                    handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
+                    handler.inject_listen_upgrade_error(info, ConnectionHandlerUpgrErr::Timer);
                 }
                 (Either::Right(handler), Either::Right(info)) => {
-                    handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer);
+                    handler.inject_listen_upgrade_error(info, ConnectionHandlerUpgrErr::Timer);
                 }
                 _ => unreachable!(),
             },
-            ProtocolsHandlerUpgrErr::Timeout => match (self, info) {
+            ConnectionHandlerUpgrErr::Timeout => match (self, info) {
                 (Either::Left(handler), Either::Left(info)) => {
-                    handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
+                    handler.inject_listen_upgrade_error(info, ConnectionHandlerUpgrErr::Timeout);
                 }
                 (Either::Right(handler), Either::Right(info)) => {
-                    handler.inject_listen_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout);
+                    handler.inject_listen_upgrade_error(info, ConnectionHandlerUpgrErr::Timeout);
                 }
                 _ => unreachable!(),
             },
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)) => match (self, info) {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)) => match (self, info) {
                 (Either::Left(handler), Either::Left(info)) => {
                     handler.inject_listen_upgrade_error(
                         info,
-                        ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
                     );
                 }
                 (Either::Right(handler), Either::Right(info)) => {
                     handler.inject_listen_upgrade_error(
                         info,
-                        ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
                     );
                 }
                 _ => unreachable!(),
             },
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
                 match (self, info) {
                     (Either::Left(handler), Either::Left(info)) => {
                         handler.inject_listen_upgrade_error(
                             info,
-                            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                         );
                     }
                     _ => unreachable!(),
                 }
             }
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
                 match (self, info) {
                     (Either::Right(handler), Either::Right(info)) => {
                         handler.inject_listen_upgrade_error(
                             info,
-                            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                         );
                     }
                     _ => unreachable!(),
@@ -280,7 +280,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,

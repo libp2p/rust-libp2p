@@ -22,9 +22,9 @@
 //!
 //! To start the server run:
 //! ```sh
-//! cargo run --example server -- --listen_port <port>
+//! cargo run --example server -- --listen-port <port>
 //! ```
-//! The `listen_port` parameter is optional and allows to set a fixed port at which the local peer should listen.
+//! The `listen-port` parameter is optional and allows to set a fixed port at which the local peer should listen.
 
 use futures::prelude::*;
 use libp2p::autonat;

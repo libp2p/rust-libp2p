@@ -42,36 +42,56 @@
 
 # `libp2p` facade crate
 
-## Version 0.43.0 [unreleased]
+## 0.44.0
 
 - Update individual crates.
-  - Update to `libp2p-autonat` `v0.2.0`.
-  - Update to `libp2p-core` `v0.32.0`.
-  - Update to `libp2p-deflate` `v0.32.0`.
-  - Update to `libp2p-dns` `v0.32.0`.
-  - Update to `libp2p-floodsub` `v0.34.0`.
-  - Update to `libp2p-gossipsub` `v0.36.0`.
-  - Update to `libp2p-identify` `v0.34.0`.
-  - Update to `libp2p-kad` `v0.35.0`.
-  - Update to `libp2p-mdns` `v0.35.0`.
-  - Update to `libp2p-metrics` `v0.4.0`.
-  - Update to `libp2p-mplex` `v0.32.0`.
-  - Update to `libp2p-noise` `v0.35.0`.
-  - Update to `libp2p-ping` `v0.34.0`.
-  - Update to `libp2p-plaintext` `v0.32.0`.
-  - Update to `libp2p-relay` `v0.7.0`.
-  - Update to `libp2p-rendezvous` `v0.4.0`.
-  - Update to `libp2p-request-response` `v0.16.0`.
-  - Update to `libp2p-swarm` `v0.34.0`.
-  - Update to `libp2p-tcp` `v0.32.0`.
-  - Update to `libp2p-uds` `v0.32.0`.
-  - Update to `libp2p-wasm-ext` `v0.32.0`.
-  - Update to `libp2p-websocket` `v0.34.0`.
-  - Update to `libp2p-yamux` `v0.36.0`.
+    - Update to [`libp2p-dcutr` `v0.2.0`](protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-dns` `v0.32.1`](transports/dns/CHANGELOG.md).
+    - Update to [`libp2p-rendezvous` `v0.5.0`](protocols/rendezvous/CHANGELOG.md).
+    - Update to [`libp2p-ping` `v0.35.0`](protocols/ping/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.35.0`](protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-floodsub` `v0.35.0`](protocols/floodsub/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.8.0`](protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-metrics` `v0.5.0`](misc/metrics/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.36.0`](protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-autonat` `v0.3.0`](protocols/autonat/CHANGELOG.md).
+    - Update to [`libp2p-request-response` `v0.17.0`](protocols/request-response/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.35.0`](swarm/CHANGELOG.md).
+
+## Version 0.43.0 [2022-02-22]
+
+- Update individual crates.
+  - Update to `libp2p-autonat` [`v0.2.0`](protocols/autonat/CHANGELOG.md#020-2022-02-22).
+  - Update to `libp2p-core` [`v0.32.0`](core/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-deflate` [`v0.32.0`](transports/deflate/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-dns` [`v0.32.0`](transports/dns/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-floodsub` [`v0.34.0`](protocols/floodsub/CHANGELOG.md#0340-2022-02-22).
+  - Update to `libp2p-gossipsub` [`v0.36.0`](protocols/gossipsub/CHANGELOG.md#0360-2022-02-22).
+  - Update to `libp2p-identify` [`v0.34.0`](protocols/identify/CHANGELOG.md#0340-2022-02-22).
+  - Update to `libp2p-kad` [`v0.35.0`](protocols/kad/CHANGELOG.md#0350-2022-02-22).
+  - Update to `libp2p-mdns` [`v0.35.0`](protocols/mdns/CHANGELOG.md#0350-2022-02-22).
+  - Update to `libp2p-metrics` [`v0.4.0`](misc/metrics/CHANGELOG.md#040-2022-02-22).
+  - Update to `libp2p-mplex` [`v0.32.0`](muxers/mplex/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-noise` [`v0.35.0`](transports/noise/CHANGELOG.md#0350-2022-02-22).
+  - Update to `libp2p-ping` [`v0.34.0`](protocols/ping/CHANGELOG.md#0340-2022-02-22).
+  - Update to `libp2p-plaintext` [`v0.32.0`](transports/plaintext/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-relay` [`v0.7.0`](protocols/relay/CHANGELOG.md#070-2022-02-22).
+  - Update to `libp2p-rendezvous` [`v0.4.0`](protocols/rendezvous/CHANGELOG.md#040-2022-02-22).
+  - Update to `libp2p-request-response` [`v0.16.0`](protocols/request-response/CHANGELOG.md#0160-2022-02-22).
+  - Update to `libp2p-swarm` [`v0.34.0`](swarm/CHANGELOG.md#0340-2022-02-22).
+  - Update to `libp2p-derive` [`v0.27.0`](swarm-derive/CHANGELOG.md#0270-2022-02-22).
+  - Update to `libp2p-tcp` [`v0.32.0`](transports/tcp/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-uds` [`v0.32.0`](transports/uds/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-wasm-ext` [`v0.32.0`](transports/wasm-ext/CHANGELOG.md#0320-2022-02-22).
+  - Update to `libp2p-websocket` [`v0.34.0`](transports/websocket/CHANGELOG.md#0340-2022-02-22).
+  - Update to `libp2p-yamux` [`v0.36.0`](muxers/yamux/CHANGELOG.md#0360-2022-02-22).
+
+- Update to `parking_lot` `v0.12.0`. See [PR 2463].
 
 - Drop support for gossipsub in the wasm32-unknown-unknown target (see [PR 2506]).
 
 [PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
+[PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
 
 ## Version 0.42.1 [2022-02-02]
 

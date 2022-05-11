@@ -25,9 +25,9 @@
 //!
 //! To run this example, follow the instructions in `examples/server` to start a server, then run in a new terminal:
 //! ```sh
-//! cargo run --example client -- --server-address <server-addr> --server-peer-id <server-peer-id> --listen_port <port>
+//! cargo run --example client -- --server-address <server-addr> --server-peer-id <server-peer-id> --listen-port <port>
 //! ```
-//! The `listen_port` parameter is optional and allows to set a fixed port at which the local client should listen.
+//! The `listen-port` parameter is optional and allows to set a fixed port at which the local client should listen.
 
 use futures::prelude::*;
 use libp2p::autonat;

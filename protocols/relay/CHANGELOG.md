@@ -1,10 +1,21 @@
-# 0.7.0 [unreleased]
+# 0.8.0
+
+- Expose `{Inbound,Outbound}{Hop,Stop}UpgradeError`. See [PR 2586].
+
+- Update to `libp2p-swarm` `v0.35.0`.
+
+- Remove support for Circuit Relay v1 protocol. See [PR 2549].
+
+[PR 2549]: https://github.com/libp2p/rust-libp2p/pull/2549
+[PR 2586]: https://github.com/libp2p/rust-libp2p/pull/2586
+
+# 0.7.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 
 - Update to `libp2p-swarm` `v0.34.0`.
 
-- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+- Merge NetworkBehaviour's inject_\* paired methods (see [PR 2445]).
 
 [PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
 

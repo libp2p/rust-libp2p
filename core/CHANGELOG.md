@@ -1,4 +1,8 @@
-# 0.32.0 [unreleased]
+# 0.32.1
+
+- Add `PeerId::try_from_multiaddr` to extract a `PeerId` from a `Multiaddr` that ends in `/p2p/<peer-id>`.
+
+# 0.32.0 [2022-02-22]
 
 - Remove `Network`. `libp2p-core` is from now on an auxiliary crate only. Users
   that have previously used `Network` only, will need to use `Swarm` instead. See
@@ -10,11 +14,22 @@
 
 - Implement `Display` on `DialError`. See [PR 2456].
 
+- Update to `parking_lot` `v0.12.0`. See [PR 2463].
+
 - Validate PeerRecord signature matching peer ID. See [RUSTSEC-2022-0009].
+
+- Don't take ownership of key in `PeerRecord::new` and `SignedEnvelope::new`. See [PR 2516].
+
+- Remove `SignedEnvelope::payload` in favor of
+  `SignedEnvelope::payload_and_signing_key`. The caller is expected to check
+  that the returned signing key makes sense in the payload's context. See [PR 2522].
 
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
 [RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
+[PR 2516]: https://github.com/libp2p/rust-libp2p/pull/2516
+[PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
+[PR 2522]: https://github.com/libp2p/rust-libp2p/pull/2522
 
 # 0.31.0 [2022-01-27]
 

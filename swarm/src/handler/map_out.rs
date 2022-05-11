@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
+use crate::handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_core::Multiaddr;
@@ -39,9 +40,9 @@ impl<TProtoHandler, TMap> MapOutEvent<TProtoHandler, TMap> {
     }
 }
 
-impl<TProtoHandler, TMap, TNewOut> ProtocolsHandler for MapOutEvent<TProtoHandler, TMap>
+impl<TProtoHandler, TMap, TNewOut> ConnectionHandler for MapOutEvent<TProtoHandler, TMap>
 where
-    TProtoHandler: ProtocolsHandler,
+    TProtoHandler: ConnectionHandler,
     TMap: FnMut(TProtoHandler::OutEvent) -> TNewOut,
     TNewOut: Debug + Send + 'static,
     TMap: Send + 'static,
@@ -85,7 +86,7 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
@@ -93,7 +94,7 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         info: Self::InboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
         self.inner.inject_listen_upgrade_error(info, error)
     }
@@ -106,7 +107,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -114,10 +115,10 @@ where
         >,
     > {
         self.inner.poll(cx).map(|ev| match ev {
-            ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
-            ProtocolsHandlerEvent::Close(err) => ProtocolsHandlerEvent::Close(err),
-            ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }
+            ConnectionHandlerEvent::Custom(ev) => ConnectionHandlerEvent::Custom((self.map)(ev)),
+            ConnectionHandlerEvent::Close(err) => ConnectionHandlerEvent::Close(err),
+            ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
+                ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
         })
     }

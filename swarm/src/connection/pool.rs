@@ -20,14 +20,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
-        handler::{THandlerError, THandlerInEvent, THandlerOutEvent},
-        Connected, ConnectionError, ConnectionHandler, ConnectionLimit, IncomingInfo,
-        IntoConnectionHandler, PendingConnectionError, PendingInboundConnectionError,
-        PendingOutboundConnectionError, Substream,
+        Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
+        PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
-    ConnectedPoint, Executor, Multiaddr, PeerId,
+    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -39,7 +38,7 @@ use futures::{
     stream::FuturesUnordered,
 };
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
-use libp2p_core::muxing::StreamMuxer;
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -67,7 +66,10 @@ where
     /// The managed connections of each peer that are currently considered established.
     established: FnvHashMap<
         PeerId,
-        FnvHashMap<ConnectionId, EstablishedConnectionInfo<THandlerInEvent<THandler>>>,
+        FnvHashMap<
+            ConnectionId,
+            EstablishedConnectionInfo<<THandler::Handler as ConnectionHandler>::InEvent>,
+        >,
     >,
 
     /// The pending connections that are currently being negotiated.
@@ -81,6 +83,9 @@ where
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
@@ -100,10 +105,12 @@ where
 
     /// Sender distributed to established tasks for reporting events back
     /// to the pool.
-    established_connection_events_tx: mpsc::Sender<task::EstablishedConnectionEvent<THandler>>,
+    established_connection_events_tx:
+        mpsc::Sender<task::EstablishedConnectionEvent<THandler::Handler>>,
 
     /// Receiver for events reported from established tasks.
-    established_connection_events_rx: mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>,
+    established_connection_events_rx:
+        mpsc::Receiver<task::EstablishedConnectionEvent<THandler::Handler>>,
 }
 
 #[derive(Debug)]
@@ -154,7 +161,7 @@ where
 {
     /// A new connection has been established.
     ConnectionEstablished {
-        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
+        connection: EstablishedConnection<'a, <THandler::Handler as ConnectionHandler>::InEvent>,
         /// List of other connections to the same peer.
         ///
         /// Note: Does not include the connection reported through this event.
@@ -182,7 +189,7 @@ where
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<THandlerError<THandler>>>,
+        error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<THandler, TTrans>,
         /// The remaining established connections to the same peer.
@@ -321,6 +328,7 @@ where
             next_connection_id: ConnectionId::new(0),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
+            substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -571,17 +579,11 @@ where
     ///
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a, TMuxer>(
-        &'a mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<PoolEvent<'a, THandler, TTrans>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<'a, THandler, TTrans>>
     where
-        TTrans: Transport<Output = (PeerId, TMuxer)>,
-        TMuxer: StreamMuxer + Send + Sync + 'static,
-        TMuxer::Error: std::fmt::Debug,
-        TMuxer::OutboundSubstream: Send,
+        TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         THandler: IntoConnectionHandler + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>> + Send,
+        THandler::Handler: ConnectionHandler + Send,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     {
         // Poll for events of established connections.
@@ -813,13 +815,11 @@ where
                         },
                     );
 
-                    let connected = Connected {
-                        peer_id: obtained_peer_id,
-                        endpoint,
-                    };
-
-                    let connection =
-                        super::Connection::new(muxer, handler.into_handler(&connected));
+                    let connection = super::Connection::new(
+                        muxer,
+                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        self.substream_upgrade_protocol_override,
+                    );
                     self.spawn(
                         task::new_for_established_connection(
                             id,
@@ -1223,6 +1223,9 @@ pub struct PoolConfig {
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 }
 
 impl Default for PoolConfig {
@@ -1233,6 +1236,7 @@ impl Default for PoolConfig {
             task_command_buffer_size: 7,
             // By default, addresses of a single connection attempt are dialed in sequence.
             dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
+            substream_upgrade_protocol_override: None,
         }
     }
 }
@@ -1259,7 +1263,7 @@ impl PoolConfig {
     /// delivery to the connection handler.
     ///
     /// When the buffer for a particular connection is full, `notify_handler` will no
-    /// longer be able to deliver events to the associated `ConnectionHandler`,
+    /// longer be able to deliver events to the associated [`Connection`](super::Connection),
     /// thus exerting back-pressure on the connection and peer API.
     pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.task_command_buffer_size = n.get() - 1;
@@ -1280,6 +1284,15 @@ impl PoolConfig {
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
+        self
+    }
+
+    /// Configures an override for the substream upgrade protocol to use.
+    pub fn with_substream_upgrade_protocol_override(
+        mut self,
+        v: libp2p_core::upgrade::Version,
+    ) -> Self {
+        self.substream_upgrade_protocol_override = Some(v);
         self
     }
 }
