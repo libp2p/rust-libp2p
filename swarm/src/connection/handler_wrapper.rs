@@ -298,6 +298,32 @@ where
         self.handler.inject_address_change(new_address);
     }
 
+    fn handle_connection_handler_event(
+        &mut self,
+        handler_event: ConnectionHandlerEvent<
+            TProtoHandler::OutboundProtocol,
+            TProtoHandler::OutboundOpenInfo,
+            TProtoHandler::OutEvent,
+            TProtoHandler::Error,
+        >,
+    ) -> Result<
+        Event<OutboundOpenInfo<TProtoHandler>, TProtoHandler::OutEvent>,
+        Error<TProtoHandler::Error>,
+    > {
+        match handler_event {
+            ConnectionHandlerEvent::Custom(event) => Ok(Event::Custom(event)),
+            ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
+                let id = self.unique_dial_upgrade_id;
+                let timeout = *protocol.timeout();
+                self.unique_dial_upgrade_id += 1;
+                let (upgrade, info) = protocol.into_upgrade();
+                self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
+                Ok(Event::OutboundSubstreamRequest((id, info, timeout)))
+            }
+            ConnectionHandlerEvent::Close(err) => Err(err.into()),
+        }
+    }
+
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -309,23 +335,9 @@ where
     > {
         loop {
             // Poll the [`ConnectionHandler`].
-            if let Poll::Ready(res) = self.handler.poll(cx) {
-                match res {
-                    ConnectionHandlerEvent::Custom(event) => {
-                        return Poll::Ready(Ok(Event::Custom(event)));
-                    }
-                    ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                        let id = self.unique_dial_upgrade_id;
-                        let timeout = *protocol.timeout();
-                        self.unique_dial_upgrade_id += 1;
-                        let (upgrade, info) = protocol.into_upgrade();
-                        self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
-                        return Poll::Ready(Ok(Event::OutboundSubstreamRequest((
-                            id, info, timeout,
-                        ))));
-                    }
-                    ConnectionHandlerEvent::Close(err) => return Poll::Ready(Err(err.into())),
-                }
+            if let Poll::Ready(handler_event) = self.handler.poll(cx) {
+                let wrapper_event = self.handle_connection_handler_event(handler_event)?;
+                return Poll::Ready(Ok(wrapper_event));
             }
 
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
