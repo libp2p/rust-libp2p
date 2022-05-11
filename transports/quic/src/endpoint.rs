@@ -158,7 +158,7 @@ impl Endpoint {
 
         // TODO: just for testing, do proper task spawning
         async_global_executor::spawn(background_task(
-            config.clone(),
+            config,
             Arc::downgrade(&endpoint),
             async_io::Async::<UdpSocket>::new(socket)?,
             new_connections_tx,
@@ -167,49 +167,6 @@ impl Endpoint {
         .detach();
 
         Ok(endpoint)
-
-        // TODO: IP address stuff
-        /*if socket_addr.ip().is_unspecified() {
-            info!("returning all local IPs for unspecified address");
-            let suffixes = [Protocol::Udp(socket_addr.port()), Protocol::Quic];
-            let local_addresses =
-                host_addresses(&suffixes).map_err(|e| TransportError::Other(Error::IO(e)))?;
-            for (_, _, address) in local_addresses {
-                info!("sending address {:?}", address);
-                new_connections
-                    .unbounded_send(ListenerEvent::NewAddress(address))
-                    .expect("we have a reference to the peer, so this will not fail; qed")
-            }
-        } else {
-            info!("sending address {:?}", multiaddr);
-            new_connections
-                .unbounded_send(ListenerEvent::NewAddress(multiaddr.clone()))
-                .expect("we have a reference to the peer, so this will not fail; qed");
-        }
-
-        if socket_addr.ip().is_unspecified() {
-            debug!("returning all local IPs for unspecified address");
-            let local_addresses =
-                host_addresses(&[Protocol::Udp(socket_addr.port()), Protocol::Quic])
-                    .map_err(|e| TransportError::Other(Error::IO(e)))?;
-            for i in local_addresses {
-                info!("sending address {:?}", i.2);
-                reference
-                    .new_connections
-                    .unbounded_send(ListenerEvent::NewAddress(i.2))
-                    .expect("we have a reference to the peer, so this will not fail; qed")
-            }
-        } else {
-            info!("sending address {:?}", multiaddr);
-            reference
-                .new_connections
-                .unbounded_send(ListenerEvent::NewAddress(multiaddr))
-                .expect("we have a reference to the peer, so this will not fail; qed");
-        }
-
-        let endpoint = EndpointRef { reference, channel };
-        let join_handle = spawn(endpoint.clone());
-        Ok((Self(endpoint), join_handle))*/
     }
 
     /// Asks the endpoint to start dialing the given address.
@@ -514,7 +471,6 @@ async fn background_task(
                         if !has_key {
                             continue;
                         }
-                        //debug_assert!(alive_connections.contains_key(&connection_id));
                         // We "drained" event indicates that the connection no longer exists and
                         // its ID can be reclaimed.
                         let is_drained_event = event.is_drained();
