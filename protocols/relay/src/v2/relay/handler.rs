@@ -764,6 +764,29 @@ impl ConnectionHandler for Handler {
             }
         }
 
+        // Deny new circuits.
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+            self.circuit_deny_futures.poll_next_unpin(cx)
+        {
+            match result {
+                Ok(()) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitReqDenied {
+                        circuit_id,
+                        dst_peer_id,
+                    }));
+                }
+                Err(error) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                        Event::CircuitReqDenyFailed {
+                            circuit_id,
+                            dst_peer_id,
+                            error,
+                        },
+                    ));
+                }
+            }
+        }
+
         // Accept new circuits.
         if let Poll::Ready(Some(result)) = self.circuit_accept_futures.poll_next_unpin(cx) {
             match result {
@@ -816,29 +839,6 @@ impl ConnectionHandler for Handler {
                 Err((circuit_id, dst_peer_id, error)) => {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(
                         Event::CircuitReqAcceptFailed {
-                            circuit_id,
-                            dst_peer_id,
-                            error,
-                        },
-                    ));
-                }
-            }
-        }
-
-        // Deny new circuits.
-        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
-            self.circuit_deny_futures.poll_next_unpin(cx)
-        {
-            match result {
-                Ok(()) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitReqDenied {
-                        circuit_id,
-                        dst_peer_id,
-                    }));
-                }
-                Err(error) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
-                        Event::CircuitReqDenyFailed {
                             circuit_id,
                             dst_peer_id,
                             error,
