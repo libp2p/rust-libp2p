@@ -50,12 +50,12 @@ pub struct IdentifyHandler {
     >,
 
     /// Future that fires when we need to identify the node again.
-    next_id: Delay,
+    trigger_next_identify: Delay,
 
     /// Whether the handler should keep the connection alive.
     keep_alive: KeepAlive,
 
-    /// The interval of `next_id`, i.e. the recurrent delay.
+    /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
 }
 
@@ -81,7 +81,7 @@ impl IdentifyHandler {
     pub fn new(initial_delay: Duration, interval: Duration) -> Self {
         IdentifyHandler {
             events: SmallVec::new(),
-            next_id: Delay::new(initial_delay),
+            trigger_next_identify: Delay::new(initial_delay),
             keep_alive: KeepAlive::Yes,
             interval,
         }
@@ -165,7 +165,7 @@ impl ConnectionHandler for IdentifyHandler {
             IdentifyHandlerEvent::IdentificationError(err),
         ));
         self.keep_alive = KeepAlive::No;
-        self.next_id.reset(self.interval);
+        self.trigger_next_identify.reset(self.interval);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -188,10 +188,10 @@ impl ConnectionHandler for IdentifyHandler {
         }
 
         // Poll the future that fires when we need to identify the node again.
-        match Future::poll(Pin::new(&mut self.next_id), cx) {
+        match Future::poll(Pin::new(&mut self.trigger_next_identify), cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(()) => {
-                self.next_id.reset(self.interval);
+                self.trigger_next_identify.reset(self.interval);
                 let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: SubstreamProtocol::new(EitherUpgrade::A(IdentifyProtocol), ()),
                 };
