@@ -35,10 +35,6 @@ use libp2p_core::{
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
-/// The maximum number of incoming streams concurrently negotiated. Streams are
-/// dropped and thus reset.
-const MAX_NUM_NEGOTIATING_IN: usize = 128;
-
 /// A wrapper for an underlying [`ConnectionHandler`].
 ///
 /// It extends [`ConnectionHandler`] with:
@@ -81,6 +77,15 @@ where
     shutdown: Shutdown,
     /// The substream upgrade protocol override, if any.
     substream_upgrade_protocol_override: Option<upgrade::Version>,
+    /// The maximum number of inbound streams concurrently negotiating. New inbound
+    /// streams exceeding the limit are dropped and thus reset.
+    ///
+    /// Note: This only enforces a limit on the number of concurrently
+    /// negotiating inbound streams. The total number of inbound streams on a
+    /// connection is the sum of negotiating and negotiated streams. A limit on
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`]
+    /// level.
+    max_number_negotiating_inbound_streams: usize,
 }
 
 impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TConnectionHandler> {
@@ -102,6 +107,7 @@ impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
         handler: TConnectionHandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
+        max_number_negotiating_inbound_streams: usize,
     ) -> Self {
         Self {
             handler,
@@ -111,6 +117,7 @@ impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
             unique_dial_upgrade_id: 0,
             shutdown: Shutdown::None,
             substream_upgrade_protocol_override,
+            max_number_negotiating_inbound_streams,
         }
     }
 
@@ -247,8 +254,11 @@ where
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
-                if self.negotiating_in.len() == MAX_NUM_NEGOTIATING_IN {
-                    log::warn!("Incoming substream exceeding `MAX_NUM_NEGOTIATING_IN`. Dropping.",);
+                if self.negotiating_in.len() == self.max_number_negotiating_inbound_streams {
+                    log::warn!(
+                        "Incoming substream exceeding maximum number of \
+                         negotiating inbound streams. Dropping."
+                    );
                     return;
                 }
 
