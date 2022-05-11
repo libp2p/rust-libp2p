@@ -110,7 +110,7 @@ impl<TProtoHandler: ConnectionHandler> HandlerWrapper<TProtoHandler> {
         }
     }
 
-    pub(crate) fn into_protocols_handler(self) -> TProtoHandler {
+    pub(crate) fn into_connection_handler(self) -> TConnectionHandler {
         self.handler
     }
 }

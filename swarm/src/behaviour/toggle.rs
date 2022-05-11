@@ -435,8 +435,8 @@ mod tests {
     /// 2. When combining [`ConnectionHandler`] implementations a single
     ///    [`ConnectionHandler`] might be notified of an inbound upgrade error
     ///    unrelated to its own upgrade logic. For example when nesting a
-    ///    [`ToggleProtoHandler`] in a
-    ///    [`ConnectionHandlerSelect`](crate::protocols_handler::ConnectionHandlerSelect)
+    ///    [`ToggleConnectionHandler`] in a
+    ///    [`ConnectionHandlerSelect`](crate::connection_handler::ConnectionHandlerSelect)
     ///    the former might receive an inbound upgrade error even when disabled.
     ///
     /// [`ToggleProtoHandler`] should ignore the error in both of these cases.
