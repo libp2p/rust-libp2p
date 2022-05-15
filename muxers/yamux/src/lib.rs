@@ -35,7 +35,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use thiserror::Error;
 
 /// A Yamux connection.
 pub struct Yamux<S>(Mutex<Inner<S>>);
@@ -95,26 +94,23 @@ where
     }
 }
 
-pub type YamuxResult<T> = Result<T, YamuxError>;
-
 /// > **Note**: This implementation never emits [`StreamMuxerEvent::AddressChange`] events.
 impl<S> StreamMuxer for Yamux<S>
 where
-    S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin,
+    S: Stream<Item = Result<yamux::Stream, yamux::ConnectionError>> + Unpin,
 {
     type Substream = yamux::Stream;
     type OutboundSubstream = OpenSubstreamToken;
-    type Error = YamuxError;
 
     fn poll_event(
         &self,
         c: &mut Context<'_>,
-    ) -> Poll<YamuxResult<StreamMuxerEvent<Self::Substream>>> {
+    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
         let mut inner = self.0.lock();
         match ready!(inner.incoming.poll_next_unpin(c)) {
             Some(Ok(s)) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
-            Some(Err(e)) => Poll::Ready(Err(e)),
-            None => Poll::Ready(Err(yamux::ConnectionError::Closed.into())),
+            Some(Err(e)) => Poll::Ready(Err(to_io_error(e))),
+            None => Poll::Ready(Err(to_io_error(yamux::ConnectionError::Closed))),
         }
     }
 
@@ -126,11 +122,11 @@ where
         &self,
         c: &mut Context<'_>,
         _: &mut OpenSubstreamToken,
-    ) -> Poll<YamuxResult<Self::Substream>> {
+    ) -> Poll<io::Result<Self::Substream>> {
         let mut inner = self.0.lock();
         Pin::new(&mut inner.control)
             .poll_open_stream(c)
-            .map_err(YamuxError)
+            .map_err(to_io_error)
     }
 
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
@@ -142,10 +138,8 @@ where
         c: &mut Context<'_>,
         s: &mut Self::Substream,
         b: &mut [u8],
-    ) -> Poll<YamuxResult<usize>> {
-        Pin::new(s)
-            .poll_read(c, b)
-            .map_err(|e| YamuxError(e.into()))
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(s).poll_read(c, b)
     }
 
     fn write_substream(
@@ -153,41 +147,41 @@ where
         c: &mut Context<'_>,
         s: &mut Self::Substream,
         b: &[u8],
-    ) -> Poll<YamuxResult<usize>> {
-        Pin::new(s)
-            .poll_write(c, b)
-            .map_err(|e| YamuxError(e.into()))
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(s).poll_write(c, b)
     }
 
     fn flush_substream(
         &self,
         c: &mut Context<'_>,
         s: &mut Self::Substream,
-    ) -> Poll<YamuxResult<()>> {
-        Pin::new(s).poll_flush(c).map_err(|e| YamuxError(e.into()))
+    ) -> Poll<io::Result<()>> {
+        Pin::new(s).poll_flush(c)
     }
 
     fn shutdown_substream(
         &self,
         c: &mut Context<'_>,
         s: &mut Self::Substream,
-    ) -> Poll<YamuxResult<()>> {
-        Pin::new(s).poll_close(c).map_err(|e| YamuxError(e.into()))
+    ) -> Poll<io::Result<()>> {
+        Pin::new(s).poll_close(c)
     }
 
     fn destroy_substream(&self, _: Self::Substream) {}
 
-    fn poll_close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
+    fn poll_close(&self, c: &mut Context<'_>) -> Poll<io::Result<()>> {
         let mut inner = self.0.lock();
 
         if let Poll::Ready(()) = Pin::new(&mut inner.control)
             .poll_close(c)
-            .map_err(YamuxError)?
+            .map_err(to_io_error)?
         {
             return Poll::Ready(Ok(()));
         }
 
-        while let Poll::Ready(maybe_inbound_stream) = inner.incoming.poll_next_unpin(c)? {
+        while let Poll::Ready(maybe_inbound_stream) =
+            inner.incoming.poll_next_unpin(c).map_err(to_io_error)?
+        {
             match maybe_inbound_stream {
                 Some(inbound_stream) => mem::drop(inbound_stream),
                 None => return Poll::Ready(Ok(())),
@@ -386,23 +380,16 @@ where
     }
 }
 
-/// The Yamux [`StreamMuxer`] error type.
-#[derive(Debug, Error)]
-#[error("yamux error: {0}")]
-pub struct YamuxError(#[from] yamux::ConnectionError);
-
-impl From<YamuxError> for io::Error {
-    fn from(err: YamuxError) -> Self {
-        match err.0 {
-            yamux::ConnectionError::Io(e) => e,
-            e => io::Error::new(io::ErrorKind::Other, e),
-        }
+fn to_io_error(e: yamux::ConnectionError) -> io::Error {
+    match e {
+        yamux::ConnectionError::Io(e) => e,
+        e => io::Error::new(io::ErrorKind::Other, e),
     }
 }
 
 /// The [`futures::stream::Stream`] of incoming substreams.
 pub struct Incoming<T> {
-    stream: BoxStream<'static, Result<yamux::Stream, YamuxError>>,
+    stream: BoxStream<'static, Result<yamux::Stream, yamux::ConnectionError>>,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -414,7 +401,7 @@ impl<T> fmt::Debug for Incoming<T> {
 
 /// The [`futures::stream::Stream`] of incoming substreams (`!Send`).
 pub struct LocalIncoming<T> {
-    stream: LocalBoxStream<'static, Result<yamux::Stream, YamuxError>>,
+    stream: LocalBoxStream<'static, Result<yamux::Stream, yamux::ConnectionError>>,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -425,7 +412,7 @@ impl<T> fmt::Debug for LocalIncoming<T> {
 }
 
 impl<T> Stream for Incoming<T> {
-    type Item = Result<yamux::Stream, YamuxError>;
+    type Item = Result<yamux::Stream, yamux::ConnectionError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
@@ -439,7 +426,7 @@ impl<T> Stream for Incoming<T> {
 impl<T> Unpin for Incoming<T> {}
 
 impl<T> Stream for LocalIncoming<T> {
-    type Item = Result<yamux::Stream, YamuxError>;
+    type Item = Result<yamux::Stream, yamux::ConnectionError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)

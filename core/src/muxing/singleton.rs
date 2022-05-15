@@ -72,12 +72,11 @@ where
 {
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
-    type Error = io::Error;
 
     fn poll_event(
         &self,
         _: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, io::Error>> {
+    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
         match self.endpoint {
             Endpoint::Dialer => return Poll::Pending,
             Endpoint::Listener => {}
@@ -149,7 +148,7 @@ where
 
     fn destroy_substream(&self, _: Self::Substream) {}
 
-    fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

@@ -147,7 +147,7 @@ where
             Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) => {
                 return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr)))
             }
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
             Poll::Pending => {}
         }
 
@@ -169,7 +169,7 @@ where
                 }
                 Poll::Ready(Err(err)) => {
                     self.inner.destroy_outbound(outbound);
-                    return Poll::Ready(Err(err.into()));
+                    return Poll::Ready(Err(err));
                 }
             }
         }
@@ -214,7 +214,7 @@ where
         match self.muxer.poll_close(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
         }
     }
 }
