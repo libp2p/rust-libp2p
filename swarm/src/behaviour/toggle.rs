@@ -29,8 +29,9 @@ use crate::{
 };
 use either::Either;
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
+    connection::ConnectionId,
     either::{EitherError, EitherOutput},
+    transport::ListenerId,
     upgrade::{DeniedUpgrade, EitherUpgrade},
     ConnectedPoint, Multiaddr, PeerId,
 };

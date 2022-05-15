@@ -79,17 +79,17 @@ pub use handler::{
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
 use connection::pool::{Pool, PoolConfig, PoolEvent};
-use connection::{EstablishedConnection, IncomingInfo, ListenersEvent, ListenersStream, Substream};
+use connection::{EstablishedConnection, IncomingInfo, Substream};
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::connection::{ConnectionId, PendingPoint};
 use libp2p_core::{
-    connection::{ConnectedPoint, ListenerId},
+    connection::ConnectedPoint,
     multiaddr::Protocol,
     multihash::Multihash,
     muxing::StreamMuxerBox,
-    transport::{self, TransportError},
+    transport::{self, TransportEvent, ListenerId, TransportError},
     upgrade::ProtocolName,
     Endpoint, Executor, Multiaddr, Negotiated, PeerId, Transport,
 };
@@ -258,7 +258,9 @@ where
     TBehaviour: NetworkBehaviour,
 {
     /// Listeners for incoming connections.
-    listeners: ListenersStream<transport::Boxed<(PeerId, StreamMuxerBox)>>,
+    transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+
+    next_listener_id: ListenerId,
 
     /// The nodes currently active.
     pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
@@ -326,7 +328,9 @@ where
     /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        let id = self.listeners.listen_on(addr)?;
+        let id = self.next_listener_id;
+        self.next_listener_id = self.next_listener_id + 1;
+        self.transport.listen_on(id, addr)?;
         self.behaviour.inject_new_listener(id);
         Ok(id)
     }
@@ -335,8 +339,10 @@ where
     ///
     /// Returns `true` if there was a listener with this ID, `false`
     /// otherwise.
-    pub fn remove_listener(&mut self, id: ListenerId) -> bool {
-        self.listeners.remove_listener(id)
+    pub fn remove_listener(&mut self, _id: ListenerId) -> bool {
+        // TODO
+        false
+        // self.transport.remove_listener(id)
     }
 
     /// Dial a known or unknown peer.
@@ -506,11 +512,8 @@ where
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
                     let dial = match role_override {
-                        Endpoint::Dialer => self.listeners.transport_mut().dial(address.clone()),
-                        Endpoint::Listener => self
-                            .listeners
-                            .transport_mut()
-                            .dial_as_listener(address.clone()),
+                        Endpoint::Dialer => self.transport.dial(address.clone()),
+                        Endpoint::Listener => self.transport.dial_as_listener(address.clone()),
                     };
                     match dial {
                         Ok(fut) => fut
@@ -545,7 +548,9 @@ where
 
     /// Returns an iterator that produces the list of addresses we're listening on.
     pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.listeners.listen_addrs()
+        // TODO
+        vec![].into_iter()
+        // self.transport.listen_addrs()
     }
 
     /// Returns the peer ID of the swarm passed as parameter.
@@ -831,10 +836,10 @@ where
 
     fn handle_listeners_event(
         &mut self,
-        event: ListenersEvent<transport::Boxed<(PeerId, StreamMuxerBox)>>,
+        event: TransportEvent<transport::Boxed<(PeerId, StreamMuxerBox)>>,
     ) -> Option<SwarmEvent<TBehaviour::OutEvent, THandlerErr<TBehaviour>>> {
         match event {
-            ListenersEvent::Incoming {
+            TransportEvent::Incoming {
                 listener_id: _,
                 upgrade,
                 local_addr,
@@ -862,7 +867,7 @@ where
                     }
                 };
             }
-            ListenersEvent::NewAddress {
+            TransportEvent::NewAddress {
                 listener_id,
                 listen_addr,
             } => {
@@ -877,7 +882,7 @@ where
                     address: listen_addr,
                 });
             }
-            ListenersEvent::AddressExpired {
+            TransportEvent::AddressExpired {
                 listener_id,
                 listen_addr,
             } => {
@@ -894,7 +899,7 @@ where
                     address: listen_addr,
                 });
             }
-            ListenersEvent::Closed {
+            TransportEvent::Closed {
                 listener_id,
                 addresses,
                 reason,
@@ -916,7 +921,7 @@ where
                     reason,
                 });
             }
-            ListenersEvent::Error { listener_id, error } => {
+            TransportEvent::Error { listener_id, error } => {
                 self.behaviour.inject_listener_error(listener_id, &error);
                 return Some(SwarmEvent::ListenerError { listener_id, error });
             }
@@ -959,7 +964,7 @@ where
 
                 self.pending_event = Some((peer_id, handler, event));
             }
-            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+            NetworkBehaviourAction::ReportObservedAddr { address: _, score } => {
                 // Maps the given `observed_addr`, representing an address of the local
                 // node observed by a remote peer, onto the locally known listen addresses
                 // to yield one or more addresses of the local node that may be publicly
@@ -973,12 +978,12 @@ where
                 //
                 // The translation is transport-specific. See [`Transport::address_translation`].
                 let translated_addresses = {
-                    let transport = self.listeners.transport();
-                    let mut addrs: Vec<_> = self
-                        .listeners
-                        .listen_addrs()
-                        .filter_map(move |server| transport.address_translation(server, &address))
-                        .collect();
+                    let mut addrs = vec![Multiaddr::empty()];
+                    // let mut addrs: Vec<_> = self
+                    //     .transport
+                    //     .listen_addrs()
+                    //     .filter_map(move |server| transport.address_translation(server, &address))
+                    //     .collect();
 
                     // remove duplicates
                     addrs.sort_unstable();
@@ -1092,7 +1097,7 @@ where
             };
 
             // Poll the listener(s) for new connections.
-            match ListenersStream::poll(Pin::new(&mut this.listeners), cx) {
+            match Pin::new(&mut this.transport).poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(listeners_event) => {
                     if let Some(swarm_event) = this.handle_listeners_event(listeners_event) {
@@ -1392,7 +1397,8 @@ where
 
         Swarm {
             local_peer_id: self.local_peer_id,
-            listeners: ListenersStream::new(self.transport),
+            next_listener_id: ListenerId::new(1),
+            transport: self.transport,
             pool: Pool::new(self.local_peer_id, pool_config, self.connection_limits),
             behaviour: self.behaviour,
             supported_protocols,
@@ -1609,7 +1615,7 @@ mod tests {
     use libp2p::plaintext;
     use libp2p::yamux;
     use libp2p_core::multiaddr::multiaddr;
-    use libp2p_core::transport::ListenerEvent;
+    use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
     use rand::prelude::SliceRandom;
@@ -2058,20 +2064,21 @@ mod tests {
                 // `+ 2` to ensure a subset of addresses is dialed by network_2.
                 let num_listen_addrs = concurrency_factor.0.get() + 2;
                 let mut listen_addresses = Vec::new();
-                let mut listeners = Vec::new();
+                let mut transports = Vec::new();
                 for _ in 0..num_listen_addrs {
-                    let mut listener = transport::MemoryTransport {}
-                        .listen_on("/memory/0".parse().unwrap())
+                    let mut transport = transport::MemoryTransport::default();
+                    transport
+                        .listen_on(ListenerId::new(1), "/memory/0".parse().unwrap())
                         .unwrap();
 
-                    match listener.next().await.unwrap().unwrap() {
-                        ListenerEvent::NewAddress(address) => {
-                            listen_addresses.push(address);
+                    match poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await {
+                        TransportEvent::NewAddress { listen_addr, .. } => {
+                            listen_addresses.push(listen_addr);
                         }
                         _ => panic!("Expected `NewListenAddr` event."),
                     }
 
-                    listeners.push(listener);
+                    transports.push(transport);
                 }
 
                 // Have swarm dial each listener and wait for each listener to receive the incoming
@@ -2083,10 +2090,11 @@ mod tests {
                             .build(),
                     )
                     .unwrap();
-                for mut listener in listeners.into_iter() {
+                for mut transport in transports.into_iter() {
+                    let poll_transport = poll_fn(|cx| Pin::new(&mut transport).poll(cx));
                     loop {
-                        match futures::future::select(listener.next(), swarm.next()).await {
-                            Either::Left((Some(Ok(ListenerEvent::Upgrade { .. })), _)) => {
+                        match futures::future::select(poll_transport, swarm.next()).await {
+                            Either::Left((TransportEvent::Incoming { .. }, _)) => {
                                 break;
                             }
                             Either::Left(_) => {
