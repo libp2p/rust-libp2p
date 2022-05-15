@@ -28,7 +28,7 @@ use futures::{
     prelude::*,
 };
 use pin_project::pin_project;
-use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
+use std::{fmt, io, io::Error as IoError, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
 pub enum EitherError<A, B> {
@@ -203,15 +203,14 @@ where
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type OutboundSubstream = EitherOutbound<A, B>;
-    type Error = IoError;
 
     fn poll_event(
         &self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
         match self {
             EitherOutput::First(inner) => inner.poll_event(cx).map(|result| {
-                result.map_err(|e| e.into()).map(|event| match event {
+                result.map(|event| match event {
                     StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
                     StreamMuxerEvent::InboundSubstream(substream) => {
                         StreamMuxerEvent::InboundSubstream(EitherOutput::First(substream))
@@ -219,7 +218,7 @@ where
                 })
             }),
             EitherOutput::Second(inner) => inner.poll_event(cx).map(|result| {
-                result.map_err(|e| e.into()).map(|event| match event {
+                result.map(|event| match event {
                     StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
                     StreamMuxerEvent::InboundSubstream(substream) => {
                         StreamMuxerEvent::InboundSubstream(EitherOutput::Second(substream))
@@ -240,16 +239,14 @@ where
         &self,
         cx: &mut Context<'_>,
         substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
+    ) -> Poll<io::Result<Self::Substream>> {
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => inner
                 .poll_outbound(cx, substream)
-                .map(|p| p.map(EitherOutput::First))
-                .map_err(|e| e.into()),
+                .map(|p| p.map(EitherOutput::First)),
             (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => inner
                 .poll_outbound(cx, substream)
-                .map(|p| p.map(EitherOutput::Second))
-                .map_err(|e| e.into()),
+                .map(|p| p.map(EitherOutput::Second)),
             _ => panic!("Wrong API usage"),
         }
     }
@@ -272,13 +269,13 @@ where
         cx: &mut Context<'_>,
         sub: &mut Self::Substream,
         buf: &mut [u8],
-    ) -> Poll<Result<usize, Self::Error>> {
+    ) -> Poll<io::Result<usize>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.read_substream(cx, sub, buf).map_err(|e| e.into())
+                inner.read_substream(cx, sub, buf)
             }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.read_substream(cx, sub, buf).map_err(|e| e.into())
+                inner.read_substream(cx, sub, buf)
             }
             _ => panic!("Wrong API usage"),
         }
@@ -289,13 +286,13 @@ where
         cx: &mut Context<'_>,
         sub: &mut Self::Substream,
         buf: &[u8],
-    ) -> Poll<Result<usize, Self::Error>> {
+    ) -> Poll<io::Result<usize>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.write_substream(cx, sub, buf).map_err(|e| e.into())
+                inner.write_substream(cx, sub, buf)
             }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.write_substream(cx, sub, buf).map_err(|e| e.into())
+                inner.write_substream(cx, sub, buf)
             }
             _ => panic!("Wrong API usage"),
         }
@@ -305,13 +302,13 @@ where
         &self,
         cx: &mut Context<'_>,
         sub: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
+    ) -> Poll<io::Result<()>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.flush_substream(cx, sub).map_err(|e| e.into())
+                inner.flush_substream(cx, sub)
             }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.flush_substream(cx, sub).map_err(|e| e.into())
+                inner.flush_substream(cx, sub)
             }
             _ => panic!("Wrong API usage"),
         }
@@ -321,13 +318,13 @@ where
         &self,
         cx: &mut Context<'_>,
         sub: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
+    ) -> Poll<io::Result<()>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.shutdown_substream(cx, sub).map_err(|e| e.into())
+                inner.shutdown_substream(cx, sub)
             }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.shutdown_substream(cx, sub).map_err(|e| e.into())
+                inner.shutdown_substream(cx, sub)
             }
             _ => panic!("Wrong API usage"),
         }
@@ -346,17 +343,17 @@ where
         }
     }
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self {
-            EitherOutput::First(inner) => inner.close(cx).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.close(cx).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.close(cx),
+            EitherOutput::Second(inner) => inner.close(cx),
         }
     }
 
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self {
-            EitherOutput::First(inner) => inner.flush_all(cx).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.flush_all(cx).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.flush_all(cx),
+            EitherOutput::Second(inner) => inner.flush_all(cx),
         }
     }
 }

@@ -22,9 +22,10 @@
 
 pub use crate::upgrade::Version;
 
+use crate::muxing::StreamMuxerBox;
 use crate::{
     connection::ConnectedPoint,
-    muxing::{StreamMuxer, StreamMuxerBox},
+    muxing::StreamMuxer,
     transport::{
         and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerEvent, Transport,
         TransportError,

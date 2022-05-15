@@ -88,8 +88,6 @@ where
 {
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
-    type Error = io::Error;
-
     fn poll_event(
         &self,
         cx: &mut Context<'_>,

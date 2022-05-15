@@ -24,9 +24,8 @@ pub enum CloseMuxerState<M> {
 impl<M> Future for CloseMuxer<M>
 where
     M: StreamMuxer,
-    M::Error: From<std::io::Error>,
 {
-    type Output = Result<M, M::Error>;
+    type Output = std::io::Result<M>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
