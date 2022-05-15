@@ -149,12 +149,7 @@ where
 
     fn destroy_substream(&self, _: Self::Substream) {}
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        // The `StreamMuxer` trait requires that `close()` implies `flush_all()`.
-        self.flush_all(cx)
-    }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        AsyncWrite::poll_flush(Pin::new(&mut *self.inner.lock()), cx)
+    fn close(&self, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
     }
 }
