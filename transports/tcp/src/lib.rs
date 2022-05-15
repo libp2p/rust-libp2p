@@ -33,14 +33,14 @@ pub use provider::async_io;
 
 /// The type of a [`GenTcpConfig`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
-pub type TcpConfig = GenTcpConfig<async_io::Tcp>;
+pub type TcpConfig = GenTcpTransport<async_io::Tcp>;
 
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
 /// The type of a [`GenTcpConfig`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
-pub type TokioTcpConfig = GenTcpConfig<tokio::Tcp>;
+pub type TokioTcpConfig = GenTcpTransport<tokio::Tcp>;
 
 use futures::{
     future::{self, BoxFuture, Ready},
@@ -51,12 +51,14 @@ use futures_timer::Delay;
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerEvent, Transport, TransportError},
+    transport::{TransportEvent, ListenerId, Transport, TransportError},
 };
+use log::debug;
+use smallvec::SmallVec;
 use socket2::{Domain, Socket, Type};
 use std::{
-    collections::HashSet,
-    io,
+    collections::{HashSet, VecDeque},
+    io, mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
     task::{Context, Poll},
@@ -65,11 +67,68 @@ use std::{
 
 use provider::{IfEvent, Provider};
 
+pub struct GenTcpTransport<T>
+where
+    T: Provider + Send,
+{
+    config: GenTcpConfig,
+    /// All the active listeners.
+    /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// can be resized, the only way is to use a `Pin<Box<>>`.
+    listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
+    /// Pending listeners events to return from [`ListenersStream::poll`].
+    pending_events: VecDeque<TransportEvent<Self>>,
+}
+
+impl<T> GenTcpTransport<T>
+where
+    T: Provider + Send,
+{
+
+    pub fn new(config: GenTcpConfig) -> Self {
+        GenTcpTransport { config, listeners:Default::default(), pending_events: Default::default() }
+    }
+
+    fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
+        let domain = if socket_addr.is_ipv4() {
+            Domain::IPV4
+        } else {
+            Domain::IPV6
+        };
+        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
+        if socket_addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+        if let Some(ttl) = self.config.ttl {
+            socket.set_ttl(ttl)?;
+        }
+        if let Some(nodelay) = self.config.nodelay {
+            socket.set_nodelay(nodelay)?;
+        }
+        socket.set_reuse_address(true)?;
+        #[cfg(unix)]
+        if let PortReuse::Enabled { .. } = &self.config.port_reuse {
+            socket.set_reuse_port(true)?;
+        }
+        Ok(socket)
+    }
+
+    fn do_listen(
+        &mut self,
+        id: ListenerId,
+        socket_addr: SocketAddr,
+    ) -> io::Result<TcpListenStream<T>> {
+        let socket = self.create_socket(&socket_addr)?;
+        socket.bind(&socket_addr.into())?;
+        socket.listen(self.config.backlog as _)?;
+        socket.set_nonblocking(true)?;
+        TcpListenStream::<T>::new(id, socket.into(), self.config.port_reuse.clone())
+    }
+}
+
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
-pub struct GenTcpConfig<T> {
-    /// The type of the I/O provider.
-    _impl: std::marker::PhantomData<T>,
+pub struct GenTcpConfig {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
@@ -148,10 +207,7 @@ impl PortReuse {
     }
 }
 
-impl<T> GenTcpConfig<T>
-where
-    T: Provider + Send,
-{
+impl GenTcpConfig {
     /// Creates a new configuration for a TCP/IP transport:
     ///
     ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_.
@@ -168,7 +224,6 @@ where
             nodelay: None,
             backlog: 1024,
             port_reuse: PortReuse::Disabled,
-            _impl: std::marker::PhantomData,
         }
     }
 
@@ -235,21 +290,22 @@ where
     /// following example:
     ///
     /// ```no_run
-    /// # use libp2p_core::transport::ListenerEvent;
+    /// # use libp2p_core::transport::{ListenerId, TransportEvent};
     /// # use libp2p_core::{Multiaddr, Transport};
-    /// # use futures::stream::StreamExt;
+    /// # use futures::{stream::StreamExt, future::poll_fn};
+    /// # use std::pin::Pin;
     /// #[cfg(feature = "async-io")]
     /// #[async_std::main]
     /// async fn main() -> std::io::Result<()> {
-    /// use libp2p_tcp::TcpConfig;
+    /// use libp2p_tcp::{GenTcpConfig, TcpConfig};
     ///
     /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let mut tcp1 = TcpConfig::new().port_reuse(true);
-    /// let mut listener1 = tcp1.clone().listen_on(listen_addr1.clone()).expect("listener");
-    /// match listener1.next().await.expect("event")? {
-    ///     ListenerEvent::NewAddress(listen_addr) => {
+    /// let mut tcp1 = TcpConfig::new(GenTcpConfig::new().port_reuse(true));
+    /// tcp1.listen_on(ListenerId::new(1), listen_addr1.clone()).expect("listener");
+    /// match poll_fn(|cx| Pin::new(&mut tcp1).poll(cx)).await {
+    ///     TransportEvent::NewAddress { listen_addr, .. } => {
     ///         println!("Listening on {:?}", listen_addr);
     ///         let mut stream = tcp1.dial(listen_addr2.clone()).unwrap().await?;
     ///         // `stream` has `listen_addr1` as its local socket address.
@@ -257,10 +313,10 @@ where
     ///     _ => {}
     /// }
     ///
-    /// let mut tcp2 = TcpConfig::new().port_reuse(true);
-    /// let mut listener2 = tcp2.clone().listen_on(listen_addr2).expect("listener");
-    /// match listener2.next().await.expect("event")? {
-    ///     ListenerEvent::NewAddress(listen_addr) => {
+    /// let mut tcp2 = TcpConfig::new(GenTcpConfig::new().port_reuse(true));
+    /// tcp2.listen_on(ListenerId::new(1), listen_addr2).expect("listener");
+    /// match poll_fn(|cx| Pin::new(&mut tcp2).poll(cx)).await {
+    ///     TransportEvent::NewAddress { listen_addr, .. } => {
     ///         println!("Listening on {:?}", listen_addr);
     ///         let mut socket = tcp2.dial(listen_addr1).unwrap().await?;
     ///         // `stream` has `listen_addr2` as its local socket address.
@@ -294,47 +350,15 @@ where
 
         self
     }
-
-    fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
-        let domain = if socket_addr.is_ipv4() {
-            Domain::IPV4
-        } else {
-            Domain::IPV6
-        };
-        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
-        if socket_addr.is_ipv6() {
-            socket.set_only_v6(true)?;
-        }
-        if let Some(ttl) = self.ttl {
-            socket.set_ttl(ttl)?;
-        }
-        if let Some(nodelay) = self.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
-        socket.set_reuse_address(true)?;
-        #[cfg(unix)]
-        if let PortReuse::Enabled { .. } = &self.port_reuse {
-            socket.set_reuse_port(true)?;
-        }
-        Ok(socket)
-    }
-
-    fn do_listen(&mut self, socket_addr: SocketAddr) -> io::Result<TcpListenStream<T>> {
-        let socket = self.create_socket(&socket_addr)?;
-        socket.bind(&socket_addr.into())?;
-        socket.listen(self.backlog as _)?;
-        socket.set_nonblocking(true)?;
-        TcpListenStream::<T>::new(socket.into(), self.port_reuse.clone())
-    }
 }
 
-impl<T: Provider + Send> Default for GenTcpConfig<T> {
+impl Default for GenTcpConfig {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> Transport for GenTcpConfig<T>
+impl<T> Transport for GenTcpTransport<T>
 where
     T: Provider + Send + 'static,
     T::Listener: Unpin,
@@ -344,20 +368,107 @@ where
     type Output = T::Stream;
     type Error = io::Error;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-    type Listener = TcpListenStream<T>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+        // Return pending events from closed listeners.
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+        // We remove each element from `listeners` one by one and add them back.
+        let mut remaining = self.listeners.len();
+        while let Some(mut listener) = self.listeners.pop_back() {
+            match TryStream::try_poll_next(listener.as_mut(), cx) {
+                Poll::Pending => {
+                    self.listeners.push_front(listener);
+                    remaining -= 1;
+                    if remaining == 0 {
+                        break;
+                    }
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::Upgrade {
+                    upgrade,
+                    local_addr,
+                    remote_addr,
+                }))) => {
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::Incoming {
+                        listener_id: id,
+                        upgrade,
+                        local_addr,
+                        send_back_addr: remote_addr,
+                    });
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(a)))) => {
+                    if listener.addresses.contains(&a) {
+                        debug!("Transport has reported address {} multiple times", a)
+                    } else {
+                        listener.addresses.push(a.clone());
+                    }
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::NewAddress {
+                        listener_id: id,
+                        listen_addr: a,
+                    });
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::AddressExpired(a)))) => {
+                    listener.addresses.retain(|x| x != &a);
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::AddressExpired {
+                        listener_id: id,
+                        listen_addr: a,
+                    });
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::Error(error)))) => {
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::Error {
+                        listener_id: id,
+                        error,
+                    });
+                }
+                Poll::Ready(None) => {
+                    let addresses = mem::take(&mut listener.addresses).into_vec();
+                    return Poll::Ready(TransportEvent::Closed {
+                        listener_id: listener.listener_id,
+                        addresses,
+                        reason: Ok(()),
+                    });
+                }
+                Poll::Ready(Some(Err(err))) => {
+                    let addresses = mem::take(&mut listener.addresses).into_vec();
+                    return Poll::Ready(TransportEvent::Closed {
+                        listener_id: listener.listener_id,
+                        addresses,
+                        reason: Err(err),
+                    });
+                }
+            }
+        }
+
+        // We register the current task to be woken up if a new listener is added.
+        Poll::Pending
+    }
 
     fn listen_on(
         &mut self,
+        id: ListenerId,
         addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+    ) -> Result<(), TransportError<Self::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(addr.clone()) {
             sa
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
         log::debug!("listening on {}", socket_addr);
-        self.do_listen(socket_addr).map_err(TransportError::Other)
+        let listener = self
+            .do_listen(id, socket_addr)
+            .map_err(TransportError::Other)?;
+        self.listeners.push_back(Box::pin(listener));
+        Ok(())
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -375,7 +486,7 @@ where
             .create_socket(&socket_addr)
             .map_err(TransportError::Other)?;
 
-        if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
+        if let Some(addr) = self.config.port_reuse.local_dial_addr(&socket_addr.ip()) {
             log::trace!("Binding dial socket to listen socket {}", addr);
             socket.bind(&addr.into()).map_err(TransportError::Other)?;
         }
@@ -425,14 +536,34 @@ where
     /// `None` is returned if one of the given addresses is not a TCP/IP
     /// address.
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        match &self.port_reuse {
+        match &self.config.port_reuse {
             PortReuse::Disabled => address_translation(listen, observed),
             PortReuse::Enabled { .. } => Some(observed.clone()),
         }
     }
 }
 
-type TcpListenerEvent<S> = ListenerEvent<Ready<Result<S, io::Error>>, io::Error>;
+#[derive(Debug)]
+pub enum TcpTransportEvent<S> {
+    /// The transport is listening on a new additional [`Multiaddr`].
+    NewAddress(Multiaddr),
+    /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
+    Upgrade {
+        /// The upgrade.
+        upgrade: Ready<Result<S, io::Error>>,
+        /// The local address which produced this upgrade.
+        local_addr: Multiaddr,
+        /// The remote address which produced this upgrade.
+        remote_addr: Multiaddr,
+    },
+    /// A [`Multiaddr`] is no longer used for listening.
+    AddressExpired(Multiaddr),
+    /// A non-fatal error has happened on the listener.
+    ///
+    /// This event should be generated in order to notify the user that something wrong has
+    /// happened. The listener, however, continues to run.
+    Error(io::Error),
+}
 
 enum IfWatch<TIfWatcher> {
     Pending(BoxFuture<'static, io::Result<TIfWatcher>>),
@@ -458,10 +589,14 @@ pub struct TcpListenStream<T>
 where
     T: Provider,
 {
+    /// The ID of this listener.
+    listener_id: ListenerId,
     /// The socket address that the listening socket is bound to,
     /// which may be a "wildcard address" like `INADDR_ANY` or `IN6ADDR_ANY`
     /// when listening on all interfaces for IPv4 respectively IPv6 connections.
     listen_addr: SocketAddr,
+    /// Addresses it is listening on.
+    addresses: SmallVec<[Multiaddr; 4]>,
     /// The async listening socket for incoming connections.
     listener: T::Listener,
     /// The IP addresses of network interfaces on which the listening socket
@@ -490,7 +625,11 @@ where
 {
     /// Constructs a `TcpListenStream` for incoming connections around
     /// the given `TcpListener`.
-    fn new(listener: TcpListener, port_reuse: PortReuse) -> io::Result<Self> {
+    fn new(
+        listener_id: ListenerId,
+        listener: TcpListener,
+        port_reuse: PortReuse,
+    ) -> io::Result<Self> {
         let listen_addr = listener.local_addr()?;
 
         let in_addr = if match &listen_addr {
@@ -515,7 +654,9 @@ where
         Ok(TcpListenStream {
             port_reuse,
             listener,
+            listener_id,
             listen_addr,
+            addresses: Default::default(),
             in_addr,
             pause: None,
             sleep_on_error: Duration::from_millis(100),
@@ -558,7 +699,7 @@ where
     T::Stream: Unpin,
     T::IfWatcher: Unpin,
 {
-    type Item = Result<TcpListenerEvent<T::Stream>, io::Error>;
+    type Item = Result<TcpTransportEvent<T::Stream>, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
@@ -579,7 +720,7 @@ where
                             };
                             *if_watch = IfWatch::Pending(T::if_watcher());
                             me.pause = Some(Delay::new(me.sleep_on_error));
-                            return Poll::Ready(Some(Ok(ListenerEvent::Error(err))));
+                            return Poll::Ready(Some(Ok(TcpTransportEvent::Error(err))));
                         }
                     },
                     // Consume all events for up/down interface changes.
@@ -593,9 +734,9 @@ where
                                         let ma = ip_to_multiaddr(ip, me.listen_addr.port());
                                         log::debug!("New listen address: {}", ma);
                                         me.port_reuse.register(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(
-                                            ma,
-                                        ))));
+                                        return Poll::Ready(Some(Ok(
+                                            TcpTransportEvent::NewAddress(ma),
+                                        )));
                                     }
                                 }
                                 Ok(IfEvent::Down(inet)) => {
@@ -606,7 +747,7 @@ where
                                         log::debug!("Expired listen address: {}", ma);
                                         me.port_reuse.unregister(ip, me.listen_addr.port());
                                         return Poll::Ready(Some(Ok(
-                                            ListenerEvent::AddressExpired(ma),
+                                            TcpTransportEvent::AddressExpired(ma),
                                         )));
                                     }
                                 }
@@ -616,7 +757,7 @@ where
                                         err
                                     };
                                     me.pause = Some(Delay::new(me.sleep_on_error));
-                                    return Poll::Ready(Some(Ok(ListenerEvent::Error(err))));
+                                    return Poll::Ready(Some(Ok(TcpTransportEvent::Error(err))));
                                 }
                             }
                         }
@@ -627,7 +768,7 @@ where
                 InAddr::One { addr, out } => {
                     if let Some(multiaddr) = out.take() {
                         me.port_reuse.register(*addr, me.listen_addr.port());
-                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(multiaddr))));
+                        return Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(multiaddr))));
                     }
                 }
             }
@@ -650,7 +791,7 @@ where
                     // These errors are non-fatal for the listener stream.
                     log::error!("error accepting incoming connection: {}", e);
                     me.pause = Some(Delay::new(me.sleep_on_error));
-                    return Poll::Ready(Some(Ok(ListenerEvent::Error(e))));
+                    return Poll::Ready(Some(Ok(TcpTransportEvent::Error(e))));
                 }
             };
 
@@ -660,7 +801,7 @@ where
 
             log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
 
-            return Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+            return Poll::Ready(Some(Ok(TcpTransportEvent::Upgrade {
                 upgrade: future::ok(incoming.stream),
                 local_addr,
                 remote_addr,
@@ -707,7 +848,7 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::channel::mpsc;
+    use futures::{channel::mpsc, future::poll_fn};
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -763,14 +904,14 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpConfig::<T>::new();
-            let mut listener = tcp.listen_on(addr).unwrap();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            tcp.listen_on(ListenerId::new(1), addr).unwrap();
             loop {
-                match listener.next().await.unwrap().unwrap() {
-                    ListenerEvent::NewAddress(listen_addr) => {
+                match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
+                    TransportEvent::NewAddress { listen_addr, .. } => {
                         ready_tx.send(listen_addr).await.unwrap();
                     }
-                    ListenerEvent::Upgrade { upgrade, .. } => {
+                    TransportEvent::Incoming { upgrade, .. } => {
                         let mut upgrade = upgrade.await.unwrap();
                         let mut buf = [0u8; 3];
                         upgrade.read_exact(&mut buf).await.unwrap();
@@ -785,7 +926,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
 
             // Obtain a future socket through dialing
             let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
@@ -832,13 +973,13 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpConfig::<T>::new();
-            let mut listener = tcp.listen_on(addr).unwrap();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            tcp.listen_on(ListenerId::new(1), addr).unwrap();
 
             loop {
-                match listener.next().await.unwrap().unwrap() {
-                    ListenerEvent::NewAddress(a) => {
-                        let mut iter = a.iter();
+                match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
+                    TransportEvent::NewAddress { listen_addr, .. } => {
+                        let mut iter = listen_addr.iter();
                         match iter.next().expect("ip address") {
                             Protocol::Ip4(ip) => assert!(!ip.is_unspecified()),
                             Protocol::Ip6(ip) => assert!(!ip.is_unspecified()),
@@ -847,11 +988,11 @@ mod tests {
                         if let Protocol::Tcp(port) = iter.next().expect("port") {
                             assert_ne!(0, port)
                         } else {
-                            panic!("No TCP port in address: {}", a)
+                            panic!("No TCP port in address: {}", listen_addr)
                         }
-                        ready_tx.send(a).await.ok();
+                        ready_tx.send(listen_addr).await.ok();
                     }
-                    ListenerEvent::Upgrade { .. } => {
+                    TransportEvent::Incoming { .. } => {
                         return;
                     }
                     _ => {}
@@ -861,7 +1002,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpConfig::<T>::new();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
             tcp.dial(dest_addr).unwrap().await.unwrap();
         }
 
@@ -901,14 +1042,14 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpConfig::<T>::new();
-            let mut listener = tcp.listen_on(addr).unwrap();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            tcp.listen_on(ListenerId::new(1), addr).unwrap();
             loop {
-                match listener.next().await.unwrap().unwrap() {
-                    ListenerEvent::NewAddress(listen_addr) => {
+                match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
+                    TransportEvent::NewAddress { listen_addr, .. } => {
                         ready_tx.send(listen_addr).await.ok();
                     }
-                    ListenerEvent::Upgrade { upgrade, .. } => {
+                    TransportEvent::Incoming { upgrade, .. } => {
                         let mut upgrade = upgrade.await.unwrap();
                         let mut buf = [0u8; 3];
                         upgrade.read_exact(&mut buf).await.unwrap();
@@ -923,10 +1064,10 @@ mod tests {
 
         async fn dialer<T: Provider>(addr: Multiaddr, mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpConfig::<T>::new().port_reuse(true);
-            let mut listener = tcp.clone().listen_on(addr).unwrap();
-            match listener.next().await.unwrap().unwrap() {
-                ListenerEvent::NewAddress(_) => {
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
+                TransportEvent::NewAddress { .. } => {
                     // Obtain a future socket through dialing
                     let mut socket = tcp.dial(dest_addr).unwrap().await.unwrap();
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
@@ -975,14 +1116,14 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
-            let tcp = GenTcpConfig::<T>::new().port_reuse(true);
-            let mut listener1 = tcp.clone().listen_on(addr).unwrap();
-            match listener1.next().await.unwrap().unwrap() {
-                ListenerEvent::NewAddress(addr1) => {
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
+                TransportEvent::NewAddress { listen_addr: addr1, .. } => {
                     // Listen on the same address a second time.
-                    let mut listener2 = tcp.clone().listen_on(addr1.clone()).unwrap();
-                    match listener2.next().await.unwrap().unwrap() {
-                        ListenerEvent::NewAddress(addr2) => {
+                    tcp.listen_on(ListenerId::new(1), addr1.clone()).unwrap();
+                    match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
+                        TransportEvent::NewAddress { listen_addr: addr2, .. } => {
                             assert_eq!(addr1, addr2);
                             return;
                         }
@@ -1019,13 +1160,10 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
-            GenTcpConfig::<T>::new()
-                .listen_on(addr)
-                .unwrap()
-                .next()
-                .await
-                .expect("some event")
-                .expect("no error")
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+                tcp.listen_on(ListenerId::new(1), addr)
+                .unwrap();
+            poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await
                 .into_new_address()
                 .expect("listen address")
         }
@@ -1059,14 +1197,14 @@ mod tests {
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
             {
-                let mut tcp = TcpConfig::new();
-                assert!(tcp.listen_on(addr.clone()).is_err());
+                let mut tcp = TcpConfig::new(GenTcpConfig::new());
+                assert!(tcp.listen_on(ListenerId::new(1), addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
-                let mut tcp = TokioTcpConfig::new();
-                assert!(tcp.listen_on(addr.clone()).is_err());
+                let mut tcp = TokioTcpConfig::new(GenTcpConfig::new());
+                assert!(tcp.listen_on(ListenerId::new(1), addr.clone()).is_err());
             }
         }
 
