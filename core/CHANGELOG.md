@@ -1,6 +1,7 @@
 # 0.33.0 [unreleased]
 
 - Have methods on `Transport` take `&mut self` instead of `self`. See [PR 2529].
+- Rename `StreamMuxer::close` to `StreamMuxer::poll_close`
 
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
 

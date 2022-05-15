@@ -226,7 +226,7 @@ pub trait StreamMuxer {
     /// >           that the remote is properly informed of the shutdown. However, apart from
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
 
     /// Flush this `StreamMuxer`.
     ///
@@ -617,8 +617,8 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.close(cx)
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_close(cx)
     }
 
     #[inline]
@@ -758,8 +758,8 @@ where
     }
 
     #[inline]
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.close(cx).map_err(|e| e.into())
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_close(cx).map_err(|e| e.into())
     }
 
     #[inline]
