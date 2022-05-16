@@ -117,7 +117,7 @@ mod tests {
     use super::*;
     use libp2p_core::{
         multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, ListenerEvent, Transport},
+        transport::{memory::MemoryTransport, Transport, TransportEvent},
     };
     use rand::{thread_rng, Rng};
     use std::time::Duration;
@@ -128,7 +128,7 @@ mod tests {
         let mut listener = MemoryTransport.listen_on(mem_addr).unwrap();
 
         let listener_addr =
-            if let Some(Some(Ok(ListenerEvent::NewAddress(a)))) = listener.next().now_or_never() {
+            if let Some(Some(Ok(TransportEvent::NewAddress(a)))) = listener.next().now_or_never() {
                 a
             } else {
                 panic!("MemoryTransport not listening on an address!");

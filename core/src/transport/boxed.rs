@@ -18,18 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerEvent, Transport, TransportError};
+use crate::transport::{Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::{error::Error, fmt, io, pin::Pin};
+use std::{
+    error::Error,
+    fmt, io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use super::{ListenerId, TransportEvent};
 
 /// Creates a new [`Boxed`] transport from the given transport.
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
 where
-    T: Transport + Send + Sync + 'static,
+    T: Transport + Send + Sync + Unpin + 'static,
     T::Error: Send + Sync,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
     Boxed {
@@ -41,19 +47,22 @@ where
 /// and `ListenerUpgrade` futures are `Box`ed and only the `Output`
 /// and `Error` types are captured in type variables.
 pub struct Boxed<O> {
-    inner: Box<dyn Abstract<O> + Send + Sync>,
+    inner: Box<dyn Abstract<O> + Send + Sync + Unpin>,
 }
 
 type Dial<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
-type Listener<O> =
-    Pin<Box<dyn Stream<Item = io::Result<ListenerEvent<ListenerUpgrade<O>, io::Error>>> + Send>>;
 type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 
 trait Abstract<O> {
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<Listener<O>, TransportError<io::Error>>;
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<io::Error>>;
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Boxed<O>>>;
 }
 
 impl<T, O> Abstract<O> for T
@@ -61,22 +70,14 @@ where
     T: Transport<Output = O> + 'static,
     T::Error: Send + Sync,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<Listener<O>, TransportError<io::Error>> {
-        let listener = Transport::listen_on(self, addr).map_err(|e| e.map(box_err))?;
-        let fut = listener
-            .map_ok(|event| {
-                event
-                    .map(|upgrade| {
-                        let up = upgrade.map_err(box_err);
-                        Box::pin(up) as ListenerUpgrade<O>
-                    })
-                    .map_err(box_err)
-            })
-            .map_err(box_err);
-        Ok(Box::pin(fut))
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<io::Error>> {
+        Transport::listen_on(self, id, addr).map_err(|e| e.map(box_err))
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>> {
@@ -96,6 +97,22 @@ where
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         Transport::address_translation(self, server, observed)
     }
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Boxed<O>>> {
+        match self.poll(cx) {
+            Poll::Ready(event) => {
+                let event = event.map(
+                    |upgrade| {
+                        let up = upgrade.map_err(box_err);
+                        Box::pin(up) as ListenerUpgrade<O>
+                    },
+                    box_err,
+                );
+                Poll::Ready(event)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 impl<O> fmt::Debug for Boxed<O> {
@@ -107,15 +124,19 @@ impl<O> fmt::Debug for Boxed<O> {
 impl<O> Transport for Boxed<O> {
     type Output = O;
     type Error = io::Error;
-    type Listener = Listener<O>;
     type ListenerUpgrade = ListenerUpgrade<O>;
     type Dial = Dial<O>;
 
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+        Pin::new(self.inner.as_mut()).poll(cx)
+    }
+
     fn listen_on(
         &mut self,
+        id: ListenerId,
         addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.inner.listen_on(addr)
+    ) -> Result<(), TransportError<Self::Error>> {
+        self.inner.listen_on(id, addr)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {

@@ -89,7 +89,7 @@ use libp2p_core::{
     multiaddr::Protocol,
     multihash::Multihash,
     muxing::StreamMuxerBox,
-    transport::{self, TransportEvent, ListenerId, TransportError},
+    transport::{self, ListenerId, TransportError, TransportEvent},
     upgrade::ProtocolName,
     Endpoint, Executor, Multiaddr, Negotiated, PeerId, Transport,
 };

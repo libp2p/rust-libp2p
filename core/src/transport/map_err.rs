@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerEvent, Transport, TransportError};
+use crate::transport::{TransportEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, pin::Pin, task::Context, task::Poll};
@@ -104,7 +104,7 @@ where
     F: FnOnce(T::Error) -> TErr + Clone,
     TErr: error::Error,
 {
-    type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>, TErr>, TErr>;
+    type Item = Result<TransportEvent<MapErrListenerUpgrade<T, F>, TErr>, TErr>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();

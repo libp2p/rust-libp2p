@@ -51,7 +51,7 @@ use futures_timer::Delay;
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
-    transport::{TransportEvent, ListenerId, Transport, TransportError},
+    transport::{ListenerId, Transport, TransportError, TransportEvent},
 };
 use log::debug;
 use smallvec::SmallVec;
@@ -84,9 +84,12 @@ impl<T> GenTcpTransport<T>
 where
     T: Provider + Send,
 {
-
     pub fn new(config: GenTcpConfig) -> Self {
-        GenTcpTransport { config, listeners:Default::default(), pending_events: Default::default() }
+        GenTcpTransport {
+            config,
+            listeners: Default::default(),
+            pending_events: Default::default(),
+        }
     }
 
     fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
@@ -1119,11 +1122,15 @@ mod tests {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
-                TransportEvent::NewAddress { listen_addr: addr1, .. } => {
+                TransportEvent::NewAddress {
+                    listen_addr: addr1, ..
+                } => {
                     // Listen on the same address a second time.
                     tcp.listen_on(ListenerId::new(1), addr1.clone()).unwrap();
                     match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
-                        TransportEvent::NewAddress { listen_addr: addr2, .. } => {
+                        TransportEvent::NewAddress {
+                            listen_addr: addr2, ..
+                        } => {
                             assert_eq!(addr1, addr2);
                             return;
                         }
@@ -1161,9 +1168,9 @@ mod tests {
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
-                tcp.listen_on(ListenerId::new(1), addr)
-                .unwrap();
-            poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await
+            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            poll_fn(|cx| Pin::new(&mut tcp).poll(cx))
+                .await
                 .into_new_address()
                 .expect("listen address")
         }

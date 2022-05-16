@@ -22,9 +22,8 @@ use crate::handler::{IdentifyHandler, IdentifyHandlerEvent, IdentifyPush};
 use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
-    multiaddr::Protocol,
-    ConnectedPoint, Multiaddr, PeerId, PublicKey,
+    connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint,
+    Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},

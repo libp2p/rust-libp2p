@@ -25,12 +25,14 @@
 // TODO: add example
 
 use crate::{
-    transport::{ListenerEvent, TransportError},
+    transport::{TransportError, TransportEvent},
     Multiaddr, Transport,
 };
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
+
+use super::ListenerId;
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -38,7 +40,9 @@ use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 /// **Note**: `listen_on` is never subject to a timeout, only the setup of each
 /// individual accepted connection.
 #[derive(Debug, Copy, Clone)]
+#[pin_project::pin_project]
 pub struct TransportTimeout<InnerTrans> {
+    #[pin]
     inner: InnerTrans,
     outgoing_timeout: Duration,
     incoming_timeout: Duration,
@@ -80,25 +84,17 @@ where
 {
     type Output = InnerTrans::Output;
     type Error = TransportTimeoutError<InnerTrans::Error>;
-    type Listener = TimeoutListener<InnerTrans::Listener>;
     type ListenerUpgrade = Timeout<InnerTrans::ListenerUpgrade>;
     type Dial = Timeout<InnerTrans::Dial>;
 
     fn listen_on(
         &mut self,
+        id: ListenerId,
         addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self
-            .inner
-            .listen_on(addr)
-            .map_err(|err| err.map(TransportTimeoutError::Other))?;
-
-        let listener = TimeoutListener {
-            inner: listener,
-            timeout: self.incoming_timeout,
-        };
-
-        Ok(listener)
+    ) -> Result<(), TransportError<Self::Error>> {
+        self.inner
+            .listen_on(id, addr)
+            .map_err(|err| err.map(TransportTimeoutError::Other))
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -129,45 +125,23 @@ where
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.address_translation(server, observed)
     }
-}
 
-// TODO: can be removed and replaced with an `impl Stream` once impl Trait is fully stable
-//       in Rust (https://github.com/rust-lang/rust/issues/34511)
-#[pin_project::pin_project]
-pub struct TimeoutListener<InnerStream> {
-    #[pin]
-    inner: InnerStream,
-    timeout: Duration,
-}
-
-impl<InnerStream, O, E> Stream for TimeoutListener<InnerStream>
-where
-    InnerStream: TryStream<Ok = ListenerEvent<O, E>, Error = E>,
-{
-    type Item =
-        Result<ListenerEvent<Timeout<O>, TransportTimeoutError<E>>, TransportTimeoutError<E>>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
         let this = self.project();
-
-        let poll_out = match TryStream::try_poll_next(this.inner, cx) {
-            Poll::Ready(Some(Err(err))) => {
-                return Poll::Ready(Some(Err(TransportTimeoutError::Other(err))))
+        let timeout = *this.incoming_timeout;
+        match this.inner.poll(cx) {
+            Poll::Ready(event) => {
+                let event = event.map(
+                    move |inner_fut| Timeout {
+                        inner: inner_fut,
+                        timer: Delay::new(timeout),
+                    },
+                    TransportTimeoutError::Other,
+                );
+                Poll::Ready(event)
             }
-            Poll::Ready(Some(Ok(v))) => v,
-            Poll::Ready(None) => return Poll::Ready(None),
-            Poll::Pending => return Poll::Pending,
-        };
-
-        let timeout = *this.timeout;
-        let event = poll_out
-            .map(move |inner_fut| Timeout {
-                inner: inner_fut,
-                timer: Delay::new(timeout),
-            })
-            .map_err(TransportTimeoutError::Other);
-
-        Poll::Ready(Some(Ok(event)))
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 

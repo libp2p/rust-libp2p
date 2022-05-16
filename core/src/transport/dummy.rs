@@ -18,10 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerEvent, Transport, TransportError};
+use crate::transport::{Transport, TransportError, TransportEvent};
 use crate::Multiaddr;
 use futures::{prelude::*, task::Context, task::Poll};
 use std::{fmt, io, marker::PhantomData, pin::Pin};
+
+use super::ListenerId;
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
 ///
@@ -56,16 +58,14 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type Listener = futures::stream::Pending<
-        Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>,
-    >;
     type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
     type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
 
     fn listen_on(
         &mut self,
+        _id: ListenerId,
         addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+    ) -> Result<(), TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
@@ -82,6 +82,10 @@ impl<TOut> Transport for DummyTransport<TOut> {
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
+    }
+
+    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+        Poll::Pending
     }
 }
 

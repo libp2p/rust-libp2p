@@ -467,7 +467,6 @@ where
     }
 }
 
-
 /// An error during [dialing][Transport::dial] or [listening][Transport::listen_on]
 /// on a [`Transport`].
 #[derive(Debug, Clone)]

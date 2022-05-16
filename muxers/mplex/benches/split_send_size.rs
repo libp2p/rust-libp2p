@@ -99,10 +99,10 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
     let receiver = task::spawn(async move {
         loop {
             match listener.next().await.unwrap().unwrap() {
-                transport::ListenerEvent::NewAddress(a) => {
+                transport::TransportEvent::NewAddress(a) => {
                     addr_sender.take().unwrap().send(a).unwrap();
                 }
-                transport::ListenerEvent::Upgrade { upgrade, .. } => {
+                transport::TransportEvent::Upgrade { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
                     match poll_fn(|cx| conn.poll_event(cx)).await {
                         Ok(muxing::StreamMuxerEvent::InboundSubstream(mut s)) => {
