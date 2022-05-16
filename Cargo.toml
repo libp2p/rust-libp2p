@@ -69,7 +69,6 @@ serde = ["libp2p-core/serde", "libp2p-kad/serde", "libp2p-gossipsub/serde"]
 all-features = true
 
 [dependencies]
-atomic = "0.5.0"
 bytes = "1"
 futures = "0.3.1"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
