@@ -248,7 +248,7 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_> {
+            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_, { K_VALUE.get() }> {
                 b.iter().map(|(n, _)| n.key.clone()).collect()
             },
         }
@@ -270,7 +270,7 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_> {
+            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_, { K_VALUE.get() }> {
                 b.iter()
                     .map(|(n, status)| EntryView {
                         node: n.clone(),
@@ -320,7 +320,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<arrayvec::IntoIter<[TOut; K_VALUE.get()]>>,
+    iter: Option<arrayvec::IntoIter<TOut, { K_VALUE.get() }>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap,
@@ -425,7 +425,7 @@ where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<[TOut; K_VALUE.get()]>,
+    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<TOut, { K_VALUE.get() }>,
     TOut: AsRef<KeyBytes>,
 {
     type Item = TOut;
