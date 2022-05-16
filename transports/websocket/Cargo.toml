@@ -18,7 +18,7 @@ libp2p-core = { version = "0.33.0", path = "../../core", default-features = fals
 log = "0.4.8"
 parking_lot = "0.12.0"
 quicksink = "0.1"
-rw-stream-sink = "0.2.0"
+rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
 soketto = { version = "0.7.0", features = ["deflate"] }
 url = "2.1"
 webpki-roots = "0.22"
