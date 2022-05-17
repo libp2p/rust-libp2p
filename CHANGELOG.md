@@ -43,8 +43,13 @@
 
 # `libp2p` facade crate
 
-# 0.45.0
+# 0.45.1
+- Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
+- Added weak dependencies for features. See [PR 2646].
 
+[PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
+
+# 0.45.0
 - Update individual crates.
     - Update to [`libp2p-plaintext` `v0.33.0`](transports/plaintext/CHANGELOG.md).
     - Update to [`libp2p-noise` `v0.36.0`](transports/noise/CHANGELOG.md).
