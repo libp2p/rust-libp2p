@@ -21,6 +21,7 @@
 use bytes::Bytes;
 
 use futures::prelude::*;
+use futures::ready;
 use webrtc_data::data_channel::DataChannel;
 use webrtc_data::Error;
 
@@ -137,21 +138,20 @@ impl AsyncRead for PollDataChannel<'_> {
         };
 
         loop {
-            match fut.as_mut().poll(cx) {
-                Poll::Pending => return Poll::Pending,
+            match ready!(fut.as_mut().poll(cx)) {
                 // Retry immediately upon empty data or incomplete chunks
                 // since there's no way to setup a waker.
-                Poll::Ready(Err(Error::Sctp(webrtc_sctp::Error::ErrTryAgain))) => {},
+                Err(Error::Sctp(webrtc_sctp::Error::ErrTryAgain)) => {},
                 // EOF has been reached => don't touch buf and just return Ok
-                Poll::Ready(Err(Error::Sctp(webrtc_sctp::Error::ErrEof))) => {
+                Err(Error::Sctp(webrtc_sctp::Error::ErrEof)) => {
                     self.read_fut = ReadFut::Idle;
                     return Poll::Ready(Ok(0));
                 },
-                Poll::Ready(Err(e)) => {
+                Err(e) => {
                     self.read_fut = ReadFut::Idle;
                     return Poll::Ready(Err(webrtc_error_to_io(e)));
                 },
-                Poll::Ready(Ok(mut temp_buf)) => {
+                Ok(mut temp_buf) => {
                     let remaining = buf.len();
                     let len = std::cmp::min(temp_buf.len(), remaining);
                     buf.copy_from_slice(&temp_buf[..len]);
@@ -218,13 +218,12 @@ impl AsyncWrite for PollDataChannel<'_> {
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.write_fut.as_mut() {
-            Some(fut) => match fut.as_mut().poll(cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(e)) => {
+            Some(fut) => match ready!(fut.as_mut().poll(cx)) {
+                Err(e) => {
                     self.write_fut = None;
                     Poll::Ready(Err(webrtc_error_to_io(e)))
                 },
-                Poll::Ready(Ok(_)) => {
+                Ok(_) => {
                     self.write_fut = None;
                     Poll::Ready(Ok(()))
                 },
@@ -239,10 +238,9 @@ impl AsyncWrite for PollDataChannel<'_> {
             .shutdown_fut
             .get_or_insert_with(|| Box::pin(async move { dc.close().await }));
 
-        match fut.as_mut().poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(e)) => Poll::Ready(Err(webrtc_error_to_io(e))),
-            Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),
+        match ready!(fut.as_mut().poll(cx)) {
+            Err(e) => Poll::Ready(Err(webrtc_error_to_io(e))),
+            Ok(_) => Poll::Ready(Ok(())),
         }
     }
 }
