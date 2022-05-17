@@ -29,6 +29,7 @@ use futures::{
     future::BoxFuture,
     prelude::*,
     ready, TryFutureExt,
+    select,
 };
 use futures_timer::Delay;
 use if_watch::{IfEvent, IfWatcher};
@@ -61,7 +62,7 @@ use crate::sdp;
 use crate::connection::Connection;
 use crate::udp_mux::UDPMuxNewAddr;
 use crate::udp_mux::UDPMuxParams;
-use crate::upgrade::WebRTCUpgrade;
+use crate::upgrade;
 
 enum IfWatch {
     Pending(BoxFuture<'static, io::Result<IfWatcher>>),
@@ -241,7 +242,7 @@ impl Stream for WebRTCListenStream {
                         Ok(w) => {
                             *if_watch = IfWatch::Ready(w);
                             continue;
-                        },
+                        }
                         Err(err) => {
                             debug! {
                                 "Failed to begin observing interfaces: {:?}. Scheduling retry.",
@@ -252,7 +253,7 @@ impl Stream for WebRTCListenStream {
                             return Poll::Ready(Some(Ok(ListenerEvent::Error(Error::IoError(
                                 err,
                             )))));
-                        },
+                        }
                     },
                     // Consume all events for up/down interface changes.
                     IfWatch::Ready(watch) => {
@@ -269,7 +270,7 @@ impl Stream for WebRTCListenStream {
                                             ma,
                                         ))));
                                     }
-                                },
+                                }
                                 Ok(IfEvent::Down(inet)) => {
                                     let ip = inet.addr();
                                     if me.listen_addr.is_ipv4() == ip.is_ipv4()
@@ -281,7 +282,7 @@ impl Stream for WebRTCListenStream {
                                             ListenerEvent::AddressExpired(ma),
                                         )));
                                     }
-                                },
+                                }
                                 Err(err) => {
                                     debug! {
                                         "Failure polling interfaces: {:?}. Scheduling retry.",
@@ -291,10 +292,10 @@ impl Stream for WebRTCListenStream {
                                     return Poll::Ready(Some(Ok(ListenerEvent::Error(
                                         Error::IoError(err),
                                     ))));
-                                },
+                                }
                             }
                         }
-                    },
+                    }
                 },
                 // If the listener is bound to a single interface, make sure the address reported
                 // once.
@@ -302,16 +303,16 @@ impl Stream for WebRTCListenStream {
                     if let Some(multiaddr) = out.take() {
                         return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(multiaddr))));
                     }
-                },
+                }
             }
 
             if let Some(mut pause) = me.pause.take() {
                 match Pin::new(&mut pause).poll(cx) {
-                    Poll::Ready(_) => {},
+                    Poll::Ready(_) => {}
                     Poll::Pending => {
                         me.pause = Some(pause);
                         return Poll::Pending;
-                    },
+                    }
                 }
             }
 
@@ -320,11 +321,8 @@ impl Stream for WebRTCListenStream {
                 Poll::Ready(Some(addr)) => Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                     local_addr: ip_to_multiaddr(me.listen_addr.ip(), me.listen_addr.port()),
                     remote_addr: addr.clone(),
-                    upgrade: Box::pin(WebRTCUpgrade::new(
-                        me.udp_mux.clone(),
-                        me.config.clone(),
-                        addr,
-                    )) as BoxFuture<'static, _>,
+                    upgrade: Box::pin(upgrade::webrtc(me.udp_mux.clone(), me.config.clone(), addr))
+                        as BoxFuture<'static, _>,
                 }))),
                 Poll::Ready(None) => Poll::Ready(None),
                 Poll::Pending => Poll::Pending,
@@ -370,28 +368,34 @@ impl WebRTCTransport {
             )
             .await?;
 
-        let (data_channel_rx, data_channel_tx) = oneshot::channel::<Arc<DetachedDataChannel>>();
+        let (data_channel_rx, mut data_channel_tx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
         // Wait until the data channel is opened and detach it.
-        let d = Arc::clone(&data_channel);
         data_channel
-            .on_open(Box::new(move || {
-                debug!("Data channel '{}'-'{}' open.", d.label(), d.id());
+            .on_open({
+                let data_channel = data_channel.clone();
+                Box::new(move || {
+                    debug!(
+                        "Data channel '{}'-'{}' open.",
+                        data_channel.label(),
+                        data_channel.id()
+                    );
 
-                let d2 = Arc::clone(&d);
-                Box::pin(async move {
-                    match d2.detach().await {
-                        Ok(detached) => {
-                            if let Err(_) = data_channel_rx.send(detached) {
-                                error!("data_channel_tx dropped");
-                            }
-                        },
-                        Err(e) => {
-                            error!("Can't detach data channel: {}", e);
-                        },
-                    };
+                    Box::pin(async move {
+                        let data_channel = data_channel.clone();
+                        match data_channel.detach().await {
+                            Ok(detached) => {
+                                if let Err(_) = data_channel_rx.send(detached) {
+                                    error!("data_channel_tx dropped");
+                                }
+                            },
+                            Err(e) => {
+                                error!("Can't detach data channel: {}", e);
+                            },
+                        };
+                    })
                 })
-            }))
+            })
             .await;
 
         let offer = peer_connection
@@ -409,7 +413,7 @@ impl WebRTCTransport {
             Some(Protocol::XWebRTC(f)) => f,
             _ => {
                 return Err(Error::InvalidMultiaddr(addr));
-            },
+            }
         };
         let server_session_description = render_description(
             sdp::SERVER_SESSION_DESCRIPTION,
@@ -426,12 +430,14 @@ impl WebRTCTransport {
             .await?;
 
         // Wait until data channel is opened and ready to use
-        match tokio_crate::time::timeout(Duration::from_secs(10), data_channel_tx).await {
-            Ok(Ok(dc)) => Ok(Connection::new(peer_connection, dc)),
-            Ok(Err(e)) => Err(Error::InternalError(e.to_string())),
-            Err(_) => Err(Error::InternalError(
+        select! {
+            res = data_channel_tx => match res {
+                Ok(dc) => Ok(Connection::new(peer_connection, dc)),
+                Err(e) => Err(Error::InternalError(e.to_string())),
+            },
+            _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::InternalError(
                 "data channel opening took longer than 10 seconds (see logs)".into(),
-            )),
+            ))
         }
     }
 }
@@ -476,7 +482,7 @@ pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 
     while let Some(proto) = iter.next() {
         match proto {
-            Protocol::P2p(_) => {}, // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
             _ => return None,
         }
     }
@@ -484,10 +490,10 @@ pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     match (proto1, proto2, proto3) {
         (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::XWebRTC(_)) => {
             Some(SocketAddr::new(ip.into(), port))
-        },
+        }
         (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::XWebRTC(_)) => {
             Some(SocketAddr::new(ip.into(), port))
-        },
+        }
         _ => None,
     }
 }

@@ -19,6 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::channel::oneshot;
+use futures::select;
+use futures::FutureExt;
+use futures_timer::Delay;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use log::{debug, error, trace};
 use webrtc::api::APIBuilder;
@@ -37,60 +40,62 @@ use crate::error::Error;
 use crate::sdp;
 use crate::transport;
 
-pub struct WebRTCUpgrade {}
+pub async fn webrtc(
+    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+    config: RTCConfiguration,
+    addr: Multiaddr,
+) -> Result<Connection<'static>, Error> {
+    trace!("upgrading {}", addr);
 
-impl WebRTCUpgrade {
-    pub async fn new(
-        udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        config: RTCConfiguration,
-        addr: Multiaddr,
-    ) -> Result<Connection<'static>, Error> {
-        trace!("upgrading {}", addr);
+    let socket_addr = transport::multiaddr_to_socketaddr(&addr)
+        .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
+    let fingerprint = transport::fingerprint_of_first_certificate(&config);
 
-        let socket_addr = transport::multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
-        let fingerprint = transport::fingerprint_of_first_certificate(&config);
-
-        let mut se = transport::build_setting_engine(udp_mux, &socket_addr, &fingerprint);
-        {
-            // Act as a lite ICE (ICE which does not send additional candidates).
-            se.set_lite(true);
-            // Act as a DTLS server (one which waits for a connection).
-            //
-            // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
-            // but none end up responding).
-            se.set_answering_dtls_role(DTLSRole::Server)
-                .map_err(Error::WebRTC)?;
+    let mut se = transport::build_setting_engine(udp_mux, &socket_addr, &fingerprint);
+    {
+        // Act as a lite ICE (ICE which does not send additional candidates).
+        se.set_lite(true);
+        // Act as a DTLS server (one which waits for a connection).
+        //
+        // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
+        // but none end up responding).
+        se.set_answering_dtls_role(DTLSRole::Server)
+            .map_err(Error::WebRTC)?;
         }
-        let api = APIBuilder::new().with_setting_engine(se).build();
-        let peer_connection = api.new_peer_connection(config).await?;
+    let api = APIBuilder::new().with_setting_engine(se).build();
+    let peer_connection = api.new_peer_connection(config).await?;
 
-        // Create a datachannel with label 'data'.
-        let data_channel = peer_connection
-            .create_data_channel(
-                "data",
-                Some(RTCDataChannelInit {
-                    negotiated: Some(true),
-                    id: Some(1),
-                    ordered: None,
-                    max_retransmits: None,
-                    max_packet_life_time: None,
-                    protocol: None,
-                }),
-            )
-            .await?;
+    // Create a datachannel with label 'data'.
+    let data_channel = peer_connection
+        .create_data_channel(
+            "data",
+            Some(RTCDataChannelInit {
+                negotiated: Some(true),
+                id: Some(1),
+                ordered: None,
+                max_retransmits: None,
+                max_packet_life_time: None,
+                protocol: None,
+            }),
+        )
+        .await?;
 
-        let (data_channel_rx, data_channel_tx) = oneshot::channel::<Arc<DetachedDataChannel>>();
+    let (data_channel_rx, mut data_channel_tx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
-        // Wait until the data channel is opened and detach it.
-        let d = Arc::clone(&data_channel);
-        data_channel
-            .on_open(Box::new(move || {
-                debug!("Data channel '{}'-'{}' open.", d.label(), d.id());
+    // Wait until the data channel is opened and detach it.
+    data_channel
+        .on_open({
+            let data_channel = data_channel.clone();
+            Box::new(move || {
+                debug!(
+                    "Data channel '{}'-'{}' open.",
+                    data_channel.label(),
+                    data_channel.id()
+                );
 
-                let d2 = Arc::clone(&d);
                 Box::pin(async move {
-                    match d2.detach().await {
+                    let data_channel = data_channel.clone();
+                    match data_channel.detach().await {
                         Ok(detached) => {
                             if let Err(_) = data_channel_rx.send(detached) {
                                 error!("data_channel_tx dropped");
@@ -101,39 +106,41 @@ impl WebRTCUpgrade {
                         },
                     };
                 })
-            }))
-            .await;
+            })
+        })
+        .await;
 
-        // Set the remote description to the predefined SDP.
-        let fingerprint = match addr.iter().last() {
-            Some(Protocol::XWebRTC(f)) => f,
-            _ => {
-                debug!("{} is not a WebRTC multiaddr", addr);
-                return Err(Error::InvalidMultiaddr(addr));
-            },
-        };
-        let client_session_description = transport::render_description(
-            sdp::CLIENT_SESSION_DESCRIPTION,
-            socket_addr,
-            &transport::fingerprint_to_string(&fingerprint),
-        );
-        debug!("OFFER: {:?}", client_session_description);
-        let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
-        peer_connection.set_remote_description(sdp).await?;
+    // Set the remote description to the predefined SDP.
+    let fingerprint = match addr.iter().last() {
+        Some(Protocol::XWebRTC(f)) => f,
+        _ => {
+            debug!("{} is not a WebRTC multiaddr", addr);
+            return Err(Error::InvalidMultiaddr(addr));
+        },
+    };
+    let client_session_description = transport::render_description(
+        sdp::CLIENT_SESSION_DESCRIPTION,
+        socket_addr,
+        &transport::fingerprint_to_string(&fingerprint),
+    );
+    debug!("OFFER: {:?}", client_session_description);
+    let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
+    peer_connection.set_remote_description(sdp).await?;
 
-        let answer = peer_connection.create_answer(None).await?;
-        // Set the local description and start UDP listeners
-        // Note: this will start the gathering of ICE candidates
-        debug!("ANSWER: {:?}", answer.sdp);
-        peer_connection.set_local_description(answer).await?;
+    let answer = peer_connection.create_answer(None).await?;
+    // Set the local description and start UDP listeners
+    // Note: this will start the gathering of ICE candidates
+    debug!("ANSWER: {:?}", answer.sdp);
+    peer_connection.set_local_description(answer).await?;
 
-        // wait until data channel is opened and ready to use
-        match tokio_crate::time::timeout(Duration::from_secs(10), data_channel_tx).await {
-            Ok(Ok(dc)) => Ok(Connection::new(peer_connection, dc)),
-            Ok(Err(e)) => Err(Error::InternalError(e.to_string())),
-            Err(_) => Err(Error::InternalError(
-                "data channel opening took longer than 10 seconds (see logs)".into(),
-            )),
-        }
+    // wait until data channel is opened and ready to use
+    select! {
+        res = data_channel_tx => match res {
+            Ok(dc) => Ok(Connection::new(peer_connection, dc)),
+            Err(e) => Err(Error::InternalError(e.to_string())),
+        },
+        _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::InternalError(
+            "data channel opening took longer than 10 seconds (see logs)".into(),
+        ))
     }
 }

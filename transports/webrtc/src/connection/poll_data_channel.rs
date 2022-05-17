@@ -34,16 +34,16 @@ use std::task::{Context, Poll};
 const DEFAULT_READ_BUF_SIZE: usize = 4096;
 
 /// State of the read `Future` in [`PollStream`].
-enum ReadFut<'a> {
+enum ReadFut {
     /// Nothing in progress.
     Idle,
     /// Reading data from the underlying stream.
-    Reading(Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send + 'a>>),
+    Reading(Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send + 'static>>),
     /// Finished reading, but there's unread data in the temporary buffer.
     RemainingData(Vec<u8>),
 }
 
-impl<'a> ReadFut<'a> {
+impl ReadFut {
     /// Gets a mutable reference to the future stored inside `Reading(future)`.
     ///
     /// # Panics
@@ -51,7 +51,7 @@ impl<'a> ReadFut<'a> {
     /// Panics if `ReadFut` variant is not `Reading`.
     fn get_reading_mut(
         &mut self,
-    ) -> &mut Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send + 'a>> {
+    ) -> &mut Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send + 'static>> {
         match self {
             ReadFut::Reading(ref mut fut) => fut,
             _ => panic!("expected ReadFut to be Reading"),
@@ -59,15 +59,14 @@ impl<'a> ReadFut<'a> {
     }
 }
 
-/// A wrapper around around [`DataChannel`], which implements [`AsyncRead`] and
-/// [`AsyncWrite`].
+/// A wrapper around [`DataChannel`], which implements [`AsyncRead`] and [`AsyncWrite`].
 ///
 /// Both `poll_read` and `poll_write` calls allocate temporary buffers, which results in an
 /// additional overhead.
 pub struct PollDataChannel<'a> {
     data_channel: Arc<DataChannel>,
 
-    read_fut: ReadFut<'a>,
+    read_fut: ReadFut,
     write_fut: Option<Pin<Box<dyn Future<Output = Result<usize, Error>> + Send + 'a>>>,
     shutdown_fut: Option<Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'a>>>,
 
@@ -115,14 +114,10 @@ impl AsyncRead for PollDataChannel<'_> {
                 let dc = self.data_channel.clone();
                 let mut temp_buf = vec![0; self.read_buf_cap];
                 self.read_fut = ReadFut::Reading(Box::pin(async move {
-                    let res = dc.read(temp_buf.as_mut_slice()).await;
-                    match res {
-                        Ok(n) => {
-                            temp_buf.truncate(n);
-                            Ok(temp_buf)
-                        },
-                        Err(e) => Err(e),
-                    }
+                    dc.read(temp_buf.as_mut_slice()).await.map(|n| {
+                        temp_buf.truncate(n);
+                        temp_buf
+                    })
                 }));
                 self.read_fut.get_reading_mut()
             },
@@ -239,14 +234,10 @@ impl AsyncWrite for PollDataChannel<'_> {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let fut = match self.shutdown_fut.as_mut() {
-            Some(fut) => fut,
-            None => {
-                let dc = self.data_channel.clone();
-                self.shutdown_fut
-                    .get_or_insert(Box::pin(async move { dc.close().await }))
-            },
-        };
+        let dc = self.data_channel.clone();
+        let fut = self
+            .shutdown_fut
+            .get_or_insert_with(|| Box::pin(async move { dc.close().await }));
 
         match fut.as_mut().poll(cx) {
             Poll::Pending => Poll::Pending,
@@ -276,14 +267,15 @@ impl AsRef<DataChannel> for PollDataChannel<'_> {
     }
 }
 
-fn webrtc_error_to_io(error: Error) -> io::Error {
+fn webrtc_error_to_io(err: Error) -> io::Error {
+    let err_str = err.to_string();
     match error {
-        e @ Error::Sctp(webrtc_sctp::Error::ErrEof) => {
-            io::Error::new(io::ErrorKind::UnexpectedEof, e.to_string())
+        Error::Sctp(webrtc_sctp::Error::ErrEof) => {
+            io::Error::new(io::ErrorKind::UnexpectedEof, err_str)
         },
-        e @ Error::ErrStreamClosed => {
-            io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string())
+        Error::ErrStreamClosed => {
+            io::Error::new(io::ErrorKind::ConnectionAborted, err_str)
         },
-        e => io::Error::new(io::ErrorKind::Other, e.to_string()),
+        _ => io::Error::new(io::ErrorKind::Other, err_str),
     }
 }
