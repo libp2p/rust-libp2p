@@ -18,15 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [`Transport`] trait for WebRTC direct protocol. "direct" here means
-//! communicating without a signaling server.
+//! Implementation of the [`Transport`] trait for WebRTC protocol without a signaling server.
 //!
 //! # Overview
 //!
 //! ## ICE
 //!
 //! RFCs: 8839, 8445 See also:
-//! https://tools.ietf.org/id/draft-ietf-rtcweb-sdp-08.html#rfc.section.5.2.3
+//! <https://tools.ietf.org/id/draft-ietf-rtcweb-sdp-08.html#rfc.section.5.2.3>
 //!
 //! The WebRTC protocol uses ICE in order to establish a connection.
 //!
@@ -69,6 +68,10 @@
 //! WebRTC by itself doesn't hardcode any specific protocol for these media streams. Instead, it is
 //! the SDP message of the offerer that specifies which protocol to use. In our use case, one data
 //! stream, we know that the offerer will always request either TCP+DTLS+SCTP, or UDP+DTLS+SCTP.
+//!
+//! The implementation only supports UDP at the moment, so if the offerer requests TCP+DTLS+SCTP, it
+//! will not respond. Support for TCP may be added in the future (see
+//! <https://github.com/webrtc-rs/webrtc/issues/132>).
 //!
 //! ## DTLS+SCTP
 //!

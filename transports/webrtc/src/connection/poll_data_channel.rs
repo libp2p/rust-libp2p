@@ -75,7 +75,7 @@ pub struct PollDataChannel<'a> {
 }
 
 impl PollDataChannel<'_> {
-    /// Constructs a new `PollDataChannel`.
+    /// Constructs a new [`PollDataChannel`].
     pub fn new(data_channel: Arc<DataChannel>) -> Self {
         Self {
             data_channel,
@@ -110,7 +110,7 @@ impl AsyncRead for PollDataChannel<'_> {
     ) -> Poll<io::Result<usize>> {
         let fut = match self.read_fut {
             ReadFut::Idle => {
-                // read into a temporary buffer because `buf` has an unonymous lifetime, which can
+                // Read into a temporary buffer because `buf` has an unonymous lifetime, which can
                 // be shorter than the lifetime of `read_fut`.
                 let dc = self.data_channel.clone();
                 let mut temp_buf = vec![0; self.read_buf_cap];
@@ -144,7 +144,7 @@ impl AsyncRead for PollDataChannel<'_> {
         loop {
             match fut.as_mut().poll(cx) {
                 Poll::Pending => return Poll::Pending,
-                // retry immediately upon empty data or incomplete chunks
+                // Retry immediately upon empty data or incomplete chunks
                 // since there's no way to setup a waker.
                 Poll::Ready(Err(Error::Sctp(webrtc_sctp::Error::ErrTryAgain))) => {},
                 // EOF has been reached => don't touch buf and just return Ok

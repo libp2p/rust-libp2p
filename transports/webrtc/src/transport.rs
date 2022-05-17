@@ -100,12 +100,12 @@ impl WebRTCTransport {
         certificate: RTCCertificate,
         listen_addr: A,
     ) -> Result<Self, TransportError<Error>> {
-        // bind to `listen_addr` and construct a UDP mux.
+        // Bind to `listen_addr` and construct a UDP mux.
         let socket = UdpSocket::bind(listen_addr)
             .map_err(Error::IoError)
             .map_err(TransportError::Other)
             .await?;
-        // sender and receiver for new addresses
+        // Sender and receiver for new addresses
         let (new_addr_tx, new_addr_rx) = mpsc::channel(1);
         let udp_mux_addr = socket
             .local_addr()
@@ -315,7 +315,7 @@ impl Stream for WebRTCListenStream {
                 }
             }
 
-            // safe to unwrap here since this is the only place `new_addr_rx` is locked.
+            // Safe to unwrap here since this is the only place `new_addr_rx` is locked.
             return match Pin::new(&mut *me.new_addr_rx.lock().unwrap()).poll_next(cx) {
                 Poll::Ready(Some(addr)) => Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
                     local_addr: ip_to_multiaddr(me.listen_addr.ip(), me.listen_addr.port()),
@@ -425,7 +425,7 @@ impl WebRTCTransport {
             .map_err(Error::WebRTC)
             .await?;
 
-        // wait until data channel is opened and ready to use
+        // Wait until data channel is opened and ready to use
         match tokio_crate::time::timeout(Duration::from_secs(10), data_channel_tx).await {
             Ok(Ok(dc)) => Ok(Connection::new(peer_connection, dc)),
             Ok(Err(e)) => Err(Error::InternalError(e.to_string())),
@@ -457,7 +457,7 @@ pub(crate) fn render_description(description: &str, addr: SocketAddr, fingerprin
         },
         target_ip: addr.ip(),
         target_port: addr.port(),
-        // hashing algorithm (SHA-256) is hardcoded for now
+        // Hashing algorithm (SHA-256) is hardcoded for now
         fingerprint: fingerprint.to_owned(),
         // ufrag and pwd are both equal to the fingerprint (minus the `:` delimiter)
         ufrag: f.clone(),
