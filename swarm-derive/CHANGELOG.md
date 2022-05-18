@@ -1,3 +1,9 @@
+# 0.27.2 [unreleased]
+
+- Replace references of Protocol Handler with Connection Handler. See [PR 2640].
+
+[PR 2640]: https://github.com/libp2p/rust-libp2p/pull/2640
+
 # 0.27.1
 
 - Allow mixing of ignored fields. See [PR 2570].

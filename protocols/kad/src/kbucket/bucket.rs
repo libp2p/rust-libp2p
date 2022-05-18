@@ -101,7 +101,7 @@ pub struct Position(usize);
 #[derive(Debug, Clone)]
 pub struct KBucket<TKey, TVal> {
     /// The nodes contained in the bucket.
-    nodes: ArrayVec<[Node<TKey, TVal>; K_VALUE.get()]>,
+    nodes: ArrayVec<Node<TKey, TVal>, { K_VALUE.get() }>,
 
     /// The position (index) in `nodes` that marks the first connected node.
     ///
