@@ -28,32 +28,32 @@ use std::fmt::Debug;
 use std::task::{Context, Poll};
 
 /// Wrapper around a protocol handler that turns the output event into something else.
-pub struct MapOutEvent<TProtoHandler, TMap> {
-    inner: TProtoHandler,
+pub struct MapOutEvent<TConnectionHandler, TMap> {
+    inner: TConnectionHandler,
     map: TMap,
 }
 
-impl<TProtoHandler, TMap> MapOutEvent<TProtoHandler, TMap> {
+impl<TConnectionHandler, TMap> MapOutEvent<TConnectionHandler, TMap> {
     /// Creates a `MapOutEvent`.
-    pub(crate) fn new(inner: TProtoHandler, map: TMap) -> Self {
+    pub(crate) fn new(inner: TConnectionHandler, map: TMap) -> Self {
         MapOutEvent { inner, map }
     }
 }
 
-impl<TProtoHandler, TMap, TNewOut> ConnectionHandler for MapOutEvent<TProtoHandler, TMap>
+impl<TConnectionHandler, TMap, TNewOut> ConnectionHandler for MapOutEvent<TConnectionHandler, TMap>
 where
-    TProtoHandler: ConnectionHandler,
-    TMap: FnMut(TProtoHandler::OutEvent) -> TNewOut,
+    TConnectionHandler: ConnectionHandler,
+    TMap: FnMut(TConnectionHandler::OutEvent) -> TNewOut,
     TNewOut: Debug + Send + 'static,
     TMap: Send + 'static,
 {
-    type InEvent = TProtoHandler::InEvent;
+    type InEvent = TConnectionHandler::InEvent;
     type OutEvent = TNewOut;
-    type Error = TProtoHandler::Error;
-    type InboundProtocol = TProtoHandler::InboundProtocol;
-    type OutboundProtocol = TProtoHandler::OutboundProtocol;
-    type InboundOpenInfo = TProtoHandler::InboundOpenInfo;
-    type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
+    type Error = TConnectionHandler::Error;
+    type InboundProtocol = TConnectionHandler::InboundProtocol;
+    type OutboundProtocol = TConnectionHandler::OutboundProtocol;
+    type InboundOpenInfo = TConnectionHandler::InboundOpenInfo;
+    type OutboundOpenInfo = TConnectionHandler::OutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         self.inner.listen_protocol()
