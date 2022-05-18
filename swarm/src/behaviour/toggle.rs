@@ -70,11 +70,11 @@ impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    type ConnectionHandler = ToggleIntoProtoHandler<TBehaviour::ConnectionHandler>;
+    type ConnectionHandler = ToggleIntoConnectionHandler<TBehaviour::ConnectionHandler>;
     type OutEvent = TBehaviour::OutEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ToggleIntoProtoHandler {
+        ToggleIntoConnectionHandler {
             inner: self.inner.as_mut().map(|i| i.new_handler()),
         }
     }
@@ -223,9 +223,9 @@ where
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(inner) = self.inner.as_mut() {
-            inner
-                .poll(cx, params)
-                .map(|action| action.map_handler(|h| ToggleIntoProtoHandler { inner: Some(h) }))
+            inner.poll(cx, params).map(|action| {
+                action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })
+            })
         } else {
             Poll::Pending
         }
@@ -244,22 +244,22 @@ where
 }
 
 /// Implementation of `IntoConnectionHandler` that can be in the disabled state.
-pub struct ToggleIntoProtoHandler<TInner> {
+pub struct ToggleIntoConnectionHandler<TInner> {
     inner: Option<TInner>,
 }
 
-impl<TInner> IntoConnectionHandler for ToggleIntoProtoHandler<TInner>
+impl<TInner> IntoConnectionHandler for ToggleIntoConnectionHandler<TInner>
 where
     TInner: IntoConnectionHandler,
 {
-    type Handler = ToggleProtoHandler<TInner::Handler>;
+    type Handler = ToggleConnectionHandler<TInner::Handler>;
 
     fn into_handler(
         self,
         remote_peer_id: &PeerId,
         connected_point: &ConnectedPoint,
     ) -> Self::Handler {
-        ToggleProtoHandler {
+        ToggleConnectionHandler {
             inner: self
                 .inner
                 .map(|h| h.into_handler(remote_peer_id, connected_point)),
@@ -276,11 +276,11 @@ where
 }
 
 /// Implementation of [`ConnectionHandler`] that can be in the disabled state.
-pub struct ToggleProtoHandler<TInner> {
+pub struct ToggleConnectionHandler<TInner> {
     inner: Option<TInner>,
 }
 
-impl<TInner> ConnectionHandler for ToggleProtoHandler<TInner>
+impl<TInner> ConnectionHandler for ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
 {
@@ -426,7 +426,7 @@ mod tests {
     use super::*;
     use crate::handler::DummyConnectionHandler;
 
-    /// A disabled [`ToggleProtoHandler`] can receive listen upgrade errors in
+    /// A disabled [`ToggleConnectionHandler`] can receive listen upgrade errors in
     /// the following two cases:
     ///
     /// 1. Protocol negotiation on an incoming stream failed with no protocol
@@ -435,14 +435,14 @@ mod tests {
     /// 2. When combining [`ConnectionHandler`] implementations a single
     ///    [`ConnectionHandler`] might be notified of an inbound upgrade error
     ///    unrelated to its own upgrade logic. For example when nesting a
-    ///    [`ToggleProtoHandler`] in a
-    ///    [`ConnectionHandlerSelect`](crate::protocols_handler::ConnectionHandlerSelect)
+    ///    [`ToggleConnectionHandler`] in a
+    ///    [`ConnectionHandlerSelect`](crate::connection_handler::ConnectionHandlerSelect)
     ///    the former might receive an inbound upgrade error even when disabled.
     ///
-    /// [`ToggleProtoHandler`] should ignore the error in both of these cases.
+    /// [`ToggleConnectionHandler`] should ignore the error in both of these cases.
     #[test]
     fn ignore_listen_upgrade_error_when_disabled() {
-        let mut handler = ToggleProtoHandler::<DummyConnectionHandler> { inner: None };
+        let mut handler = ToggleConnectionHandler::<DummyConnectionHandler> { inner: None };
 
         handler.inject_listen_upgrade_error(Either::Right(()), ConnectionHandlerUpgrErr::Timeout);
     }

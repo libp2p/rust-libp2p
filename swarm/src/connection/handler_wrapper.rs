@@ -42,35 +42,35 @@ use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 /// - Driving substream upgrades
 /// - Handling connection timeout
 // TODO: add a caching system for protocols that are supported or not
-pub struct HandlerWrapper<TProtoHandler>
+pub struct HandlerWrapper<TConnectionHandler>
 where
-    TProtoHandler: ConnectionHandler,
+    TConnectionHandler: ConnectionHandler,
 {
     /// The underlying handler.
-    handler: TProtoHandler,
+    handler: TConnectionHandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in: FuturesUnordered<
         SubstreamUpgrade<
-            TProtoHandler::InboundOpenInfo,
+            TConnectionHandler::InboundOpenInfo,
             InboundUpgradeApply<
                 Substream<StreamMuxerBox>,
-                SendWrapper<TProtoHandler::InboundProtocol>,
+                SendWrapper<TConnectionHandler::InboundProtocol>,
             >,
         >,
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
         SubstreamUpgrade<
-            TProtoHandler::OutboundOpenInfo,
+            TConnectionHandler::OutboundOpenInfo,
             OutboundUpgradeApply<
                 Substream<StreamMuxerBox>,
-                SendWrapper<TProtoHandler::OutboundProtocol>,
+                SendWrapper<TConnectionHandler::OutboundProtocol>,
             >,
         >,
     >,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, SendWrapper<TProtoHandler::OutboundProtocol>)>,
+    queued_dial_upgrades: Vec<(u64, SendWrapper<TConnectionHandler::OutboundProtocol>)>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
@@ -79,7 +79,7 @@ where
     substream_upgrade_protocol_override: Option<upgrade::Version>,
 }
 
-impl<TProtoHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TProtoHandler> {
+impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TConnectionHandler> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerWrapper")
             .field("negotiating_in", &self.negotiating_in)
@@ -94,9 +94,9 @@ impl<TProtoHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TProto
     }
 }
 
-impl<TProtoHandler: ConnectionHandler> HandlerWrapper<TProtoHandler> {
+impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
-        handler: TProtoHandler,
+        handler: TConnectionHandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
     ) -> Self {
         Self {
@@ -110,7 +110,7 @@ impl<TProtoHandler: ConnectionHandler> HandlerWrapper<TProtoHandler> {
         }
     }
 
-    pub(crate) fn into_protocols_handler(self) -> TProtoHandler {
+    pub(crate) fn into_connection_handler(self) -> TConnectionHandler {
         self.handler
     }
 }
@@ -224,22 +224,22 @@ where
     }
 }
 
-pub type OutboundOpenInfo<TProtoHandler> = (
+pub type OutboundOpenInfo<TConnectionHandler> = (
     u64,
-    <TProtoHandler as ConnectionHandler>::OutboundOpenInfo,
+    <TConnectionHandler as ConnectionHandler>::OutboundOpenInfo,
     Duration,
 );
 
-impl<TProtoHandler> HandlerWrapper<TProtoHandler>
+impl<TConnectionHandler> HandlerWrapper<TConnectionHandler>
 where
-    TProtoHandler: ConnectionHandler,
+    TConnectionHandler: ConnectionHandler,
 {
     pub fn inject_substream(
         &mut self,
         substream: Substream<StreamMuxerBox>,
         // The first element of the tuple is the unique upgrade identifier
         // (see `unique_dial_upgrade_id`).
-        endpoint: SubstreamEndpoint<OutboundOpenInfo<TProtoHandler>>,
+        endpoint: SubstreamEndpoint<OutboundOpenInfo<TConnectionHandler>>,
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
@@ -290,7 +290,7 @@ where
         }
     }
 
-    pub fn inject_event(&mut self, event: TProtoHandler::InEvent) {
+    pub fn inject_event(&mut self, event: TConnectionHandler::InEvent) {
         self.handler.inject_event(event);
     }
 
@@ -303,8 +303,8 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<
         Result<
-            Event<OutboundOpenInfo<TProtoHandler>, TProtoHandler::OutEvent>,
-            Error<TProtoHandler::Error>,
+            Event<OutboundOpenInfo<TConnectionHandler>, TConnectionHandler::OutEvent>,
+            Error<TConnectionHandler::Error>,
         >,
     > {
         while let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
