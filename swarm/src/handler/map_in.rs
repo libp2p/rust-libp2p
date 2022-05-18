@@ -27,15 +27,15 @@ use libp2p_core::Multiaddr;
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
-pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
-    inner: TProtoHandler,
+pub struct MapInEvent<TConnectionHandler, TNewIn, TMap> {
+    inner: TConnectionHandler,
     map: TMap,
     marker: PhantomData<TNewIn>,
 }
 
-impl<TProtoHandler, TMap, TNewIn> MapInEvent<TProtoHandler, TNewIn, TMap> {
+impl<TConnectionHandler, TMap, TNewIn> MapInEvent<TConnectionHandler, TNewIn, TMap> {
     /// Creates a `MapInEvent`.
-    pub(crate) fn new(inner: TProtoHandler, map: TMap) -> Self {
+    pub(crate) fn new(inner: TConnectionHandler, map: TMap) -> Self {
         MapInEvent {
             inner,
             map,
@@ -44,20 +44,21 @@ impl<TProtoHandler, TMap, TNewIn> MapInEvent<TProtoHandler, TNewIn, TMap> {
     }
 }
 
-impl<TProtoHandler, TMap, TNewIn> ConnectionHandler for MapInEvent<TProtoHandler, TNewIn, TMap>
+impl<TConnectionHandler, TMap, TNewIn> ConnectionHandler
+    for MapInEvent<TConnectionHandler, TNewIn, TMap>
 where
-    TProtoHandler: ConnectionHandler,
-    TMap: Fn(TNewIn) -> Option<TProtoHandler::InEvent>,
+    TConnectionHandler: ConnectionHandler,
+    TMap: Fn(TNewIn) -> Option<TConnectionHandler::InEvent>,
     TNewIn: Debug + Send + 'static,
     TMap: Send + 'static,
 {
     type InEvent = TNewIn;
-    type OutEvent = TProtoHandler::OutEvent;
-    type Error = TProtoHandler::Error;
-    type InboundProtocol = TProtoHandler::InboundProtocol;
-    type OutboundProtocol = TProtoHandler::OutboundProtocol;
-    type InboundOpenInfo = TProtoHandler::InboundOpenInfo;
-    type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
+    type OutEvent = TConnectionHandler::OutEvent;
+    type Error = TConnectionHandler::Error;
+    type InboundProtocol = TConnectionHandler::InboundProtocol;
+    type OutboundProtocol = TConnectionHandler::OutboundProtocol;
+    type InboundOpenInfo = TConnectionHandler::InboundOpenInfo;
+    type OutboundOpenInfo = TConnectionHandler::OutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         self.inner.listen_protocol()
