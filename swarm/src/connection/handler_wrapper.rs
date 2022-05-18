@@ -301,14 +301,14 @@ where
     fn handle_connection_handler_event(
         &mut self,
         handler_event: ConnectionHandlerEvent<
-            TProtoHandler::OutboundProtocol,
-            TProtoHandler::OutboundOpenInfo,
-            TProtoHandler::OutEvent,
-            TProtoHandler::Error,
+            TConnectionHandler::OutboundProtocol,
+            TConnectionHandler::OutboundOpenInfo,
+            TConnectionHandler::OutEvent,
+            TConnectionHandler::Error,
         >,
     ) -> Result<
-        Event<OutboundOpenInfo<TProtoHandler>, TProtoHandler::OutEvent>,
-        Error<TProtoHandler::Error>,
+        Event<OutboundOpenInfo<TConnectionHandler>, TConnectionHandler::OutEvent>,
+        Error<TConnectionHandler::Error>,
     > {
         match handler_event {
             ConnectionHandlerEvent::Custom(event) => Ok(Event::Custom(event)),
