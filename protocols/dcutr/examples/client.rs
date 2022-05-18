@@ -215,7 +215,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("Relay accepted our reservation request.");
                     relay_accepted_reservation = true
                 }
-                SwarmEvent::Behaviour(Event::Relay(_)) => {}
                 SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Sent { .. })) => {}
                 SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
                     info: IdentifyInfo { observed_addr, .. },
