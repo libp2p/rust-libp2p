@@ -226,11 +226,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                 event => panic!("{:?}", event),
             }
 
-            if learned_observed_addr
-                && (matches!(opts.mode, Mode::Dial) || relay_accepted_reservation)
-            {
-                break;
+            // Check whether we are done.
+
+            if !learned_observed_addr {
+                continue;
             }
+
+            if opts.mode == Mode::Listen && !relay_accepted_reservation {
+                continue;
+            }
+
+            break;
         }
     });
 
