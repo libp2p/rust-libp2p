@@ -189,15 +189,14 @@ async fn test_auto_probe() {
             other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
-        let mut has_received_response = false;
-        // Expect inbound dial from server.
+        let mut had_connection_event = false;
         loop {
             match client.select_next_some().await {
                 SwarmEvent::ConnectionEstablished {
                     endpoint, peer_id, ..
                 } if endpoint.is_listener() => {
                     assert_eq!(peer_id, server_id);
-                    break;
+                    had_connection_event = true;
                 }
                 SwarmEvent::Behaviour(Event::OutboundProbe(OutboundProbeEvent::Response {
                     probe_id,
@@ -206,7 +205,13 @@ async fn test_auto_probe() {
                 })) => {
                     assert_eq!(peer, server_id);
                     assert_eq!(probe_id, id);
-                    has_received_response = true;
+                }
+                SwarmEvent::Behaviour(Event::StatusChanged { old, new }) => {
+                    // Expect to flip status to public
+                    assert_eq!(old, NatStatus::Private);
+                    assert!(matches!(new, NatStatus::Public(_)));
+                    assert!(new.is_public());
+                    break;
                 }
                 SwarmEvent::IncomingConnection { .. }
                 | SwarmEvent::NewListenAddr { .. }
@@ -215,28 +220,18 @@ async fn test_auto_probe() {
             }
         }
 
-        if !has_received_response {
+        // It can happen that the server observed the established connection and
+        // returned a response before the inbound established connection was reported at the client.
+        // In this (rare) case the `ConnectionEstablished` event occurs after the `OutboundProbeEvent::Response`.
+        if !had_connection_event {
             match client.select_next_some().await {
-                SwarmEvent::Behaviour(Event::OutboundProbe(OutboundProbeEvent::Response {
-                    probe_id,
-                    peer,
-                    ..
-                })) => {
-                    assert_eq!(peer, server_id);
-                    assert_eq!(probe_id, id);
+                SwarmEvent::ConnectionEstablished {
+                    endpoint, peer_id, ..
+                } if endpoint.is_listener() => {
+                    assert_eq!(peer_id, server_id);
                 }
                 other => panic!("Unexpected swarm event: {:?}.", other),
             }
-        }
-
-        // Expect to flip status to public
-        match next_event(&mut client).await {
-            Event::StatusChanged { old, new } => {
-                assert_eq!(old, NatStatus::Private);
-                assert!(matches!(new, NatStatus::Public(_)));
-                assert!(new.is_public());
-            }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
         }
 
         assert_eq!(client.behaviour().confidence(), 0);
