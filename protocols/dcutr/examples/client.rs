@@ -232,7 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Mode::Listen => {
             swarm
-                .listen_on(opts.relay_address.clone().with(Protocol::P2pCircuit))
+                .listen_on(opts.relay_address.with(Protocol::P2pCircuit))
                 .unwrap();
 
             // Wait for relay to accept reservation request.
