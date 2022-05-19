@@ -71,6 +71,7 @@ where
             },
             control: ctrl,
         };
+
         Yamux(Mutex::new(inner))
     }
 }
@@ -90,6 +91,7 @@ where
             },
             control: ctrl,
         };
+
         Yamux(Mutex::new(inner))
     }
 }
