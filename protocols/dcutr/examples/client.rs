@@ -234,26 +234,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             swarm
                 .listen_on(opts.relay_address.with(Protocol::P2pCircuit))
                 .unwrap();
-
-            // Wait for relay to accept reservation request.
-            block_on(async {
-                loop {
-                    match swarm.next().await.unwrap() {
-                        SwarmEvent::NewListenAddr { .. } => {}
-                        SwarmEvent::Dialing { .. } => {}
-                        SwarmEvent::ConnectionEstablished { .. } => {}
-                        SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                        SwarmEvent::Behaviour(Event::Relay(
-                            client::Event::ReservationReqAccepted { .. },
-                        )) => {
-                            info!("Relay accepted our reservation request.");
-                            break;
-                        }
-                        SwarmEvent::Behaviour(Event::Identify(_)) => {}
-                        event => panic!("{:?}", event),
-                    }
-                }
-            });
         }
     }
 
@@ -262,6 +242,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             match swarm.next().await.unwrap() {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     info!("Listening on {:?}", address);
+                }
+                SwarmEvent::Behaviour(Event::Relay(client::Event::ReservationReqAccepted {
+                    ..
+                })) => {
+                    assert!(opts.mode == Mode::Listen);
+                    info!("Relay accepted our reservation request.");
                 }
                 SwarmEvent::Behaviour(Event::Relay(event)) => {
                     info!("{:?}", event)
