@@ -1,6 +1,9 @@
 # 0.37.0
 
 - Update to `libp2p-core` `v0.33.0`.
+- Remove `YamuxResult` and `YamuxError` from the public API. See [PR 2648].
+
+[PR 2648]: https://github.com/libp2p/rust-libp2p/pull/2648
 
 # 0.36.0 [2022-02-22]
 

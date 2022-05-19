@@ -30,7 +30,7 @@ where
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             match std::mem::replace(&mut self.state, CloseMuxerState::Done) {
-                CloseMuxerState::Close(muxer) => {
+                CloseMuxerState::Close(mut muxer) => {
                     if !muxer.poll_close(cx)?.is_ready() {
                         self.state = CloseMuxerState::Close(muxer);
                         return Poll::Pending;

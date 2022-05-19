@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{channel::oneshot, prelude::*};
-use libp2p_core::{muxing, upgrade, Transport};
+use futures::{channel::oneshot, future::poll_fn, prelude::*};
+use libp2p_core::{upgrade, StreamMuxer, Transport};
 use libp2p_tcp::TcpConfig;
-use std::sync::Arc;
 
 #[test]
 fn client_to_server_outbound() {
@@ -49,7 +48,7 @@ fn client_to_server_outbound() {
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let mut client = listener
             .next()
             .await
             .unwrap()
@@ -60,12 +59,15 @@ fn client_to_server_outbound() {
             .await
             .unwrap();
 
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+        client.open_outbound();
+        let (mut outbound, _) = poll_fn(|cx| client.poll(cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
 
-        let mut buf = Vec::new();
-        outbound.read_to_end(&mut buf).await.unwrap();
+        let mut buf = vec![0u8; 11];
+        outbound.read_exact(&mut buf).await.unwrap();
         assert_eq!(buf, b"hello world");
     });
 
@@ -74,9 +76,9 @@ fn client_to_server_outbound() {
         let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let mut client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
         let mut inbound = loop {
-            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone())
+            if let Some(s) = poll_fn(|cx| client.poll(cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()
@@ -117,21 +119,19 @@ fn client_to_server_inbound() {
 
         tx.send(addr).unwrap();
 
-        let client = Arc::new(
-            listener
-                .next()
-                .await
-                .unwrap()
-                .unwrap()
-                .into_upgrade()
-                .unwrap()
-                .0
-                .await
-                .unwrap(),
-        );
+        let mut client = listener
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_upgrade()
+            .unwrap()
+            .0
+            .await
+            .unwrap();
 
         let mut inbound = loop {
-            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone())
+            if let Some(s) = poll_fn(|cx| client.poll(cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()
@@ -150,9 +150,13 @@ fn client_to_server_inbound() {
         let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+        let mut client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+
+        client.open_outbound();
+        let (mut outbound, _) = poll_fn(|cx| client.poll(cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
         outbound.write_all(b"hello world").await.unwrap();
         outbound.close().await.unwrap();
@@ -185,7 +189,7 @@ fn protocol_not_match() {
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let mut client = listener
             .next()
             .await
             .unwrap()
@@ -196,8 +200,11 @@ fn protocol_not_match() {
             .await
             .unwrap();
 
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+        client.open_outbound();
+        let (mut outbound, _) = poll_fn(|cx| client.poll(cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
 
         let mut buf = Vec::new();

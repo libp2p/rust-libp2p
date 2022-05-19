@@ -21,7 +21,6 @@
 mod error;
 mod handler_wrapper;
 mod listeners;
-mod substream;
 
 pub(crate) mod pool;
 
@@ -32,17 +31,18 @@ pub use error::{
 pub use listeners::{ListenersEvent, ListenersStream};
 pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
-pub use substream::{Close, Substream, SubstreamEndpoint};
 
 use crate::handler::ConnectionHandler;
+use futures::future::poll_fn;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::upgrade;
+use libp2p_core::muxing::{OutboundSubstreamId, StreamMuxerBox, StreamMuxerEvent};
 use libp2p_core::PeerId;
-use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
-use substream::{Muxing, SubstreamEvent};
+use libp2p_core::{upgrade, StreamMuxer};
+use std::collections::HashMap;
+use std::future::Future;
+use std::{error::Error, fmt, io, pin::Pin, task::Context, task::Poll};
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,7 +68,11 @@ where
     THandler: ConnectionHandler,
 {
     /// Node that handles the muxing.
-    muxing: substream::Muxing<StreamMuxerBox, handler_wrapper::OutboundOpenInfo<THandler>>,
+    muxing: StreamMuxerBox,
+
+    /// Temporary storage of OutboundOpenInfo whilst the substreams are opening.
+    open_info: HashMap<OutboundSubstreamId, handler_wrapper::OutboundOpenInfo<THandler>>,
+
     /// Handler that processes substreams.
     handler: HandlerWrapper<THandler>,
 }
@@ -76,10 +80,11 @@ where
 impl<THandler> fmt::Debug for Connection<THandler>
 where
     THandler: ConnectionHandler + fmt::Debug,
+    handler_wrapper::OutboundOpenInfo<THandler>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection")
-            .field("muxing", &self.muxing)
+            .field("open_info", &self.open_info)
             .field("handler", &self.handler)
             .finish()
     }
@@ -105,7 +110,8 @@ where
             max_negotiating_inbound_streams,
         );
         Connection {
-            muxing: Muxing::new(muxer),
+            muxing: muxer,
+            open_info: HashMap::default(),
             handler: wrapped_handler,
         }
     }
@@ -117,10 +123,10 @@ where
 
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
-    pub fn close(self) -> (THandler, Close<StreamMuxerBox>) {
+    pub fn close(mut self) -> (THandler, impl Future<Output = io::Result<()>>) {
         (
             self.handler.into_connection_handler(),
-            self.muxing.close().0,
+            poll_fn(move |cx| self.muxing.poll_close(cx)),
         )
     }
 
@@ -135,7 +141,8 @@ where
             match self.handler.poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(Ok(handler_wrapper::Event::OutboundSubstreamRequest(user_data))) => {
-                    self.muxing.open_substream(user_data);
+                    let id = self.muxing.open_outbound();
+                    self.open_info.insert(id, user_data);
                     continue;
                 }
                 Poll::Ready(Ok(handler_wrapper::Event::Custom(event))) => {
@@ -148,20 +155,19 @@ where
             // of new substreams.
             match self.muxing.poll(cx) {
                 Poll::Pending => {}
-                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
+                Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
                     self.handler
                         .inject_substream(substream, SubstreamEndpoint::Listener);
                     continue;
                 }
-                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream {
-                    user_data,
-                    substream,
-                })) => {
+                Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(substream, id))) => {
+                    let user_data = self.open_info.remove(&id).expect("unknown substream id");
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
+
                     self.handler.inject_substream(substream, endpoint);
                     continue;
                 }
-                Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
+                Poll::Ready(Ok(StreamMuxerEvent::AddressChange(address))) => {
                     self.handler.inject_address_change(&address);
                     return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
@@ -171,6 +177,13 @@ where
             return Poll::Pending;
         }
     }
+}
+
+/// Endpoint for a received substream.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SubstreamEndpoint<TDialInfo> {
+    Dialer(TDialInfo),
+    Listener,
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.

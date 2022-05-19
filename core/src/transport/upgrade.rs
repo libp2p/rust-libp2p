@@ -300,9 +300,8 @@ impl<T> Multiplexed<T> {
         T::Listener: Send + 'static,
         T::ListenerUpgrade: Send + 'static,
         T::Error: Send + Sync,
-        M: StreamMuxer + Send + Sync + 'static,
-        M::Substream: Send + 'static,
-        M::OutboundSubstream: Send + 'static,
+        M: StreamMuxer + Send + 'static,
+        M::Substream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         boxed(self.map(|(i, m), _| (i, StreamMuxerBox::new(m))))
     }

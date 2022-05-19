@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{channel::oneshot, prelude::*};
-use libp2p_core::{muxing, upgrade, Transport};
+use futures::{channel::oneshot, future::poll_fn, prelude::*};
+use libp2p_core::{upgrade, StreamMuxer, Transport};
 use libp2p_tcp::TcpConfig;
-use std::sync::Arc;
 
 #[test]
 fn async_write() {
@@ -49,7 +48,7 @@ fn async_write() {
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let mut client = listener
             .next()
             .await
             .unwrap()
@@ -60,8 +59,11 @@ fn async_write() {
             .await
             .unwrap();
 
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+        client.open_outbound();
+        let (mut outbound, _) = poll_fn(|cx| client.poll(cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
 
         let mut buf = Vec::new();
@@ -74,9 +76,9 @@ fn async_write() {
         let mut transport = TcpConfig::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let mut client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
         let mut inbound = loop {
-            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone())
+            if let Some(s) = poll_fn(|cx| client.poll(cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()

@@ -103,8 +103,8 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                     addr_sender.take().unwrap().send(a).unwrap();
                 }
                 transport::ListenerEvent::Upgrade { upgrade, .. } => {
-                    let (_peer, conn) = upgrade.await.unwrap();
-                    let mut s = poll_fn(|cx| conn.poll_event(cx))
+                    let (_peer, mut conn) = upgrade.await.unwrap();
+                    let mut s = poll_fn(|cx| conn.poll(cx))
                         .await
                         .expect("unexpected error")
                         .into_inbound_substream()
@@ -115,9 +115,7 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                     loop {
                         // Read in typical chunk sizes of up to 8KiB.
                         let end = off + std::cmp::min(buf.len() - off, 8 * 1024);
-                        let n = poll_fn(|cx| conn.read_substream(cx, &mut s, &mut buf[off..end]))
-                            .await
-                            .unwrap();
+                        let n = s.read(&mut buf[off..end]).await.unwrap();
                         off += n;
                         if off == buf.len() {
                             return;
@@ -132,24 +130,16 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
     // Spawn and block on the sender, i.e. until all data is sent.
     task::block_on(async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, conn) = transport.dial(addr).unwrap().await.unwrap();
-        let mut handle = conn.open_outbound();
-        let mut stream = poll_fn(|cx| conn.poll_outbound(cx, &mut handle))
+        let (_peer, mut conn) = transport.dial(addr).unwrap().await.unwrap();
+        conn.open_outbound();
+        let (mut stream, _) = poll_fn(|cx| conn.poll(cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
-        let mut off = 0;
-        loop {
-            let n = poll_fn(|cx| conn.write_substream(cx, &mut stream, &payload[off..]))
-                .await
-                .unwrap();
-            off += n;
-            if off == payload.len() {
-                poll_fn(|cx| conn.flush_substream(cx, &mut stream))
-                    .await
-                    .unwrap();
-                return;
-            }
-        }
+
+        stream.write_all(&payload).await.unwrap();
+        stream.flush().await.unwrap();
     });
 
     // Wait for all data to be received.

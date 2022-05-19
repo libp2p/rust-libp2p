@@ -4,12 +4,13 @@
 - Remove `StreamMuxer::flush_all`. See [PR 2669].
 - Rename `StreamMuxer::close` to `StreamMuxer::poll_close`. See [PR 2666].
 - Remove deprecated function `StreamMuxer::is_remote_acknowledged`. See [PR 2665].
+- Re-design `StreamMuxer` trait to take `&mut self` and remove all associated types but `Substream`. See [PR 2648].
 
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
 [PR 2666]: https://github.com/libp2p/rust-libp2p/pull/2666
 [PR 2665]: https://github.com/libp2p/rust-libp2p/pull/2665
 [PR 2669]: https://github.com/libp2p/rust-libp2p/pull/2669
-
+[PR 2648]: https://github.com/libp2p/rust-libp2p/pull/2648
 
 # 0.32.1
 
