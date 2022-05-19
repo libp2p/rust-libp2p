@@ -31,7 +31,7 @@ use std::{
 /// Creates a new [`Boxed`] transport from the given transport.
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
 where
-    T: Transport + Send + Sync + Unpin + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send + Sync,
     T::Dial: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
@@ -45,7 +45,7 @@ where
 /// and `ListenerUpgrade` futures are `Box`ed and only the `Output`
 /// and `Error` types are captured in type variables.
 pub struct Boxed<O> {
-    inner: Box<dyn Abstract<O> + Send + Sync + Unpin>,
+    inner: Box<dyn Abstract<O> + Send + Unpin>,
 }
 
 type Dial<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;

@@ -295,7 +295,7 @@ impl<T> Multiplexed<T> {
     /// the [`StreamMuxer`] and custom transport errors.
     pub fn boxed<M>(self) -> super::Boxed<(PeerId, StreamMuxerBox)>
     where
-        T: Transport<Output = (PeerId, M)> + Sized + Send + Sync + Unpin + 'static,
+        T: Transport<Output = (PeerId, M)> + Sized + Send + Unpin + 'static,
         T::Dial: Send + 'static,
         T::ListenerUpgrade: Send + 'static,
         T::Error: Send + Sync,
