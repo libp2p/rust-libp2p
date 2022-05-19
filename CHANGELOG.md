@@ -39,6 +39,7 @@
 
 - [`libp2p-metrics` CHANGELOG](misc/metrics/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
+- [`rw-stream-sink` CHANGELOG](misc/rw-stream-sink/CHANGELOG.md)
 
 # `libp2p` facade crate
 

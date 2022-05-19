@@ -197,25 +197,46 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Wait till connected to relay to learn external address.
+    // Wait till connected to relay to learn external address. In case we are in listening mode,
+    // wait for the relay to accept our reservation request.
     block_on(async {
+        let mut learned_observed_addr = false;
+        let mut relay_accepted_reservation = false;
+
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::NewListenAddr { .. } => {}
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                SwarmEvent::Behaviour(Event::Relay(_)) => {}
+                SwarmEvent::Behaviour(Event::Relay(client::Event::ReservationReqAccepted {
+                    ..
+                })) => {
+                    info!("Relay accepted our reservation request.");
+                    relay_accepted_reservation = true
+                }
                 SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Sent { .. })) => {}
                 SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
                     info: IdentifyInfo { observed_addr, .. },
                     ..
                 })) => {
-                    info!("Observed address: {:?}", observed_addr);
-                    break;
+                    info!("Relay observes us under the address: {:?}", observed_addr);
+                    learned_observed_addr = true;
                 }
                 event => panic!("{:?}", event),
             }
+
+            // Check whether we are done.
+
+            if !learned_observed_addr {
+                continue;
+            }
+
+            if opts.mode == Mode::Listen && !relay_accepted_reservation {
+                continue;
+            }
+
+            break;
         }
     });
 

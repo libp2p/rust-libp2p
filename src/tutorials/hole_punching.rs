@@ -132,6 +132,12 @@
 //!
 //! ``` bash
 //! RUST_LOG=info ./client --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
+//!
+//! [2022-05-11T10:38:52Z INFO  client] Local peer id: PeerId("XXX")
+//! [2022-05-11T10:38:52Z INFO  client] Listening on "/ip4/127.0.0.1/tcp/44703"
+//! [2022-05-11T10:38:52Z INFO  client] Listening on "/ip4/XXX/tcp/44703"
+//! [2022-05-11T10:38:54Z INFO  client] Relay accepted our reservation request.
+//! [2022-05-11T10:38:54Z INFO  client] Relay observes us under the address: "/ip4/XXX/tcp/53160"
 //! ```
 //!
 //! Now let's make sure that the listening client is not public, in other words let's make sure one
@@ -139,7 +145,7 @@
 //! connect on Layer 4 (TCP):
 //!
 //! ``` bash
-//! telnet $RELAY_SERVER_IP 4001
+//! telnet $LISTENING_CLIENT_IP_OBSERVED_BY_RELAY 53160
 //! ```
 //!
 //! ## Connecting to the listening client from the dialing client
