@@ -623,7 +623,7 @@ impl GlobalIp for std::net::Ipv6Addr {
         }
 
         // Variation of unstable method [`std::net::Ipv6Addr::multicast_scope`] that instead of the
-        // `Ipv6MulticastScope` just return if the scope is global or not.
+        // `Ipv6MulticastScope` just returns if the scope is global or not.
         // Equivalent to `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope, Ipv6MulticastScope::Global))`.
         fn is_multicast_scope_global(addr: &std::net::Ipv6Addr) -> Option<bool> {
             match addr.segments()[0] & 0x000f {
