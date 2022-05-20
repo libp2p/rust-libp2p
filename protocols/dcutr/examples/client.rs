@@ -224,7 +224,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             swarm
                 .dial(
                     opts.relay_address
-                        .clone()
                         .with(Protocol::P2pCircuit)
                         .with(Protocol::P2p(opts.remote_peer_id.unwrap().into())),
                 )
