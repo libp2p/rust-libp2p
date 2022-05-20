@@ -113,7 +113,10 @@ where
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
     pub fn close(self) -> (THandler, Close<StreamMuxerBox>) {
-        (self.handler.into_protocols_handler(), self.muxing.close().0)
+        (
+            self.handler.into_connection_handler(),
+            self.muxing.close().0,
+        )
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
