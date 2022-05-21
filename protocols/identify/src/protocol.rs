@@ -290,7 +290,7 @@ mod tests {
         upgrade::{self, apply_inbound, apply_outbound},
         Transport,
     };
-    use libp2p_tcp::TcpConfig;
+    use libp2p_tcp::TcpTransport;
 
     #[test]
     fn correct_transfer() {
@@ -302,7 +302,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         let bg_task = async_std::task::spawn(async move {
-            let mut transport = TcpConfig::new();
+            let mut transport = TcpTransport::new();
 
             let mut listener = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -347,7 +347,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let mut transport = TcpConfig::new();
+            let mut transport = TcpTransport::new();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
             let info = apply_outbound(socket, IdentifyProtocol, upgrade::Version::V1)

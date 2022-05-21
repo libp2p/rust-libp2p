@@ -29,7 +29,7 @@ use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
 use libp2p_noise::{
     Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
 };
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::TcpTransport;
 use log::info;
 use quickcheck::QuickCheck;
 use std::{convert::TryInto, io, net::TcpStream};
@@ -41,7 +41,7 @@ fn core_upgrade_compat() {
     let id_keys = identity::Keypair::generate_ed25519();
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
     let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-    let _ = TcpConfig::new()
+    let _ = TcpTransport::new()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise);
 }
@@ -60,7 +60,7 @@ fn xx_spec() {
         let server_dh = Keypair::<X25519Spec>::new()
             .into_authentic(&server_id)
             .unwrap();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -74,7 +74,7 @@ fn xx_spec() {
         let client_dh = Keypair::<X25519Spec>::new()
             .into_authentic(&client_id)
             .unwrap();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -105,7 +105,7 @@ fn xx() {
         let client_id_public = client_id.public();
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -117,7 +117,7 @@ fn xx() {
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -148,7 +148,7 @@ fn ix() {
         let client_id_public = client_id.public();
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -160,7 +160,7 @@ fn ix() {
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -192,7 +192,7 @@ fn ik_xx() {
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_dh_public = server_dh.public().clone();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
                     Either::Left(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
@@ -208,7 +208,7 @@ fn ik_xx() {
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let server_id_public2 = server_id_public.clone();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
                     Either::Left(apply_outbound(

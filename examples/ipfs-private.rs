@@ -44,7 +44,7 @@ use libp2p::{
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::{NetworkBehaviourEventProcess, SwarmEvent},
-    tcp::TcpConfig,
+    tcp::TcpTransport,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
@@ -61,7 +61,7 @@ pub fn build_transport(
     let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
     let yamux_config = YamuxConfig::default();
 
-    let base_transport = TcpConfig::new().nodelay(true);
+    let base_transport = TcpTransport::new().nodelay(true);
     let maybe_encrypted = match psk {
         Some(psk) => EitherTransport::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),

@@ -22,7 +22,7 @@
 //!
 //! # Usage
 //!
-//! This crate provides a `TcpConfig` and `TokioTcpConfig`, depending on
+//! This crate provides a `TcpTransport` and `TokioTcpTransport`, depending on
 //! the enabled features, which implement the `Transport` trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 
@@ -33,14 +33,14 @@ pub use provider::async_io;
 
 /// The type of a [`GenTcpConfig`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
-pub type TcpConfig = GenTcpTransport<async_io::Tcp>;
+pub type TcpTransport = GenTcpTransport<async_io::Tcp>;
 
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
 /// The type of a [`GenTcpConfig`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
-pub type TokioTcpConfig = GenTcpTransport<tokio::Tcp>;
+pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 
 use futures::{
     future::{self, BoxFuture, Ready},
@@ -300,12 +300,12 @@ impl GenTcpConfig {
     /// #[cfg(feature = "async-io")]
     /// #[async_std::main]
     /// async fn main() -> std::io::Result<()> {
-    /// use libp2p_tcp::{GenTcpConfig, TcpConfig};
+    /// use libp2p_tcp::{GenTcpConfig, TcpTransport};
     ///
     /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let mut tcp1 = TcpConfig::new(GenTcpConfig::new().port_reuse(true));
+    /// let mut tcp1 = TcpTransport::new(GenTcpConfig::new().port_reuse(true));
     /// tcp1.listen_on(ListenerId::new(1), listen_addr1.clone()).expect("listener");
     /// match poll_fn(|cx| Pin::new(&mut tcp1).poll(cx)).await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -316,7 +316,7 @@ impl GenTcpConfig {
     ///     _ => {}
     /// }
     ///
-    /// let mut tcp2 = TcpConfig::new(GenTcpConfig::new().port_reuse(true));
+    /// let mut tcp2 = TcpTransport::new(GenTcpConfig::new().port_reuse(true));
     /// tcp2.listen_on(ListenerId::new(1), listen_addr2).expect("listener");
     /// match poll_fn(|cx| Pin::new(&mut tcp2).poll(cx)).await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -1204,13 +1204,13 @@ mod tests {
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
             {
-                let mut tcp = TcpConfig::new(GenTcpConfig::new());
+                let mut tcp = TcpTransport::new(GenTcpConfig::new());
                 assert!(tcp.listen_on(ListenerId::new(1), addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
-                let mut tcp = TokioTcpConfig::new(GenTcpConfig::new());
+                let mut tcp = TokioTcpTransport::new(GenTcpConfig::new());
                 assert!(tcp.listen_on(ListenerId::new(1), addr.clone()).is_err());
             }
         }

@@ -20,7 +20,7 @@
 
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::{muxing, upgrade, Transport};
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::TcpTransport;
 use std::sync::Arc;
 
 #[test]
@@ -32,7 +32,7 @@ fn async_write() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let mut transport = TcpConfig::new()
+        let mut transport = TcpTransport::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
@@ -71,7 +71,7 @@ fn async_write() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let mut transport = TcpConfig::new()
+        let mut transport = TcpTransport::new()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
