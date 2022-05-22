@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    transport::{TransportError, TransportEvent},
-    Transport,
-};
+use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
 use futures::{
     channel::mpsc,
@@ -40,8 +37,6 @@ use std::{
     num::NonZeroU64,
     pin::Pin,
 };
-
-use super::ListenerId;
 
 lazy_static! {
     static ref HUB: Hub = Hub(Mutex::new(FnvHashMap::default()));
@@ -180,47 +175,6 @@ impl Transport for MemoryTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = DialFuture;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>>
-    where
-        Self: Sized,
-    {
-        let mut remaining = self.listeners.len();
-        while let Some(mut listener) = self.listeners.pop_back() {
-            if listener.tell_listen_addr {
-                listener.tell_listen_addr = false;
-                let listen_addr = listener.addr.clone();
-                let listener_id = listener.id;
-                self.listeners.push_back(listener);
-                return Poll::Ready(TransportEvent::NewAddress {
-                    listen_addr,
-                    listener_id,
-                });
-            }
-
-            let event = match Stream::poll_next(Pin::new(&mut listener.receiver), cx) {
-                Poll::Pending => None,
-                Poll::Ready(None) => panic!("Alive listeners always have a sender."),
-                Poll::Ready(Some((channel, dial_port))) => Some(TransportEvent::Incoming {
-                    listener_id: listener.id,
-                    upgrade: future::ready(Ok(channel)),
-                    local_addr: listener.addr.clone(),
-                    send_back_addr: Protocol::Memory(dial_port.get()).into(),
-                }),
-            };
-
-            self.listeners.push_back(listener);
-            if let Some(event) = event {
-                return Poll::Ready(event);
-            } else {
-                remaining -= 1;
-                if remaining == 0 {
-                    break;
-                }
-            }
-        }
-        Poll::Pending
-    }
-
     fn listen_on(
         &mut self,
         id: ListenerId,
@@ -272,6 +226,47 @@ impl Transport for MemoryTransport {
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
+    }
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>>
+    where
+        Self: Sized,
+    {
+        let mut remaining = self.listeners.len();
+        while let Some(mut listener) = self.listeners.pop_back() {
+            if listener.tell_listen_addr {
+                listener.tell_listen_addr = false;
+                let listen_addr = listener.addr.clone();
+                let listener_id = listener.id;
+                self.listeners.push_back(listener);
+                return Poll::Ready(TransportEvent::NewAddress {
+                    listen_addr,
+                    listener_id,
+                });
+            }
+
+            let event = match Stream::poll_next(Pin::new(&mut listener.receiver), cx) {
+                Poll::Pending => None,
+                Poll::Ready(None) => panic!("Alive listeners always have a sender."),
+                Poll::Ready(Some((channel, dial_port))) => Some(TransportEvent::Incoming {
+                    listener_id: listener.id,
+                    upgrade: future::ready(Ok(channel)),
+                    local_addr: listener.addr.clone(),
+                    send_back_addr: Protocol::Memory(dial_port.get()).into(),
+                }),
+            };
+
+            self.listeners.push_back(listener);
+            if let Some(event) = event {
+                return Poll::Ready(event);
+            } else {
+                remaining -= 1;
+                if remaining == 0 {
+                    break;
+                }
+            }
+        }
+        Poll::Pending
     }
 }
 

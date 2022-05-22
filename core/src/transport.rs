@@ -108,10 +108,6 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>>
-    where
-        Self: Sized;
-
     /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections
     /// and addresses this transport is listening on (cf. [`TransportEvent`]).
     ///
@@ -142,6 +138,11 @@ pub trait Transport {
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>>
+    where
+        Self: Sized;
+
+    // TODO: Add docs
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>>
     where
         Self: Sized;
 

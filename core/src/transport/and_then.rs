@@ -21,13 +21,11 @@
 use crate::{
     connection::{ConnectedPoint, Endpoint},
     either::EitherError,
-    transport::{Transport, TransportError, TransportEvent},
+    transport::{ListenerId, Transport, TransportError, TransportEvent},
 };
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
 use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
-
-use super::ListenerId;
 
 /// See the `Transport::and_then` method.
 #[pin_project::pin_project]

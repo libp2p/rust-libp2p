@@ -25,14 +25,12 @@
 // TODO: add example
 
 use crate::{
-    transport::{TransportError, TransportEvent},
+    transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
-
-use super::ListenerId;
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -129,19 +127,15 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
         let this = self.project();
         let timeout = *this.incoming_timeout;
-        match this.inner.poll(cx) {
-            Poll::Ready(event) => {
-                let event = event.map(
-                    move |inner_fut| Timeout {
-                        inner: inner_fut,
-                        timer: Delay::new(timeout),
-                    },
-                    TransportTimeoutError::Other,
-                );
-                Poll::Ready(event)
-            }
-            Poll::Pending => Poll::Pending,
-        }
+        this.inner.poll(cx).map(|event| {
+            event.map(
+                move |inner_fut| Timeout {
+                    inner: inner_fut,
+                    timer: Delay::new(timeout),
+                },
+                TransportTimeoutError::Other,
+            )
+        })
     }
 }
 

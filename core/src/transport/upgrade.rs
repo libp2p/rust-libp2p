@@ -26,8 +26,8 @@ use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, Transport, TransportError,
-        TransportEvent,
+        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerId, Transport,
+        TransportError, TransportEvent,
     },
     upgrade::{
         self, apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
@@ -44,8 +44,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-use super::ListenerId;
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
 /// a `Swarm`.
@@ -440,19 +438,15 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
         let this = self.project();
         let upgrade = this.upgrade.clone();
-        match this.inner.poll(cx) {
-            Poll::Ready(event) => {
-                let event = event.map(
-                    move |future| ListenerUpgradeFuture {
-                        future: Box::pin(future),
-                        upgrade: future::Either::Left(Some(upgrade)),
-                    },
-                    TransportUpgradeError::Transport,
-                );
-                Poll::Ready(event)
-            }
-            Poll::Pending => Poll::Pending,
-        }
+        this.inner.poll(cx).map(|event| {
+            event.map(
+                move |future| ListenerUpgradeFuture {
+                    future: Box::pin(future),
+                    upgrade: future::Either::Left(Some(upgrade)),
+                },
+                TransportUpgradeError::Transport,
+            )
+        })
     }
 }
 

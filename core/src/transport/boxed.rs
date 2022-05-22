@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
+use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{
@@ -27,8 +27,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
-use super::{ListenerId, TransportEvent};
 
 /// Creates a new [`Boxed`] transport from the given transport.
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
@@ -99,19 +97,15 @@ where
     }
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Boxed<O>>> {
-        match self.poll(cx) {
-            Poll::Ready(event) => {
-                let event = event.map(
-                    |upgrade| {
-                        let up = upgrade.map_err(box_err);
-                        Box::pin(up) as ListenerUpgrade<O>
-                    },
-                    box_err,
-                );
-                Poll::Ready(event)
-            }
-            Poll::Pending => Poll::Pending,
-        }
+        self.poll(cx).map(|event| {
+            event.map(
+                |upgrade| {
+                    let up = upgrade.map_err(box_err);
+                    Box::pin(up) as ListenerUpgrade<O>
+                },
+                box_err,
+            )
+        })
     }
 }
 
@@ -126,10 +120,6 @@ impl<O> Transport for Boxed<O> {
     type Error = io::Error;
     type ListenerUpgrade = ListenerUpgrade<O>;
     type Dial = Dial<O>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
-        Pin::new(self.inner.as_mut()).poll(cx)
-    }
 
     fn listen_on(
         &mut self,
@@ -152,6 +142,10 @@ impl<O> Transport for Boxed<O> {
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.address_translation(server, observed)
+    }
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+        Pin::new(self.inner.as_mut()).poll(cx)
     }
 }
 
