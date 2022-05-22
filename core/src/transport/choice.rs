@@ -113,14 +113,21 @@ where
         }
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         match this.0.poll(cx) {
-            Poll::Ready(ev) => return Poll::Ready(ev.map(EitherFuture::First, EitherError::A)),
+            Poll::Ready(ev) => {
+                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(EitherError::A))
+            }
             Poll::Pending => {}
         }
         match this.1.poll(cx) {
-            Poll::Ready(ev) => return Poll::Ready(ev.map(EitherFuture::Second, EitherError::B)),
+            Poll::Ready(ev) => {
+                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(EitherError::B))
+            }
             Poll::Pending => {}
         }
         Poll::Pending

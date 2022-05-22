@@ -79,17 +79,17 @@ where
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         match this.inner.poll(cx) {
             Poll::Ready(event) => {
-                let event = event.map(
-                    {
-                        let sinks = this.sinks.clone();
-                        |inner| BandwidthFuture { inner, sinks }
-                    },
-                    |e| e,
-                );
+                let event = event.map_upgrade( {
+                    let sinks = this.sinks.clone();
+                    |inner| BandwidthFuture { inner, sinks }
+                });
                 Poll::Ready(event)
             }
             Poll::Pending => Poll::Pending,

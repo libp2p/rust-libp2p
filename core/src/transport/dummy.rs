@@ -82,7 +82,10 @@ impl<TOut> Transport for DummyTransport<TOut> {
         None
     }
 
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
     }
 }

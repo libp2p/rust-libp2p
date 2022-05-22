@@ -90,17 +90,18 @@ where
         self.transport.address_translation(server, observed)
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         let map = &*this.map;
         this.transport.poll(cx).map(|ev| {
-            ev.map(
-                move |value| MapErrListenerUpgrade {
-                    inner: value,
-                    map: Some(map.clone()),
-                },
-                |err| (map.clone())(err),
-            )
+            ev.map_upgrade(move |value| MapErrListenerUpgrade {
+                inner: value,
+                map: Some(map.clone()),
+            })
+            .map_err(map.clone())
         })
     }
 }

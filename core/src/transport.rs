@@ -142,7 +142,10 @@ pub trait Transport {
         Self: Sized;
 
     // TODO: Add docs
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>>
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>
     where
         Self: Sized;
 
@@ -247,7 +250,7 @@ impl std::ops::Add<u64> for ListenerId {
 /// listen addresses which have previously been announced via
 /// a `NewAddress` event and which have not been invalidated by
 /// an `AddressExpired` event yet.
-pub enum TransportEvent<T: Transport> {
+pub enum TransportEvent<TUpgr, TErr> {
     /// A new address is being listened on.
     NewAddress {
         /// The listener that is listening on the new address.
@@ -267,7 +270,7 @@ pub enum TransportEvent<T: Transport> {
         /// The listener that produced the upgrade.
         listener_id: ListenerId,
         /// The produced upgrade.
-        upgrade: T::ListenerUpgrade,
+        upgrade: TUpgr,
         /// Local connection address.
         local_addr: Multiaddr,
         /// Address used to send back data to the incoming client.
@@ -281,7 +284,7 @@ pub enum TransportEvent<T: Transport> {
         addresses: Vec<Multiaddr>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
-        reason: Result<(), T::Error>,
+        reason: Result<(), TErr>,
     },
     /// A listener errored.
     ///
@@ -291,40 +294,12 @@ pub enum TransportEvent<T: Transport> {
         /// The ID of the listener that errored.
         listener_id: ListenerId,
         /// The error value.
-        error: T::Error,
+        error: TErr,
     },
 }
 
-impl<T: Transport> TransportEvent<T> {
-    pub fn into<U>(self) -> TransportEvent<U>
-    where
-        U: Transport<ListenerUpgrade = T::ListenerUpgrade, Error = T::Error>,
-    {
-        self.map(|u| u, |e| e)
-    }
-
-    pub fn map_upgrade<U>(
-        self,
-        map: impl FnOnce(T::ListenerUpgrade) -> U::ListenerUpgrade,
-    ) -> TransportEvent<U>
-    where
-        U: Transport<Error = T::Error>,
-    {
-        self.map(map, |e| e)
-    }
-
-    pub fn map_error<U>(self, map_err: impl FnOnce(T::Error) -> U::Error) -> TransportEvent<U>
-    where
-        U: Transport<ListenerUpgrade = T::ListenerUpgrade>,
-    {
-        self.map(|u| u, map_err)
-    }
-
-    pub fn map<U: Transport>(
-        self,
-        map: impl FnOnce(T::ListenerUpgrade) -> U::ListenerUpgrade,
-        map_err: impl FnOnce(T::Error) -> U::Error,
-    ) -> TransportEvent<U> {
+impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
+    pub fn map_upgrade<U>(self, map: impl FnOnce(TUpgr) -> U) -> TransportEvent<U, TErr> {
         match self {
             TransportEvent::Incoming {
                 listener_id,
@@ -334,6 +309,48 @@ impl<T: Transport> TransportEvent<T> {
             } => TransportEvent::Incoming {
                 listener_id,
                 upgrade: map(upgrade),
+                local_addr,
+                send_back_addr,
+            },
+            TransportEvent::NewAddress {
+                listen_addr,
+                listener_id,
+            } => TransportEvent::NewAddress {
+                listen_addr,
+                listener_id,
+            },
+            TransportEvent::AddressExpired {
+                listen_addr,
+                listener_id,
+            } => TransportEvent::AddressExpired {
+                listen_addr,
+                listener_id,
+            },
+            TransportEvent::Error { listener_id, error } => {
+                TransportEvent::Error { listener_id, error }
+            }
+            TransportEvent::Closed {
+                listener_id,
+                addresses,
+                reason,
+            } => TransportEvent::Closed {
+                listener_id,
+                addresses,
+                reason,
+            },
+        }
+    }
+
+    pub fn map_err<E>(self, map_err: impl FnOnce(TErr) -> E) -> TransportEvent<TUpgr, E> {
+        match self {
+            TransportEvent::Incoming {
+                listener_id,
+                upgrade,
+                local_addr,
+                send_back_addr,
+            } => TransportEvent::Incoming {
+                listener_id,
+                upgrade,
                 local_addr,
                 send_back_addr,
             },
@@ -376,7 +393,7 @@ impl<T: Transport> TransportEvent<T> {
     ///
     /// Returns `None` if the event is not actually an upgrade,
     /// otherwise the upgrade and the remote address.
-    pub fn into_upgrade(self) -> Option<(T::ListenerUpgrade, Multiaddr)> {
+    pub fn into_upgrade(self) -> Option<(TUpgr, Multiaddr)> {
         if let TransportEvent::Incoming {
             upgrade,
             send_back_addr,
@@ -432,7 +449,7 @@ impl<T: Transport> TransportEvent<T> {
     ///
     /// Returns `None` if the event is not actually a `Error`,
     /// otherwise the error.
-    pub fn into_error(self) -> Option<T::Error> {
+    pub fn into_error(self) -> Option<TErr> {
         if let TransportEvent::Error { error, .. } = self {
             Some(error)
         } else {
@@ -441,11 +458,7 @@ impl<T: Transport> TransportEvent<T> {
     }
 }
 
-impl<TTrans> fmt::Debug for TransportEvent<TTrans>
-where
-    TTrans: Transport,
-    TTrans::Error: fmt::Debug,
-{
+impl<TUpgr, TErr: fmt::Debug> fmt::Debug for TransportEvent<TUpgr, TErr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             TransportEvent::NewAddress {

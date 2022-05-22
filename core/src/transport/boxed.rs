@@ -60,7 +60,10 @@ trait Abstract<O> {
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Boxed<O>>>;
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<ListenerUpgrade<O>, io::Error>>;
 }
 
 impl<T, O> Abstract<O> for T
@@ -96,15 +99,17 @@ where
         Transport::address_translation(self, server, observed)
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Boxed<O>>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<ListenerUpgrade<O>, io::Error>> {
         self.poll(cx).map(|event| {
-            event.map(
-                |upgrade| {
+            event
+                .map_upgrade(|upgrade| {
                     let up = upgrade.map_err(box_err);
                     Box::pin(up) as ListenerUpgrade<O>
-                },
-                box_err,
-            )
+                })
+                .map_err(box_err)
         })
     }
 }
@@ -144,7 +149,10 @@ impl<O> Transport for Boxed<O> {
         self.inner.address_translation(server, observed)
     }
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Pin::new(self.inner.as_mut()).poll(cx)
     }
 }

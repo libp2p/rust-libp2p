@@ -77,7 +77,7 @@ where
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
     /// Pending listeners events to return from [`ListenersStream::poll`].
-    pending_events: VecDeque<TransportEvent<Self>>,
+    pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, io::Error>>,
 }
 
 impl<T> GenTcpTransport<T>
@@ -373,89 +373,6 @@ where
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
-        // Return pending events from closed listeners.
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(event);
-        }
-        // We remove each element from `listeners` one by one and add them back.
-        let mut remaining = self.listeners.len();
-        while let Some(mut listener) = self.listeners.pop_back() {
-            match TryStream::try_poll_next(listener.as_mut(), cx) {
-                Poll::Pending => {
-                    self.listeners.push_front(listener);
-                    remaining -= 1;
-                    if remaining == 0 {
-                        break;
-                    }
-                }
-                Poll::Ready(Some(Ok(TcpTransportEvent::Upgrade {
-                    upgrade,
-                    local_addr,
-                    remote_addr,
-                }))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::Incoming {
-                        listener_id: id,
-                        upgrade,
-                        local_addr,
-                        send_back_addr: remote_addr,
-                    });
-                }
-                Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(a)))) => {
-                    if listener.addresses.contains(&a) {
-                        debug!("Transport has reported address {} multiple times", a)
-                    } else {
-                        listener.addresses.push(a.clone());
-                    }
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::NewAddress {
-                        listener_id: id,
-                        listen_addr: a,
-                    });
-                }
-                Poll::Ready(Some(Ok(TcpTransportEvent::AddressExpired(a)))) => {
-                    listener.addresses.retain(|x| x != &a);
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::AddressExpired {
-                        listener_id: id,
-                        listen_addr: a,
-                    });
-                }
-                Poll::Ready(Some(Ok(TcpTransportEvent::Error(error)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::Error {
-                        listener_id: id,
-                        error,
-                    });
-                }
-                Poll::Ready(None) => {
-                    let addresses = mem::take(&mut listener.addresses).into_vec();
-                    return Poll::Ready(TransportEvent::Closed {
-                        listener_id: listener.listener_id,
-                        addresses,
-                        reason: Ok(()),
-                    });
-                }
-                Poll::Ready(Some(Err(err))) => {
-                    let addresses = mem::take(&mut listener.addresses).into_vec();
-                    return Poll::Ready(TransportEvent::Closed {
-                        listener_id: listener.listener_id,
-                        addresses,
-                        reason: Err(err),
-                    });
-                }
-            }
-        }
-
-        // We register the current task to be woken up if a new listener is added.
-        Poll::Pending
-    }
-
     fn listen_on(
         &mut self,
         id: ListenerId,
@@ -543,6 +460,93 @@ where
             PortReuse::Disabled => address_translation(listen, observed),
             PortReuse::Enabled { .. } => Some(observed.clone()),
         }
+    }
+
+    // TODO: docs
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        // Return pending events from closed listeners.
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+        // We remove each element from `listeners` one by one and add them back.
+        let mut remaining = self.listeners.len();
+        while let Some(mut listener) = self.listeners.pop_back() {
+            match TryStream::try_poll_next(listener.as_mut(), cx) {
+                Poll::Pending => {
+                    self.listeners.push_front(listener);
+                    remaining -= 1;
+                    if remaining == 0 {
+                        break;
+                    }
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::Upgrade {
+                    upgrade,
+                    local_addr,
+                    remote_addr,
+                }))) => {
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::Incoming {
+                        listener_id: id,
+                        upgrade,
+                        local_addr,
+                        send_back_addr: remote_addr,
+                    });
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(a)))) => {
+                    if listener.addresses.contains(&a) {
+                        debug!("Transport has reported address {} multiple times", a)
+                    } else {
+                        listener.addresses.push(a.clone());
+                    }
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::NewAddress {
+                        listener_id: id,
+                        listen_addr: a,
+                    });
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::AddressExpired(a)))) => {
+                    listener.addresses.retain(|x| x != &a);
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::AddressExpired {
+                        listener_id: id,
+                        listen_addr: a,
+                    });
+                }
+                Poll::Ready(Some(Ok(TcpTransportEvent::Error(error)))) => {
+                    let id = listener.listener_id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(TransportEvent::Error {
+                        listener_id: id,
+                        error,
+                    });
+                }
+                Poll::Ready(None) => {
+                    let addresses = mem::take(&mut listener.addresses).into_vec();
+                    return Poll::Ready(TransportEvent::Closed {
+                        listener_id: listener.listener_id,
+                        addresses,
+                        reason: Ok(()),
+                    });
+                }
+                Poll::Ready(Some(Err(err))) => {
+                    let addresses = mem::take(&mut listener.addresses).into_vec();
+                    return Poll::Ready(TransportEvent::Closed {
+                        listener_id: listener.listener_id,
+                        addresses,
+                        reason: Err(err),
+                    });
+                }
+            }
+        }
+
+        // We register the current task to be woken up if a new listener is added.
+        Poll::Pending
     }
 }
 

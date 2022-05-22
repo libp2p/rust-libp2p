@@ -836,7 +836,10 @@ where
 
     fn handle_listeners_event(
         &mut self,
-        event: TransportEvent<transport::Boxed<(PeerId, StreamMuxerBox)>>,
+        event: TransportEvent<
+            <transport::Boxed<(PeerId, StreamMuxerBox)> as Transport>::ListenerUpgrade,
+            io::Error,
+        >,
     ) -> Option<SwarmEvent<TBehaviour::OutEvent, THandlerErr<TBehaviour>>> {
         match event {
             TransportEvent::Incoming {

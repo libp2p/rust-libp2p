@@ -100,7 +100,10 @@ where
         self.transport.address_translation(server, observed)
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         match this.transport.poll(cx) {
             Poll::Ready(TransportEvent::Incoming {

@@ -334,10 +334,6 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
-        self.project().0.poll(cx).map(|ev| ev.into())
-    }
-
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr)
     }
@@ -359,6 +355,13 @@ where
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.0.address_translation(server, observed)
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        self.project().0.poll(cx)
     }
 }
 
@@ -435,17 +438,19 @@ where
         self.inner.address_translation(server, observed)
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         let upgrade = this.upgrade.clone();
         this.inner.poll(cx).map(|event| {
-            event.map(
-                move |future| ListenerUpgradeFuture {
+            event
+                .map_upgrade(move |future| ListenerUpgradeFuture {
                     future: Box::pin(future),
                     upgrade: future::Either::Left(Some(upgrade)),
-                },
-                TransportUpgradeError::Transport,
-            )
+                })
+                .map_err(TransportUpgradeError::Transport)
         })
     }
 }

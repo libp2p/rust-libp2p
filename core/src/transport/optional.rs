@@ -99,9 +99,12 @@ where
         }
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         if let Some(inner) = self.project().0.as_pin_mut() {
-            inner.poll(cx).map(|ev| ev.into())
+            inner.poll(cx)
         } else {
             Poll::Pending
         }

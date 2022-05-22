@@ -109,7 +109,10 @@ where
         self.transport.address_translation(server, observed)
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         match this.transport.poll(cx) {
             Poll::Ready(TransportEvent::Incoming {
@@ -134,10 +137,9 @@ where
                 })
             }
             Poll::Ready(other) => {
-                let mapped = other.map(
-                    |_upgrade| unreachable!("case already matched"),
-                    EitherError::A,
-                );
+                let mapped = other
+                    .map_upgrade(|_upgrade| unreachable!("case already matched"))
+                    .map_err(EitherError::A);
                 Poll::Ready(mapped)
             }
             Poll::Pending => Poll::Pending,

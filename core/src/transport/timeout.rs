@@ -124,17 +124,19 @@ where
         self.inner.address_translation(server, observed)
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
         let timeout = *this.incoming_timeout;
         this.inner.poll(cx).map(|event| {
-            event.map(
-                move |inner_fut| Timeout {
+            event
+                .map_upgrade(move |inner_fut| Timeout {
                     inner: inner_fut,
                     timer: Delay::new(timeout),
-                },
-                TransportTimeoutError::Other,
-            )
+                })
+                .map_err(TransportTimeoutError::Other)
         })
     }
 }

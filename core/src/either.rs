@@ -455,15 +455,26 @@ where
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         match self.project() {
             EitherTransportProj::Left(a) => match a.poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(event) => Poll::Ready(event.map(EitherFuture::First, EitherError::A)),
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherFuture::First)
+                        .map_err(EitherError::A),
+                ),
             },
             EitherTransportProj::Right(b) => match b.poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(event) => Poll::Ready(event.map(EitherFuture::Second, EitherError::B)),
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherFuture::Second)
+                        .map_err(EitherError::B),
+                ),
             },
         }
     }
