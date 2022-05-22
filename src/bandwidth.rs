@@ -86,7 +86,7 @@ where
         let this = self.project();
         match this.inner.poll(cx) {
             Poll::Ready(event) => {
-                let event = event.map_upgrade( {
+                let event = event.map_upgrade({
                     let sinks = this.sinks.clone();
                     |inner| BandwidthFuture { inner, sinks }
                 });

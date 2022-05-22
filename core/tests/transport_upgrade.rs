@@ -20,7 +20,6 @@
 
 mod util;
 
-use futures::future::poll_fn;
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
@@ -96,7 +95,7 @@ fn upgrade_pipeline() {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        });
+        }).boxed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
@@ -114,7 +113,8 @@ fn upgrade_pipeline() {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        });
+        })
+        .boxed();
 
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
     let listen_addr2 = listen_addr1.clone();
@@ -125,14 +125,10 @@ fn upgrade_pipeline() {
 
     let server = async move {
         loop {
-            let (upgrade, _send_back_addr) =
-                match poll_fn(|cx| Pin::new(&mut listener_transport).poll(cx))
-                    .await
-                    .into_upgrade()
-                {
-                    Some(u) => u,
-                    None => continue,
-                };
+            let (upgrade, _send_back_addr) = match listener_transport.select_next_some().await.into_upgrade() {
+                Some(u) => u,
+                None => continue,
+            };
             let (peer, _mplex) = upgrade.await.unwrap();
             assert_eq!(peer, dialer_id);
         }

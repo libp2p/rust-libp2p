@@ -2069,12 +2069,12 @@ mod tests {
                 let mut listen_addresses = Vec::new();
                 let mut transports = Vec::new();
                 for _ in 0..num_listen_addrs {
-                    let mut transport = transport::MemoryTransport::default();
+                    let mut transport = transport::MemoryTransport::default().boxed();
                     transport
                         .listen_on(ListenerId::new(1), "/memory/0".parse().unwrap())
                         .unwrap();
 
-                    match poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await {
+                    match transport.select_next_some().await {
                         TransportEvent::NewAddress { listen_addr, .. } => {
                             listen_addresses.push(listen_addr);
                         }
@@ -2094,9 +2094,8 @@ mod tests {
                     )
                     .unwrap();
                 for mut transport in transports.into_iter() {
-                    let poll_transport = poll_fn(|cx| Pin::new(&mut transport).poll(cx));
                     loop {
-                        match futures::future::select(poll_transport, swarm.next()).await {
+                        match futures::future::select(transport.select_next_some(), swarm.next()).await {
                             Either::Left((TransportEvent::Incoming { .. }, _)) => {
                                 break;
                             }

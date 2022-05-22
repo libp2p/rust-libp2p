@@ -401,8 +401,6 @@ impl<T> Drop for Chan<T> {
 
 #[cfg(test)]
 mod tests {
-    use futures::future::poll_fn;
-
     use super::*;
 
     #[test]
@@ -495,12 +493,12 @@ mod tests {
         let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
         let cloned_t1_addr = t1_addr.clone();
 
-        let mut t1 = MemoryTransport::default();
+        let mut t1 = MemoryTransport::default().boxed();
 
         let listener = async move {
             t1.listen_on(ListenerId::new(1), t1_addr.clone()).unwrap();
             let upgrade = loop {
-                let event = poll_fn(|cx| Pin::new(&mut t1).poll(cx)).await;
+                let event = t1.select_next_some().await;
                 if let Some(upgrade) = event.into_upgrade() {
                     break upgrade;
                 }
@@ -533,16 +531,14 @@ mod tests {
             Protocol::Memory(rand::random::<u64>().saturating_add(1)).into();
         let listener_addr_cloned = listener_addr.clone();
 
-        let mut listener_transport = MemoryTransport::default();
+        let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
             listener_transport
                 .listen_on(ListenerId::new(1), listener_addr.clone())
                 .unwrap();
             loop {
-                if let TransportEvent::Incoming { send_back_addr, .. } =
-                    poll_fn(|cx| Pin::new(&mut listener_transport).poll(cx)).await
-                {
+                if let TransportEvent::Incoming { send_back_addr, .. } = listener_transport.select_next_some().await {
                     assert!(
                         send_back_addr != listener_addr,
                         "Expect dialer address not to equal listener address."
@@ -572,7 +568,7 @@ mod tests {
             Protocol::Memory(rand::random::<u64>().saturating_add(1)).into();
         let listener_addr_cloned = listener_addr.clone();
 
-        let mut listener_transport = MemoryTransport::default();
+        let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
             listener_transport
@@ -580,7 +576,7 @@ mod tests {
                 .unwrap();
             loop {
                 if let TransportEvent::Incoming { send_back_addr, .. } =
-                    poll_fn(|cx| Pin::new(&mut listener_transport).poll(cx)).await
+                    listener_transport.select_next_some().await
                 {
                     let dialer_port =
                         NonZeroU64::new(parse_memory_addr(&send_back_addr).unwrap()).unwrap();

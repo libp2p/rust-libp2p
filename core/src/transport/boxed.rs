@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
-use futures::prelude::*;
+use futures::{prelude::*, stream::FusedStream};
 use multiaddr::Multiaddr;
 use std::{
     error::Error,
@@ -154,6 +154,20 @@ impl<O> Transport for Boxed<O> {
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Pin::new(self.inner.as_mut()).poll(cx)
+    }
+}
+
+impl<O> Stream for Boxed<O> {
+    type Item = TransportEvent<ListenerUpgrade<O>, io::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Transport::poll(self, cx).map(Some)
+    }
+}
+
+impl<O> FusedStream for Boxed<O> {
+    fn is_terminated(&self) -> bool {
+        false
     }
 }
 
