@@ -337,10 +337,7 @@ where
     type Dial = T::Dial;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<Self>> {
-        match self.project().0.poll(cx) {
-            Poll::Ready(ev) => Poll::Ready(ev.map(|u| u, |e| e)),
-            Poll::Pending => Poll::Pending,
-        }
+        self.project().0.poll(cx).map(|ev| ev.into())
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {

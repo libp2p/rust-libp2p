@@ -124,7 +124,7 @@ where
                 })
             }
             Poll::Ready(other) => {
-                let mapped = other.map(|_upgrade| unreachable!("case already matched"), |e| e);
+                let mapped = other.map_upgrade(|_upgrade| unreachable!("case already matched"));
                 Poll::Ready(mapped)
             }
             Poll::Pending => Poll::Pending,
