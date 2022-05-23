@@ -79,7 +79,7 @@ pub enum Keypair {
     #[cfg(feature = "ecdsa")]
     Ecdsa(ecdsa::Keypair),
     /// An Sr25519 keypair.
-    #[cfg(feature = "ecdsa")]
+    #[cfg(feature = "sr25519")]
     Sr25519(sr25519::Keypair),
 }
 

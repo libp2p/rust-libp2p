@@ -1,8 +1,10 @@
 # 0.33.0 [unreleased]
 
 - Have methods on `Transport` take `&mut self` instead of `self`. See [PR 2529].
+- Add support for sr25519 keys. See [PR 2671].
 
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
+[PR 2671]: https://github.com/libp2p/rust-libp2p/pull2671/
 
 # 0.32.1
 

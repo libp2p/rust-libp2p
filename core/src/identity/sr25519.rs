@@ -24,7 +24,7 @@ use super::error::DecodingError;
 use core::fmt;
 use zeroize::Zeroize;
 
-const SIGNING_CTX: &[u8] = b"rust-libp2p";
+const SIGNING_CTX: &[u8] = b"libp2p";
 
 // TODO: We need this because `schnorrkel` errors doesn't implement `std::error::Error`
 #[derive(Clone, Debug)]
