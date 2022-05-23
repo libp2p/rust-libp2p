@@ -78,6 +78,9 @@ pub enum Keypair {
     /// An ECDSA keypair.
     #[cfg(feature = "ecdsa")]
     Ecdsa(ecdsa::Keypair),
+    /// An Sr25519 keypair.
+    #[cfg(feature = "ecdsa")]
+    Sr25519(sr25519::Keypair),
 }
 
 impl Keypair {
@@ -129,6 +132,8 @@ impl Keypair {
             Secp256k1(ref pair) => pair.secret().sign(msg),
             #[cfg(feature = "ecdsa")]
             Ecdsa(ref pair) => Ok(pair.secret().sign(msg)),
+            #[cfg(feature = "sr25519")]
+            Sr25519(ref pair) => Ok(pair.sign(msg)),
         }
     }
 
@@ -143,6 +148,8 @@ impl Keypair {
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
             #[cfg(feature = "ecdsa")]
             Ecdsa(pair) => PublicKey::Ecdsa(pair.public().clone()),
+            #[cfg(feature = "sr25519")]
+            Sr25519(pair) => PublicKey::Sr25519(pair.public()),
         }
     }
 
@@ -173,6 +180,11 @@ impl Keypair {
                     "Encoding ECDSA key into Protobuf is unsupported",
                 ))
             }
+            #[cfg(feature = "sr25519")]
+            Self::Sr25519(data) => keys_proto::PrivateKey {
+                r#type: keys_proto::KeyType::Sr25519.into(),
+                data: data.encode().into(),
+            },
         };
 
         Ok(pk.encode_to_vec())
@@ -194,6 +206,14 @@ impl Keypair {
             keys_proto::KeyType::Ed25519 => {
                 ed25519::Keypair::decode(&mut private_key.data).map(Keypair::Ed25519)
             }
+            #[cfg(feature = "sr25519")]
+            keys_proto::KeyType::Sr25519 => {
+                sr25519::Keypair::decode(&mut private_key.data).map(Keypair::Sr25519)
+            }
+            #[cfg(not(feature = "sr25519"))]
+            keys_proto::KeyType::Sr25519 => Err(DecodingError::new(
+                "Decoding Sr25519 key from Protobuf is unsupported.",
+            )),
             keys_proto::KeyType::Rsa => Err(DecodingError::new(
                 "Decoding RSA key from Protobuf is unsupported.",
             )),
@@ -228,6 +248,9 @@ pub enum PublicKey {
     /// A public ECDSA key.
     #[cfg(feature = "ecdsa")]
     Ecdsa(ecdsa::PublicKey),
+    /// A public Sr25519 key.
+    #[cfg(feature = "sr25519")]
+    Sr25519(sr25519::PublicKey),
 }
 
 impl PublicKey {
@@ -246,6 +269,8 @@ impl PublicKey {
             Secp256k1(pk) => pk.verify(msg, sig),
             #[cfg(feature = "ecdsa")]
             Ecdsa(pk) => pk.verify(msg, sig),
+            #[cfg(feature = "sr25519")]
+            Sr25519(pk) => pk.verify(msg, sig),
         }
     }
 
@@ -302,6 +327,11 @@ impl From<&PublicKey> for keys_proto::PublicKey {
                 r#type: keys_proto::KeyType::Ecdsa as i32,
                 data: key.encode_der(),
             },
+            #[cfg(feature = "sr25519")]
+            PublicKey::Sr25519(key) => keys_proto::PublicKey {
+                r#type: keys_proto::KeyType::Sr25519 as i32,
+                data: key.encode().to_vec(),
+            },
         }
     }
 }
@@ -324,6 +354,15 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             #[cfg(target_arch = "wasm32")]
             keys_proto::KeyType::Rsa => {
                 log::debug!("support for RSA was disabled at compile-time");
+                Err(DecodingError::new("Unsupported"))
+            }
+            #[cfg(feature = "sr25519")]
+            keys_proto::KeyType::Sr25519 => {
+                sr25519::PublicKey::decode(&pubkey.data).map(PublicKey::Sr25519)
+            }
+            #[cfg(not(feature = "sr25519"))]
+            keys_proto::KeyType::Sr25519 => {
+                log::debug!("support for Sr25519 was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))
             }
             #[cfg(feature = "secp256k1")]
