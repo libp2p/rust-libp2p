@@ -48,6 +48,18 @@ impl std::error::Error for StringError {}
 #[derive(Clone)]
 pub struct Keypair(schnorrkel::Keypair);
 
+impl From<schnorrkel::Keypair> for Keypair {
+    fn from(kp: schnorrkel::Keypair) -> Keypair {
+        Self(kp)
+    }
+}
+
+impl From<Keypair> for schnorrkel::Keypair {
+    fn from(Keypair(kp): Keypair) -> schnorrkel::Keypair {
+        kp
+    }
+}
+
 impl Keypair {
     /// Generate a new random Sr25519 keypair.
     pub fn generate() -> Keypair {
@@ -119,6 +131,18 @@ impl From<SecretKey> for Keypair {
 #[derive(PartialEq, Eq, Clone)]
 pub struct PublicKey(schnorrkel::PublicKey);
 
+impl From<schnorrkel::PublicKey> for PublicKey {
+    fn from(pk: schnorrkel::PublicKey) -> PublicKey {
+        Self(pk)
+    }
+}
+
+impl From<PublicKey> for schnorrkel::PublicKey {
+    fn from(PublicKey(pk): PublicKey) -> schnorrkel::PublicKey {
+        pk
+    }
+}
+
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("PublicKey(compressed): ")?;
@@ -160,6 +184,18 @@ impl Clone for SecretKey {
         let mut sk_bytes = self.0.to_bytes();
         Self::from_bytes(&mut sk_bytes)
             .expect("schnorrkel::SecretKey::from_bytes(to_bytes(k)) != k")
+    }
+}
+
+impl From<schnorrkel::SecretKey> for SecretKey {
+    fn from(sk: schnorrkel::SecretKey) -> SecretKey {
+        Self(sk)
+    }
+}
+
+impl From<SecretKey> for schnorrkel::SecretKey {
+    fn from(SecretKey(sk): SecretKey) -> schnorrkel::SecretKey {
+        sk
     }
 }
 

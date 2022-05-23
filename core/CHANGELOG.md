@@ -4,7 +4,7 @@
 - Add support for sr25519 keys. See [PR 2671].
 
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
-[PR 2671]: https://github.com/libp2p/rust-libp2p/pull2671/
+[PR 2671]: https://github.com/libp2p/rust-libp2p/pull/2671
 
 # 0.32.1
 
