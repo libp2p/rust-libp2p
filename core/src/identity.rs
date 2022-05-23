@@ -39,6 +39,8 @@ pub mod ed25519;
 pub mod rsa;
 #[cfg(feature = "secp256k1")]
 pub mod secp256k1;
+#[cfg(feature = "sr25519")]
+pub mod sr25519;
 
 pub mod error;
 
