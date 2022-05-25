@@ -4,6 +4,10 @@
 
 [PR 2640]: https://github.com/libp2p/rust-libp2p/pull/2640
 
+- Add helpful error message on derive syntax error. See [PR 2672]
+
+[PR 2672]: https://github.com/libp2p/rust-libp2p/pull/2672
+
 # 0.27.1
 
 - Allow mixing of ignored fields. See [PR 2570].
