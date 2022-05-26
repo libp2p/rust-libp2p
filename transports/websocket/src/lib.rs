@@ -26,14 +26,11 @@ pub mod tls;
 
 use error::Error;
 use framed::{Connection, Incoming};
-use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
+use futures::{future::BoxFuture, prelude::*, ready};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    transport::{
-        map::{MapFuture, MapStream},
-        ListenerEvent, TransportError,
-    },
+    transport::{map::MapFuture, ListenerId, TransportError, TransportEvent},
     Transport,
 };
 use rw_stream_sink::RwStreamSink;
@@ -44,21 +41,22 @@ use std::{
 };
 
 /// A Websocket transport.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+#[pin_project::pin_project]
 pub struct WsConfig<T: Transport>
 where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
+    #[pin]
     transport: libp2p_core::transport::map::Map<framed::WsConfig<T>, WrapperFn<T::Output>>,
 }
 
 impl<T: Transport> WsConfig<T>
 where
-    T: Transport + Send + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -114,24 +112,23 @@ where
 
 impl<T> Transport for WsConfig<T>
 where
-    T: Transport + Send + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
     T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = RwStreamSink<BytesConnection<T::Output>>;
     type Error = Error<T::Error>;
-    type Listener = MapStream<InnerStream<T::Output, T::Error>, WrapperFn<T::Output>>;
     type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
     fn listen_on(
         &mut self,
+        id: ListenerId,
         addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.transport.listen_on(addr)
+    ) -> Result<(), TransportError<Self::Error>> {
+        self.transport.listen_on(id, addr)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -148,11 +145,14 @@ where
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }
-}
 
-/// Type alias corresponding to `framed::WsConfig::Listener`.
-pub type InnerStream<T, E> =
-    BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>, Error<E>>, Error<E>>>;
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        self.project().transport.poll(cx)
+    }
+}
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
 pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
@@ -221,7 +221,7 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId, Transport};
+    use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Multiaddr, PeerId, Transport};
     use libp2p_tcp as tcp;
 
     #[test]
@@ -237,14 +237,17 @@ mod tests {
     }
 
     async fn connect(listen_addr: Multiaddr) {
-        let ws_config = || WsConfig::new(tcp::TcpTransport::new());
+        let new_ws_config =
+            || WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::default())).boxed();
 
-        let mut listener = ws_config().listen_on(listen_addr).expect("listener");
+        let mut ws_config = new_ws_config();
+        ws_config
+            .listen_on(ListenerId::new(1), listen_addr)
+            .expect("listener");
 
-        let addr = listener
-            .try_next()
+        let addr = ws_config
+            .next()
             .await
-            .expect("some event")
             .expect("no error")
             .into_new_address()
             .expect("listen address");
@@ -253,16 +256,15 @@ mod tests {
         assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
 
         let inbound = async move {
-            let (conn, _addr) = listener
-                .try_filter_map(|e| future::ready(Ok(e.into_upgrade())))
-                .try_next()
+            let (conn, _addr) = ws_config
+                .select_next_some()
+                .map(|ev| ev.into_upgrade())
                 .await
-                .unwrap()
                 .unwrap();
             conn.await
         };
 
-        let outbound = ws_config()
+        let outbound = new_ws_config()
             .dial(addr.with(Protocol::P2p(PeerId::random().into())))
             .unwrap();
 
