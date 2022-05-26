@@ -2095,7 +2095,9 @@ mod tests {
                     .unwrap();
                 for mut transport in transports.into_iter() {
                     loop {
-                        match futures::future::select(transport.select_next_some(), swarm.next()).await {
+                        match futures::future::select(transport.select_next_some(), swarm.next())
+                            .await
+                        {
                             Either::Left((TransportEvent::Incoming { .. }, _)) => {
                                 break;
                             }

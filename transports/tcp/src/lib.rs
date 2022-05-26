@@ -45,7 +45,8 @@ pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 use futures::{
     future::{self, BoxFuture, Ready},
     prelude::*,
-    ready, stream::FusedStream,
+    ready,
+    stream::FusedStream,
 };
 use futures_timer::Delay;
 use libp2p_core::{
@@ -550,7 +551,7 @@ where
     }
 }
 
-impl<T> Stream for GenTcpTransport<T> 
+impl<T> Stream for GenTcpTransport<T>
 where
     T: Provider + Send + 'static,
     T::Listener: Unpin,
@@ -563,7 +564,7 @@ where
         Transport::poll(self, cx).map(Some)
     }
 }
-impl<T> FusedStream for GenTcpTransport<T> 
+impl<T> FusedStream for GenTcpTransport<T>
 where
     T: Provider + Send + 'static,
     T::Listener: Unpin,
@@ -574,7 +575,6 @@ where
         false
     }
 }
- 
 
 #[derive(Debug)]
 pub enum TcpTransportEvent<S> {
@@ -1202,14 +1202,17 @@ mod tests {
     fn listen_port_0() {
         env_logger::try_init().ok();
 
-        async fn listen<T>(addr: Multiaddr) -> Multiaddr 
-        where 
+        async fn listen<T>(addr: Multiaddr) -> Multiaddr
+        where
             T: Provider,
-            T::IfWatcher: Sync
+            T::IfWatcher: Sync,
         {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
-            tcp.select_next_some().await.into_new_address().expect("listen address")
+            tcp.select_next_some()
+                .await
+                .into_new_address()
+                .expect("listen address")
         }
 
         fn test(addr: Multiaddr) {

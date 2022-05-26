@@ -95,7 +95,8 @@ fn upgrade_pipeline() {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        }).boxed();
+        })
+        .boxed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
@@ -125,10 +126,11 @@ fn upgrade_pipeline() {
 
     let server = async move {
         loop {
-            let (upgrade, _send_back_addr) = match listener_transport.select_next_some().await.into_upgrade() {
-                Some(u) => u,
-                None => continue,
-            };
+            let (upgrade, _send_back_addr) =
+                match listener_transport.select_next_some().await.into_upgrade() {
+                    Some(u) => u,
+                    None => continue,
+                };
             let (peer, _mplex) = upgrade.await.unwrap();
             assert_eq!(peer, dialer_id);
         }

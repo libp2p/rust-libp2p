@@ -538,7 +538,9 @@ mod tests {
                 .listen_on(ListenerId::new(1), listener_addr.clone())
                 .unwrap();
             loop {
-                if let TransportEvent::Incoming { send_back_addr, .. } = listener_transport.select_next_some().await {
+                if let TransportEvent::Incoming { send_back_addr, .. } =
+                    listener_transport.select_next_some().await
+                {
                     assert!(
                         send_back_addr != listener_addr,
                         "Expect dialer address not to equal listener address."
