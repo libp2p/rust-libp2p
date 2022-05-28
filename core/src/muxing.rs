@@ -203,17 +203,6 @@ pub trait StreamMuxer {
     /// Destroys a substream.
     fn destroy_substream(&self, s: Self::Substream);
 
-    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
-    ///
-    /// For optimisation purposes, the connection handshake of libp2p can be very optimistic and is
-    /// allowed to assume that the handshake has succeeded when it didn't in fact succeed. This
-    /// method can be called in order to determine whether the remote has accepted our handshake or
-    /// has potentially not received it yet.
-    #[deprecated(note = "This method is unused and will be removed in the future")]
-    fn is_remote_acknowledged(&self) -> bool {
-        true
-    }
-
     /// Closes this `StreamMuxer`.
     ///
     /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
