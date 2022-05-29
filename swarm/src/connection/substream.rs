@@ -211,7 +211,7 @@ where
     type Output = Result<(), IoError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.muxer.close(cx) {
+        match self.muxer.poll_close(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
             Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),

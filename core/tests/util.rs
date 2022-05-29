@@ -32,7 +32,7 @@ where
         loop {
             match std::mem::replace(&mut self.state, CloseMuxerState::Done) {
                 CloseMuxerState::Close(muxer) => {
-                    if !muxer.close(cx)?.is_ready() {
+                    if !muxer.poll_close(cx)?.is_ready() {
                         self.state = CloseMuxerState::Close(muxer);
                         return Poll::Pending;
                     }

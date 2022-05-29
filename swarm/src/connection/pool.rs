@@ -686,7 +686,7 @@ where
                     if let Err(error) = error {
                         self.spawn(
                             poll_fn(move |cx| {
-                                if let Err(e) = ready!(muxer.close(cx)) {
+                                if let Err(e) = ready!(muxer.poll_close(cx)) {
                                     log::debug!(
                                         "Failed to close connection {:?} to peer {}: {:?}",
                                         id,
