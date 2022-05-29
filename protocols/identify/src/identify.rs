@@ -516,7 +516,7 @@ mod tests {
     use libp2p_mplex::MplexConfig;
     use libp2p_noise as noise;
     use libp2p_swarm::{Swarm, SwarmEvent};
-    use libp2p_tcp::TcpTransport;
+    use libp2p_tcp::{GenTcpConfig, TcpTransport};
 
     fn transport() -> (
         identity::PublicKey,
@@ -527,8 +527,7 @@ mod tests {
             .into_authentic(&id_keys)
             .unwrap();
         let pubkey = id_keys.public();
-        let transport = TcpTransport::new()
-            .nodelay(true)
+        let transport = TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())
