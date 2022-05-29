@@ -278,8 +278,8 @@ where
 
         let transport = self.transport.clone();
         let tls_config = self.tls_config.clone();
-        let use_deflate = self.use_deflate.clone();
-        let max_redirects = self.max_redirects.clone();
+        let use_deflate = self.use_deflate;
+        let max_redirects = self.max_redirects;
 
         let future = async move {
             loop {

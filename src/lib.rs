@@ -266,8 +266,8 @@ pub fn tokio_development_transport(
             let tcp = tcp::TokioTcpTransport::new(tcp_config);
             dns::TokioDnsConfig::system(tcp)
         };
-        let ws_dns_tcp = websocket::WsConfig::new(dns_tcp().await?);
-        dns_tcp().await?.or_transport(ws_dns_tcp)
+        let ws_dns_tcp = websocket::WsConfig::new(dns_tcp()?);
+        dns_tcp()?.or_transport(ws_dns_tcp)
     };
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
