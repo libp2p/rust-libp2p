@@ -67,68 +67,6 @@ use std::{
 
 use provider::{IfEvent, Provider};
 
-pub struct GenTcpTransport<T>
-where
-    T: Provider + Send,
-{
-    config: GenTcpConfig,
-    /// All the active listeners.
-    /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
-    /// can be resized, the only way is to use a `Pin<Box<>>`.
-    listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
-    /// Pending listeners events to return from [`ListenersStream::poll`].
-    pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, io::Error>>,
-}
-
-impl<T> GenTcpTransport<T>
-where
-    T: Provider + Send,
-{
-    pub fn new(config: GenTcpConfig) -> Self {
-        GenTcpTransport {
-            config,
-            listeners: Default::default(),
-            pending_events: Default::default(),
-        }
-    }
-
-    fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
-        let domain = if socket_addr.is_ipv4() {
-            Domain::IPV4
-        } else {
-            Domain::IPV6
-        };
-        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
-        if socket_addr.is_ipv6() {
-            socket.set_only_v6(true)?;
-        }
-        if let Some(ttl) = self.config.ttl {
-            socket.set_ttl(ttl)?;
-        }
-        if let Some(nodelay) = self.config.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
-        socket.set_reuse_address(true)?;
-        #[cfg(unix)]
-        if let PortReuse::Enabled { .. } = &self.config.port_reuse {
-            socket.set_reuse_port(true)?;
-        }
-        Ok(socket)
-    }
-
-    fn do_listen(
-        &mut self,
-        id: ListenerId,
-        socket_addr: SocketAddr,
-    ) -> io::Result<TcpListenStream<T>> {
-        let socket = self.create_socket(&socket_addr)?;
-        socket.bind(&socket_addr.into())?;
-        socket.listen(self.config.backlog as _)?;
-        socket.set_nonblocking(true)?;
-        TcpListenStream::<T>::new(id, socket.into(), self.config.port_reuse.clone())
-    }
-}
-
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
 pub struct GenTcpConfig {
@@ -358,6 +296,81 @@ impl GenTcpConfig {
 impl Default for GenTcpConfig {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct GenTcpTransport<T>
+where
+    T: Provider + Send,
+{
+    config: GenTcpConfig,
+    /// All the active listeners.
+    /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// can be resized, the only way is to use a `Pin<Box<>>`.
+    listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
+    /// Pending listeners events to return from [`ListenersStream::poll`].
+    pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, io::Error>>,
+}
+
+impl<T> GenTcpTransport<T>
+where
+    T: Provider + Send,
+{
+    pub fn new(config: GenTcpConfig) -> Self {
+        GenTcpTransport {
+            config,
+            listeners: Default::default(),
+            pending_events: Default::default(),
+        }
+    }
+
+    fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
+        let domain = if socket_addr.is_ipv4() {
+            Domain::IPV4
+        } else {
+            Domain::IPV6
+        };
+        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
+        if socket_addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+        if let Some(ttl) = self.config.ttl {
+            socket.set_ttl(ttl)?;
+        }
+        if let Some(nodelay) = self.config.nodelay {
+            socket.set_nodelay(nodelay)?;
+        }
+        socket.set_reuse_address(true)?;
+        #[cfg(unix)]
+        if let PortReuse::Enabled { .. } = &self.config.port_reuse {
+            socket.set_reuse_port(true)?;
+        }
+        Ok(socket)
+    }
+
+    fn do_listen(
+        &mut self,
+        id: ListenerId,
+        socket_addr: SocketAddr,
+    ) -> io::Result<TcpListenStream<T>> {
+        let socket = self.create_socket(&socket_addr)?;
+        socket.bind(&socket_addr.into())?;
+        socket.listen(self.config.backlog as _)?;
+        socket.set_nonblocking(true)?;
+        TcpListenStream::<T>::new(id, socket.into(), self.config.port_reuse.clone())
+    }
+}
+
+impl<T> Default for GenTcpTransport<T>
+where
+    T: Provider + Send,
+{
+    fn default() -> Self {
+        GenTcpTransport {
+            config: GenTcpConfig::default(),
+            listeners: VecDeque::new(),
+            pending_events: VecDeque::new(),
+        }
     }
 }
 
