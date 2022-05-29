@@ -46,7 +46,6 @@ use futures::{
     future::{self, BoxFuture, Ready},
     prelude::*,
     ready,
-    stream::FusedStream,
 };
 use futures_timer::Delay;
 use libp2p_core::{
@@ -306,7 +305,7 @@ impl GenTcpConfig {
     /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let mut tcp1 = TcpTransport::new(GenTcpConfig::new().port_reuse(true));
+    /// let mut tcp1 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
     /// tcp1.listen_on(ListenerId::new(1), listen_addr1.clone()).expect("listener");
     /// match tcp1.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -317,7 +316,7 @@ impl GenTcpConfig {
     ///     _ => {}
     /// }
     ///
-    /// let mut tcp2 = TcpTransport::new(GenTcpConfig::new().port_reuse(true));
+    /// let mut tcp2 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
     /// tcp2.listen_on(ListenerId::new(1), listen_addr2).expect("listener");
     /// match tcp2.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -548,31 +547,6 @@ where
 
         // We register the current task to be woken up if a new listener is added.
         Poll::Pending
-    }
-}
-
-impl<T> Stream for GenTcpTransport<T>
-where
-    T: Provider + Send + 'static,
-    T::Listener: Unpin,
-    T::IfWatcher: Unpin,
-    T::Stream: Unpin,
-{
-    type Item = TransportEvent<<Self as Transport>::ListenerUpgrade, <Self as Transport>::Error>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Transport::poll(self, cx).map(Some)
-    }
-}
-impl<T> FusedStream for GenTcpTransport<T>
-where
-    T: Provider + Send + 'static,
-    T::Listener: Unpin,
-    T::IfWatcher: Unpin,
-    T::Stream: Unpin,
-{
-    fn is_terminated(&self) -> bool {
-        false
     }
 }
 
@@ -937,7 +911,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -1006,7 +980,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
 
             loop {
@@ -1075,7 +1049,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -1097,7 +1071,7 @@ mod tests {
 
         async fn dialer<T: Provider>(addr: Multiaddr, mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
             match tcp.select_next_some().await {
                 TransportEvent::NewAddress { .. } => {
@@ -1155,7 +1129,7 @@ mod tests {
             T::IfWatcher: Sync,
             T::Stream: Sync,
         {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
             match tcp.select_next_some().await {
                 TransportEvent::NewAddress {
@@ -1207,7 +1181,7 @@ mod tests {
             T: Provider,
             T::IfWatcher: Sync,
         {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(ListenerId::new(1), addr).unwrap();
             tcp.select_next_some()
                 .await
