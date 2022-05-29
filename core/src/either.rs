@@ -352,13 +352,6 @@ where
             EitherOutput::Second(inner) => inner.poll_close(cx).map_err(|e| e.into()),
         }
     }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner.flush_all(cx).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.flush_all(cx).map_err(|e| e.into()),
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone)]

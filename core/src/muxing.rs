@@ -216,13 +216,6 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
-
-    /// Flush this `StreamMuxer`.
-    ///
-    /// This drains any write buffers of substreams and delivers any pending shutdown notifications
-    /// due to `shutdown_substream` or `close`. One may thus shutdown groups of substreams
-    /// followed by a final `flush_all` instead of having to do `flush_substream` for each.
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
 }
 
 /// Event about a connection, reported by an implementation of [`StreamMuxer`].
@@ -609,11 +602,6 @@ impl StreamMuxer for StreamMuxerBox {
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_close(cx)
     }
-
-    #[inline]
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.flush_all(cx)
-    }
 }
 
 struct Wrap<T>
@@ -749,10 +737,5 @@ where
     #[inline]
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_close(cx).map_err(|e| e.into())
-    }
-
-    #[inline]
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.flush_all(cx).map_err(|e| e.into())
     }
 }

@@ -172,10 +172,6 @@ where
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close(cx)
     }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.io.lock().poll_flush(cx)
-    }
 }
 
 /// Active attempt to open an outbound substream.

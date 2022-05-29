@@ -191,10 +191,6 @@ where
         }
         Poll::Pending
     }
-
-    fn flush_all(&self, _: &mut Context<'_>) -> Poll<YamuxResult<()>> {
-        Poll::Ready(Ok(()))
-    }
 }
 
 /// The yamux configuration.
