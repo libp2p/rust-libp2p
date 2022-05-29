@@ -241,7 +241,7 @@ impl Transport for MemoryTransport {
                 listener.tell_listen_addr = false;
                 let listen_addr = listener.addr.clone();
                 let listener_id = listener.id;
-                self.listeners.push_back(listener);
+                self.listeners.push_front(listener);
                 return Poll::Ready(TransportEvent::NewAddress {
                     listen_addr,
                     listener_id,
@@ -259,7 +259,7 @@ impl Transport for MemoryTransport {
                 }),
             };
 
-            self.listeners.push_back(listener);
+            self.listeners.push_front(listener);
             if let Some(event) = event {
                 return Poll::Ready(event);
             } else {
