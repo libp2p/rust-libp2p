@@ -149,7 +149,7 @@ where
 
     fn destroy_substream(&self, _: Self::Substream) {}
 
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
 }
