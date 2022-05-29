@@ -169,12 +169,8 @@ where
         self.io.lock().drop_stream(sub.id);
     }
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close(cx)
-    }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.io.lock().poll_flush(cx)
     }
 }
 
