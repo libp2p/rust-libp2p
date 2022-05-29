@@ -52,6 +52,7 @@ use libp2p::{
     PeerId,
     Transport,
 };
+use libp2p_tcp::GenTcpConfig;
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
 
@@ -72,8 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
-    let transport = TokioTcpTransport::new()
-        .nodelay(true)
+    let transport = TokioTcpTransport::new(GenTcpConfig::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
