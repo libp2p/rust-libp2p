@@ -661,7 +661,7 @@ mod tests {
                 let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
-                    .listen_on(libp2p_core::transport::ListenerId::new(1), "/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                    .listen_on( "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                     .unwrap();
                 tx.send(addr).unwrap();
 

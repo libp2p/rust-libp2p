@@ -19,10 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future, prelude::*};
-use libp2p_core::{
-    transport::{ListenerId, Transport},
-    upgrade,
-};
+use libp2p_core::{transport::Transport, upgrade};
 use libp2p_deflate::DeflateConfig;
 use libp2p_tcp::TcpTransport;
 use quickcheck::{QuickCheck, RngCore, TestResult};
@@ -61,10 +58,7 @@ async fn run(message1: Vec<u8>) {
     };
     let mut listener_trans = new_transport();
     listener_trans
-        .listen_on(
-            ListenerId::new(1),
-            "/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"),
-        )
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
 
     let listen_addr = listener_trans

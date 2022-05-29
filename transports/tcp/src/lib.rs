@@ -242,7 +242,7 @@ impl GenTcpConfig {
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
     /// let mut tcp1 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
-    /// tcp1.listen_on(ListenerId::new(1), listen_addr1.clone()).expect("listener");
+    /// tcp1.listen_on( listen_addr1.clone()).expect("listener");
     /// match tcp1.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
     ///         println!("Listening on {:?}", listen_addr);
@@ -253,7 +253,7 @@ impl GenTcpConfig {
     /// }
     ///
     /// let mut tcp2 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
-    /// tcp2.listen_on(ListenerId::new(1), listen_addr2).expect("listener");
+    /// tcp2.listen_on( listen_addr2).expect("listener");
     /// match tcp2.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
     ///         println!("Listening on {:?}", listen_addr);
@@ -302,6 +302,8 @@ where
     T: Provider + Send,
 {
     config: GenTcpConfig,
+
+    next_listener_id: ListenerId,
     /// All the active listeners.
     /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
@@ -317,8 +319,7 @@ where
     pub fn new(config: GenTcpConfig) -> Self {
         GenTcpTransport {
             config,
-            listeners: Default::default(),
-            pending_events: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -365,6 +366,7 @@ where
 {
     fn default() -> Self {
         GenTcpTransport {
+            next_listener_id: ListenerId::new::<Self>(1),
             config: GenTcpConfig::default(),
             listeners: VecDeque::new(),
             pending_events: VecDeque::new(),
@@ -384,22 +386,19 @@ where
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
 
-    fn listen_on(
-        &mut self,
-        id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(addr.clone()) {
             sa
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
+        let id = self.next_listener_id.next_id();
         log::debug!("listening on {}", socket_addr);
         let listener = self
             .do_listen(id, socket_addr)
             .map_err(TransportError::Other)?;
         self.listeners.push_back(Box::pin(listener));
-        Ok(())
+        Ok(id)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -924,7 +923,7 @@ mod tests {
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
-            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
                     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -993,7 +992,7 @@ mod tests {
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
-            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            tcp.listen_on(addr).unwrap();
 
             loop {
                 match tcp.select_next_some().await {
@@ -1062,7 +1061,7 @@ mod tests {
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
-            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
                     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -1084,7 +1083,7 @@ mod tests {
         async fn dialer<T: Provider>(addr: Multiaddr, mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
-            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            tcp.listen_on(addr).unwrap();
             match tcp.select_next_some().await {
                 TransportEvent::NewAddress { .. } => {
                     // Obtain a future socket through dialing
@@ -1142,13 +1141,13 @@ mod tests {
             T::Stream: Sync,
         {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
-            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            tcp.listen_on(addr).unwrap();
             match tcp.select_next_some().await {
                 TransportEvent::NewAddress {
                     listen_addr: addr1, ..
                 } => {
                     // Listen on the same address a second time.
-                    tcp.listen_on(ListenerId::new(1), addr1.clone()).unwrap();
+                    tcp.listen_on(addr1.clone()).unwrap();
                     match tcp.select_next_some().await {
                         TransportEvent::NewAddress {
                             listen_addr: addr2, ..
@@ -1194,7 +1193,7 @@ mod tests {
             T::IfWatcher: Sync,
         {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
-            tcp.listen_on(ListenerId::new(1), addr).unwrap();
+            tcp.listen_on(addr).unwrap();
             tcp.select_next_some()
                 .await
                 .into_new_address()
@@ -1231,13 +1230,13 @@ mod tests {
             #[cfg(feature = "async-io")]
             {
                 let mut tcp = TcpTransport::new(GenTcpConfig::new());
-                assert!(tcp.listen_on(ListenerId::new(1), addr.clone()).is_err());
+                assert!(tcp.listen_on(addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
                 let mut tcp = TokioTcpTransport::new(GenTcpConfig::new());
-                assert!(tcp.listen_on(ListenerId::new(1), addr.clone()).is_err());
+                assert!(tcp.listen_on(addr.clone()).is_err());
             }
         }
 

@@ -25,18 +25,18 @@ default = [
     "ping",
     "plaintext",
     "pnet",
-    "relay",
+    # "relay",
     "request-response",
     "rendezvous",
     "secp256k1",
     "tcp-async-io",
     "uds",
-    "wasm-ext",
+    # "wasm-ext",
     "websocket",
     "yamux",
 ]
 autonat = ["libp2p-autonat"]
-dcutr = ["libp2p-dcutr", "libp2p-metrics/dcutr"]
+# dcutr = ["libp2p-dcutr", "libp2p-metrics/dcutr"]
 deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
@@ -51,15 +51,15 @@ noise = ["libp2p-noise"]
 ping = ["libp2p-ping", "libp2p-metrics/ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
-relay = ["libp2p-relay", "libp2p-metrics/relay"]
+# relay = ["libp2p-relay", "libp2p-metrics/relay"]
 request-response = ["libp2p-request-response"]
 rendezvous = ["libp2p-rendezvous"]
 tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
 uds = ["libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "rand/wasm-bindgen"]
-wasm-ext = ["libp2p-wasm-ext"]
-wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
+# wasm-ext = ["libp2p-wasm-ext"]
+# wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
 websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1"]
@@ -78,7 +78,7 @@ lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.4.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.33.0", path = "core",  default-features = false }
-libp2p-dcutr = { version = "0.3.0", path = "protocols/dcutr",  optional = true }
+# libp2p-dcutr = { version = "0.3.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.36.0", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.36.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.37.0", path = "protocols/kad", optional = true }
@@ -88,13 +88,13 @@ libp2p-noise = { version = "0.36.0", path = "transports/noise", optional = true 
 libp2p-ping = { version = "0.36.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.33.0", path = "transports/plaintext", optional = true }
 libp2p-pnet = { version = "0.22.0", path = "transports/pnet", optional = true }
-libp2p-relay = { version = "0.9.0", path = "protocols/relay", optional = true }
+# libp2p-relay = { version = "0.9.0", path = "protocols/relay", optional = true }
 libp2p-rendezvous = { version = "0.6.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.18.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.36.0", path = "swarm" }
 libp2p-swarm-derive = { version = "0.27.0", path = "swarm-derive" }
 libp2p-uds = { version = "0.32.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.33.0", path = "transports/wasm-ext", default-features = false, optional = true }
+# libp2p-wasm-ext = { version = "0.33.0", path = "transports/wasm-ext", default-features = false, optional = true }
 libp2p-yamux = { version = "0.37.0", path = "muxers/yamux", optional = true }
 multiaddr = { version = "0.14.0" }
 parking_lot = "0.12.0"
@@ -129,7 +129,7 @@ members = [
     "misc/prost-codec",
     "muxers/mplex",
     "muxers/yamux",
-    "protocols/dcutr",
+    # "protocols/dcutr",
     "protocols/autonat",
     "protocols/floodsub",
     "protocols/gossipsub",
@@ -138,7 +138,7 @@ members = [
     "protocols/kad",
     "protocols/mdns",
     "protocols/ping",
-    "protocols/relay",
+    # "protocols/relay",
     "protocols/request-response",
     "swarm",
     "swarm-derive",
@@ -150,7 +150,7 @@ members = [
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
-    "transports/wasm-ext"
+    # "transports/wasm-ext"
 ]
 
 [[example]]

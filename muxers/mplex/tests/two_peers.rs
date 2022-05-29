@@ -37,10 +37,7 @@ fn client_to_server_outbound() {
             .boxed();
 
         transport
-            .listen_on(
-                libp2p_core::transport::ListenerId::new(1),
-                "/ip4/127.0.0.1/tcp/0".parse().unwrap(),
-            )
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let addr = transport
@@ -108,10 +105,7 @@ fn client_to_server_inbound() {
             .boxed();
 
         transport
-            .listen_on(
-                libp2p_core::transport::ListenerId::new(1),
-                "/ip4/127.0.0.1/tcp/0".parse().unwrap(),
-            )
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let addr = transport
@@ -179,10 +173,7 @@ fn protocol_not_match() {
             .boxed();
 
         transport
-            .listen_on(
-                libp2p_core::transport::ListenerId::new(1),
-                "/ip4/127.0.0.1/tcp/0".parse().unwrap(),
-            )
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let addr = transport

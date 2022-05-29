@@ -127,9 +127,7 @@ mod tests {
     fn ping_pong() {
         let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
-        transport
-            .listen_on(libp2p_core::transport::ListenerId::new(0), mem_addr)
-            .unwrap();
+        transport.listen_on(mem_addr).unwrap();
 
         let listener_addr = transport
             .select_next_some()

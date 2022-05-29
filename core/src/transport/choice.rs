@@ -44,17 +44,13 @@ where
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(
-        &mut self,
-        id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<(), TransportError<Self::Error>> {
-        let addr = match self.0.listen_on(id, addr) {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        let addr = match self.0.listen_on(addr) {
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             res => return res.map_err(|err| err.map(EitherError::A)),
         };
 
-        let addr = match self.1.listen_on(id, addr) {
+        let addr = match self.1.listen_on(addr) {
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             res => return res.map_err(|err| err.map(EitherError::B)),
         };

@@ -93,16 +93,23 @@ impl Hub {
 }
 
 /// Transport that supports `/memory/N` multiaddresses.
-#[derive(Default)]
 pub struct MemoryTransport {
     listeners: VecDeque<Pin<Box<Listener>>>,
+    next_listener_id: ListenerId,
+}
+
+impl Default for MemoryTransport {
+    fn default() -> Self {
+        MemoryTransport {
+            listeners: VecDeque::new(),
+            next_listener_id: ListenerId::new::<Self>(1),
+        }
+    }
 }
 
 impl MemoryTransport {
     pub fn new() -> Self {
-        MemoryTransport {
-            listeners: VecDeque::new(),
-        }
+        Self::default()
     }
 }
 
@@ -183,11 +190,7 @@ impl Transport for MemoryTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = DialFuture;
 
-    fn listen_on(
-        &mut self,
-        id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -199,6 +202,7 @@ impl Transport for MemoryTransport {
             None => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
         };
 
+        let id = self.next_listener_id.next_id();
         let listener = Listener {
             id,
             port,
@@ -208,7 +212,7 @@ impl Transport for MemoryTransport {
         };
         self.listeners.push_back(Box::pin(listener));
 
-        Ok(())
+        Ok(id)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -460,34 +464,25 @@ mod tests {
     #[test]
     fn listening_twice() {
         let mut transport = MemoryTransport::default();
-        let listener_id_1 = ListenerId::new(1);
 
         let addr_1: Multiaddr = "/memory/1639174018481".parse().unwrap();
         let addr_2: Multiaddr = "/memory/8459375923478".parse().unwrap();
 
-        assert!(transport.listen_on(listener_id_1, addr_1.clone()).is_ok());
+        let listener_id_1 = transport.listen_on(addr_1.clone()).unwrap();
         assert!(transport.remove_listener(listener_id_1));
 
-        let listener_id_2 = ListenerId::new(2);
-        assert!(transport.listen_on(listener_id_2, addr_1.clone()).is_ok());
-        let listener_id_3 = ListenerId::new(3);
-        assert!(transport.listen_on(listener_id_3, addr_2.clone()).is_ok());
+        let listener_id_2 = transport.listen_on(addr_1.clone()).unwrap();
+        let listener_id_3 = transport.listen_on(addr_2.clone()).unwrap();
 
-        assert!(transport
-            .listen_on(ListenerId::new(4), addr_1.clone())
-            .is_err());
-        assert!(transport
-            .listen_on(ListenerId::new(4), addr_2.clone())
-            .is_err());
+        assert!(transport.listen_on(addr_1.clone()).is_err());
+        assert!(transport.listen_on(addr_2.clone()).is_err());
 
         assert!(transport.remove_listener(listener_id_2));
-        assert!(transport.listen_on(ListenerId::new(4), addr_1).is_ok());
-        assert!(transport
-            .listen_on(ListenerId::new(4), addr_2.clone())
-            .is_err());
+        assert!(transport.listen_on(addr_1).is_ok());
+        assert!(transport.listen_on(addr_2.clone()).is_err());
 
         assert!(transport.remove_listener(listener_id_3));
-        assert!(transport.listen_on(ListenerId::new(4), addr_2).is_ok());
+        assert!(transport.listen_on(addr_2).is_ok());
     }
 
     #[test]
@@ -497,10 +492,7 @@ mod tests {
             .dial("/memory/810172461024613".parse().unwrap())
             .is_err());
         let _listener = transport
-            .listen_on(
-                ListenerId::new(1),
-                "/memory/810172461024613".parse().unwrap(),
-            )
+            .listen_on("/memory/810172461024613".parse().unwrap())
             .unwrap();
         assert!(transport
             .dial("/memory/810172461024613".parse().unwrap())
@@ -514,8 +506,7 @@ mod tests {
 
         let mut transport = MemoryTransport::default().boxed();
         futures::executor::block_on(async {
-            let listener_id = ListenerId::new(1);
-            transport.listen_on(listener_id, addr.clone()).unwrap();
+            let listener_id = transport.listen_on(addr.clone()).unwrap();
             let reported_addr = transport
                 .select_next_some()
                 .await
@@ -550,7 +541,7 @@ mod tests {
         let mut t1 = MemoryTransport::default().boxed();
 
         let listener = async move {
-            t1.listen_on(ListenerId::new(1), t1_addr.clone()).unwrap();
+            t1.listen_on(t1_addr.clone()).unwrap();
             let upgrade = loop {
                 let event = t1.select_next_some().await;
                 if let Some(upgrade) = event.into_upgrade() {
@@ -588,9 +579,7 @@ mod tests {
         let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
-            listener_transport
-                .listen_on(ListenerId::new(1), listener_addr.clone())
-                .unwrap();
+            listener_transport.listen_on(listener_addr.clone()).unwrap();
             loop {
                 if let TransportEvent::Incoming { send_back_addr, .. } =
                     listener_transport.select_next_some().await
@@ -627,9 +616,7 @@ mod tests {
         let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
-            listener_transport
-                .listen_on(ListenerId::new(1), listener_addr.clone())
-                .unwrap();
+            listener_transport.listen_on(listener_addr.clone()).unwrap();
             loop {
                 if let TransportEvent::Incoming { send_back_addr, .. } =
                     listener_transport.select_next_some().await

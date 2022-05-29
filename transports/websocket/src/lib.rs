@@ -123,12 +123,10 @@ where
     type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
-    fn listen_on(
-        &mut self,
-        id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<(), TransportError<Self::Error>> {
-        self.transport.listen_on(id, addr)
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.transport
+            .listen_on(addr)
+            .map(ListenerId::map_type::<Self>)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -225,7 +223,7 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Multiaddr, PeerId, Transport};
+    use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId, Transport};
     use libp2p_tcp as tcp;
 
     #[test]
@@ -245,9 +243,7 @@ mod tests {
             || WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::default())).boxed();
 
         let mut ws_config = new_ws_config();
-        ws_config
-            .listen_on(ListenerId::new(1), listen_addr)
-            .expect("listener");
+        ws_config.listen_on(listen_addr).expect("listener");
 
         let addr = ws_config
             .next()

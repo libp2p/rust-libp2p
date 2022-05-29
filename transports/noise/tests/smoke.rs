@@ -24,7 +24,7 @@ use futures::{
     prelude::*,
 };
 use libp2p_core::identity;
-use libp2p_core::transport::{self, ListenerId, Transport};
+use libp2p_core::transport::{self, Transport};
 use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
 use libp2p_noise::{
     Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
@@ -249,7 +249,7 @@ fn run<I, C>(
 {
     futures::executor::block_on(async {
         server
-            .listen_on(ListenerId::new(1), "/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let server_address = server

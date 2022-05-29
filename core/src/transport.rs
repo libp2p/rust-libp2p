@@ -28,6 +28,7 @@
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{
+    any::{Any, TypeId},
     error::Error,
     fmt,
     pin::Pin,
@@ -114,11 +115,7 @@ pub trait Transport {
     ///
     /// Returning an error from the stream is considered fatal. The listener can also report
     /// non-fatal errors by producing a [`TransportEvent::Error`].
-    fn listen_on(
-        &mut self,
-        id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<(), TransportError<Self::Error>>
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>
     where
         Self: Sized;
 
@@ -234,20 +231,30 @@ pub trait Transport {
 
 /// The ID of a single listener.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ListenerId(u64);
-
-impl ListenerId {
-    /// Creates a `ListenerId` from a non-negative integer.
-    pub fn new(id: u64) -> Self {
-        Self(id)
-    }
+pub struct ListenerId {
+    id: u64,
+    transport_id: TypeId,
 }
 
-impl std::ops::Add<u64> for ListenerId {
-    type Output = Self;
+impl ListenerId {
+    /// Creates a new `ListenerId`.
+    pub fn new<T: Any>(id: u64) -> Self {
+        Self {
+            id,
+            transport_id: TypeId::of::<T>(),
+        }
+    }
 
-    fn add(self, other: u64) -> Self {
-        Self(self.0 + other)
+    /// Returns the next id
+    pub fn next_id(&mut self) -> Self {
+        let current = *self;
+        self.id += 1;
+        current
+    }
+
+    pub fn map_type<T: Any>(mut self) -> Self {
+        self.transport_id = TypeId::of::<T>();
+        self
     }
 }
 
@@ -381,6 +388,47 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
             } => TransportEvent::ListenerClosed {
                 listener_id,
                 reason: reason.map_err(map_err),
+            },
+        }
+    }
+
+    pub fn map_transport_type<T: Any>(self) -> Self {
+        match self {
+            TransportEvent::Incoming {
+                listener_id,
+                upgrade,
+                local_addr,
+                send_back_addr,
+            } => TransportEvent::Incoming {
+                listener_id: listener_id.map_type::<T>(),
+                upgrade,
+                local_addr,
+                send_back_addr,
+            },
+            TransportEvent::NewAddress {
+                listen_addr,
+                listener_id,
+            } => TransportEvent::NewAddress {
+                listen_addr,
+                listener_id: listener_id.map_type::<T>(),
+            },
+            TransportEvent::AddressExpired {
+                listen_addr,
+                listener_id,
+            } => TransportEvent::AddressExpired {
+                listen_addr,
+                listener_id: listener_id.map_type::<T>(),
+            },
+            TransportEvent::Error { listener_id, error } => TransportEvent::Error {
+                listener_id: listener_id.map_type::<T>(),
+                error,
+            },
+            TransportEvent::ListenerClosed {
+                listener_id,
+                reason,
+            } => TransportEvent::ListenerClosed {
+                listener_id: listener_id.map_type::<T>(),
+                reason,
             },
         }
     }

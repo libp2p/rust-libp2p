@@ -260,8 +260,6 @@ where
     /// Listeners for incoming connections.
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
 
-    next_listener_id: ListenerId,
-
     /// The nodes currently active.
     pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
 
@@ -328,9 +326,7 @@ where
     /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        let id = self.next_listener_id;
-        self.next_listener_id = self.next_listener_id + 1;
-        self.transport.listen_on(id, addr)?;
+        let id = self.transport.listen_on(addr)?;
         self.behaviour.inject_new_listener(id);
         Ok(id)
     }
@@ -1400,7 +1396,6 @@ where
 
         Swarm {
             local_peer_id: self.local_peer_id,
-            next_listener_id: ListenerId::new(1),
             transport: self.transport,
             pool: Pool::new(self.local_peer_id, pool_config, self.connection_limits),
             behaviour: self.behaviour,
@@ -2070,9 +2065,7 @@ mod tests {
                 let mut transports = Vec::new();
                 for _ in 0..num_listen_addrs {
                     let mut transport = transport::MemoryTransport::default().boxed();
-                    transport
-                        .listen_on(ListenerId::new(1), "/memory/0".parse().unwrap())
-                        .unwrap();
+                    transport.listen_on("/memory/0".parse().unwrap()).unwrap();
 
                     match transport.select_next_some().await {
                         TransportEvent::NewAddress { listen_addr, .. } => {

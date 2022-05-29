@@ -100,9 +100,7 @@ fn run(
     payload: &Vec<u8>,
     listen_addr: &Multiaddr,
 ) {
-    receiver_trans
-        .listen_on(transport::ListenerId::new(1), listen_addr.clone())
-        .unwrap();
+    receiver_trans.listen_on(listen_addr.clone()).unwrap();
     let (addr_sender, addr_receiver) = oneshot::channel();
     let mut addr_sender = Some(addr_sender);
     let payload_len = payload.len();

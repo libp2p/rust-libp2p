@@ -22,12 +22,7 @@ use futures::{
     io::{AsyncReadExt, AsyncWriteExt},
     StreamExt,
 };
-use libp2p_core::{
-    identity,
-    multiaddr::Multiaddr,
-    transport::{ListenerId, Transport},
-    upgrade,
-};
+use libp2p_core::{identity, multiaddr::Multiaddr, transport::Transport, upgrade};
 use libp2p_plaintext::PlainText2Config;
 use log::debug;
 use quickcheck::QuickCheck;
@@ -78,9 +73,7 @@ fn variable_msg_length() {
                     .parse()
                     .unwrap();
 
-            server
-                .listen_on(ListenerId::new(1), server_address.clone())
-                .unwrap();
+            server.listen_on(server_address.clone()).unwrap();
 
             // Ignore server listen address event.
             let _ = server

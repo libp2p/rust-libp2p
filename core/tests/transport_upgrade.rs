@@ -22,7 +22,7 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::identity;
-use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
+use libp2p_core::transport::{MemoryTransport, Transport};
 use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
@@ -120,9 +120,7 @@ fn upgrade_pipeline() {
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
     let listen_addr2 = listen_addr1.clone();
 
-    listener_transport
-        .listen_on(ListenerId::new(1), listen_addr1)
-        .unwrap();
+    listener_transport.listen_on(listen_addr1).unwrap();
 
     let server = async move {
         loop {

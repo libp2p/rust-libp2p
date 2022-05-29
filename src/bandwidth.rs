@@ -96,12 +96,8 @@ where
         }
     }
 
-    fn listen_on(
-        &mut self,
-        id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<(), TransportError<Self::Error>> {
-        self.inner.listen_on(id, addr)
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.inner.listen_on(addr)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
