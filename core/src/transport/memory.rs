@@ -98,6 +98,14 @@ pub struct MemoryTransport {
     listeners: VecDeque<Pin<Box<Listener>>>,
 }
 
+impl MemoryTransport {
+    pub fn new() -> Self {
+        MemoryTransport {
+            listeners: VecDeque::new(),
+        }
+    }
+}
+
 /// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
     /// Ephemeral source port.
