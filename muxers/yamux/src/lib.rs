@@ -31,7 +31,7 @@ use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{
-    fmt, io, iter,
+    fmt, io, iter, mem,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -187,11 +187,9 @@ where
             return Poll::Ready(Ok(()));
         }
 
-        while let Poll::Ready(_inbound_stream) =
-            inner.incoming.poll_next_unpin(c)?
-        {
-            match _inbound_stream {
-                Some(_) => {} // drop inbound stream
+        while let Poll::Ready(maybe_inbound_stream) = inner.incoming.poll_next_unpin(c)? {
+            match maybe_inbound_stream {
+                Some(inbound_stream) => mem::drop(inbound_stream),
                 None => return Poll::Ready(Ok(())),
             }
         }
