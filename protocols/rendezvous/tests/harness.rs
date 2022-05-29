@@ -57,7 +57,6 @@ where
             MplexConfig::new(),
         ))
         .timeout(Duration::from_secs(5))
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
     SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
